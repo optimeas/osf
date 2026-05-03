@@ -1,89 +1,154 @@
-# OSF — Architecture and Design Decisions
+# OSF Project – Architecture & Design Decisions
 
-This document records key decisions made during the design and development of the OSF project. Each entry explains what was decided and why, so future contributors understand the reasoning without having to reconstruct it from git history.
-
----
-
-## 1. Two Format Versions (OSF4 and OSF5)
-
-**Decision:** Support both OSF4 (XML header) and OSF5 (JSON header) in all reader implementations. Writers target OSF5 only, except where backward compatibility is explicitly required.
-
-**Why:** OSF4 is already deployed in production measurement systems. Dropping reader support would break existing workflows. OSF5 is simpler to implement and parse, so new writers default to it. The two formats share the same binary data block structure, so a reader that handles both requires only a header parser for each.
+This document records the key decisions made during the design and setup of the `osf` open source project.
+It serves as context for contributors and for AI-assisted development sessions.
 
 ---
 
-## 2. Streaming-First Design
+## 1. Project Goal
 
-**Decision:** Writers must produce valid, partially-readable files at every point during writing. Readers must be able to decode whatever data is present even in a truncated file.
+The goal of this project is to maximize adoption of the **Open Streaming Format (OSF)** by providing
+clean, well-documented, open source implementations in as many relevant programming languages and
+ecosystems as possible.
 
-**Why:** Measurement systems can lose power or crash mid-recording. A file that is only readable if it is complete is a liability in field use. Streaming-first means partial files are always recoverable up to the last complete data block.
+The format itself is developed and maintained by **Optimeas GmbH**. The implementations are intentionally
+open and free — anyone may use, modify, and distribute them under the Apache 2.0 license.
+
+> **Vision:** OSF should become the format that carries measurement data seamlessly from sensor to
+> AI training — without conversion losses through CSV or Parquet intermediates.
 
 ---
 
-## 3. One Implementation Per Language Directory
+## 2. License
 
-**Decision:** Each language gets its own self-contained directory under `implementations/`. No shared code across language implementations.
+**Apache 2.0**, copyright 2026 Optimeas GmbH.
 
-**Why:** Cross-language shared code creates coupling that makes individual implementations harder to distribute, test, and maintain. Each implementation should be independently publishable as a package for its ecosystem (PyPI, npm, NuGet, crates.io, etc.).
+Chosen because:
+- It allows anyone to use the code commercially without restrictions.
+- It does not require derived works to be open source.
+- It maximizes adoption and minimizes friction for integrators.
+
+---
+
+## 3. Repository Structure
+
+```
+osf/
+├── docs/                   # OSF format specification (Markdown)
+├── implementations/        # Standalone readers/writers per language
+├── integrations/           # Bridges to existing ecosystems and frameworks
+├── examples/               # Sample .osf files for testing
+├── DECISIONS.md            # This file
+├── CONTRIBUTING.md
+├── CHANGELOG.md
+└── README.md
+```
+
+### `implementations/` vs. `integrations/`
+
+| Directory          | Purpose |
+|--------------------|---------|
+| `implementations/` | Standalone OSF reader/writer libraries in a specific programming language. No external framework required beyond the language runtime. |
+| `integrations/`    | Bridges that connect OSF to existing ecosystems (ML frameworks, data pipelines, LLM tooling). These typically depend on a base implementation. |
 
 ---
 
 ## 4. Planned Implementations
 
-The following language implementations are planned. Each targets a specific platform niche and is listed with its primary rationale.
-
-| Language | Target Platform | Primary Rationale |
-|---|---|---|
-| Delphi | Windows desktop, industrial systems | Reference implementation; existing OSF4 ecosystem |
-| C | Embedded and desktop | Lowest-level reference; baseline for porting |
-| C++ | Industrial measurement, Qt | High-performance desktop; Qt ecosystem |
-| C# | Windows desktop, automation | .NET and HMI ecosystem |
-| Python | Data analytics, scientific computing | NumPy/pandas integration; prerequisite for AI integrations |
-| Java | Enterprise, Android | JVM ecosystem; Android mobile logging |
-| Swift | iOS, macOS, iPadOS | Apple ecosystem; field measurement and analysis apps |
-| MicroPython | ESP32, RP2040 | Sensor node writer; minimal footprint |
-| Rust | Systems, embedded | Memory-safe high-performance; no_std support |
-| MATLAB | Engineering analysis | Reader-only; Simulink workflow integration |
-| JavaScript | Browser, Node.js | Web dashboards; streaming over HTTP range requests |
+| Language       | Target Platform                        | Status      | Notes |
+|----------------|----------------------------------------|-------------|-------|
+| Delphi         | Windows desktop, legacy systems        | In progress | First implementation; reference for the project |
+| C              | Embedded + desktop                     | Planned     | Reference for low-level targets (STM32, ESP32, RTOS) |
+| C++            | Industrial measurement, Qt ecosystem   | Planned     | Builds on C implementation |
+| C# / .NET      | Windows desktop, industrial automation | Planned     | Relevant for Beckhoff, Siemens environments |
+| Python         | Data analytics, scripting              | Planned     | NumPy + pandas integration; primary AI/ML entry point |
+| MicroPython    | Embedded only                          | Planned     | Minimal footprint; targets ESP32, RP2040 |
+| Java           | Enterprise, Android                    | Planned     | |
+| Swift          | iOS / macOS / iPadOS                   | Planned     | Reader-focused; Apple ecosystem for field and analysis apps |
+| Rust           | Systems programming, embedded          | Planned     | Growing relevance in embedded and cloud |
+| MATLAB         | Engineering analysis                   | Planned     | Reader only |
+| JavaScript/TS  | Browser + Node.js                      | Planned     | Web dashboards, cloud visualization |
 
 ---
 
-## 5. Integrations Are Separate from Implementations
+## 5. Planned Integrations
 
-**Decision:** Bridges to external ecosystems (Arrow, PyTorch, TensorFlow, MCP, LangChain) live in `integrations/`, not in `implementations/python/`.
-
-**Why:** Integrations have heavier dependencies (torch, tensorflow, pyarrow) that most users of the Python implementation do not need. Keeping them separate allows the core Python package to remain lightweight.
-
----
-
-## 6. OSF5 Has No Trailer
-
-**Decision:** OSF5 files do not include a trailer block. OSF4 files may include a trailer; readers must handle its presence or absence.
-
-**Why:** The trailer in OSF4 was used for index acceleration and integrity verification. In OSF5, the JSON header carries all necessary metadata, and streaming-first design means the file is always readable without a trailer. Removing the trailer simplifies both writers and readers.
+| Integration    | Ecosystem                              | Notes |
+|----------------|----------------------------------------|-------|
+| Apache Arrow   | DuckDB, Polars, HuggingFace, Parquet   | OSF ↔ Arrow bridge; highest strategic value for AI pipelines |
+| PyTorch        | ML training                            | `OSFDataset` implementing `torch.utils.data.Dataset` |
+| TensorFlow     | ML training                            | `tf.data` connector |
+| MCP Server     | LLM tooling (Claude, etc.)             | Enables LLMs to read and reason about OSF files directly |
+| LangChain      | RAG pipelines                          | Document Loader for LangChain / LlamaIndex |
 
 ---
 
-## 7. English Only in Code and Documentation
+## 6. Coding Conventions (all languages)
 
-**Decision:** All code, comments, commit messages, and documentation in this repository must be in English.
+- All code, comments, variable names, class names, and documentation must be written in **English**.
+- Each implementation must be self-contained within its subdirectory.
+- Every implementation directory must contain a `README.md` describing: purpose, status, dependencies, and usage examples.
+- No implementation should depend on another implementation (exception: integrations may depend on the Python implementation).
 
-**Why:** OSF is an open format intended for international use. English ensures that contributors and users from any background can read and contribute to the project.
+---
+
+## 7. OSF Format Versions
+
+- **OSF4** — stable, XML metadata header, supported by all existing optiMEAS devices and tools.
+- **OSF5** — in development, JSON metadata header, simplified control byte, no trailer, fully backward-compatible with OSF4.
+
+All implementations must support OSF4 reading as a minimum.
+OSF5 writing is the target for new implementations.
+OSF5 readers must also handle OSF4 files (backward compatibility is mandatory).
+
+The format version is detected automatically:
+- Magic header starts with `OSF4`, `OSF5`, or `OCEAN_STREAMING_FORMAT4`
+- First character after the magic header: `<` = XML (OSF4), `{` = JSON (OSF5)
 
 ---
 
 ## 8. Implementation Priority Order
 
-Implementations will be developed in the following order. Priority is based on the size of the existing user base, the availability of contributors, and the strategic importance of the platform.
+1. **Delphi** — already in progress
+2. **C** — broadest embedded reach, foundation for C++ port
+3. **Python** — largest community, direct path to AI/ML integrations
+4. **C++** — industrial and Qt ecosystem
+5. **C#** — Windows tooling ecosystem
+6. **Rust** — systems + embedded, growing community
+7. **Java** — enterprise + Android
+8. **Swift** — Apple ecosystem; field measurement and analysis apps
+9. **MicroPython** — embedded, after C is stable
+10. **JavaScript/TypeScript** — web and Node.js
+11. **MATLAB** — reader only, engineering niche
 
-1. Delphi — reference implementation, already in progress
-2. Python — required by all AI/data integrations
-3. C — low-level reference for porting to other languages
-4. C++ — industrial measurement systems
-5. C# — Windows tooling and automation
-6. JavaScript — web and Node.js ecosystem
-7. Java — enterprise and Android
-8. Swift — Apple ecosystem field and analysis apps
-9. MicroPython — embedded sensor nodes
-10. Rust — high-performance and embedded
-11. MATLAB — engineering analysis (reader only)
+Integrations (Arrow, PyTorch, TensorFlow, MCP, LangChain) follow after the Python implementation is stable.
+
+---
+
+## 9. Examples
+
+The `examples/` directory will contain sample `.osf` files covering:
+- Simple scalar time-stamped channels (double, int16)
+- Equidistant channels
+- Mixed channel types in one file
+- Binary blobs (WAV audio, images)
+- Large files for performance testing
+
+These files are generated by the Delphi demo generator and will later be regenerated by each implementation as a correctness test.
+
+---
+
+## 10. AI-Assisted Development
+
+This project uses Claude (Anthropic) for code generation and documentation. Each implementation is
+developed in a separate chat session. To maintain context across sessions, every new session should
+be initialized with:
+
+- The format specification from `docs/`
+- This `DECISIONS.md` file
+- The `CONTRIBUTING.md` file
+- The target language `README.md`
+
+Suggested session opener:
+> "Please read the OSF specification in docs/, DECISIONS.md, and CONTRIBUTING.md.
+> We are now implementing OSF in [language]. Start with the reader for OSF4."
