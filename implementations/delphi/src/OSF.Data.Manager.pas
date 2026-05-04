@@ -116,6 +116,16 @@ type
     property OnLog        : TOSFLogEvent read FOnLog        write FOnLog;
   end;
 
+resourcestring
+  // Log messages emitted by the data manager via OnLog.
+  SOSFLogLoadingFile          = 'Loading OSF file: %s';
+  SOSFLogLoadedChannels       = 'Loaded %d channels';
+  SOSFLogChannelSummary       = '  [%s]  %d samples  %s .. %s';
+  SOSFLogPrecisionLossInt64   = 'Channel [%s] uses Int64/UInt64 — ValueAsDouble may lose precision for values > 2^53';
+  SOSFLogTruncatedFilePartial = 'Truncated or partial file — %d complete blocks read';
+  SOSFLogChannelNotFoundName  = 'Channel not found by name: "%s"';
+  SOSFLogDataManagerCleared   = 'DataManager cleared';
+
 implementation
 
 // ── Local helpers ────────────────────────────────────────────────────────────
@@ -349,7 +359,7 @@ begin
   FLatitude       := 0;
   FLongitude      := 0;
   FAltitude       := 0;
-  Log(llDebug, 'DataManager cleared');
+  Log(llDebug, SOSFLogDataManagerCleared);
 end;
 
 function TOSFDataManager.GetChannelCount: Integer;
@@ -421,7 +431,7 @@ begin
     if FChannels[I].Name = Name then
       Exit(FChannels[I]);
   Result := nil;
-  Log(llWarning, 'Channel not found by name: "%s"', [Name]);
+  Log(llWarning, SOSFLogChannelNotFoundName, [Name]);
 end;
 
 function TOSFDataManager.ChannelByIndex(Index: Integer): TOSFDataChannel;
@@ -458,7 +468,7 @@ procedure TOSFDataManager.LoadFromFile(const FileName: string);
 var
   FS: TFileStream;
 begin
-  Log(llInfo, 'Loading OSF file: %s', [FileName]);
+  Log(llInfo, SOSFLogLoadingFile, [FileName]);
   FS := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
   try
     LoadFromStream(FS);
@@ -500,11 +510,10 @@ begin
     CreateChannelsFromFiler(Filer);
     BlockCount := ConsumeBlocks(Filer);
 
-    Log(llInfo, 'Loaded %d channels', [FChannels.Count]);
+    Log(llInfo, SOSFLogLoadedChannels, [FChannels.Count]);
     LogChannelsSummary;
     if TruncationSeen then
-      Log(llWarning, 'Truncated or partial file — %d complete blocks read',
-          [BlockCount]);
+      Log(llWarning, SOSFLogTruncatedFilePartial, [BlockCount]);
   finally
     Filer.Free;
   end;
@@ -524,15 +533,13 @@ begin
   for I := 0 to FChannels.Count - 1 do
   begin
     Ch := FChannels[I];
-    Log(llInfo, '  [%s]  %d samples  %s .. %s',
+    Log(llInfo, SOSFLogChannelSummary,
         [Ch.Name,
          Ch.SampleCount,
          FormatDateTime(TS_FMT, Ch.StartTimeUtc),
          FormatDateTime(TS_FMT, Ch.EndTimeUtc)]);
     if Ch.HasDoublePrecisionLoss then
-      Log(llWarning,
-          'Channel [%s] uses Int64/UInt64 — ValueAsDouble may lose precision for values > 2^53',
-          [Ch.Name]);
+      Log(llWarning, SOSFLogPrecisionLossInt64, [Ch.Name]);
   end;
 end;
 

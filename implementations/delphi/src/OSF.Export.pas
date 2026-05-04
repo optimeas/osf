@@ -62,6 +62,12 @@ type
       read FAbsoluteTimestamps write FAbsoluteTimestamps;
   end;
 
+resourcestring
+  // Log messages emitted by Export() before, after and on failure.
+  SOSFLogExportStarted  = 'Export started: %s';
+  SOSFLogExportFinished = 'Export finished: %s';
+  SOSFLogExportFailed   = 'Export failed: %s — %s';
+
 implementation
 
 constructor TOSFExporter.Create(DataManager: TOSFDataManager);
@@ -101,14 +107,14 @@ end;
 
 procedure TOSFExporter.Export(const FileName: string);
 begin
-  Log(llInfo, 'Export started: %s', [FileName]);
+  Log(llInfo, SOSFLogExportStarted, [FileName]);
   try
     DoExport(FileName);
-    Log(llInfo, 'Export finished: %s', [FileName]);
+    Log(llInfo, SOSFLogExportFinished, [FileName]);
   except
     on E: Exception do
     begin
-      Log(llError, 'Export failed: %s — %s', [FileName, E.Message]);
+      Log(llError, SOSFLogExportFailed, [FileName, E.Message]);
       raise;
     end;
   end;

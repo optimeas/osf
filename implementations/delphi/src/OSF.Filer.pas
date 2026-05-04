@@ -276,6 +276,21 @@ resourcestring
   SOSFTSBlockLengthMismatch    = 'WriteTimestampedBlock: Timestamps and Values lengths must match';
   SOSFTSDoublesLengthMismatch  = 'WriteTimestampedDoubles: Timestamps and Values lengths must match';
 
+  // Log messages — informational, debug and warning text emitted via OnLog.
+  SOSFLogOpeningFile           = 'Opening file for read: %s (%d bytes)';
+  SOSFLogDetectedVersion       = 'Detected version: %s, meta format: %s';
+  SOSFLogChannelsDefined       = 'Channels defined in meta block: %d';
+  SOSFLogChannelEntry          = '  [%d] %s  type=%s  equidistant=%s';
+  SOSFLogBlockRead             = 'Block: channel=%d  type=%s  samples=%d  bytes=%d';
+  SOSFLogTruncatedBlock        = 'Truncated block at offset %d — stopping';
+  SOSFLogUnknownBlockTypeInfo  = 'Unknown block type %d in info block — skipping';
+  SOSFLogUnknownChannelInBlock = 'Block references unknown channel index %d — skipping';
+  SOSFLogUnknownBlockType      = 'Unknown block type %d at offset %d — skipping';
+  SOSFLogWritingHeader         = 'Writing header: version=%s  channels=%d';
+  SOSFLogWriteEquidistant      = 'WriteEquidistant: channel=%d  samples=%d';
+  SOSFLogWriteTimestamped      = 'WriteTimestamped: channel=%d  samples=%d';
+  SOSFLogFileClosed            = 'File closed: %s  total bytes=%d';
+
 implementation
 
 const
@@ -600,7 +615,7 @@ begin
   end;
   // Pre-format with Format() so we exercise the single-string Log overload —
   // the array-of-const overload is exercised by every other call site.
-  Log(llInfo, Format('File closed: %s  total bytes=%d', [SourceStr, TotalBytes]));
+  Log(llInfo, Format(SOSFLogFileClosed, [SourceStr, TotalBytes]));
 end;
 
 function TOSFFile.GetChannelCount: Integer;
@@ -673,7 +688,7 @@ var
 begin
   FS := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
   FSourceName := FileName;
-  Log(llInfo, 'Opening file for read: %s (%d bytes)', [FileName, FS.Size]);
+  Log(llInfo, SOSFLogOpeningFile, [FileName, FS.Size]);
   OpenForRead(FS, True);
 end;
 
@@ -691,13 +706,13 @@ begin
   FInfoItems.Clear;
   ReadMagicAndMeta;
 
-  Log(llInfo, 'Detected version: %s, meta format: %s',
+  Log(llInfo, SOSFLogDetectedVersion,
       [VersionToLogString(FVersion), MetaFormatToLogString(FMetaFormat)]);
-  Log(llInfo, 'Channels defined in meta block: %d', [FChannels.Count]);
+  Log(llInfo, SOSFLogChannelsDefined, [FChannels.Count]);
   for I := 0 to FChannels.Count - 1 do
   begin
     Ch := FChannels[I];
-    Log(llDebug, '  [%d] %s  type=%s  equidistant=%s',
+    Log(llDebug, SOSFLogChannelEntry,
         [Ch.Index,
          Ch.Name,
          OSFDataTypeToString(Ch.DataType),
@@ -927,13 +942,13 @@ begin
     Result := ReadDataBlock(ChannelIndex, Block);
 
   if Result and (not Block.IsInfoBlock) then
-    Log(llDebug, 'Block: channel=%d  type=%s  samples=%d  bytes=%d',
+    Log(llDebug, SOSFLogBlockRead,
         [ChannelIndex,
          BlockTypeToLogString(Block.BlockType),
          Block.SampleCount,
          Length(Block.RawPayload)])
   else if (not Result) and (not Block.IsInfoBlock) then
-    Log(llWarning, 'Truncated block at offset %d — stopping', [StartOffset]);
+    Log(llWarning, SOSFLogTruncatedBlock, [StartOffset]);
 end;
 
 function TOSFFile.TryReadChannelIndex(out ChannelIndex: Word): Boolean;
@@ -967,7 +982,7 @@ begin
     TypeBits := Payload[0] and OSF_BLOCK_TYPE_MASK;
     if Integer(TypeBits) > Ord(bcAbsTimeStampData) then
     begin
-      Log(llWarning, 'Unknown block type %d in info block — skipping', [TypeBits]);
+      Log(llWarning, SOSFLogUnknownBlockTypeInfo, [TypeBits]);
       Exit(False);
     end;
     Block.BlockType := TBlockContent(TypeBits);
@@ -989,9 +1004,7 @@ begin
   Channel := FindChannel(ChannelIndex);
   if not Assigned(Channel) then
   begin
-    Log(llWarning,
-        'Block references unknown channel index %d — skipping',
-        [ChannelIndex]);
+    Log(llWarning, SOSFLogUnknownChannelInBlock, [ChannelIndex]);
     Exit(False);
   end;
 
@@ -1037,8 +1050,7 @@ begin
   TypeBits := CtrlByte and OSF_BLOCK_TYPE_MASK;
   if Integer(TypeBits) > Ord(bcAbsTimeStampData) then
   begin
-    Log(llWarning, 'Unknown block type %d at offset %d — skipping',
-        [TypeBits, Pos]);
+    Log(llWarning, SOSFLogUnknownBlockType, [TypeBits, Pos]);
     Exit;
   end;
   Block.BlockType  := TBlockContent(TypeBits);
@@ -1334,7 +1346,7 @@ begin
   FStream.WriteBuffer(MetaBytes[0],  Length(MetaBytes));
 
   FHeaderWritten := True;
-  Log(llInfo, 'Writing header: version=%s  channels=%d',
+  Log(llInfo, SOSFLogWritingHeader,
       [VersionToLogString(FVersion), FChannels.Count]);
 end;
 
@@ -1381,7 +1393,7 @@ begin
     Channel.StartTimestampNs := FirstTimestampNs;
     Channel.LastTimestampNs  := FirstTimestampNs;
   end;
-  Log(llDebug, 'WriteEquidistant: channel=%d  samples=%d', [ChannelIndex, N]);
+  Log(llDebug, SOSFLogWriteEquidistant, [ChannelIndex, N]);
 end;
 
 procedure TOSFFile.WriteTimestampedSample(ChannelIndex: Integer;
@@ -1419,7 +1431,7 @@ begin
 
   Channel.SampleCount     := Channel.SampleCount + N;
   Channel.LastTimestampNs := Timestamps[N - 1];
-  Log(llDebug, 'WriteTimestamped: channel=%d  samples=%d', [ChannelIndex, N]);
+  Log(llDebug, SOSFLogWriteTimestamped, [ChannelIndex, N]);
 end;
 
 procedure TOSFFile.WriteTimestampedDoubles(ChannelIndex: Integer;

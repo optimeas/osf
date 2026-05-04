@@ -81,29 +81,34 @@ type
     property TimestampFormat  : string  read FTimestampFormat  write FTimestampFormat;
   end;
 
+resourcestring
+  // Header-row labels (German Excel flavour by default).
+  SOSFCSVHdrName         = 'Name:';
+  SOSFCSVHdrChannelTyp   = 'Channel-Typ:';
+  SOSFCSVHdrComment      = 'Comment:';
+  SOSFCSVHdrUnit         = 'Unit:';
+  SOSFCSVHdrStartTs      = 'Start-Timestamp:';
+  SOSFCSVHdrLastTs       = 'Last-Timestamp:';
+  SOSFCSVTimeAxisLabel   = 'time';
+  SOSFCSVTimeAxisUnit    = 's';
+  SOSFCSVChannelTypValue = 'XY';
+  SOSFCSVXValuesHeader   = 'X-Values';
+  SOSFCSVYValuesHeader   = 'Y-Values';
+
+  // Log messages emitted from DoExport.
+  SOSFLogCSVStarted      = 'CSV export started: %s  channels=%d';
+  SOSFLogCSVFinished     = 'CSV export finished: %s  rows=%d  bytes=%d';
+  SOSFLogCSVSkipEmpty    = 'Skipping empty channel: %s';
+  SOSFLogCSVPrecision    = 'Channel [%s] has Int64/UInt64 values — CSV output may lose precision';
+  SOSFLogCSVFailed       = 'CSV export failed: %s';
+
 implementation
 
+// Technical constants — codepage and line terminator are part of the file
+// format wire layout, not user-visible text, so they stay as const.
 const
-  ISO_8859_1_CODEPAGE   = 28591;
-  CSV_LINE_TERMINATOR   = #13#10;
-
-  CSV_HDR_NAME          = 'Name:';
-  CSV_HDR_CHANNEL_TYP   = 'Channel-Typ:';
-  CSV_HDR_COMMENT       = 'Comment:';
-  CSV_HDR_UNIT          = 'Unit:';
-  CSV_HDR_START_TS      = 'Start-Timestamp:';
-  CSV_HDR_LAST_TS       = 'Last-Timestamp:';
-  CSV_TIME_AXIS_LABEL   = 'time';
-  CSV_TIME_AXIS_UNIT    = 's';
-  CSV_CHANNEL_TYP_VALUE = 'XY';
-  CSV_X_VALUES_HEADER   = 'X-Values';
-  CSV_Y_VALUES_HEADER   = 'Y-Values';
-
-  CSV_INFO_STARTED      = 'CSV export started: %s  channels=%d';
-  CSV_INFO_FINISHED     = 'CSV export finished: %s  rows=%d  bytes=%d';
-  CSV_DEBUG_SKIP_EMPTY  = 'Skipping empty channel: %s';
-  CSV_WARN_PRECISION    = 'Channel [%s] has Int64/UInt64 values — CSV output may lose precision';
-  CSV_ERROR_FAILED      = 'CSV export failed: %s';
+  ISO_8859_1_CODEPAGE = 28591;
+  CSV_LINE_TERMINATOR = #13#10;
 
 // Returns True for OSF data types whose ValueAsString produces a single number
 // where '.' is the decimal point. Pair/Triple, Gps, Can produce composite
@@ -200,10 +205,10 @@ begin
       Result[Cnt] := Ch;
       Inc(Cnt);
       if Ch.HasDoublePrecisionLoss then
-        Log(llWarning, CSV_WARN_PRECISION, [Ch.Name]);
+        Log(llWarning, SOSFLogCSVPrecision, [Ch.Name]);
     end
     else
-      Log(llDebug, CSV_DEBUG_SKIP_EMPTY, [Ch.Name]);
+      Log(llDebug, SOSFLogCSVSkipEmpty, [Ch.Name]);
   end;
   SetLength(Result, Cnt);
 end;
@@ -215,9 +220,9 @@ function TOSFCSVExporter.BuildHeaderRow_Name(
 var
   I: Integer;
 begin
-  Result := CSV_HDR_NAME;
+  Result := SOSFCSVHdrName;
   for I := 0 to High(Channels) do
-    Result := Result + FColumnSeparator + CSV_TIME_AXIS_LABEL +
+    Result := Result + FColumnSeparator + SOSFCSVTimeAxisLabel +
                        FColumnSeparator + Channels[I].Name;
 end;
 
@@ -226,9 +231,9 @@ function TOSFCSVExporter.BuildHeaderRow_ChannelTyp(
 var
   I: Integer;
 begin
-  Result := CSV_HDR_CHANNEL_TYP;
+  Result := SOSFCSVHdrChannelTyp;
   for I := 0 to High(Channels) do
-    Result := Result + FColumnSeparator + CSV_CHANNEL_TYP_VALUE +
+    Result := Result + FColumnSeparator + SOSFCSVChannelTypValue +
                        FColumnSeparator;
 end;
 
@@ -237,7 +242,7 @@ function TOSFCSVExporter.BuildHeaderRow_Comment(
 var
   I: Integer;
 begin
-  Result := CSV_HDR_COMMENT;
+  Result := SOSFCSVHdrComment;
   for I := 0 to High(Channels) do
     Result := Result + FColumnSeparator +
                        FColumnSeparator + Channels[I].Comment;
@@ -248,9 +253,9 @@ function TOSFCSVExporter.BuildHeaderRow_Unit(
 var
   I: Integer;
 begin
-  Result := CSV_HDR_UNIT;
+  Result := SOSFCSVHdrUnit;
   for I := 0 to High(Channels) do
-    Result := Result + FColumnSeparator + CSV_TIME_AXIS_UNIT +
+    Result := Result + FColumnSeparator + SOSFCSVTimeAxisUnit +
                        FColumnSeparator + Channels[I].PhysicalUnit;
 end;
 
@@ -259,7 +264,7 @@ function TOSFCSVExporter.BuildHeaderRow_Start(
 var
   I: Integer;
 begin
-  Result := CSV_HDR_START_TS;
+  Result := SOSFCSVHdrStartTs;
   for I := 0 to High(Channels) do
     Result := Result + FColumnSeparator + FormatTimestamp(Channels[I].StartTimeUtc) +
                        FColumnSeparator;
@@ -270,7 +275,7 @@ function TOSFCSVExporter.BuildHeaderRow_Last(
 var
   I: Integer;
 begin
-  Result := CSV_HDR_LAST_TS;
+  Result := SOSFCSVHdrLastTs;
   for I := 0 to High(Channels) do
     Result := Result + FColumnSeparator + FormatTimestamp(Channels[I].EndTimeUtc) +
                        FColumnSeparator;
@@ -284,8 +289,8 @@ begin
   // Row 8: empty Col 0, then per channel: 'X-Values' and 'Y-Values'.
   Result := '';
   for I := 0 to High(Channels) do
-    Result := Result + FColumnSeparator + CSV_X_VALUES_HEADER +
-                       FColumnSeparator + CSV_Y_VALUES_HEADER;
+    Result := Result + FColumnSeparator + SOSFCSVXValuesHeader +
+                       FColumnSeparator + SOSFCSVYValuesHeader;
 end;
 
 function TOSFCSVExporter.BuildDataRow(const Channels: TArray<TOSFDataChannel>;
@@ -327,7 +332,7 @@ var
   RowsEmitted    : Integer;
 begin
   Active := CollectActive;
-  Log(llInfo, CSV_INFO_STARTED, [FileName, Length(Active)]);
+  Log(llInfo, SOSFLogCSVStarted, [FileName, Length(Active)]);
 
   // Find the longest channel so the data section ends after the last sample
   // of the longest channel; shorter channels emit empty cells beyond their end.
@@ -357,13 +362,13 @@ begin
         Inc(RowsEmitted);
       end;
 
-      Log(llInfo, CSV_INFO_FINISHED, [FileName, RowsEmitted, FS.Size]);
+      Log(llInfo, SOSFLogCSVFinished, [FileName, RowsEmitted, FS.Size]);
     except
       on E: Exception do
       begin
         // CSV-specific failure log; the inherited Export wrapper logs the
         // generic 'Export failed: ...' message after we re-raise.
-        Log(llError, CSV_ERROR_FAILED, [E.Message]);
+        Log(llError, SOSFLogCSVFailed, [E.Message]);
         raise;
       end;
     end;
