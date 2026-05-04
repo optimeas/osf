@@ -22,9 +22,14 @@ uses
 
 const
   // Magic header tokens written as the very first bytes of every OSF file.
-  OSF_MAGIC_OSF4         = 'OSF4';
-  OSF_MAGIC_OSF5         = 'OSF5';
-  OSF_MAGIC_OCEAN_STREAM = 'OCEAN_STREAMING_FORMAT4';  // legacy OSF4 alias
+  // Two legacy spellings for the original OSF4 token are present in the wild:
+  // the long form 'OCEAN_STREAMING_FORMAT4' and the short form
+  // 'OCEAN_STREAM_FORMAT4' (the variant emitted by the original demo
+  // generator). Both are accepted on read.
+  OSF_MAGIC_OSF4                = 'OSF4';
+  OSF_MAGIC_OSF5                = 'OSF5';
+  OSF_MAGIC_OCEAN_STREAM        = 'OCEAN_STREAMING_FORMAT4';  // long legacy
+  OSF_MAGIC_OCEAN_STREAM_LEGACY = 'OCEAN_STREAM_FORMAT4';     // short legacy
 
   // Magic trailer written at the end of OSF4 files (optional).
   // Format: "OSF_STREAM_END <offset>========..." padded to exactly 40 bytes.
@@ -354,7 +359,9 @@ end;
 
 function OSFVersionFromMagic(const Magic: string): TOSFVersion;
 begin
-  if (Magic = OSF_MAGIC_OSF4) or (Magic = OSF_MAGIC_OCEAN_STREAM) then
+  if (Magic = OSF_MAGIC_OSF4) or
+     (Magic = OSF_MAGIC_OCEAN_STREAM) or
+     (Magic = OSF_MAGIC_OCEAN_STREAM_LEGACY) then
     Result := osvOSF4
   else if Magic = OSF_MAGIC_OSF5 then
     Result := osvOSF5

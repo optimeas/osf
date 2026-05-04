@@ -2,7 +2,7 @@ object FormOSFViewer: TFormOSFViewer
   Left = 0
   Top = 0
   Caption = 'OSF Viewer'
-  ClientHeight = 600
+  ClientHeight = 753
   ClientWidth = 1000
   Color = clBtnFace
   Constraints.MinHeight = 400
@@ -20,131 +20,134 @@ object FormOSFViewer: TFormOSFViewer
   object splVert: TSplitter
     Left = 280
     Top = 0
-    Height = 600
-    ExplicitLeft = 280
-    ExplicitTop = 0
+    Height = 753
     ExplicitHeight = 600
   end
   object pnlLeft: TPanel
     Left = 0
     Top = 0
     Width = 280
-    Height = 600
+    Height = 753
     Align = alLeft
     BevelOuter = bvNone
     Padding.Left = 4
     Padding.Top = 4
     Padding.Right = 4
     TabOrder = 0
+    ExplicitHeight = 592
     object lblChannels: TLabel
       AlignWithMargins = True
       Left = 4
       Top = 4
       Width = 272
-      Height = 17
+      Height = 13
       Margins.Left = 0
       Margins.Top = 0
       Margins.Right = 0
       Margins.Bottom = 4
       Align = alTop
       Caption = 'Channels'
-      ExplicitWidth = 60
+      ExplicitWidth = 48
     end
     object lbChannels: TListBox
       Left = 4
-      Top = 25
+      Top = 21
       Width = 272
-      Height = 575
-      Align = alClient
+      Height = 732
       Style = lbOwnerDrawFixed
+      Align = alClient
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
       Font.Height = -12
       Font.Name = 'Consolas'
       Font.Style = []
-      ItemHeight = 16
       ParentFont = False
       TabOrder = 0
       OnClick = lbChannelsClick
       OnDrawItem = lbChannelsDrawItem
+      ExplicitHeight = 571
     end
   end
   object pnlRight: TPanel
-    Left = 285
+    Left = 283
     Top = 0
-    Width = 715
-    Height = 600
+    Width = 717
+    Height = 753
     Align = alClient
     BevelOuter = bvNone
     TabOrder = 1
+    ExplicitLeft = 282
+    ExplicitHeight = 814
+    DesignSize = (
+      717
+      753)
     object splHorz: TSplitter
-      Cursor = crVSplit
       Left = 0
-      Top = 495
-      Width = 715
+      Top = 569
+      Width = 717
       Height = 5
-      Align = alBottom
+      Cursor = crVSplit
+      Align = alTop
       ExplicitTop = 495
       ExplicitWidth = 715
-    end
-    object chtData: TChart
-      Left = 0
-      Top = 0
-      Width = 715
-      Height = 495
-      Title.Font.Color = clWindowText
-      Title.Font.Height = -13
-      Title.Font.Name = 'Segoe UI'
-      Title.Font.Style = [fsBold]
-      Title.Text.Strings = (
-        '')
-      BottomAxis.DateTimeFormat = 'yyyy-mm-dd hh:nn:ss'
-      View3D = False
-      Align = alClient
-      TabOrder = 0
     end
     object lblNoChart: TLabel
       Left = 0
       Top = 0
-      Width = 715
-      Height = 495
-      Anchors = [akLeft, akTop, akRight, akBottom]
+      Width = 303
+      Height = 174
       Alignment = taCenter
+      Anchors = [akLeft, akTop, akRight, akBottom]
       Caption = 'Channel type cannot be displayed as a chart'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clGrayText
       Font.Height = -16
       Font.Name = 'Segoe UI'
       Font.Style = []
-      Layout = tlCenter
       ParentFont = False
+      Layout = tlCenter
       Visible = False
-      ExplicitWidth = 312
       ExplicitHeight = 21
+    end
+    object chtData: TChart
+      Left = 0
+      Top = 0
+      Width = 717
+      Height = 569
+      Title.Font.Color = clWindowText
+      Title.Font.Name = 'Segoe UI'
+      Title.Font.Style = [fsBold]
+      Title.Text.Strings = (
+        '')
+      BottomAxis.DateTimeFormat = 'yyyy-mm-dd hh:nn:ss'
+      View3D = False
+      Align = alTop
+      TabOrder = 0
+      DefaultCanvas = 'TGDIPlusCanvas'
+      ColorPaletteIndex = 0
     end
     object pnlBottomLog: TPanel
       Left = 0
-      Top = 500
-      Width = 715
-      Height = 100
-      Align = alBottom
+      Top = 615
+      Width = 717
+      Height = 138
+      Align = alClient
       BevelOuter = bvNone
       TabOrder = 1
-      object cbDebug: TCheckBox
-        Left = 8
-        Top = 4
-        Width = 200
-        Height = 17
-        Caption = 'Show debug output'
-        TabOrder = 0
-        OnClick = cbDebugClick
-      end
+      ExplicitTop = 492
+      ExplicitWidth = 715
+      ExplicitHeight = 100
       object memLog: TMemo
-        Left = 0
-        Top = 24
-        Width = 715
-        Height = 76
-        Align = alBottom
+        AlignWithMargins = True
+        Left = 8
+        Top = 8
+        Width = 701
+        Height = 122
+        Margins.Left = 8
+        Margins.Top = 8
+        Margins.Right = 8
+        Margins.Bottom = 8
+        Align = alClient
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWindowText
         Font.Height = -11
@@ -153,8 +156,34 @@ object FormOSFViewer: TFormOSFViewer
         ParentFont = False
         ReadOnly = True
         ScrollBars = ssBoth
-        TabOrder = 1
+        TabOrder = 0
         WordWrap = False
+        ExplicitLeft = 6
+        ExplicitTop = -24
+        ExplicitWidth = 717
+        ExplicitHeight = 100
+      end
+    end
+    object Panel1: TPanel
+      Left = 0
+      Top = 574
+      Width = 717
+      Height = 41
+      Align = alTop
+      BevelOuter = bvNone
+      TabOrder = 2
+      ExplicitLeft = 23
+      ExplicitTop = 580
+      ExplicitWidth = 185
+      object cbDebug: TCheckBox
+        Left = 19
+        Top = 12
+        Width = 200
+        Height = 17
+        Margins.Left = 16
+        Caption = 'Show debug output'
+        TabOrder = 0
+        OnClick = cbDebugClick
       end
     end
   end
