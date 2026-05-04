@@ -195,6 +195,43 @@ type
     function ChannelByIndex(Index: Integer): TOSFChannelDef;
   end;
 
+resourcestring
+  // Lifecycle / mode errors.
+  SOSFFileAlreadyOpen          = 'TOSFFile: already open';
+  SOSFCreateForWriteBadVersion = 'CreateForWrite: AVersion must be osvOSF4 or osvOSF5';
+  SOSFAddChannelAfterHeader    = 'AddChannel must be called before WriteHeader';
+  SOSFAddInfoItemAfterHeader   = 'AddInfoItem must be called before WriteHeader';
+  SOSFWriteHeaderNotWriteMode  = 'WriteHeader requires the file to be open for writing';
+  SOSFWriteHeaderAlreadyCalled = 'WriteHeader has already been called';
+  SOSFWriteHeaderBadVersion    = 'WriteHeader: unsupported FVersion';
+  SOSFWriteBeforeHeader        = 'WriteHeader must be called before writing data blocks';
+
+  // AddChannel uniqueness errors.
+  SOSFDuplicateChannelIndex    = 'AddChannel: duplicate channel index %d';
+  SOSFDuplicateChannelName     = 'AddChannel: duplicate channel name "%s"';
+
+  // Header / meta-block parse errors.
+  SOSFUnexpectedEOFInHeader    = 'Unexpected end of stream reading magic header';
+  SOSFInvalidMagicHeader       = 'Invalid OSF magic header: %s';
+  SOSFUnsupportedMagicToken    = 'Unsupported OSF magic token: "%s"';
+  SOSFInvalidMetaBlockSize     = 'Invalid meta block size in header: "%s"';
+  SOSFUnknownMetaFormat        = 'Unknown meta block format: first byte is 0x%02X (expected ''<'' or ''{'')';
+  SOSFParseJSONMetaFailed      = 'Failed to parse OSF5 JSON meta block';
+  SOSFMissingOSFKey            = 'JSON meta block is missing the top-level "osf" key';
+  SOSFXMLNoRootElement         = 'XML meta block has no root element';
+
+  // Data-block read errors.
+  SOSFUnknownChannelInBlock    = 'Data block references channel index %d which is not defined in the meta block';
+  SOSFZeroLengthBlock          = 'Zero-length data block for channel %d';
+
+  // Data-block write errors.
+  SOSFEquiUnknownChannel       = 'WriteEquidistantBlock: unknown channel index %d';
+  SOSFEquiNoFirstTimestamp     = 'WriteEquidistantBlock: FirstTimestampNs must be provided for the first block of each channel';
+  SOSFTimestampedUnknown       = 'WriteTimestampedSample: unknown channel index %d';
+  SOSFTSBlockUnknown           = 'WriteTimestampedBlock: unknown channel index %d';
+  SOSFTSBlockLengthMismatch    = 'WriteTimestampedBlock: Timestamps and Values lengths must match';
+  SOSFTSDoublesLengthMismatch  = 'WriteTimestampedDoubles: Timestamps and Values lengths must match';
+
 implementation
 
 const
@@ -404,7 +441,7 @@ end;
 procedure TOSFFile.OpenForRead(AStream: TStream; AOwnsStream: Boolean);
 begin
   if FMode <> fmClosed then
-    raise EOSFException.Create('TOSFFile: already open');
+    raise EOSFException.Create(SOSFFileAlreadyOpen);
   FStream     := AStream;
   FOwnsStream := AOwnsStream;
   FMode       := fmRead;
@@ -423,19 +460,19 @@ var
 begin
   Line := ReadAsciiLine(FStream);
   if Length(Line) = 0 then
-    raise EOSFFormatError.Create('Unexpected end of stream reading magic header');
+    raise EOSFFormatError.Create(SOSFUnexpectedEOFInHeader);
 
   Parts := string(Line).Split([' ']);
   if Length(Parts) < 2 then
-    raise EOSFFormatError.Create('Invalid OSF magic header: ' + string(Line));
+    raise EOSFFormatError.CreateFmt(SOSFInvalidMagicHeader, [string(Line)]);
 
   FVersion := OSFVersionFromMagic(Parts[0]);
   if FVersion = osvUnknown then
-    raise EOSFVersionError.CreateFmt('Unsupported OSF magic token: "%s"', [Parts[0]]);
+    raise EOSFVersionError.CreateFmt(SOSFUnsupportedMagicToken, [Parts[0]]);
 
   MetaSize := StrToInt64Def(Parts[1], -1);
   if MetaSize <= 0 then
-    raise EOSFFormatError.CreateFmt('Invalid meta block size in header: "%s"', [Parts[1]]);
+    raise EOSFFormatError.CreateFmt(SOSFInvalidMetaBlockSize, [Parts[1]]);
 
   // Read the complete meta block.
   SetLength(MetaBytes, MetaSize);
@@ -447,8 +484,7 @@ begin
     '<': FMetaFormat := mfXML;
     '{': FMetaFormat := mfJSON;
   else
-    raise EOSFFormatError.CreateFmt(
-      'Unknown meta block format: first byte is 0x%02X (expected ''<'' or ''{'')', [FirstByte]);
+    raise EOSFFormatError.CreateFmt(SOSFUnknownMetaFormat, [FirstByte]);
   end;
 
   case FMetaFormat of
@@ -473,11 +509,11 @@ begin
   JSONText := TEncoding.UTF8.GetString(Data);
   Root := TJSONObject.ParseJSONValue(JSONText) as TJSONObject;
   if not Assigned(Root) then
-    raise EOSFFormatError.Create('Failed to parse OSF5 JSON meta block');
+    raise EOSFFormatError.Create(SOSFParseJSONMetaFailed);
   try
     OSFNode := Root.GetValue('osf') as TJSONObject;
     if not Assigned(OSFNode) then
-      raise EOSFFormatError.Create('JSON meta block is missing the top-level "osf" key');
+      raise EOSFFormatError.Create(SOSFMissingOSFKey);
 
     // Newer files put file metadata in a "file" sub-object; older files put
     // it directly under "osf". Support both.
@@ -538,7 +574,7 @@ begin
 
   RootNode := XMLDoc.DocumentElement;
   if not Assigned(RootNode) then
-    raise EOSFFormatError.Create('XML meta block has no root element');
+    raise EOSFFormatError.Create(SOSFXMLNoRootElement);
 
   // File-level metadata from the root element's attributes. Works for either
   // <optimeas> (OSF4) or <osf> (synthetic) — we only look at the attributes.
@@ -633,9 +669,7 @@ begin
   // Regular data block: look up the channel to determine the length field width.
   Channel := FindChannel(ChannelIndex);
   if not Assigned(Channel) then
-    raise EOSFFormatError.CreateFmt(
-      'Data block references channel index %d which is not defined in the meta block',
-      [ChannelIndex]);
+    raise EOSFFormatError.CreateFmt(SOSFUnknownChannelInBlock, [ChannelIndex]);
 
   try
     case Channel.LengthFieldSize of
@@ -646,7 +680,7 @@ begin
     end;
 
     if LenField = 0 then
-      raise EOSFFormatError.CreateFmt('Zero-length data block for channel %d', [ChannelIndex]);
+      raise EOSFFormatError.CreateFmt(SOSFZeroLengthBlock, [ChannelIndex]);
 
     SetLength(Payload, LenField);
     FStream.ReadBuffer(Payload[0], LenField);
@@ -703,9 +737,9 @@ procedure TOSFFile.CreateForWrite(AStream: TStream; AOwnsStream: Boolean;
                                    AVersion: TOSFVersion);
 begin
   if FMode <> fmClosed then
-    raise EOSFException.Create('TOSFFile: already open');
+    raise EOSFException.Create(SOSFFileAlreadyOpen);
   if not (AVersion in [osvOSF4, osvOSF5]) then
-    raise EOSFException.Create('CreateForWrite: AVersion must be osvOSF4 or osvOSF5');
+    raise EOSFException.Create(SOSFCreateForWriteBadVersion);
 
   FStream        := AStream;
   FOwnsStream    := AOwnsStream;
@@ -725,7 +759,7 @@ var
   I: Integer;
 begin
   if FHeaderWritten then
-    raise EOSFException.Create('AddChannel must be called before WriteHeader');
+    raise EOSFException.Create(SOSFAddChannelAfterHeader);
 
   // A duplicate index produces an unreadable file (the reader can't tell the
   // two channels apart). A duplicate name is permitted by the spec but almost
@@ -733,11 +767,9 @@ begin
   for I := 0 to FChannels.Count - 1 do
   begin
     if FChannels[I].Index = Def.Index then
-      raise EOSFException.CreateFmt(
-        'AddChannel: duplicate channel index %d', [Def.Index]);
+      raise EOSFException.CreateFmt(SOSFDuplicateChannelIndex, [Def.Index]);
     if (Def.Name <> '') and (FChannels[I].Name = Def.Name) then
-      raise EOSFException.CreateFmt(
-        'AddChannel: duplicate channel name "%s"', [Def.Name]);
+      raise EOSFException.CreateFmt(SOSFDuplicateChannelName,  [Def.Name]);
   end;
 
   FChannels.Add(Def);
@@ -749,7 +781,7 @@ var
   Item: TOSFMetaItem;
 begin
   if FHeaderWritten then
-    raise EOSFException.Create('AddInfoItem must be called before WriteHeader');
+    raise EOSFException.Create(SOSFAddInfoItemAfterHeader);
   Item.Name     := AName;
   Item.Value    := AValue;
   Item.DataType := ADataType;
@@ -882,9 +914,9 @@ var
   Magic      : string;
 begin
   if FMode <> fmWrite then
-    raise EOSFException.Create('WriteHeader requires the file to be open for writing');
+    raise EOSFException.Create(SOSFWriteHeaderNotWriteMode);
   if FHeaderWritten then
-    raise EOSFException.Create('WriteHeader has already been called');
+    raise EOSFException.Create(SOSFWriteHeaderAlreadyCalled);
 
   if FMetadata.CreatedUtc = 0 then
     FMetadata.CreatedUtc := TTimeZone.Local.ToUniversalTime(Now);
@@ -903,7 +935,7 @@ begin
         Magic     := OSF_MAGIC_OSF5;
       end;
   else
-    raise EOSFException.Create('WriteHeader: unsupported FVersion');
+    raise EOSFException.Create(SOSFWriteHeaderBadVersion);
   end;
 
   // Magic header line: "<MAGIC> <metabytecount>\n"
@@ -930,11 +962,11 @@ var
   NVal       : UInt32;
 begin
   if not FHeaderWritten then
-    raise EOSFException.Create('WriteHeader must be called before writing data blocks');
+    raise EOSFException.Create(SOSFWriteBeforeHeader);
 
   Channel := ChannelByIndex(ChannelIndex);
   if not Assigned(Channel) then
-    raise EOSFFormatError.CreateFmt('WriteEquidistantBlock: unknown channel index %d', [ChannelIndex]);
+    raise EOSFFormatError.CreateFmt(SOSFEquiUnknownChannel, [ChannelIndex]);
 
   N       := Length(Samples);
   IsStart := not Channel.StartBlockWritten;
@@ -942,8 +974,7 @@ begin
   if N = 0 then Exit;
 
   if IsStart and (FirstTimestampNs = 0) then
-    raise EOSFFormatError.Create(
-      'WriteEquidistantBlock: FirstTimestampNs must be provided for the first block of each channel');
+    raise EOSFFormatError.Create(SOSFEquiNoFirstTimestamp);
 
   if IsStart then
     CtrlByte := OSFMakeControlByte(bcStartData, N > 1)
@@ -1002,11 +1033,11 @@ var
   Buf        : TBytes;
 begin
   if not FHeaderWritten then
-    raise EOSFException.Create('WriteHeader must be called before writing data blocks');
+    raise EOSFException.Create(SOSFWriteBeforeHeader);
 
   Channel := ChannelByIndex(ChannelIndex);
   if not Assigned(Channel) then
-    raise EOSFFormatError.CreateFmt('WriteTimestampedSample: unknown channel index %d', [ChannelIndex]);
+    raise EOSFFormatError.CreateFmt(SOSFTimestampedUnknown, [ChannelIndex]);
 
   // Single sample: bit 7 = 0, no sample-count field, no per-value length prefix
   // (the block length tells the reader the value size).
@@ -1047,18 +1078,16 @@ var
   Payload    : TBytes;
 begin
   if not FHeaderWritten then
-    raise EOSFException.Create('WriteHeader must be called before writing data blocks');
+    raise EOSFException.Create(SOSFWriteBeforeHeader);
 
   N := Length(Timestamps);
   if N = 0 then Exit;
   if Length(Values) <> N then
-    raise EOSFException.Create(
-      'WriteTimestampedBlock: Timestamps and Values lengths must match');
+    raise EOSFException.Create(SOSFTSBlockLengthMismatch);
 
   Channel := ChannelByIndex(ChannelIndex);
   if not Assigned(Channel) then
-    raise EOSFFormatError.CreateFmt(
-      'WriteTimestampedBlock: unknown channel index %d', [ChannelIndex]);
+    raise EOSFFormatError.CreateFmt(SOSFTSBlockUnknown, [ChannelIndex]);
 
   IsVariable := OSFDataTypeIsVariableLength(Channel.DataType);
   IsMulti    := N > 1;
@@ -1119,8 +1148,7 @@ var
   D             : Double;
 begin
   if Length(Values) <> Length(Timestamps) then
-    raise EOSFException.Create(
-      'WriteTimestampedDoubles: Timestamps and Values lengths must match');
+    raise EOSFException.Create(SOSFTSDoublesLengthMismatch);
   SetLength(EncodedValues, Length(Values));
   for I := 0 to High(Values) do
   begin

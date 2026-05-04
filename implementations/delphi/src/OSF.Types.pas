@@ -172,6 +172,14 @@ type
   {$MESSAGE ERROR 'TOSFTriple must be exactly 24 bytes'}
 {$ENDIF}
 
+resourcestring
+  SOSFUnknownDataType        = 'Unknown OSF data type: "%s"';
+  SOSFUnhandledDataType      = 'Unhandled TOSFDataType value: %d';
+  SOSFUnknownChannelType     = 'Unknown OSF channel type: "%s"';
+  SOSFUnhandledChannelType   = 'Unhandled TOSFChannelType value: %d';
+  SOSFUnknownBlockTypeByte   = 'Unknown block type byte: %d';
+  SOSFInvalidLengthFieldSize = 'Invalid sizeoflengthvalue %d — must be 2 or 4';
+
 // Data type helpers.
 function OSFDataTypeFromString(const S: string): TOSFDataType;
 function OSFDataTypeToString(DT: TOSFDataType): string;
@@ -229,7 +237,7 @@ begin
   else if Lower = 'pair'      then Exit(dtPair)
   else if Lower = 'triple'    then Exit(dtTriple);
 
-  raise EOSFFormatError.CreateFmt('Unknown OSF data type: "%s"', [S]);
+  raise EOSFFormatError.CreateFmt(SOSFUnknownDataType, [S]);
 end;
 
 function OSFDataTypeToString(DT: TOSFDataType): string;
@@ -253,7 +261,7 @@ begin
     dtPair:    Result := 'pair';
     dtTriple:  Result := 'triple';
   else
-    raise EOSFFormatError.CreateFmt('Unhandled TOSFDataType value: %d', [Ord(DT)]);
+    raise EOSFFormatError.CreateFmt(SOSFUnhandledDataType, [Ord(DT)]);
   end;
 end;
 
@@ -278,7 +286,7 @@ begin
     dtPair:    Result := 16;
     dtTriple:  Result := 24;
   else
-    raise EOSFFormatError.CreateFmt('Unhandled TOSFDataType value: %d', [Ord(DT)]);
+    raise EOSFFormatError.CreateFmt(SOSFUnhandledDataType, [Ord(DT)]);
   end;
 end;
 
@@ -297,7 +305,7 @@ begin
   else if Lower = 'matrix' then Exit(ctMatrix)
   else if Lower = 'binary' then Exit(ctBinary);
 
-  raise EOSFFormatError.CreateFmt('Unknown OSF channel type: "%s"', [S]);
+  raise EOSFFormatError.CreateFmt(SOSFUnknownChannelType, [S]);
 end;
 
 function OSFChannelTypeToString(CT: TOSFChannelType): string;
@@ -308,7 +316,7 @@ begin
     ctMatrix: Result := 'matrix';
     ctBinary: Result := 'binary';
   else
-    raise EOSFFormatError.CreateFmt('Unhandled TOSFChannelType value: %d', [Ord(CT)]);
+    raise EOSFFormatError.CreateFmt(SOSFUnhandledChannelType, [Ord(CT)]);
   end;
 end;
 
@@ -318,7 +326,7 @@ var
 begin
   TypeBits := ControlByte and OSF_BLOCK_TYPE_MASK;
   if Integer(TypeBits) > Ord(bcAbsTimeStampData) then
-    raise EOSFFormatError.CreateFmt('Unknown block type byte: %d', [TypeBits]);
+    raise EOSFFormatError.CreateFmt(SOSFUnknownBlockTypeByte, [TypeBits]);
   Result := TBlockContent(TypeBits);
 end;
 
@@ -340,8 +348,7 @@ begin
     2: Result := lfs2;
     4: Result := lfs4;
   else
-    raise EOSFFormatError.CreateFmt(
-      'Invalid sizeoflengthvalue %d — must be 2 or 4', [Value]);
+    raise EOSFFormatError.CreateFmt(SOSFInvalidLengthFieldSize, [Value]);
   end;
 end;
 
