@@ -25,7 +25,8 @@ uses
   Xml.XMLIntf,
   Xml.XMLDoc,
   OSF.Types,
-  OSF.Channel;
+  OSF.Channel,
+  OSF.Log;
 
 type
   // File-level metadata written in the OSF meta block.
@@ -75,6 +76,18 @@ type
     FMetadata      : TOSFFileMetadata;
     FInfoItems     : TList<TOSFMetaItem>;
     FHeaderWritten : Boolean;
+
+    // Logging — copied verbatim from TOSFLoggable because TOSFFile already
+    // has an inheritance constraint and cannot subclass TOSFLoggable.
+    FOnLog        : TOSFLogEvent;
+    FDebugEnabled : Boolean;
+    // Source filename, set by the file-based OpenForRead/CreateForWrite
+    // overloads. Used purely for log message formatting; empty when the
+    // user opened the filer on a raw stream.
+    FSourceName   : string;
+    procedure Log(Level: TOSFLogLevel; const Msg: string); overload;
+    procedure Log(Level: TOSFLogLevel; const Fmt: string;
+                   const Args: array of const); overload;
 
     // Magic header line + meta block dispatcher.
     procedure ReadMagicAndMeta;
@@ -219,6 +232,11 @@ type
     function ChannelByName(const Name: string): TOSFChannelDef;
     // Looks up a channel by its Index attribute; returns nil if not found.
     function ChannelByIndex(Index: Integer): TOSFChannelDef;
+
+    // Logging hook — emit human-readable progress / diagnostic messages.
+    // Default: unassigned (silent). DebugEnabled gates llDebug messages.
+    property DebugEnabled : Boolean      read FDebugEnabled write FDebugEnabled;
+    property OnLog        : TOSFLogEvent read FOnLog        write FOnLog;
   end;
 
 resourcestring
@@ -349,6 +367,49 @@ begin
   end;
 end;
 
+function VersionToLogString(V: TOSFVersion): string;
+begin
+  case V of
+    osvOSF4:    Result := 'OSF4';
+    osvOSF5:    Result := 'OSF5';
+    osvUnknown: Result := 'unknown';
+  else
+    Result := 'unknown';
+  end;
+end;
+
+function MetaFormatToLogString(F: TOSFMetaFormat): string;
+begin
+  case F of
+    mfXML:  Result := 'XML';
+    mfJSON: Result := 'JSON';
+  else
+    Result := '?';
+  end;
+end;
+
+function BlockTypeToLogString(BT: TBlockContent): string;
+begin
+  case BT of
+    bcReserved:              Result := 'reserved';
+    bcTrustedTimestamp:      Result := 'trustedTimestamp';
+    bcTimebaseRealign:       Result := 'timebaseRealign';
+    bcStatusEvent:           Result := 'statusEvent';
+    bcMessageEvent:          Result := 'messageEvent';
+    bcContinuedData:         Result := 'continuedData';
+    bcStartData:             Result := 'startData';
+    bcContinuedRelStampData: Result := 'continuedRelStampData';
+    bcAbsTimeStampData:      Result := 'absTimeStampData';
+  else
+    Result := 'unknown';
+  end;
+end;
+
+function BoolToLogString(B: Boolean): string;
+begin
+  if B then Result := 'true' else Result := 'false';
+end;
+
 // Reads a single LF-terminated ASCII line from the stream. Strips a trailing CR
 // if present. Stops at the first LF or after MaxLen characters as a safety bound.
 function ReadAsciiLine(AStream: TStream; MaxLen: Integer = 1024): AnsiString;
@@ -471,6 +532,31 @@ begin
   end;
 end;
 
+// ── TOSFFile — logging helpers (verbatim copy of TOSFLoggable.Log) ───────────
+
+procedure TOSFFile.Log(Level: TOSFLogLevel; const Msg: string);
+begin
+  if not Assigned(FOnLog) then Exit;
+  if (Level = llDebug) and (not FDebugEnabled) then Exit;
+  try
+    FOnLog(Level, Msg);
+  except
+    // Never let a buggy log handler propagate.
+  end;
+end;
+
+procedure TOSFFile.Log(Level: TOSFLogLevel; const Fmt: string;
+                       const Args: array of const);
+begin
+  if not Assigned(FOnLog) then Exit;
+  if (Level = llDebug) and (not FDebugEnabled) then Exit;
+  try
+    FOnLog(Level, Format(Fmt, Args));
+  except
+    // Never let a buggy log handler or a broken Format string propagate.
+  end;
+end;
+
 // ── TOSFFile — construction / lifecycle ───────────────────────────────────────
 
 constructor TOSFFile.Create;
@@ -492,8 +578,18 @@ begin
 end;
 
 procedure TOSFFile.Close;
+var
+  TotalBytes : Int64;
+  SourceStr  : string;
 begin
   if FMode = fmClosed then Exit;
+  TotalBytes := 0;
+  if Assigned(FStream) then
+    TotalBytes := FStream.Position;
+  if FSourceName <> '' then
+    SourceStr := FSourceName
+  else
+    SourceStr := '<stream>';
   try
     if FOwnsStream then
       FreeAndNil(FStream)
@@ -502,6 +598,9 @@ begin
   finally
     FMode := fmClosed;
   end;
+  // Pre-format with Format() so we exercise the single-string Log overload —
+  // the array-of-const overload is exercised by every other call site.
+  Log(llInfo, Format('File closed: %s  total bytes=%d', [SourceStr, TotalBytes]));
 end;
 
 function TOSFFile.GetChannelCount: Integer;
@@ -569,11 +668,19 @@ end;
 // ── Reading: open + magic header dispatch ────────────────────────────────────
 
 procedure TOSFFile.OpenForRead(const FileName: string);
+var
+  FS: TFileStream;
 begin
-  OpenForRead(TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite), True);
+  FS := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  FSourceName := FileName;
+  Log(llInfo, 'Opening file for read: %s (%d bytes)', [FileName, FS.Size]);
+  OpenForRead(FS, True);
 end;
 
 procedure TOSFFile.OpenForRead(AStream: TStream; AOwnsStream: Boolean);
+var
+  I  : Integer;
+  Ch : TOSFChannelDef;
 begin
   if FMode <> fmClosed then
     raise EOSFException.Create(SOSFFileAlreadyOpen);
@@ -583,6 +690,19 @@ begin
   FChannels.Clear;
   FInfoItems.Clear;
   ReadMagicAndMeta;
+
+  Log(llInfo, 'Detected version: %s, meta format: %s',
+      [VersionToLogString(FVersion), MetaFormatToLogString(FMetaFormat)]);
+  Log(llInfo, 'Channels defined in meta block: %d', [FChannels.Count]);
+  for I := 0 to FChannels.Count - 1 do
+  begin
+    Ch := FChannels[I];
+    Log(llDebug, '  [%d] %s  type=%s  equidistant=%s',
+        [Ch.Index,
+         Ch.Name,
+         OSFDataTypeToString(Ch.DataType),
+         BoolToLogString(Ch.IsEquidistant)]);
+  end;
 end;
 
 procedure TOSFFile.ReadMagicAndMeta;
@@ -787,9 +907,15 @@ end;
 function TOSFFile.ReadNextBlock(out Block: TOSFDataBlock): Boolean;
 var
   ChannelIndex: Word;
+  StartOffset : Int64;
 begin
   // Default() initialises managed fields (TBytes) without corrupting refcounts.
   Block := Default(TOSFDataBlock);
+
+  // Record the offset at the start of the block so warnings can pinpoint it.
+  StartOffset := 0;
+  if Assigned(FStream) then
+    StartOffset := FStream.Position;
 
   if not TryReadChannelIndex(ChannelIndex) then
     Exit(False);
@@ -799,6 +925,15 @@ begin
     Result := ReadInfoBlock(Block)
   else
     Result := ReadDataBlock(ChannelIndex, Block);
+
+  if Result and (not Block.IsInfoBlock) then
+    Log(llDebug, 'Block: channel=%d  type=%s  samples=%d  bytes=%d',
+        [ChannelIndex,
+         BlockTypeToLogString(Block.BlockType),
+         Block.SampleCount,
+         Length(Block.RawPayload)])
+  else if (not Result) and (not Block.IsInfoBlock) then
+    Log(llWarning, 'Truncated block at offset %d — stopping', [StartOffset]);
 end;
 
 function TOSFFile.TryReadChannelIndex(out ChannelIndex: Word): Boolean;
@@ -815,6 +950,7 @@ function TOSFFile.ReadInfoBlock(var Block: TOSFDataBlock): Boolean;
 var
   LenField : UInt32;
   Payload  : TBytes;
+  TypeBits : Byte;
 begin
   // The info/trailer block always uses a uint32 length field (spec §$FFFF).
   Block.IsInfoBlock := True;
@@ -828,7 +964,13 @@ begin
   end;
   if LenField > 0 then
   begin
-    Block.BlockType := OSFBlockTypeFromByte(Payload[0]);
+    TypeBits := Payload[0] and OSF_BLOCK_TYPE_MASK;
+    if Integer(TypeBits) > Ord(bcAbsTimeStampData) then
+    begin
+      Log(llWarning, 'Unknown block type %d in info block — skipping', [TypeBits]);
+      Exit(False);
+    end;
+    Block.BlockType := TBlockContent(TypeBits);
     SetLength(Block.RawPayload, LenField - 1);
     if LenField > 1 then
       Move(Payload[1], Block.RawPayload[0], LenField - 1);
@@ -842,10 +984,16 @@ var
   LenField : UInt32;
   Payload  : TBytes;
 begin
-  // Channel must have been declared in the meta block.
+  // Channel must have been declared in the meta block; otherwise we cannot
+  // know the length-field width and have to stop the best-effort scan here.
   Channel := FindChannel(ChannelIndex);
   if not Assigned(Channel) then
-    raise EOSFFormatError.CreateFmt(SOSFUnknownChannelInBlock, [ChannelIndex]);
+  begin
+    Log(llWarning,
+        'Block references unknown channel index %d — skipping',
+        [ChannelIndex]);
+    Exit(False);
+  end;
 
   try
     case Channel.LengthFieldSize of
@@ -869,16 +1017,31 @@ function TOSFFile.DecodeBlockPayload(Channel: TOSFChannelDef;
   const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): Boolean;
 var
   CtrlByte    : Byte;
+  TypeBits    : Byte;
   Offset      : Integer;
   RequiredLen : Integer;
   PayloadSize : Integer;
   SampleCount : UInt32;
+  Pos         : Int64;
 begin
   Result := False;
   if Length(Payload) < 1 then Exit;
 
-  CtrlByte         := Payload[0];
-  Block.BlockType  := OSFBlockTypeFromByte(CtrlByte);
+  Pos := 0;
+  if Assigned(FStream) then
+    Pos := FStream.Position;
+
+  // Decode the block type without going through OSFBlockTypeFromByte so we can
+  // log a warning instead of letting an unknown type byte raise.
+  CtrlByte := Payload[0];
+  TypeBits := CtrlByte and OSF_BLOCK_TYPE_MASK;
+  if Integer(TypeBits) > Ord(bcAbsTimeStampData) then
+  begin
+    Log(llWarning, 'Unknown block type %d at offset %d — skipping',
+        [TypeBits, Pos]);
+    Exit;
+  end;
+  Block.BlockType  := TBlockContent(TypeBits);
   Block.MultiValue := OSFBlockHasMultipleValues(CtrlByte);
 
   // Pre-validate the encoded prefix length so the body needs no further checks.
@@ -919,6 +1082,7 @@ end;
 
 procedure TOSFFile.CreateForWrite(const FileName: string; AVersion: TOSFVersion);
 begin
+  FSourceName := FileName;
   CreateForWrite(TFileStream.Create(FileName, fmCreate), True, AVersion);
 end;
 
@@ -1170,6 +1334,8 @@ begin
   FStream.WriteBuffer(MetaBytes[0],  Length(MetaBytes));
 
   FHeaderWritten := True;
+  Log(llInfo, 'Writing header: version=%s  channels=%d',
+      [VersionToLogString(FVersion), FChannels.Count]);
 end;
 
 procedure TOSFFile.WriteDataBlock(Channel: TOSFChannelDef; const Payload: TBytes);
@@ -1215,6 +1381,7 @@ begin
     Channel.StartTimestampNs := FirstTimestampNs;
     Channel.LastTimestampNs  := FirstTimestampNs;
   end;
+  Log(llDebug, 'WriteEquidistant: channel=%d  samples=%d', [ChannelIndex, N]);
 end;
 
 procedure TOSFFile.WriteTimestampedSample(ChannelIndex: Integer;
@@ -1252,6 +1419,7 @@ begin
 
   Channel.SampleCount     := Channel.SampleCount + N;
   Channel.LastTimestampNs := Timestamps[N - 1];
+  Log(llDebug, 'WriteTimestamped: channel=%d  samples=%d', [ChannelIndex, N]);
 end;
 
 procedure TOSFFile.WriteTimestampedDoubles(ChannelIndex: Integer;

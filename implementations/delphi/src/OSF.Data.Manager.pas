@@ -26,6 +26,7 @@ uses
   System.Generics.Collections,
   OSF.Types,
   OSF.Channel,
+  OSF.Log,
   OSF.Filer,
   OSF.Data.Channels;
 
@@ -49,15 +50,24 @@ type
     FLongitude       : Double;
     FAltitude        : Double;
 
+    // Logging — copied verbatim from TOSFLoggable. TPersistent is the
+    // required base class so the manager cannot inherit from TOSFLoggable.
+    FOnLog           : TOSFLogEvent;
+    FDebugEnabled    : Boolean;
+    procedure Log(Level: TOSFLogLevel; const Msg: string); overload;
+    procedure Log(Level: TOSFLogLevel; const Fmt: string;
+                   const Args: array of const); overload;
+
     procedure CopyFrom(Source: TOSFDataManager);
     function  GetChannelCount: Integer;
 
     // Loading helpers.
     procedure CopyFileMetadata    (AFiler: TOSFFile);
     procedure CreateChannelsFromFiler(AFiler: TOSFFile);
-    procedure ConsumeBlocks       (AFiler: TOSFFile);
+    function  ConsumeBlocks       (AFiler: TOSFFile): Integer;
     procedure DispatchBlock       (const Block: TOSFDataBlock);
     function  FindChannelByDefIndex(DefIndex: Word): TOSFDataChannel;
+    procedure LogChannelsSummary;
   public
     constructor Create; overload;
     constructor Create(Source: TOSFDataManager); overload;
@@ -97,6 +107,13 @@ type
     property Latitude       : Double      read FLatitude;
     property Longitude      : Double      read FLongitude;
     property Altitude       : Double      read FAltitude;
+
+    // Logging hook — emits informational, warning and (optionally) debug
+    // messages during LoadFromFile/LoadFromStream. The manager forwards its
+    // settings to the internal TOSFFile so log messages from both layers go
+    // through the same handler.
+    property DebugEnabled : Boolean      read FDebugEnabled write FDebugEnabled;
+    property OnLog        : TOSFLogEvent read FOnLog        write FOnLog;
   end;
 
 implementation
@@ -266,6 +283,31 @@ begin
   end;
 end;
 
+// ── TOSFDataManager — logging helpers (verbatim copy of TOSFLoggable.Log) ───
+
+procedure TOSFDataManager.Log(Level: TOSFLogLevel; const Msg: string);
+begin
+  if not Assigned(FOnLog) then Exit;
+  if (Level = llDebug) and (not FDebugEnabled) then Exit;
+  try
+    FOnLog(Level, Msg);
+  except
+    // Never let a buggy log handler propagate.
+  end;
+end;
+
+procedure TOSFDataManager.Log(Level: TOSFLogLevel; const Fmt: string;
+                               const Args: array of const);
+begin
+  if not Assigned(FOnLog) then Exit;
+  if (Level = llDebug) and (not FDebugEnabled) then Exit;
+  try
+    FOnLog(Level, Format(Fmt, Args));
+  except
+    // Never let a buggy log handler or a broken Format string propagate.
+  end;
+end;
+
 // ── TOSFDataManager — construction / lifecycle ──────────────────────────────
 
 constructor TOSFDataManager.Create;
@@ -307,6 +349,7 @@ begin
   FLatitude       := 0;
   FLongitude      := 0;
   FAltitude       := 0;
+  Log(llDebug, 'DataManager cleared');
 end;
 
 function TOSFDataManager.GetChannelCount: Integer;
@@ -378,6 +421,7 @@ begin
     if FChannels[I].Name = Name then
       Exit(FChannels[I]);
   Result := nil;
+  Log(llWarning, 'Channel not found by name: "%s"', [Name]);
 end;
 
 function TOSFDataManager.ChannelByIndex(Index: Integer): TOSFDataChannel;
@@ -414,6 +458,7 @@ procedure TOSFDataManager.LoadFromFile(const FileName: string);
 var
   FS: TFileStream;
 begin
+  Log(llInfo, 'Loading OSF file: %s', [FileName]);
   FS := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
   try
     LoadFromStream(FS);
@@ -427,17 +472,67 @@ end;
 
 procedure TOSFDataManager.LoadFromStream(AStream: TStream);
 var
-  Filer: TOSFFile;
+  Filer          : TOSFFile;
+  TruncationSeen : Boolean;
+  BlockCount     : Integer;
+  UserOnLog      : TOSFLogEvent;
 begin
   Clear;
+  TruncationSeen := False;
+  UserOnLog      := FOnLog;
+
   Filer := TOSFFile.Create;
   try
+    Filer.DebugEnabled := FDebugEnabled;
+    // Forward filer log events to the user's handler. The wrapper also watches
+    // for the filer's truncation warning so we can emit a summary at the end.
+    Filer.OnLog := procedure(Level: TOSFLogLevel; const Msg: string)
+                   begin
+                     if (Level = llWarning) and
+                        (System.Pos('Truncated', Msg) > 0) then
+                       TruncationSeen := True;
+                     if Assigned(UserOnLog) then
+                       UserOnLog(Level, Msg);
+                   end;
+
     Filer.OpenForRead(AStream);
     CopyFileMetadata(Filer);
     CreateChannelsFromFiler(Filer);
-    ConsumeBlocks(Filer);
+    BlockCount := ConsumeBlocks(Filer);
+
+    Log(llInfo, 'Loaded %d channels', [FChannels.Count]);
+    LogChannelsSummary;
+    if TruncationSeen then
+      Log(llWarning, 'Truncated or partial file — %d complete blocks read',
+          [BlockCount]);
   finally
     Filer.Free;
+  end;
+end;
+
+procedure TOSFDataManager.LogChannelsSummary;
+const
+  TS_FMT = 'yyyy-mm-dd"T"hh:nn:ss"."zzz"Z"';
+var
+  I  : Integer;
+  Ch : TOSFDataChannel;
+begin
+  // Skip the per-channel walk entirely if no log handler is attached so we
+  // don't pay the FormatDateTime cost when nobody is listening.
+  if not Assigned(FOnLog) then Exit;
+
+  for I := 0 to FChannels.Count - 1 do
+  begin
+    Ch := FChannels[I];
+    Log(llInfo, '  [%s]  %d samples  %s .. %s',
+        [Ch.Name,
+         Ch.SampleCount,
+         FormatDateTime(TS_FMT, Ch.StartTimeUtc),
+         FormatDateTime(TS_FMT, Ch.EndTimeUtc)]);
+    if Ch.HasDoublePrecisionLoss then
+      Log(llWarning,
+          'Channel [%s] uses Int64/UInt64 — ValueAsDouble may lose precision for values > 2^53',
+          [Ch.Name]);
   end;
 end;
 
@@ -469,14 +564,18 @@ begin
   end;
 end;
 
-procedure TOSFDataManager.ConsumeBlocks(AFiler: TOSFFile);
+function TOSFDataManager.ConsumeBlocks(AFiler: TOSFFile): Integer;
 var
   Block: TOSFDataBlock;
 begin
   // Best-effort: ReadNextBlock returns False on clean EOF or truncation;
   // we never propagate exceptions from partial files.
+  Result := 0;
   while AFiler.ReadNextBlock(Block) do
+  begin
     DispatchBlock(Block);
+    Inc(Result);
+  end;
 end;
 
 procedure TOSFDataManager.DispatchBlock(const Block: TOSFDataBlock);
