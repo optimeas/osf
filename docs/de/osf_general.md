@@ -827,7 +827,7 @@ Für eine vollständige Implementierung oder tiefere Integration bieten sich fol
   - Details zu den jeweiligen Header-Formaten (XML vs. JSON)  
   - Unterschiede beim Steuerbyte und im Trailer  
   - Abwärtskompatibilität und Implementierungshinweise
-  - Weiter mit [OSF4](references/osf4.md) oder [OSF5](references/osf5.md)
+  - Weiter mit [OSF4](osf4.md) oder [OSF5](osf5.md)
 
 - **Vectoren und Matrizen:**  
   - Erweiterte Kanaltypen für mehrdimensionale Daten  

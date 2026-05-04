@@ -1,12 +1,20 @@
 # OSF Specification Documents
 
-This directory contains the formal specification for the Open Streaming Format.
+The formal specification for the Open Streaming Format is maintained in two
+languages. English is the default; the German version is kept in sync.
+
+| Language | Path |
+|----------|------|
+| English (default) | [`en/`](en/) |
+| German            | [`de/`](de/) |
+
+Each language directory contains the same three documents:
 
 | Document | Description |
 |----------|-------------|
-| [osf_general.md](osf_general.md) | Concepts common to all OSF versions: channel types, data block structure, time models, and design rationale |
-| [osf4.md](osf4.md) | OSF4 specification — XML metadata header, control byte layout, trailer structure |
-| [osf5.md](osf5.md) | OSF5 specification — JSON metadata header, simplified control byte, no trailer, backward compatibility with OSF4 |
+| `osf_general.md` | Concepts common to all OSF versions: channel types, data block structure, time models, and design rationale |
+| `osf4.md`        | OSF4 specification — XML metadata header, control byte layout, trailer structure |
+| `osf5.md`        | OSF5 specification — JSON metadata header, simplified control byte, no trailer, backward compatibility with OSF4 |
 
 ---
 

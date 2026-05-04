@@ -16,7 +16,7 @@ last_update:
 # OSF4 – Spezifische Dokumentation
 
 Dieses Dokument beschreibt alle Aspekte des **Open Streaming Formats Version 4 (OSF4)**, die über die allgemeine OSF-Beschreibung hinausgehen.  
-Es ergänzt die Datei [`osf_general.md`](../osf_general.md), in der alle für OSF4 und OSF5 gemeinsamen Strukturen erklärt sind.
+Es ergänzt die Datei [`osf_general.md`](osf_general.md), in der alle für OSF4 und OSF5 gemeinsamen Strukturen erklärt sind.
 
 OSF4 ist die klassische Version des Formats. Sie nutzt ausschließlich **XML** für den Metablock und bildet die Basis für die Abwärtskompatibilität in OSF5.
 

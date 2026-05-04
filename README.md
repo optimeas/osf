@@ -27,7 +27,7 @@ OSF solves this by defining a format that is:
 | OSF4 | XML header | Stable, widely deployed |
 | OSF5 | JSON header | Active development, fully backward-compatible with OSF4 |
 
-See [`docs/`](docs/) for the full specification.
+See [`docs/en/`](docs/en/) for the full specification. German version available under [`docs/de/`](docs/de/).
 
 ---
 
@@ -77,9 +77,11 @@ Full examples and sample `.osf` files are provided in [`examples/`](examples/).
 
 ## Documentation
 
-- [General OSF concepts](docs/osf_general.md)
-- [OSF4 specification](docs/osf4.md)
-- [OSF5 specification](docs/osf5.md)
+The specification is maintained in English under [`docs/en/`](docs/en/) and mirrored in German under [`docs/de/`](docs/de/).
+
+- [General OSF concepts](docs/en/osf_general.md) ([🇩🇪 Deutsch](docs/de/osf_general.md))
+- [OSF4 specification](docs/en/osf4.md) ([🇩🇪 Deutsch](docs/de/osf4.md))
+- [OSF5 specification](docs/en/osf5.md) ([🇩🇪 Deutsch](docs/de/osf5.md))
 
 ---
 

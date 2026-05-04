@@ -15,7 +15,7 @@ last_update:
 # OSF5 – Spezifische Dokumentation
 
 Dieses Dokument beschreibt alle Aspekte des **Open Streaming Formats Version 5 (OSF5)**, die über die allgemeine OSF-Beschreibung hinausgehen.  
-Es ergänzt die Datei [`osf_general.md`](../osf_general.md), in der alle für OSF4 und OSF5 gemeinsamen Strukturen erklärt sind.
+Es ergänzt die Datei [`osf_general.md`](osf_general.md), in der alle für OSF4 und OSF5 gemeinsamen Strukturen erklärt sind.
 
 OSF5 ist die Weiterentwicklung von OSF4. Es nutzt **JSON** als Standardformat für den Metablock und vereinfacht das Steuerbyte.  
 Gleichzeitig bleibt OSF5 vollständig **abwärtskompatibel** zu OSF4.
