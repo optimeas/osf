@@ -17,7 +17,8 @@ unit OSF.Types;
 interface
 
 uses
-  System.SysUtils;
+  System.SysUtils,
+  System.DateUtils;
 
 const
   // Magic header tokens written as the very first bytes of every OSF file.
@@ -79,18 +80,14 @@ type
 
   // Value data type of a channel, as declared in the meta block.
   // dtPair and dtTriple are OSF5-only; an OSF4 file must never contain them.
+  // Unsigned integer types (dtUInt8..dtUInt64) are supported in both OSF4 and OSF5.
   TOSFDataType = (
     dtBool,
-    dtInt8,
-    dtInt16,
-    dtInt32,
-    dtInt64,
-    dtFloat,
-    dtDouble,
-    dtString,
-    dtBinary,
-    dtCanData,
-    dtGpsData,
+    dtInt8, dtInt16, dtInt32, dtInt64,
+    dtUInt8, dtUInt16, dtUInt32, dtUInt64,
+    dtFloat, dtDouble,
+    dtString, dtBinary,
+    dtCanData, dtGpsData,
     dtPair,    // OSF5 only — two doubles, 16 bytes
     dtTriple   // OSF5 only — three doubles, 24 bytes
   );
@@ -152,6 +149,15 @@ type
   // Raised when a file version or feature is not supported by this implementation.
   EOSFVersionError = class(EOSFException);
 
+  // A single entry in the optional free-form metadata list embedded in the
+  // OSF header. In OSF5 JSON: the "info" array. In OSF4 XML: <infos><info .../>.
+  TOSFMetaItem = record
+    Name     : string;
+    Value    : string;
+    DataType : string;  // typically 'string', 'int', 'double'
+    UnitStr  : string;
+  end;
+
 // Compile-time binary layout assertions.
 {$IF SizeOf(TOSFCanData) <> 16}
   {$MESSAGE ERROR 'TOSFCanData must be exactly 16 bytes'}
@@ -188,6 +194,14 @@ function OSFLengthFieldSizeFromInt(Value: Integer): TOSFLengthFieldSize;
 // Version detection from a magic token read out of the header line.
 function OSFVersionFromMagic(const Magic: string): TOSFVersion;
 
+// Returns the current UTC time formatted as ISO 8601 with millisecond precision.
+// Example: "2026-05-03T14:22:07.456Z"
+function OSFUtcNowISO8601: string;
+
+// Returns the current UTC time as nanoseconds since the Unix epoch (1970-01-01T00:00:00Z).
+// Precision is limited to ~1 microsecond due to Double arithmetic on the day count.
+function OSFNowAsUnixNs: Int64;
+
 implementation
 
 function OSFDataTypeFromString(const S: string): TOSFDataType;
@@ -195,19 +209,25 @@ var
   Lower: string;
 begin
   Lower := LowerCase(S);
-  if      Lower = 'bool'    then Exit(dtBool)
-  else if Lower = 'int8'    then Exit(dtInt8)
-  else if Lower = 'int16'   then Exit(dtInt16)
-  else if Lower = 'int32'   then Exit(dtInt32)
-  else if Lower = 'int64'   then Exit(dtInt64)
-  else if Lower = 'float'   then Exit(dtFloat)
-  else if Lower = 'double'  then Exit(dtDouble)
-  else if Lower = 'string'  then Exit(dtString)
-  else if Lower = 'binary'  then Exit(dtBinary)
-  else if Lower = 'candata' then Exit(dtCanData)
-  else if Lower = 'gpsdata' then Exit(dtGpsData)
-  else if Lower = 'pair'    then Exit(dtPair)
-  else if Lower = 'triple'  then Exit(dtTriple);
+  if      Lower = 'bool'      then Exit(dtBool)
+  else if Lower = 'int8'      then Exit(dtInt8)
+  else if Lower = 'int16'     then Exit(dtInt16)
+  else if Lower = 'int32'     then Exit(dtInt32)
+  else if Lower = 'int64'     then Exit(dtInt64)
+  else if Lower = 'uint8'     then Exit(dtUInt8)
+  else if Lower = 'uint16'    then Exit(dtUInt16)
+  else if Lower = 'uint32'    then Exit(dtUInt32)
+  else if Lower = 'uint64'    then Exit(dtUInt64)
+  else if Lower = 'float'     then Exit(dtFloat)
+  else if Lower = 'float32'   then Exit(dtFloat)    // legacy alias
+  else if Lower = 'double'    then Exit(dtDouble)
+  else if Lower = 'string'    then Exit(dtString)
+  else if Lower = 'binary'    then Exit(dtBinary)
+  else if Lower = 'bytearray' then Exit(dtBinary)   // OSF4 legacy alias
+  else if Lower = 'candata'   then Exit(dtCanData)
+  else if Lower = 'gpsdata'   then Exit(dtGpsData)
+  else if Lower = 'pair'      then Exit(dtPair)
+  else if Lower = 'triple'    then Exit(dtTriple);
 
   raise EOSFFormatError.CreateFmt('Unknown OSF data type: "%s"', [S]);
 end;
@@ -220,6 +240,10 @@ begin
     dtInt16:   Result := 'int16';
     dtInt32:   Result := 'int32';
     dtInt64:   Result := 'int64';
+    dtUInt8:   Result := 'uint8';
+    dtUInt16:  Result := 'uint16';
+    dtUInt32:  Result := 'uint32';
+    dtUInt64:  Result := 'uint64';
     dtFloat:   Result := 'float';
     dtDouble:  Result := 'double';
     dtString:  Result := 'string';
@@ -241,6 +265,10 @@ begin
     dtInt16:   Result := 2;
     dtInt32:   Result := 4;
     dtInt64:   Result := 8;
+    dtUInt8:   Result := 1;
+    dtUInt16:  Result := 2;
+    dtUInt32:  Result := 4;
+    dtUInt64:  Result := 8;
     dtFloat:   Result := 4;
     dtDouble:  Result := 8;
     dtString:  Result := 0;
@@ -289,7 +317,7 @@ var
   TypeBits: Byte;
 begin
   TypeBits := ControlByte and OSF_BLOCK_TYPE_MASK;
-  if TypeBits > Ord(bcAbsTimeStampData) then
+  if Integer(TypeBits) > Ord(bcAbsTimeStampData) then
     raise EOSFFormatError.CreateFmt('Unknown block type byte: %d', [TypeBits]);
   Result := TBlockContent(TypeBits);
 end;
@@ -325,6 +353,22 @@ begin
     Result := osvOSF5
   else
     Result := osvUnknown;
+end;
+
+function OSFUtcNowISO8601: string;
+var
+  UtcNow: TDateTime;
+begin
+  UtcNow := TTimeZone.Local.ToUniversalTime(Now);
+  Result := FormatDateTime('yyyy-mm-dd"T"hh:nn:ss"."zzz"Z"', UtcNow);
+end;
+
+function OSFNowAsUnixNs: Int64;
+var
+  UtcNow: TDateTime;
+begin
+  UtcNow := TTimeZone.Local.ToUniversalTime(Now);
+  Result := Round((UtcNow - EncodeDate(1970, 1, 1)) * 86400.0 * 1.0e9);
 end;
 
 end.

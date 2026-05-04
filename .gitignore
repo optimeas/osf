@@ -1,1 +1,19 @@
 .claude/
+
+# Delphi build output
+*.dcu
+*.dcp
+*.exe
+*.dll
+*.bpl
+*.lib
+*.local
+*.identcache
+*.tvsconfig
+*.~*
+__history/
+__recovery/
+Win32/
+Win64/
+Debug/
+Release/
