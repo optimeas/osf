@@ -386,7 +386,7 @@ begin
     Builder.AppendFormat(' reference="%s"', [XMLEscape(FReference)]);
   if FComment <> '' then
     Builder.AppendFormat(' comment="%s"', [XMLEscape(FComment)]);
-  Builder.AppendLine('/>');
+  Builder.Append('/>'#10);
 end;
 
 procedure TOSFChannelDef.AppendJSON(Arr: TJSONArray);

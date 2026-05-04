@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-unit OSF.&File;
+unit OSF.Filer;
 
 interface
 
@@ -76,20 +76,46 @@ type
     FInfoItems     : TList<TOSFMetaItem>;
     FHeaderWritten : Boolean;
 
-    // Parses the magic header line, reads the meta block, and populates
-    // FVersion, FMetaFormat, FMetadata, FChannels, and FInfoItems.
+    // Magic header line + meta block dispatcher.
     procedure ReadMagicAndMeta;
-    procedure ParseXMLMeta(const Data: TBytes);
-    procedure ParseJSONMeta(const Data: TBytes);
 
-    // Builds the complete meta block as UTF-8 bytes.
+    // JSON meta block — build / parse split into focused helpers.
     function  BuildJSONMeta: TBytes;
-    function  BuildXMLMeta:  TBytes;
+    procedure AppendJSONFileNode (Parent: TJSONObject);
+    procedure AppendJSONChannels (Parent: TJSONObject);
+    procedure AppendJSONInfoArray(Parent: TJSONObject);
+    procedure ParseJSONMeta(const Data: TBytes);
+    procedure ParseJSONFileMetadata(FileNode: TJSONObject);
+    procedure ParseJSONChannels    (OSFNode:  TJSONObject);
+    procedure ParseJSONInfo        (OSFNode:  TJSONObject);
 
-    // Returns the channel with the given index, or nil if not found.
+    // XML meta block — build / parse split into focused helpers.
+    function  BuildXMLMeta: TBytes;
+    procedure AppendXMLOpenTag (B: TStringBuilder);
+    procedure AppendXMLChannels(B: TStringBuilder);
+    procedure AppendXMLInfos   (B: TStringBuilder);
+    procedure ParseXMLMeta(const Data: TBytes);
+    procedure ParseXMLRootAttributes(RootNode: IXMLNode);
+    procedure ParseXMLChannels      (RootNode: IXMLNode);
+    procedure ParseXMLInfos         (RootNode: IXMLNode);
+
+    // Block reading — split so each helper stays under 30 lines and the
+    // truncation guards are at the top of their function.
+    function  TryReadChannelIndex(out ChannelIndex: Word): Boolean;
+    function  ReadInfoBlock(var Block: TOSFDataBlock): Boolean;
+    function  ReadDataBlock(ChannelIndex: Word; var Block: TOSFDataBlock): Boolean;
+    function  DecodeBlockPayload(Channel:  TOSFChannelDef;
+                                  const Payload: TBytes;
+                                  LenField: UInt32;
+                                  var Block: TOSFDataBlock): Boolean;
+
+    // Shared low-level write — emits channel index, length field, and payload.
+    procedure WriteDataBlock(Channel: TOSFChannelDef; const Payload: TBytes);
+
+    // Channel lookup.
     function  FindChannel(Index: Integer): TOSFChannelDef;
 
-    // Low-level stream primitives. ReadXxx raise EReadError on short reads.
+    // Stream primitives. ReadXxx raise EReadError on short reads.
     function  ReadUInt16: Word;
     function  ReadUInt32: UInt32;
     procedure WriteUInt16(Value: Word);
@@ -276,13 +302,6 @@ begin
   if Assigned(Val) then Result := Val.Value else Result := Default;
 end;
 
-function JInt(Obj: TJSONObject; const Key: string; Default: Integer): Integer;
-var Val: TJSONValue;
-begin
-  Val := Obj.GetValue(Key);
-  if Assigned(Val) then Result := (Val as TJSONNumber).AsInt else Result := Default;
-end;
-
 function JDbl(Obj: TJSONObject; const Key: string; Default: Double): Double;
 var
   Val : TJSONValue;
@@ -336,20 +355,123 @@ function ReadAsciiLine(AStream: TStream; MaxLen: Integer = 1024): AnsiString;
 var
   Ch        : AnsiChar;
   BytesRead : Integer;
+  Done      : Boolean;
 begin
   Result := '';
-  while Length(Result) < MaxLen do
+  Done   := False;
+  while (not Done) and (Length(Result) < MaxLen) do
   begin
     BytesRead := AStream.Read(Ch, 1);
-    if BytesRead = 0 then Exit;
-    if Ch = #10 then Break;
-    Result := Result + Ch;
+    if BytesRead = 0 then
+      Done := True
+    else if Ch = #10 then
+      Done := True
+    else
+      Result := Result + Ch;
   end;
   if (Length(Result) > 0) and (Result[Length(Result)] = #13) then
     SetLength(Result, Length(Result) - 1);
 end;
 
-// ── TOSFFile ──────────────────────────────────────────────────────────────────
+// Builds the binary payload of an equidistant data block.
+// Layout: [ctrl 1B] [int64 ts 8B if start] [uint32 N 4B if N>1] [double × N]
+function EncodeEquidistantPayload(IsStart: Boolean; FirstTimestampNs: Int64;
+  const Samples: array of Double): TBytes;
+var
+  CtrlByte    : Byte;
+  PayloadSize : Integer;
+  Pos         : Integer;
+  N           : Integer;
+  NVal        : UInt32;
+begin
+  N := Length(Samples);
+  if IsStart then
+    CtrlByte := OSFMakeControlByte(bcStartData, N > 1)
+  else
+    CtrlByte := OSFMakeControlByte(bcContinuedData, N > 1);
+
+  PayloadSize := 1;
+  if IsStart then Inc(PayloadSize, 8);
+  if N > 1   then Inc(PayloadSize, 4);
+  Inc(PayloadSize, N * SizeOf(Double));
+
+  SetLength(Result, PayloadSize);
+  Pos         := 0;
+  Result[Pos] := CtrlByte;
+  Inc(Pos);
+
+  if IsStart then
+  begin
+    Move(FirstTimestampNs, Result[Pos], 8);
+    Inc(Pos, 8);
+  end;
+
+  if N > 1 then
+  begin
+    NVal := N;
+    Move(NVal, Result[Pos], 4);
+    Inc(Pos, 4);
+  end;
+
+  Move(Samples[0], Result[Pos], N * SizeOf(Double));
+end;
+
+// Builds the binary payload of an absolute-timestamped data block.
+// Layout: [ctrl 1B] [uint32 N 4B if N>1] [int64 ts | (uint32 len if variable) | bytes]*
+function EncodeTimestampedPayload(IsVariableLength: Boolean;
+  const Timestamps: array of Int64;
+  const Values: array of TBytes): TBytes;
+var
+  N        : Integer;
+  IsMulti  : Boolean;
+  CtrlByte : Byte;
+  MS       : TMemoryStream;
+  I        : Integer;
+  Cnt      : UInt32;
+  Len4     : UInt32;
+  TS       : Int64;
+begin
+  N        := Length(Timestamps);
+  IsMulti  := N > 1;
+  CtrlByte := OSFMakeControlByte(bcAbsTimeStampData, IsMulti);
+
+  MS := TMemoryStream.Create;
+  try
+    MS.WriteBuffer(CtrlByte, 1);
+    if IsMulti then
+    begin
+      Cnt := N;
+      MS.WriteBuffer(Cnt, SizeOf(Cnt));
+    end;
+
+    for I := 0 to N - 1 do
+    begin
+      TS := Timestamps[I];
+      MS.WriteBuffer(TS, SizeOf(TS));
+      // Variable-length values inside a multi-sample block need a uint32
+      // length prefix per value. Single-sample blocks don't need it because
+      // the block length already determines the value size.
+      if IsVariableLength and IsMulti then
+      begin
+        Len4 := Length(Values[I]);
+        MS.WriteBuffer(Len4, SizeOf(Len4));
+      end;
+      if Length(Values[I]) > 0 then
+        MS.WriteBuffer(Values[I][0], Length(Values[I]));
+    end;
+
+    SetLength(Result, MS.Size);
+    if MS.Size > 0 then
+    begin
+      MS.Position := 0;
+      MS.ReadBuffer(Result[0], MS.Size);
+    end;
+  finally
+    MS.Free;
+  end;
+end;
+
+// ── TOSFFile — construction / lifecycle ───────────────────────────────────────
 
 constructor TOSFFile.Create;
 begin
@@ -367,6 +489,19 @@ begin
   FInfoItems.Free;
   FChannels.Free;
   inherited;
+end;
+
+procedure TOSFFile.Close;
+begin
+  if FMode = fmClosed then Exit;
+  try
+    if FOwnsStream then
+      FreeAndNil(FStream)
+    else
+      FStream := nil;
+  finally
+    FMode := fmClosed;
+  end;
 end;
 
 function TOSFFile.GetChannelCount: Integer;
@@ -403,7 +538,7 @@ begin
   end;
 end;
 
-// ── Stream primitives ─────────────────────────────────────────────────────────
+// ── Stream primitives ────────────────────────────────────────────────────────
 
 function TOSFFile.ReadUInt16: Word;
 begin
@@ -431,7 +566,7 @@ begin
     FStream.WriteBuffer(Data[0], Length(Data));
 end;
 
-// ── Reading ───────────────────────────────────────────────────────────────────
+// ── Reading: open + magic header dispatch ────────────────────────────────────
 
 procedure TOSFFile.OpenForRead(const FileName: string);
 begin
@@ -474,11 +609,10 @@ begin
   if MetaSize <= 0 then
     raise EOSFFormatError.CreateFmt(SOSFInvalidMetaBlockSize, [Parts[1]]);
 
-  // Read the complete meta block.
   SetLength(MetaBytes, MetaSize);
   FStream.ReadBuffer(MetaBytes[0], MetaSize);
 
-  // Determine meta format from the first byte: '<' = XML, '{' = JSON.
+  // Dispatch on the first byte: '<' = XML (OSF4), '{' = JSON (OSF5).
   FirstByte := MetaBytes[0];
   case Chr(FirstByte) of
     '<': FMetaFormat := mfXML;
@@ -493,18 +627,14 @@ begin
   end;
 end;
 
+// ── Reading: JSON meta block ─────────────────────────────────────────────────
+
 procedure TOSFFile.ParseJSONMeta(const Data: TBytes);
 var
   JSONText : string;
   Root     : TJSONObject;
   OSFNode  : TJSONObject;
   FileNode : TJSONObject;
-  ChanArr  : TJSONArray;
-  InfoArr  : TJSONArray;
-  I        : Integer;
-  Ch       : TOSFChannelDef;
-  InfoObj  : TJSONObject;
-  Item     : TOSFMetaItem;
 begin
   JSONText := TEncoding.UTF8.GetString(Data);
   Root := TJSONObject.ParseJSONValue(JSONText) as TJSONObject;
@@ -521,51 +651,65 @@ begin
     if not Assigned(FileNode) then
       FileNode := OSFNode;
 
-    FMetadata.CreatedUtc   := ParseISO8601DateTime(JStr(FileNode, 'created_utc', ''));
-    FMetadata.Creator      := JStr(FileNode, 'creator',                 '');
-    FMetadata.Tag          := JStr(FileNode, 'tag',                     '');
-    FMetadata.Reason       := JStr(FileNode, 'reason',                  '');
-    FMetadata.Comment      := JStr(FileNode, 'comment',                 '');
-    FMetadata.NamespaceSep := JStr(FileNode, 'namespacesep',            OSF_DEFAULT_NAMESPACE_SEP);
-    FMetadata.Longitude    := JDbl(FileNode, 'created_at_longitude',    0.0);
-    FMetadata.Latitude     := JDbl(FileNode, 'created_at_latitude',     0.0);
-    FMetadata.Altitude     := JDbl(FileNode, 'created_at_altitude',     0.0);
-
-    ChanArr := OSFNode.GetValue('channels') as TJSONArray;
-    if Assigned(ChanArr) then
-      for I := 0 to ChanArr.Count - 1 do
-      begin
-        Ch := TOSFChannelDef.FromJSONObject(ChanArr.Items[I] as TJSONObject);
-        FChannels.Add(Ch);
-      end;
-
-    InfoArr := OSFNode.GetValue('info') as TJSONArray;
-    if Assigned(InfoArr) then
-      for I := 0 to InfoArr.Count - 1 do
-      begin
-        InfoObj := InfoArr.Items[I] as TJSONObject;
-        Item.Name     := JStr(InfoObj, 'name',     '');
-        Item.Value    := JStr(InfoObj, 'value',    '');
-        Item.DataType := JStr(InfoObj, 'datatype', 'string');
-        Item.UnitStr  := JStr(InfoObj, 'unit',     '');
-        FInfoItems.Add(Item);
-      end;
+    ParseJSONFileMetadata(FileNode);
+    ParseJSONChannels    (OSFNode);
+    ParseJSONInfo        (OSFNode);
   finally
     Root.Free;
   end;
 end;
 
+procedure TOSFFile.ParseJSONFileMetadata(FileNode: TJSONObject);
+begin
+  FMetadata.CreatedUtc   := ParseISO8601DateTime(JStr(FileNode, 'created_utc', ''));
+  FMetadata.Creator      := JStr(FileNode, 'creator',                 '');
+  FMetadata.Tag          := JStr(FileNode, 'tag',                     '');
+  FMetadata.Reason       := JStr(FileNode, 'reason',                  '');
+  FMetadata.Comment      := JStr(FileNode, 'comment',                 '');
+  FMetadata.NamespaceSep := JStr(FileNode, 'namespacesep',            OSF_DEFAULT_NAMESPACE_SEP);
+  FMetadata.Longitude    := JDbl(FileNode, 'created_at_longitude',    0.0);
+  FMetadata.Latitude     := JDbl(FileNode, 'created_at_latitude',     0.0);
+  FMetadata.Altitude     := JDbl(FileNode, 'created_at_altitude',     0.0);
+end;
+
+procedure TOSFFile.ParseJSONChannels(OSFNode: TJSONObject);
+var
+  ChanArr : TJSONArray;
+  I       : Integer;
+begin
+  ChanArr := OSFNode.GetValue('channels') as TJSONArray;
+  if not Assigned(ChanArr) then Exit;
+  for I := 0 to ChanArr.Count - 1 do
+    FChannels.Add(TOSFChannelDef.FromJSONObject(ChanArr.Items[I] as TJSONObject));
+end;
+
+procedure TOSFFile.ParseJSONInfo(OSFNode: TJSONObject);
+var
+  InfoArr : TJSONArray;
+  InfoObj : TJSONObject;
+  Item    : TOSFMetaItem;
+  I       : Integer;
+begin
+  InfoArr := OSFNode.GetValue('info') as TJSONArray;
+  if not Assigned(InfoArr) then Exit;
+  for I := 0 to InfoArr.Count - 1 do
+  begin
+    InfoObj := InfoArr.Items[I] as TJSONObject;
+    Item.Name     := JStr(InfoObj, 'name',     '');
+    Item.Value    := JStr(InfoObj, 'value',    '');
+    Item.DataType := JStr(InfoObj, 'datatype', 'string');
+    Item.UnitStr  := JStr(InfoObj, 'unit',     '');
+    FInfoItems.Add(Item);
+  end;
+end;
+
+// ── Reading: XML meta block ──────────────────────────────────────────────────
+
 procedure TOSFFile.ParseXMLMeta(const Data: TBytes);
 var
-  XMLDoc      : IXMLDocument;
-  XMLText     : string;
-  RootNode    : IXMLNode;
-  ChansNode   : IXMLNode;
-  InfosNode   : IXMLNode;
-  I           : Integer;
-  Node        : IXMLNode;
-  Ch          : TOSFChannelDef;
-  Item        : TOSFMetaItem;
+  XMLDoc   : IXMLDocument;
+  XMLText  : string;
+  RootNode : IXMLNode;
 begin
   XMLText := TEncoding.UTF8.GetString(Data);
   XMLDoc  := TXMLDocument.Create(nil);
@@ -576,97 +720,129 @@ begin
   if not Assigned(RootNode) then
     raise EOSFFormatError.Create(SOSFXMLNoRootElement);
 
-  // File-level metadata from the root element's attributes. Works for either
-  // <optimeas> (OSF4) or <osf> (synthetic) — we only look at the attributes.
+  ParseXMLRootAttributes(RootNode);
+  ParseXMLChannels      (RootNode);
+  ParseXMLInfos         (RootNode);
+end;
+
+procedure TOSFFile.ParseXMLRootAttributes(RootNode: IXMLNode);
+begin
+  // Works for either <optimeas> (OSF4) or <osf> (synthetic) — only attributes.
   if RootNode.HasAttribute('creator')      then FMetadata.Creator      := RootNode.Attributes['creator'];
   if RootNode.HasAttribute('tag')          then FMetadata.Tag          := RootNode.Attributes['tag'];
   if RootNode.HasAttribute('reason')       then FMetadata.Reason       := RootNode.Attributes['reason'];
   if RootNode.HasAttribute('comment')      then FMetadata.Comment      := RootNode.Attributes['comment'];
   if RootNode.HasAttribute('created_utc')  then
     FMetadata.CreatedUtc := ParseISO8601DateTime(RootNode.Attributes['created_utc']);
-  if RootNode.HasAttribute('namespacesep') then FMetadata.NamespaceSep := RootNode.Attributes['namespacesep']
-  else                                          FMetadata.NamespaceSep := OSF_DEFAULT_NAMESPACE_SEP;
+  if RootNode.HasAttribute('namespacesep') then
+    FMetadata.NamespaceSep := RootNode.Attributes['namespacesep']
+  else
+    FMetadata.NamespaceSep := OSF_DEFAULT_NAMESPACE_SEP;
   FMetadata.Longitude := XMLAttrDoubleLocal(RootNode, 'longitude', 0.0);
   FMetadata.Latitude  := XMLAttrDoubleLocal(RootNode, 'latitude',  0.0);
   FMetadata.Altitude  := XMLAttrDoubleLocal(RootNode, 'altitude',  0.0);
-
-  // Channel definitions.
-  ChansNode := RootNode.ChildNodes.FindNode('channels');
-  if Assigned(ChansNode) then
-    for I := 0 to ChansNode.ChildNodes.Count - 1 do
-    begin
-      Node := ChansNode.ChildNodes[I];
-      if Node.NodeName = 'channel' then
-      begin
-        Ch := TOSFChannelDef.FromXMLNode(Node);
-        FChannels.Add(Ch);
-      end;
-    end;
-
-  // Free-form metadata items.
-  InfosNode := RootNode.ChildNodes.FindNode('infos');
-  if Assigned(InfosNode) then
-    for I := 0 to InfosNode.ChildNodes.Count - 1 do
-    begin
-      Node := InfosNode.ChildNodes[I];
-      if Node.NodeName = 'info' then
-      begin
-        Item.Name     := XMLAttrStrLocal(Node, 'name',     '');
-        Item.Value    := XMLAttrStrLocal(Node, 'value',    '');
-        Item.DataType := XMLAttrStrLocal(Node, 'datatype', 'string');
-        Item.UnitStr  := XMLAttrStrLocal(Node, 'unit',     '');
-        FInfoItems.Add(Item);
-      end;
-    end;
 end;
+
+procedure TOSFFile.ParseXMLChannels(RootNode: IXMLNode);
+var
+  ChansNode : IXMLNode;
+  Node      : IXMLNode;
+  I         : Integer;
+begin
+  ChansNode := RootNode.ChildNodes.FindNode('channels');
+  if not Assigned(ChansNode) then Exit;
+  for I := 0 to ChansNode.ChildNodes.Count - 1 do
+  begin
+    Node := ChansNode.ChildNodes[I];
+    if Node.NodeName = 'channel' then
+      FChannels.Add(TOSFChannelDef.FromXMLNode(Node));
+  end;
+end;
+
+procedure TOSFFile.ParseXMLInfos(RootNode: IXMLNode);
+var
+  InfosNode : IXMLNode;
+  Node      : IXMLNode;
+  Item      : TOSFMetaItem;
+  I         : Integer;
+begin
+  InfosNode := RootNode.ChildNodes.FindNode('infos');
+  if not Assigned(InfosNode) then Exit;
+  for I := 0 to InfosNode.ChildNodes.Count - 1 do
+  begin
+    Node := InfosNode.ChildNodes[I];
+    if Node.NodeName = 'info' then
+    begin
+      Item.Name     := XMLAttrStrLocal(Node, 'name',     '');
+      Item.Value    := XMLAttrStrLocal(Node, 'value',    '');
+      Item.DataType := XMLAttrStrLocal(Node, 'datatype', 'string');
+      Item.UnitStr  := XMLAttrStrLocal(Node, 'unit',     '');
+      FInfoItems.Add(Item);
+    end;
+  end;
+end;
+
+// ── Reading: data blocks ─────────────────────────────────────────────────────
 
 function TOSFFile.ReadNextBlock(out Block: TOSFDataBlock): Boolean;
 var
-  BytesRead   : Integer;
   ChannelIndex: Word;
-  LenField    : UInt32;
-  Payload     : TBytes;
-  CtrlByte    : Byte;
-  Channel     : TOSFChannelDef;
-  SampleCount : UInt32;
-  Offset      : Integer;
-  PayloadSize : Integer;
 begin
-  Result := False;
-  // Default() is required here because TOSFDataBlock contains TBytes (a managed type);
-  // FillChar on managed fields corrupts reference counts.
+  // Default() initialises managed fields (TBytes) without corrupting refcounts.
   Block := Default(TOSFDataBlock);
 
-  // Try to read the 2-byte channel index. A zero-byte read here is clean EOF.
-  BytesRead := FStream.Read(ChannelIndex, SizeOf(ChannelIndex));
-  if BytesRead = 0 then Exit;
-  if BytesRead < SizeOf(ChannelIndex) then Exit;  // Truncated — best-effort stop.
+  if not TryReadChannelIndex(ChannelIndex) then
+    Exit(False);
   Block.ChannelIndex := ChannelIndex;
 
   if ChannelIndex = OSF_INFO_CHANNEL_INDEX then
-  begin
-    // The info/trailer block always uses a uint32 length field (spec 0xFFFF section).
-    Block.IsInfoBlock := True;
-    try
-      LenField := ReadUInt32;
-      SetLength(Payload, LenField);
-      if LenField > 0 then
-        FStream.ReadBuffer(Payload[0], LenField);
-    except
-      on EReadError do Exit;
-    end;
-    if LenField > 0 then
-    begin
-      Block.BlockType := OSFBlockTypeFromByte(Payload[0]);
-      SetLength(Block.RawPayload, LenField - 1);
-      if LenField > 1 then
-        Move(Payload[1], Block.RawPayload[0], LenField - 1);
-    end;
-    Result := True;
-    Exit;
-  end;
+    Result := ReadInfoBlock(Block)
+  else
+    Result := ReadDataBlock(ChannelIndex, Block);
+end;
 
-  // Regular data block: look up the channel to determine the length field width.
+function TOSFFile.TryReadChannelIndex(out ChannelIndex: Word): Boolean;
+var
+  BytesRead: Integer;
+begin
+  // A zero-byte read here is clean EOF; a short read is mid-header truncation.
+  // Either case: best-effort stop without raising.
+  BytesRead := FStream.Read(ChannelIndex, SizeOf(ChannelIndex));
+  Result    := BytesRead = SizeOf(ChannelIndex);
+end;
+
+function TOSFFile.ReadInfoBlock(var Block: TOSFDataBlock): Boolean;
+var
+  LenField : UInt32;
+  Payload  : TBytes;
+begin
+  // The info/trailer block always uses a uint32 length field (spec §$FFFF).
+  Block.IsInfoBlock := True;
+  try
+    LenField := ReadUInt32;
+    SetLength(Payload, LenField);
+    if LenField > 0 then
+      FStream.ReadBuffer(Payload[0], LenField);
+  except
+    on EReadError do Exit(False);
+  end;
+  if LenField > 0 then
+  begin
+    Block.BlockType := OSFBlockTypeFromByte(Payload[0]);
+    SetLength(Block.RawPayload, LenField - 1);
+    if LenField > 1 then
+      Move(Payload[1], Block.RawPayload[0], LenField - 1);
+  end;
+  Result := True;
+end;
+
+function TOSFFile.ReadDataBlock(ChannelIndex: Word; var Block: TOSFDataBlock): Boolean;
+var
+  Channel  : TOSFChannelDef;
+  LenField : UInt32;
+  Payload  : TBytes;
+begin
+  // Channel must have been declared in the meta block.
   Channel := FindChannel(ChannelIndex);
   if not Assigned(Channel) then
     raise EOSFFormatError.CreateFmt(SOSFUnknownChannelInBlock, [ChannelIndex]);
@@ -678,34 +854,49 @@ begin
     else
       LenField := 0;
     end;
-
     if LenField = 0 then
       raise EOSFFormatError.CreateFmt(SOSFZeroLengthBlock, [ChannelIndex]);
-
     SetLength(Payload, LenField);
     FStream.ReadBuffer(Payload[0], LenField);
   except
-    on EReadError do Exit;  // Truncated block — stop cleanly.
+    on EReadError do Exit(False);  // truncated mid-block — best-effort stop
   end;
+
+  Result := DecodeBlockPayload(Channel, Payload, LenField, Block);
+end;
+
+function TOSFFile.DecodeBlockPayload(Channel: TOSFChannelDef;
+  const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): Boolean;
+var
+  CtrlByte    : Byte;
+  Offset      : Integer;
+  RequiredLen : Integer;
+  PayloadSize : Integer;
+  SampleCount : UInt32;
+begin
+  Result := False;
+  if Length(Payload) < 1 then Exit;
 
   CtrlByte         := Payload[0];
   Block.BlockType  := OSFBlockTypeFromByte(CtrlByte);
   Block.MultiValue := OSFBlockHasMultipleValues(CtrlByte);
-  Offset           := 1;
 
-  // bcStartData carries an absolute start timestamp before the data values.
+  // Pre-validate the encoded prefix length so the body needs no further checks.
+  RequiredLen := 1;
+  if Block.BlockType = bcStartData then Inc(RequiredLen, 8);
+  if Block.MultiValue              then Inc(RequiredLen, 4);
+  if Integer(LenField) < RequiredLen then Exit;
+
+  Offset := 1;
   if Block.BlockType = bcStartData then
   begin
-    if Integer(LenField) < Offset + 8 then Exit;
     Move(Payload[Offset], Block.StartTimestampNs, 8);
     Inc(Offset, 8);
     Channel.LastTimestampNs := Block.StartTimestampNs;
   end;
 
-  // When bit 7 is set the block contains N > 1 samples; count is stored as uint32.
   if Block.MultiValue then
   begin
-    if Integer(LenField) < Offset + 4 then Exit;
     Move(Payload[Offset], SampleCount, 4);
     Inc(Offset, 4);
     Block.SampleCount := SampleCount;
@@ -713,7 +904,6 @@ begin
   else
     Block.SampleCount := 1;
 
-  // Everything remaining is the raw encoded data area.
   PayloadSize := Integer(LenField) - Offset;
   if PayloadSize > 0 then
   begin
@@ -722,11 +912,10 @@ begin
   end;
 
   Channel.SampleCount := Channel.SampleCount + Block.SampleCount;
-
   Result := True;
 end;
 
-// ── Writing ───────────────────────────────────────────────────────────────────
+// ── Writing: open + structural setup ─────────────────────────────────────────
 
 procedure TOSFFile.CreateForWrite(const FileName: string; AVersion: TOSFVersion);
 begin
@@ -789,20 +978,15 @@ begin
   FInfoItems.Add(Item);
 end;
 
+// ── Writing: JSON meta block ─────────────────────────────────────────────────
+
 function TOSFFile.BuildJSONMeta: TBytes;
 var
-  Root     : TJSONObject;
-  OSFNode  : TJSONObject;
-  FileNode : TJSONObject;
-  ChanArr  : TJSONArray;
-  InfoArr  : TJSONArray;
-  InfoObj  : TJSONObject;
-  I        : Integer;
-  Item     : TOSFMetaItem;
+  Root    : TJSONObject;
+  OSFNode : TJSONObject;
 begin
   // Build top-down so each freshly created object becomes owned by its parent
-  // before the next allocation. If any later step raises, freeing Root cascades
-  // through every node and no orphan leaks.
+  // before the next allocation. Freeing Root cascades through every node.
   Root := TJSONObject.Create;
   try
     OSFNode := TJSONObject.Create;
@@ -810,42 +994,9 @@ begin
     OSFNode.AddPair('format',  OSF_FORMAT_OSF5);
     OSFNode.AddPair('version', TJSONNumber.Create(5));
 
-    FileNode := TJSONObject.Create;
-    OSFNode.AddPair('file', FileNode);
-    FileNode.AddPair('created_utc', FormatUTCDateTime(FMetadata.CreatedUtc));
-    if FMetadata.Creator      <> '' then FileNode.AddPair('creator',      FMetadata.Creator);
-    if FMetadata.Tag          <> '' then FileNode.AddPair('tag',          FMetadata.Tag);
-    if FMetadata.Reason       <> '' then FileNode.AddPair('reason',       FMetadata.Reason);
-    if FMetadata.Comment      <> '' then FileNode.AddPair('comment',      FMetadata.Comment);
-    if FMetadata.NamespaceSep <> '' then FileNode.AddPair('namespacesep', FMetadata.NamespaceSep);
-    if FMetadata.Longitude    <> 0  then
-      FileNode.AddPair('created_at_longitude', TJSONNumber.Create(FMetadata.Longitude));
-    if FMetadata.Latitude     <> 0  then
-      FileNode.AddPair('created_at_latitude',  TJSONNumber.Create(FMetadata.Latitude));
-    if FMetadata.Altitude     <> 0  then
-      FileNode.AddPair('created_at_altitude',  TJSONNumber.Create(FMetadata.Altitude));
-
-    ChanArr := TJSONArray.Create;
-    OSFNode.AddPair('channels', ChanArr);
-    for I := 0 to FChannels.Count - 1 do
-      FChannels[I].AppendJSON(ChanArr);
-
-    if FInfoItems.Count > 0 then
-    begin
-      InfoArr := TJSONArray.Create;
-      OSFNode.AddPair('info', InfoArr);
-      for I := 0 to FInfoItems.Count - 1 do
-      begin
-        Item    := FInfoItems[I];
-        InfoObj := TJSONObject.Create;
-        InfoArr.AddElement(InfoObj);
-        InfoObj.AddPair('name',     Item.Name);
-        InfoObj.AddPair('value',    Item.Value);
-        InfoObj.AddPair('datatype', Item.DataType);
-        if Item.UnitStr <> '' then
-          InfoObj.AddPair('unit', Item.UnitStr);
-      end;
-    end;
+    AppendJSONFileNode (OSFNode);
+    AppendJSONChannels (OSFNode);
+    AppendJSONInfoArray(OSFNode);
 
     Result := TEncoding.UTF8.GetBytes(Root.ToJSON);
   finally
@@ -853,58 +1004,132 @@ begin
   end;
 end;
 
+procedure TOSFFile.AppendJSONFileNode(Parent: TJSONObject);
+var
+  FileNode: TJSONObject;
+begin
+  FileNode := TJSONObject.Create;
+  Parent.AddPair('file', FileNode);
+  FileNode.AddPair('created_utc', FormatUTCDateTime(FMetadata.CreatedUtc));
+  if FMetadata.Creator      <> '' then FileNode.AddPair('creator',      FMetadata.Creator);
+  if FMetadata.Tag          <> '' then FileNode.AddPair('tag',          FMetadata.Tag);
+  if FMetadata.Reason       <> '' then FileNode.AddPair('reason',       FMetadata.Reason);
+  if FMetadata.Comment      <> '' then FileNode.AddPair('comment',      FMetadata.Comment);
+  if FMetadata.NamespaceSep <> '' then FileNode.AddPair('namespacesep', FMetadata.NamespaceSep);
+  if FMetadata.Longitude    <> 0  then
+    FileNode.AddPair('created_at_longitude', TJSONNumber.Create(FMetadata.Longitude));
+  if FMetadata.Latitude     <> 0  then
+    FileNode.AddPair('created_at_latitude',  TJSONNumber.Create(FMetadata.Latitude));
+  if FMetadata.Altitude     <> 0  then
+    FileNode.AddPair('created_at_altitude',  TJSONNumber.Create(FMetadata.Altitude));
+end;
+
+procedure TOSFFile.AppendJSONChannels(Parent: TJSONObject);
+var
+  ChanArr : TJSONArray;
+  I       : Integer;
+begin
+  ChanArr := TJSONArray.Create;
+  Parent.AddPair('channels', ChanArr);
+  for I := 0 to FChannels.Count - 1 do
+    FChannels[I].AppendJSON(ChanArr);
+end;
+
+procedure TOSFFile.AppendJSONInfoArray(Parent: TJSONObject);
+var
+  InfoArr : TJSONArray;
+  InfoObj : TJSONObject;
+  Item    : TOSFMetaItem;
+  I       : Integer;
+begin
+  if FInfoItems.Count = 0 then Exit;
+  InfoArr := TJSONArray.Create;
+  Parent.AddPair('info', InfoArr);
+  for I := 0 to FInfoItems.Count - 1 do
+  begin
+    Item    := FInfoItems[I];
+    InfoObj := TJSONObject.Create;
+    InfoArr.AddElement(InfoObj);
+    InfoObj.AddPair('name',     Item.Name);
+    InfoObj.AddPair('value',    Item.Value);
+    InfoObj.AddPair('datatype', Item.DataType);
+    if Item.UnitStr <> '' then
+      InfoObj.AddPair('unit', Item.UnitStr);
+  end;
+end;
+
+// ── Writing: XML meta block ──────────────────────────────────────────────────
+
 function TOSFFile.BuildXMLMeta: TBytes;
 var
-  B    : TStringBuilder;
-  FS   : TFormatSettings;
-  I    : Integer;
-  Item : TOSFMetaItem;
+  B: TStringBuilder;
 begin
-  FS := TFormatSettings.Invariant;
-  B  := TStringBuilder.Create;
+  B := TStringBuilder.Create;
   try
-    B.AppendLine('<?xml version="1.0" encoding="UTF-8"?>');
-    B.Append('<optimeas');
-    B.AppendFormat(' creator="%s"', [XMLEscape(FMetadata.Creator)]);
-    B.AppendFormat(' created_utc="%s"', [FormatUTCDateTime(FMetadata.CreatedUtc)]);
-    if FMetadata.Tag       <> '' then B.AppendFormat(' tag="%s"',     [XMLEscape(FMetadata.Tag)]);
-    if FMetadata.Reason    <> '' then B.AppendFormat(' reason="%s"',  [XMLEscape(FMetadata.Reason)]);
-    if FMetadata.Comment   <> '' then B.AppendFormat(' comment="%s"', [XMLEscape(FMetadata.Comment)]);
-    B.AppendFormat(' namespacesep="%s"', [XMLEscape(FMetadata.NamespaceSep)]);
-    if FMetadata.Longitude <> 0  then B.AppendFormat(' longitude="%s"', [FloatToStr(FMetadata.Longitude, FS)]);
-    if FMetadata.Latitude  <> 0  then B.AppendFormat(' latitude="%s"',  [FloatToStr(FMetadata.Latitude,  FS)]);
-    if FMetadata.Altitude  <> 0  then B.AppendFormat(' altitude="%s"',  [FloatToStr(FMetadata.Altitude,  FS)]);
-    B.AppendLine('>');
-
-    B.AppendFormat('  <channels count="%d">', [FChannels.Count]);
-    B.AppendLine;
-    for I := 0 to FChannels.Count - 1 do
-      FChannels[I].AppendXML(B);
-    B.AppendLine('  </channels>');
-
-    if FInfoItems.Count > 0 then
-    begin
-      B.AppendLine('  <infos>');
-      for I := 0 to FInfoItems.Count - 1 do
-      begin
-        Item := FInfoItems[I];
-        B.Append('    <info');
-        B.AppendFormat(' name="%s"',     [XMLEscape(Item.Name)]);
-        B.AppendFormat(' value="%s"',    [XMLEscape(Item.Value)]);
-        B.AppendFormat(' datatype="%s"', [XMLEscape(Item.DataType)]);
-        if Item.UnitStr <> '' then
-          B.AppendFormat(' unit="%s"', [XMLEscape(Item.UnitStr)]);
-        B.AppendLine('/>');
-      end;
-      B.AppendLine('  </infos>');
-    end;
-
-    B.AppendLine('</optimeas>');
+    B.Append('<?xml version="1.0" encoding="UTF-8"?>'#10);
+    AppendXMLOpenTag (B);
+    AppendXMLChannels(B);
+    AppendXMLInfos   (B);
+    B.Append('</optimeas>'#10);
     Result := TEncoding.UTF8.GetBytes(B.ToString);
   finally
     B.Free;
   end;
 end;
+
+procedure TOSFFile.AppendXMLOpenTag(B: TStringBuilder);
+var
+  FS: TFormatSettings;
+begin
+  FS := TFormatSettings.Invariant;
+  B.Append('<optimeas');
+  B.AppendFormat(' creator="%s"',     [XMLEscape(FMetadata.Creator)]);
+  B.AppendFormat(' created_utc="%s"', [FormatUTCDateTime(FMetadata.CreatedUtc)]);
+  if FMetadata.Tag       <> '' then B.AppendFormat(' tag="%s"',     [XMLEscape(FMetadata.Tag)]);
+  if FMetadata.Reason    <> '' then B.AppendFormat(' reason="%s"',  [XMLEscape(FMetadata.Reason)]);
+  if FMetadata.Comment   <> '' then B.AppendFormat(' comment="%s"', [XMLEscape(FMetadata.Comment)]);
+  B.AppendFormat(' namespacesep="%s"', [XMLEscape(FMetadata.NamespaceSep)]);
+  if FMetadata.Longitude <> 0  then
+    B.AppendFormat(' longitude="%s"', [FloatToStr(FMetadata.Longitude, FS)]);
+  if FMetadata.Latitude  <> 0  then
+    B.AppendFormat(' latitude="%s"',  [FloatToStr(FMetadata.Latitude,  FS)]);
+  if FMetadata.Altitude  <> 0  then
+    B.AppendFormat(' altitude="%s"',  [FloatToStr(FMetadata.Altitude,  FS)]);
+  B.Append('>'#10);
+end;
+
+procedure TOSFFile.AppendXMLChannels(B: TStringBuilder);
+var
+  I: Integer;
+begin
+  B.AppendFormat('  <channels count="%d">'#10, [FChannels.Count]);
+  for I := 0 to FChannels.Count - 1 do
+    FChannels[I].AppendXML(B);
+  B.Append('  </channels>'#10);
+end;
+
+procedure TOSFFile.AppendXMLInfos(B: TStringBuilder);
+var
+  I    : Integer;
+  Item : TOSFMetaItem;
+begin
+  if FInfoItems.Count = 0 then Exit;
+  B.Append('  <infos>'#10);
+  for I := 0 to FInfoItems.Count - 1 do
+  begin
+    Item := FInfoItems[I];
+    B.Append('    <info');
+    B.AppendFormat(' name="%s"',     [XMLEscape(Item.Name)]);
+    B.AppendFormat(' value="%s"',    [XMLEscape(Item.Value)]);
+    B.AppendFormat(' datatype="%s"', [XMLEscape(Item.DataType)]);
+    if Item.UnitStr <> '' then
+      B.AppendFormat(' unit="%s"', [XMLEscape(Item.UnitStr)]);
+    B.Append('/>'#10);
+  end;
+  B.Append('  </infos>'#10);
+end;
+
+// ── Writing: header + data blocks ────────────────────────────────────────────
 
 procedure TOSFFile.WriteHeader;
 var
@@ -938,7 +1163,6 @@ begin
     raise EOSFException.Create(SOSFWriteHeaderBadVersion);
   end;
 
-  // Magic header line: "<MAGIC> <metabytecount>\n"
   HeaderStr  := Format('%s %d'#10, [Magic, Length(MetaBytes)]);
   HeaderLine := TEncoding.ASCII.GetBytes(HeaderStr);
 
@@ -948,18 +1172,24 @@ begin
   FHeaderWritten := True;
 end;
 
+procedure TOSFFile.WriteDataBlock(Channel: TOSFChannelDef; const Payload: TBytes);
+begin
+  WriteUInt16(Word(Channel.Index));
+  case Channel.LengthFieldSize of
+    lfs2: WriteUInt16(Word(Length(Payload)));
+    lfs4: WriteUInt32(UInt32(Length(Payload)));
+  end;
+  WriteRawBytes(Payload);
+end;
+
 procedure TOSFFile.WriteEquidistantBlock(ChannelIndex: Integer;
                                           const Samples: array of Double;
                                           FirstTimestampNs: Int64);
 var
-  Channel    : TOSFChannelDef;
-  IsStart    : Boolean;
-  CtrlByte   : Byte;
-  N          : Integer;
-  PayloadSize: Integer;
-  Buf        : TBytes;
-  Pos        : Integer;
-  NVal       : UInt32;
+  Channel : TOSFChannelDef;
+  IsStart : Boolean;
+  N       : Integer;
+  Payload : TBytes;
 begin
   if not FHeaderWritten then
     raise EOSFException.Create(SOSFWriteBeforeHeader);
@@ -968,51 +1198,15 @@ begin
   if not Assigned(Channel) then
     raise EOSFFormatError.CreateFmt(SOSFEquiUnknownChannel, [ChannelIndex]);
 
-  N       := Length(Samples);
-  IsStart := not Channel.StartBlockWritten;
-
+  N := Length(Samples);
   if N = 0 then Exit;
 
+  IsStart := not Channel.StartBlockWritten;
   if IsStart and (FirstTimestampNs = 0) then
     raise EOSFFormatError.Create(SOSFEquiNoFirstTimestamp);
 
-  if IsStart then
-    CtrlByte := OSFMakeControlByte(bcStartData, N > 1)
-  else
-    CtrlByte := OSFMakeControlByte(bcContinuedData, N > 1);
-
-  // Payload: [ctrl 1B] [int64 ts 8B if start] [uint32 N 4B if N>1] [double×N]
-  PayloadSize := 1;
-  if IsStart then Inc(PayloadSize, 8);
-  if N > 1   then Inc(PayloadSize, 4);
-  Inc(PayloadSize, N * SizeOf(Double));
-
-  SetLength(Buf, PayloadSize);
-  Pos      := 0;
-  Buf[Pos] := CtrlByte;
-  Inc(Pos);
-
-  if IsStart then
-  begin
-    Move(FirstTimestampNs, Buf[Pos], 8);
-    Inc(Pos, 8);
-  end;
-
-  if N > 1 then
-  begin
-    NVal := N;
-    Move(NVal, Buf[Pos], 4);
-    Inc(Pos, 4);
-  end;
-
-  Move(Samples[0], Buf[Pos], N * SizeOf(Double));
-
-  WriteUInt16(Word(ChannelIndex));
-  case Channel.LengthFieldSize of
-    lfs2: WriteUInt16(Word(PayloadSize));
-    lfs4: WriteUInt32(UInt32(PayloadSize));
-  end;
-  WriteRawBytes(Buf);
+  Payload := EncodeEquidistantPayload(IsStart, FirstTimestampNs, Samples);
+  WriteDataBlock(Channel, Payload);
 
   Channel.StartBlockWritten := True;
   Channel.SampleCount       := Channel.SampleCount + N;
@@ -1026,56 +1220,19 @@ end;
 procedure TOSFFile.WriteTimestampedSample(ChannelIndex: Integer;
                                            TimestampNs: Int64;
                                            const Value: TBytes);
-var
-  Channel    : TOSFChannelDef;
-  CtrlByte   : Byte;
-  PayloadSize: Integer;
-  Buf        : TBytes;
 begin
-  if not FHeaderWritten then
-    raise EOSFException.Create(SOSFWriteBeforeHeader);
-
-  Channel := ChannelByIndex(ChannelIndex);
-  if not Assigned(Channel) then
-    raise EOSFFormatError.CreateFmt(SOSFTimestampedUnknown, [ChannelIndex]);
-
-  // Single sample: bit 7 = 0, no sample-count field, no per-value length prefix
-  // (the block length tells the reader the value size).
-  CtrlByte    := OSFMakeControlByte(bcAbsTimeStampData, False);
-  PayloadSize := 1 + 8 + Length(Value);
-
-  SetLength(Buf, PayloadSize);
-  Buf[0] := CtrlByte;
-  Move(TimestampNs, Buf[1], 8);
-  if Length(Value) > 0 then
-    Move(Value[0], Buf[9], Length(Value));
-
-  WriteUInt16(Word(ChannelIndex));
-  case Channel.LengthFieldSize of
-    lfs2: WriteUInt16(Word(PayloadSize));
-    lfs4: WriteUInt32(UInt32(PayloadSize));
-  end;
-  WriteRawBytes(Buf);
-
-  Channel.SampleCount     := Channel.SampleCount + 1;
-  Channel.LastTimestampNs := TimestampNs;
+  // A single-sample call is just a one-element batch — same byte layout because
+  // the multi-value flag stays clear and no count field is written.
+  WriteTimestampedBlock(ChannelIndex, [TimestampNs], [Value]);
 end;
 
 procedure TOSFFile.WriteTimestampedBlock(ChannelIndex: Integer;
                                           const Timestamps: array of Int64;
                                           const Values: array of TBytes);
 var
-  Channel    : TOSFChannelDef;
-  N          : Integer;
-  IsVariable : Boolean;
-  IsMulti    : Boolean;
-  CtrlByte   : Byte;
-  MS         : TMemoryStream;
-  I          : Integer;
-  Cnt        : UInt32;
-  Len4       : UInt32;
-  TS         : Int64;
-  Payload    : TBytes;
+  Channel : TOSFChannelDef;
+  N       : Integer;
+  Payload : TBytes;
 begin
   if not FHeaderWritten then
     raise EOSFException.Create(SOSFWriteBeforeHeader);
@@ -1089,51 +1246,9 @@ begin
   if not Assigned(Channel) then
     raise EOSFFormatError.CreateFmt(SOSFTSBlockUnknown, [ChannelIndex]);
 
-  IsVariable := OSFDataTypeIsVariableLength(Channel.DataType);
-  IsMulti    := N > 1;
-  CtrlByte   := OSFMakeControlByte(bcAbsTimeStampData, IsMulti);
-
-  MS := TMemoryStream.Create;
-  try
-    MS.WriteBuffer(CtrlByte, 1);
-    if IsMulti then
-    begin
-      Cnt := N;
-      MS.WriteBuffer(Cnt, SizeOf(Cnt));
-    end;
-
-    for I := 0 to N - 1 do
-    begin
-      TS := Timestamps[I];
-      MS.WriteBuffer(TS, SizeOf(TS));
-      // Variable-length values inside a multi-sample block need a uint32 length
-      // prefix per value. Single-sample blocks don't need it because the block
-      // length already determines the value size.
-      if IsVariable and IsMulti then
-      begin
-        Len4 := Length(Values[I]);
-        MS.WriteBuffer(Len4, SizeOf(Len4));
-      end;
-      if Length(Values[I]) > 0 then
-        MS.WriteBuffer(Values[I][0], Length(Values[I]));
-    end;
-
-    SetLength(Payload, MS.Size);
-    if MS.Size > 0 then
-    begin
-      MS.Position := 0;
-      MS.ReadBuffer(Payload[0], MS.Size);
-    end;
-  finally
-    MS.Free;
-  end;
-
-  WriteUInt16(Word(ChannelIndex));
-  case Channel.LengthFieldSize of
-    lfs2: WriteUInt16(Word(Length(Payload)));
-    lfs4: WriteUInt32(UInt32(Length(Payload)));
-  end;
-  WriteRawBytes(Payload);
+  Payload := EncodeTimestampedPayload(
+    OSFDataTypeIsVariableLength(Channel.DataType), Timestamps, Values);
+  WriteDataBlock(Channel, Payload);
 
   Channel.SampleCount     := Channel.SampleCount + N;
   Channel.LastTimestampNs := Timestamps[N - 1];
@@ -1159,20 +1274,7 @@ begin
   WriteTimestampedBlock(ChannelIndex, Timestamps, EncodedValues);
 end;
 
-// ── Common ────────────────────────────────────────────────────────────────────
-
-procedure TOSFFile.Close;
-begin
-  if FMode = fmClosed then Exit;
-  try
-    if FOwnsStream then
-      FreeAndNil(FStream)
-    else
-      FStream := nil;
-  finally
-    FMode := fmClosed;
-  end;
-end;
+// ── Lookup ───────────────────────────────────────────────────────────────────
 
 function TOSFFile.FindChannel(Index: Integer): TOSFChannelDef;
 var
