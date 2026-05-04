@@ -113,7 +113,6 @@ Alle Parameter wie in der allgemeinen OSF-Doku beschrieben, für OSF4 gilt:
 - **Unterstützte `channeltype`:** `scalar`, `vector`, `matrix`, `binary`  
 - **Vektor- und Matrix-Parameter:** In der Kanaldefinition über `rows`, `columns` und zugehörige Attribute  
 - **`sizeoflengthvalue`:** Pflichtfeld (2 oder 4 Byte)  
-- **Keine neuen Typen `pair` und `triple`** – diese sind erst ab OSF5 verfügbar.  
 
 ---
 
@@ -128,11 +127,19 @@ Alle Parameter wie in der allgemeinen OSF-Doku beschrieben, für OSF4 gilt:
 | `int64`     | 8 Byte   | Ganzzahl mit Vorzeichen |
 | `float`     | 4 Byte   | IEEE 754 Single Precision |
 | `double`    | 8 Byte   | IEEE 754 Double Precision |
-| `string`    | variabel | UTF-8, Länge durch Block |
+| `string`    | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert, **mit abschließender Nullbyte (`0x00`)**. Effektive Stringlänge = Blockgröße − Zeitstempel − Nullbyte. |
 | `candata`   | 16 Byte  | Struktur für CAN-Frames |
 | `gpsdata`   | 24 Byte  | Struktur für GPS-Positionen |
 
-> **Hinweis:** `pair` und `triple` sind in OSF4 nicht definiert.
+### Stringterminierung in OSF4
+
+In OSF4 werden `string`- und `binary`-Datenwerte in `bcAbsTimeStampData`-Blöcken **mit abschließender Nullbyte (`0x00`)** geschrieben. Dies ist Bestandsverhalten und kein Breaking Change. Schreiber müssen das Nullbyte schreiben, Leser müssen es beim Bestimmen der Nutzlänge abziehen.
+
+**Beispiel `datatype=string` in OSF4:**
+`[uint32 N] [int64 Zeit] [UTF-8 Bytes des Strings] [0x00]`
+
+**Beispiel `datatype=binary` in OSF4:**
+`[uint32 N] [int64 Zeit] [Byte1] [Byte2] ... [Byte N] [0x00]`
 
 ---
 
@@ -145,6 +152,15 @@ Spezifisch für OSF4:
 - **`bcContinuedRelStampData`:** Wird in OSF4 noch genutzt (ab OSF5 entfernt).  
 - **`bcStatusEvent` und `bcMessageEvent`:** Vorhanden, werden aber in neuen Implementierungen nicht mehr empfohlen.  
 - **Metadaten:** Immer im XML-Format.
+
+### `bcStartData` mit Abtastrate
+
+Ab dieser Spec-Revision trägt `bcStartData` in OSF4 — wie in OSF5 — direkt nach dem `int64`-Startzeitstempel ein `double`-Feld mit der **Abtastrate (Hz)**. Die Rate gilt für alle nachfolgenden `bcContinuedData`-Blöcke desselben Kanals, bis ein neuer `bcStartData`-Block geschrieben wird.
+
+**Beispiel `bcStartData` in OSF4:**
+`[int64 ZeitStart] [double SampleRate] [uint32 N] [double Wert1] [double Wert2] ... [double WertN]`
+
+Neue OSF4-Schreiber **müssen** dieses Feld schreiben. Reader, die einer OSF4-Datei ohne dieses Feld begegnen (alte Bestandsdateien), schlagen mit einem Format-Fehler fehl — es gibt keinen impliziten Fallback aus `timeincrement`.
 
 ### Einschränkungen:
 
@@ -182,7 +198,6 @@ OSF_STREAM_END 321316454==============
 
 - Nur XML-Metablock, keine JSON-Unterstützung.  
 - Steuerbyte komplexer, mehr Blocktypen als OSF5.  
-- Keine nativen `pair`/`triple`-Datentypen.  
 - Vektor- und Matrixkanäle über XML-Parameter (`rows`, `columns`).  
 - `bcContinuedRelStampData` wird unterstützt, ist aber in OSF5 nicht mehr enthalten.  
 

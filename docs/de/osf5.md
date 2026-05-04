@@ -99,7 +99,7 @@ OSF5 übernimmt die Blockstruktur aus OSF4, reduziert aber die Anzahl der genutz
 
 ## Unterstützte Datentypen in OSF5
 
-OSF5 unterstützt alle Datentypen aus OSF4 sowie zwei neue zusammengesetzte Typen für Mehrkomponenten-Werte:
+OSF5 unterstützt dieselben Datentypen wie OSF4. Strings und Binärdaten in `bcAbsTimeStampData`-Blöcken werden in OSF5 jedoch **ohne Nullterminierung** gespeichert (Unterschied zu OSF4).
 
 | Datentyp   | Größe    | Beschreibung |
 |------------|----------|--------------|
@@ -110,33 +110,29 @@ OSF5 unterstützt alle Datentypen aus OSF4 sowie zwei neue zusammengesetzte Type
 | `int64`    | 8 Byte   | Ganzzahl mit Vorzeichen |
 | `float`    | 4 Byte   | IEEE 754 Single Precision |
 | `double`   | 8 Byte   | IEEE 754 Double Precision |
-| `string`   | variabel | UTF-8, Länge durch Block |
-| `binary`   | variabel | Beliebige Bytefolgen, optional mit `mimetype` |
+| `string`   | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert, **ohne Nullterminierung**. Effektive Stringlänge = Blockgröße − Zeitstempel. |
+| `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen, **ohne abschließende Nullbyte**. Maximale Länge wird durch `sizeoflengthvalue` bestimmt. |
 | `candata`  | 16 Byte  | Struktur für CAN-Frames |
 | `gpsdata`  | 24 Byte  | Struktur für GPS-Positionen |
-| `pair`     | 16 Byte  | Zwei `double`-Werte, z. B. X/Y oder Real/Imaginär |
-| `triple`   | 24 Byte  | Drei `double`-Werte, z. B. 3D-Beschleunigung |
 
-### Struktur `pair`:
+### Stringterminierung in OSF5
 
-```c
-struct pair {
-    double v1;
-    double v2;
-};
-```
+In OSF5 werden `string`- und `binary`-Datenwerte in `bcAbsTimeStampData`-Blöcken **ohne** abschließende Nullbyte geschrieben. Die Nutzlänge ergibt sich vollständig aus der Blockgröße abzüglich der Zeitstempel. Dies ist eine bewusste Vereinfachung gegenüber OSF4 zugunsten einer einfacheren Embedded-Implementierung.
 
-### Struktur `triple`:
+**Beispiel `datatype=string` in OSF5:**
+`[uint32 N] [int64 Zeit] [UTF-8 Bytes des Strings]`
 
-```c
-struct triple {
-    double v1;
-    double v2;
-    double v3;
-};
-```
+**Beispiel `datatype=binary` in OSF5:**
+`[uint32 N] [int64 Zeit] [Byte1] [Byte2] ... [Byte N]`
 
+> **Hinweis für OSF5-Leser:** Beim Lesen von OSF4-Dateien muss die Nullbyte-Konvention von OSF4 angewendet werden (siehe `osf4.md`).
 
+### `bcStartData` mit Abtastrate
+
+Wie in der allgemeinen Spezifikation und in OSF4 trägt `bcStartData` in OSF5 direkt nach dem `int64`-Startzeitstempel ein `double`-Feld mit der **Abtastrate (Hz)**. Sie gilt für alle nachfolgenden `bcContinuedData`-Blöcke desselben Kanals, bis ein neuer `bcStartData`-Block geschrieben wird. Mehrere `bcStartData`-Blöcke pro Kanal mit Zeitlücken dazwischen sind explizit zulässig.
+
+**Beispiel `bcStartData` in OSF5:**
+`[int64 ZeitStart] [double SampleRate] [uint32 N] [double Wert1] [double Wert2] ... [double WertN]`
 
 ## Trailer und Info-Block
 
@@ -175,7 +171,7 @@ In OSF5 haben wir beide Elemente bewusst entfernt.
 
 - **JSON** als Hauptformat, XML nur für Abwärtskompatibilität.  
 - **Vereinfachtes Steuerbyte** mit weniger Blocktypen.  
-- Neue Datentypen `pair` und `triple`.  
+- Strings und Binärdaten werden **ohne** Nullterminierung gespeichert (Unterschied zu OSF4).
 - Keine Trailer oder Info-Datenblöcke am Dateiende.  
 - `bcContinuedRelStampData`, `bcStatusEvent`, `bcMessageEvent` werden nicht mehr erzeugt.
 
@@ -200,9 +196,17 @@ OSF5 2048
       },
       {
         "index": 1,
-        "name": "Sensor/ForcePath",
+        "name": "Sensor/Force",
         "channeltype": "scalar",
-        "datatype": "pair"
+        "datatype": "double",
+        "physicalunit": "N"
+      },
+      {
+        "index": 2,
+        "name": "Sensor/Path",
+        "channeltype": "scalar",
+        "datatype": "double",
+        "physicalunit": "mm"
       }
     ]
   }
