@@ -768,53 +768,53 @@ var
   I        : Integer;
   Item     : TOSFMetaItem;
 begin
-  // Channels.
-  ChanArr := TJSONArray.Create;
-  for I := 0 to FChannels.Count - 1 do
-    FChannels[I].AppendJSON(ChanArr);
-
-  // File metadata sub-object.
-  FileNode := TJSONObject.Create;
-  FileNode.AddPair('created_utc', FormatUTCDateTime(FMetadata.CreatedUtc));
-  if FMetadata.Creator      <> '' then FileNode.AddPair('creator',      FMetadata.Creator);
-  if FMetadata.Tag          <> '' then FileNode.AddPair('tag',          FMetadata.Tag);
-  if FMetadata.Reason       <> '' then FileNode.AddPair('reason',       FMetadata.Reason);
-  if FMetadata.Comment      <> '' then FileNode.AddPair('comment',      FMetadata.Comment);
-  if FMetadata.NamespaceSep <> '' then FileNode.AddPair('namespacesep', FMetadata.NamespaceSep);
-  if FMetadata.Longitude    <> 0  then FileNode.AddPair('created_at_longitude', TJSONNumber.Create(FMetadata.Longitude));
-  if FMetadata.Latitude     <> 0  then FileNode.AddPair('created_at_latitude',  TJSONNumber.Create(FMetadata.Latitude));
-  if FMetadata.Altitude     <> 0  then FileNode.AddPair('created_at_altitude',  TJSONNumber.Create(FMetadata.Altitude));
-
-  // Info items.
-  InfoArr := nil;
-  if FInfoItems.Count > 0 then
-  begin
-    InfoArr := TJSONArray.Create;
-    for I := 0 to FInfoItems.Count - 1 do
-    begin
-      Item    := FInfoItems[I];
-      InfoObj := TJSONObject.Create;
-      InfoObj.AddPair('name',     Item.Name);
-      InfoObj.AddPair('value',    Item.Value);
-      InfoObj.AddPair('datatype', Item.DataType);
-      if Item.UnitStr <> '' then
-        InfoObj.AddPair('unit', Item.UnitStr);
-      InfoArr.AddElement(InfoObj);
-    end;
-  end;
-
-  // Top-level "osf" node.
-  OSFNode := TJSONObject.Create;
-  OSFNode.AddPair('format',   OSF_FORMAT_OSF5);
-  OSFNode.AddPair('version',  TJSONNumber.Create(5));
-  OSFNode.AddPair('file',     FileNode);    // OSFNode takes ownership
-  OSFNode.AddPair('channels', ChanArr);     // OSFNode takes ownership
-  if Assigned(InfoArr) then
-    OSFNode.AddPair('info',   InfoArr);     // OSFNode takes ownership
-
+  // Build top-down so each freshly created object becomes owned by its parent
+  // before the next allocation. If any later step raises, freeing Root cascades
+  // through every node and no orphan leaks.
   Root := TJSONObject.Create;
-  Root.AddPair('osf', OSFNode);             // Root takes ownership
   try
+    OSFNode := TJSONObject.Create;
+    Root.AddPair('osf', OSFNode);
+    OSFNode.AddPair('format',  OSF_FORMAT_OSF5);
+    OSFNode.AddPair('version', TJSONNumber.Create(5));
+
+    FileNode := TJSONObject.Create;
+    OSFNode.AddPair('file', FileNode);
+    FileNode.AddPair('created_utc', FormatUTCDateTime(FMetadata.CreatedUtc));
+    if FMetadata.Creator      <> '' then FileNode.AddPair('creator',      FMetadata.Creator);
+    if FMetadata.Tag          <> '' then FileNode.AddPair('tag',          FMetadata.Tag);
+    if FMetadata.Reason       <> '' then FileNode.AddPair('reason',       FMetadata.Reason);
+    if FMetadata.Comment      <> '' then FileNode.AddPair('comment',      FMetadata.Comment);
+    if FMetadata.NamespaceSep <> '' then FileNode.AddPair('namespacesep', FMetadata.NamespaceSep);
+    if FMetadata.Longitude    <> 0  then
+      FileNode.AddPair('created_at_longitude', TJSONNumber.Create(FMetadata.Longitude));
+    if FMetadata.Latitude     <> 0  then
+      FileNode.AddPair('created_at_latitude',  TJSONNumber.Create(FMetadata.Latitude));
+    if FMetadata.Altitude     <> 0  then
+      FileNode.AddPair('created_at_altitude',  TJSONNumber.Create(FMetadata.Altitude));
+
+    ChanArr := TJSONArray.Create;
+    OSFNode.AddPair('channels', ChanArr);
+    for I := 0 to FChannels.Count - 1 do
+      FChannels[I].AppendJSON(ChanArr);
+
+    if FInfoItems.Count > 0 then
+    begin
+      InfoArr := TJSONArray.Create;
+      OSFNode.AddPair('info', InfoArr);
+      for I := 0 to FInfoItems.Count - 1 do
+      begin
+        Item    := FInfoItems[I];
+        InfoObj := TJSONObject.Create;
+        InfoArr.AddElement(InfoObj);
+        InfoObj.AddPair('name',     Item.Name);
+        InfoObj.AddPair('value',    Item.Value);
+        InfoObj.AddPair('datatype', Item.DataType);
+        if Item.UnitStr <> '' then
+          InfoObj.AddPair('unit', Item.UnitStr);
+      end;
+    end;
+
     Result := TEncoding.UTF8.GetBytes(Root.ToJSON);
   finally
     Root.Free;
