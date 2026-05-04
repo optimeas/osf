@@ -172,6 +172,8 @@ Die Parameter werden nachfolgend beschrieben
   Festes Zeitinkrement in Nanosekunden für äquidistante Kanäle.
   *Wert = 0 oder nicht gesetzt → Kanal verwendet individuelle Zeitstempel.*
 
+  **Hinweis:** Das `timeincrement` im Metablock ist ein **optionaler Hinweis**. Bei hochaufgelösten oder triggerbasierten Aufzeichnungen ist die exakte Abtastrate beim Erstellen des Headers oft noch nicht bekannt. Die **tatsächlich gültige Abtastrate wird in jedem `bcStartData`-Block als `double` mitgeliefert** und gilt ab diesem Zeitpunkt für alle nachfolgenden `bcContinuedData`-Blöcke desselben Kanals, bis ein neuer `bcStartData`-Block geschrieben wird. Dies gilt sowohl für **OSF4** als auch für **OSF5**.
+
 
 #### **Datentypen und Struktur**
 
@@ -211,16 +213,8 @@ Die Parameter werden nachfolgend beschrieben
 
 * **physicalunit**
   Optional, physikalische Einheit (SI-konform, z. B. `V`, `°C`).
-* **physicalunit1**
-  `Neu in OSF5` Optional, physikalische Einheit für den zweiten Datensatz in Mehrkomponenten-Datentypen wie `pair` oder `triple` (SI-konform, z. B. `V`, `°C`).
-* **physicalunit2**
-  `Neu in OSF5` Optional, physikalische Einheit für den dritten Datensatz in Mehrkomponenten-Datentypen wie `pair` oder `triple` (SI-konform, z. B. `V`, `°C`).
 * **physicaldimension**
   Optional, Beschreibung der physikalischen Dimension (`temperature`, `pressure`, …).
-* **scale**
-  Optional, Skalierungsfaktor für Integer-Datentypen → Umrechnung in physikalische Werte.
-* **offset**
-  Optional, Offset für Integer-Datentypen → Nullpunktverschiebung in physikalische Werte.
 
 
 #### **Darstellung und Zusatzinfos**
@@ -247,6 +241,8 @@ Metadaten sind frei definierbar und eignen sich für:
 * Kommentare und Statusmeldungen
 * Kalibrierwerte
 * Benutzerdefinierte Zusatzinformationen
+
+> **Hinweis:** `bytearray` ist ein Alias für `binary`. Beide Bezeichnungen sind in OSF4 und OSF5 gültig und werden von Lesern identisch interpretiert. Schreiber **sollen** beim Schreiben einheitlich `binary` verwenden; `bytearray` bleibt zur Abwärtskompatibilität lesbar.
 
 
 ### Vorteile der Struktur
@@ -278,12 +274,12 @@ Der Parameter `datatype` legt das Datenformat der Werte eines Kanals fest. Jeder
 | `int64`   | 8             | Ganzzahl mit Vorzeichen                                                                                                                              |
 | `float`   | 4             | IEEE 754 Single Precision                                                                                                                            |
 | `double`  | 8             | IEEE 754 Double Precision                                                                                                                            |
-| `string`  | variabel      | UTF-8 kodiert, Länge durch Blockgröße definiert                                                                                                      |
-| `binary`  | variabel      | Beliebige Bytefolgen; Die maximale Länge des Blocks wird durch das `sizeoflengthvalue`-Feld des Kanals bestimmt; für Bild-, Audio- oder andere Binärdaten mit MIME-Type |
+| `string`  | variabel      | UTF-8 kodiert. Stringbehandlung versionsabhängig – siehe `osf4.md` bzw. `osf5.md`. |
+| `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen für Bild-, Audio- oder andere Binärdaten mit MIME-Type. Die maximale Länge des Blocks wird durch das `sizeoflengthvalue`-Feld des Kanals bestimmt. Behandlung versionsabhängig – siehe `osf4.md` bzw. `osf5.md`. |
 | `candata` | 16            | Struktur für CAN-Frames (siehe unten)                                                                                                                |
 | `gpsdata` | 24            | Struktur für GPS-Positionen (siehe unten)                                                                                                            |
-| `pair`    | 16            | `Neu in OSF5` Ein Datentyp für zwei zusammengehörige double-Werte in einer Einheit.<br/>Ideal für X/Y-Wertepaare wie Kraft/Weg, Spannung/Strom oder komplexe Zahlen (Real/Imaginär). (siehe unten)|
-| `triple`  | 24            | `Neu in OSF5` Ein Datentyp für drei zusammengehörige double-Werte in einer Einheit.<br/>Typisch für 3D-Sensordaten wie Beschleunigung, Gyroskop oder Magnetfeldmessungen. (siehe unten)|
+
+> **Hinweis zu Integer-Typen:** Integer-Werte (`int8`, `int16`, `int32`, `int64`) werden in OSF-Dateien typischerweise für **Zustände, Statusinformationen oder Zählerwerte** verwendet, nicht als skalierte Rohwerte einer physikalischen Größe. Aus diesem Grund kennt OSF bewusst **keine** `scale`/`offset`-Parameter zur Umrechnung in physikalische Werte – physikalische Größen werden direkt als `float` oder `double` gespeichert.
 
 #### Struktur `candata`
 
@@ -304,27 +300,6 @@ struct gps_location {
     double altitude;   // Höhe
 };
 ```
-
-#### `Neu in OSF5` Struktur `pair`
-
-```c
-// 2-Komponenten-Werte
-struct pairdouble {
-    double v1;   // X oder Real
-    double v2;   // Y oder Imaginär
-};
-```
-#### `Neu in OSF5` Struktur `triple`
-
-```c
-// 3-Komponenten-Werte
-struct tripledouble {
-    double v1;   // X 
-    double v2;   // Y 
-    double v3;   // Z 
-};
-```
-
 
 > **Hinweis:** Für Kanäle mit `datatype="binary"` wird empfohlen, den MIME-Type (`mimetype`) im Kanal zu definieren (z. B. `image/jpeg`, `audio/wav`), um die Daten eindeutig interpretieren zu können. Die maximale Blockgröße wird durch den Parameter [`sizeoflengthvalue`](#sizeoflengthvalue) des Kanals bestimmt.
 
@@ -569,7 +544,7 @@ Das Steuerbyte wird als 8-Bit-Wert interpretiert. Die unteren 7 Bits definiere
 | **3**      | `bcStatusEvent`    | `Entfällt` Diente zur Mitführung von Statusinformationen pro Kanal. Wird nicht mehr genutzt. | `int64`: Absoluter Zeitstempel<br/>`uint32`: Status-Wort |
 | **4**      | `bcMessageEvent`   | `Entfällt` Kann vollständig durch `bcAbsTimeStampData` mit `datatype=string` ersetzt werden. | `int64`: Absoluter Zeitstempel<br/>`string`: Text ohne 0-Terminierung |
 | **5**      | `bcContinuedData`  | Daten mit fester Abtastrate fortsetzen. Bei gesetztem Bit 7 mehrere Werte im Block.        | `[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × Datenwerte |
-| **6**      | `bcStartData`      | Erster Datenblock mit fester Abtastrate (z. B. bei Trigger). Enthält immer einen absoluten Startzeitstempel. | `int64`: Absoluter Zeitstempel<br/>`[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × Datenwerte |
+| **6**      | `bcStartData`      | Erster Datenblock mit fester Abtastrate; trägt zusätzlich die ab diesem Block gültige Abtastrate (z. B. bei Trigger). Enthält immer einen absoluten Startzeitstempel. | `int64`: Absoluter Zeitstempel<br/>`double`: Abtastrate (Hz)<br/>`[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × Datenwerte |
 | **7**      | `bcContinuedRelStampData` | `Entfällt`, `In OSF5 beim Lesen unterstützt` Ursprünglich zur Einsparung von 4 Byte pro Sample mit relativen Zeitstempeln. | `[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × (`uint32` Relativzeit + Datenwert) |
 | **8**      | `bcAbsTimeStampData` | Datenblöcke mit absolutem Zeitstempel pro Wert. Unterstützt nun auch Strings und Binärdaten in Verbindung mit `datatype` und `mimetype`. | `[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × (`int64` Absolutzeit + Datenwert) |
 
@@ -598,16 +573,19 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
 
 - **Blockaufbau:**  
   1. `int64` – Absoluter Startzeitstempel (ns since Epoch).  
-  2. **[uint32 N]** – Anzahl der Samples (nur wenn Bit 7 gesetzt, sonst 1).  
-  3. **N × Datenwerte** – Rohdaten entsprechend `datatype`.  
+  2. `double` – Abtastrate in Hz (gültig ab diesem Block, bis zum nächsten `bcStartData`).  
+  3. **[uint32 N]** – Anzahl der Samples (nur wenn Bit 7 gesetzt, sonst 1).  
+  4. **N × Datenwerte** – Rohdaten entsprechend `datatype`.  
 
-- **Beispiel `datatype=double`:** [int64 ZeitStart] [uint32 N] [double Wert1] [double Wert2] ... [double WertN]
-
-
-- **Hinweis:**  
-  - Markiert immer den Start einer Serie oder eines neuen Segments (z. B. nach Trigger).
+- **Beispiel `datatype=double`:** [int64 ZeitStart] [double SampleRate] [uint32 N] [double Wert1] [double Wert2] ... [double WertN]
 
 
+- **Hinweise:**
+  - `bcStartData` darf **mehrfach pro Datei und Kanal** auftreten. Er wird geschrieben:
+    - zu Beginn einer äquidistanten Aufzeichnung,
+    - bei jedem Trigger oder Ereignis, das eine neue Datensequenz auslöst,
+    - bei einer notwendigen Korrektur der Zeitspur (Driftausgleich).
+  - **Konsequenz für Leser:** Daten eines äquidistanten Kanals entstehen **block- bzw. ereignisweise**. Zwischen aufeinanderfolgenden Sequenzen desselben Kanals können **Zeitlücken** liegen. Leser müssen die effektive Abtastrate aus dem aktuell gültigen `bcStartData`-Block übernehmen und dürfen **nicht** annehmen, dass `timeincrement` aus dem Metablock immer korrekt ist.
 
 #### bcContinuedData (äquidistante Daten, Fortsetzung)
 
@@ -621,6 +599,8 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
     2. **N × Datenwerte** – Rohdaten entsprechend `datatype`.  
 
 - **Beispiel `datatype=int16`:**[uint32 N] [int16 Wert1] [int16 Wert2] ... [int16 WertN]
+
+- **Hinweis:** Die Zeit pro Sample in einem `bcContinuedData`-Block ergibt sich aus `1 / SampleRate` des zuletzt gelesenen `bcStartData`-Blocks desselben Kanals.
 
 
 
@@ -637,13 +617,13 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
 - **Beispiel `datatype=int16`:**[uint32 N] [int64 Zeit1] [int16 Wert1] [int64 Zeit2] [int16 Wert2] ...
 - **Beispiel `datatype=double`:**[uint32 N] [int64 Zeit1] [double Wert1] [int64 Zeit2] [double Wert2] ...
 - **Beispiel `datatype=string`:**
-  - Strings werden **ohne Nullterminierung** gespeichert.  
+  - Die Speicherung von Strings (mit/ohne abschließende Nullbyte) hängt von der OSF-Version ab. Details siehe `osf4.md` und `osf5.md`. Der hier gezeigte Aufbau zeigt die Nutzdaten **ohne** Versions-Spezifika.
   - `Anzahl der Samples` bestimmt die Länge. Bit 7 muss gesetzt sein.
   - [uint32 N] [int64 Zeit] [UTF-8 Bytes des Strings]
 
 - **Beispiel `datatype=binary`:**
-  - Binärdaten werden als Rohbytes geschrieben.  
-  - `mimetype` im Kanal definiert die Interpretation.  
+  - Binärdaten werden als Rohbytes geschrieben. Behandlung am Blockende (Nullbyte oder nicht) ist versionsspezifisch.
+  - `mimetype` im Kanal definiert die Interpretation.
   - `Anzahl der Samples` (N) bestimmt die Länge. Bit 7 muss gesetzt sein.
   - [uint32 N] [int64 Zeit] [Byte1] [Byte2] ... [Byte N]
 
@@ -679,9 +659,9 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
   - Keine Strings, keine Binärdaten, keine komplexen Strukturen.  
 
 - **Zeitgestempelte Kanäle (bcAbsTimeStampData, bcContinuedRelStampData):**
-  - Unterstützen alle Datentypen.  
-  - Strings ohne Nullterminierung; Länge über Blockgröße.  
-  - Binärdaten mit `datatype=binary` und optionalem `mimetype`.
+  - Unterstützen alle Datentypen.
+  - Strings: Behandlung der Terminierung versionsspezifisch (siehe OSF4/OSF5). Länge ergibt sich aus der Blockgröße.
+  - Binärdaten mit `datatype=binary` und optionalem `mimetype`; Behandlung am Blockende ebenfalls versionsspezifisch.
 
 #### Wichtige Punkte
 
@@ -694,9 +674,9 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
   - Leser müssen Bit 7 immer prüfen, um Einzel- vs. Mehrwertblöcke korrekt zu interpretieren.  
   - Nicht erkannte Blocktypen können anhand der Längenangabe übersprungen werden.
 
-- **Strings und Binärdaten:**  
-  - Für `bcAbsTimeStampData` mit `datatype=string` entfällt eine Nullterminierung.  
-  - Die Blocklänge ergibt sich aus `sizeoflengthvalue`.  
+- **Strings und Binärdaten:**
+  - Für `bcAbsTimeStampData` mit `datatype=string` oder `datatype=binary` ist die Behandlung am Blockende **versionsspezifisch**: OSF4 verwendet eine abschließende Nullbyte (`0x00`), OSF5 verzichtet darauf. Die exakte Definition steht in den versionsspezifischen Dokumenten.
+  - Die Blocklänge ergibt sich aus `sizeoflengthvalue`.
   - Binärdaten verwenden `datatype=binary` plus `mimetype`.
 <br/>
 
