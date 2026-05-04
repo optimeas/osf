@@ -208,6 +208,10 @@ begin
   lbChannels.Items.BeginUpdate;
   try
     lbChannels.Clear;
+    // Items.AddObject stashes the channel reference next to the displayed
+    // text, so when the list is sorted (Sorted = True) the position no longer
+    // matches FDataManager.Channels[I] but Items.Objects[I] still resolves
+    // to the right channel.
     for I := 0 to FDataManager.ChannelCount - 1 do
     begin
       Ch := FDataManager.Channels[I];
@@ -215,11 +219,22 @@ begin
         Item := Format(SListItemWithUnit, [Ch.Name, Ch.SampleCount, Ch.PhysicalUnit])
       else
         Item := Format(SListItemWithoutUnit, [Ch.Name, Ch.SampleCount]);
-      lbChannels.Items.Add(Item);
+      lbChannels.Items.AddObject(Item, Ch);
     end;
   finally
     lbChannels.Items.EndUpdate;
   end;
+end;
+
+// Returns the data channel rendered at the given list-box position, or nil
+// when the position is out of range. Centralised so every callsite resolves
+// the sorted display order back to the underlying channel the same way.
+function ChannelAtListIndex(LB: TListBox; Index: Integer): TOSFDataChannel;
+begin
+  if (Index < 0) or (Index >= LB.Count) then
+    Result := nil
+  else
+    Result := TOSFDataChannel(LB.Items.Objects[Index]);
 end;
 
 // Owner-draw renders empty channels in clGrayText so the user immediately
@@ -235,9 +250,8 @@ begin
   Cnv := LB.Canvas;
   Cnv.FillRect(Rect);
 
-  if (Index < 0) or (Index >= FDataManager.ChannelCount) then
-    Exit;
-  Ch := FDataManager.Channels[Index];
+  Ch := ChannelAtListIndex(LB, Index);
+  if not Assigned(Ch) then Exit;
   IsEmpty := Ch.SampleCount = 0;
 
   if odSelected in State then
@@ -298,10 +312,11 @@ var
   Step: Integer;
   Drawn: Integer;
 begin
-  if (Index < 0) or (Index >= FDataManager.ChannelCount) then
-    Exit;
-
-  Ch := FDataManager.Channels[Index];
+  // Index is the list-box position which is now sorted alphabetically and
+  // therefore no longer matches FDataManager.Channels[I]. The channel
+  // reference was stashed via AddObject in PopulateChannelList.
+  Ch := ChannelAtListIndex(lbChannels, Index);
+  if not Assigned(Ch) then Exit;
 
   ClearChartSeries;
   chtData.Title.Text.Text := Ch.Name;

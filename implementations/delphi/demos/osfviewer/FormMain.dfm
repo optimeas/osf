@@ -62,6 +62,7 @@ object FormOSFViewer: TFormOSFViewer
       Font.Name = 'Consolas'
       Font.Style = []
       ParentFont = False
+      Sorted = True
       TabOrder = 0
       OnClick = lbChannelsClick
       OnDrawItem = lbChannelsDrawItem
@@ -114,12 +115,15 @@ object FormOSFViewer: TFormOSFViewer
       Top = 0
       Width = 717
       Height = 569
+      Legend.Visible = False
       Title.Font.Color = clWindowText
       Title.Font.Name = 'Segoe UI'
       Title.Font.Style = [fsBold]
       Title.Text.Strings = (
         '')
       BottomAxis.DateTimeFormat = 'yyyy-mm-dd hh:nn:ss'
+      BottomAxis.LabelsAngle = 45
+      BottomAxis.LabelsSize = 80
       View3D = False
       Align = alTop
       TabOrder = 0
