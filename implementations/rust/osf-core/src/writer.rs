@@ -39,6 +39,7 @@
 //!   for these types end with the spec-mandated null terminator;
 //!   handled centrally in [`crate::binary_write`].
 
+use crate::binary_write;
 use crate::block::GpsLocation;
 use crate::data_channel::NumericValues;
 use crate::error::OsfError;
@@ -144,9 +145,6 @@ pub(crate) struct FileInfoDraft {
 }
 
 /// One equidistant segment held by the builder until write time.
-/// Fields are consumed by the block-writing phase that lands in a
-/// follow-up commit; the lint allow is removed there.
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct EquidistantSegmentDraft {
     pub start_timestamp_ns: i64,
@@ -321,10 +319,12 @@ impl WriterBuilder {
     /// # Errors
     ///
     /// As [`Self::write_to_file`].
-    pub fn write_to<W: Write>(self, mut writer: W) -> Result<(), OsfError> {
+    pub fn write_to<W: Write>(mut self, mut writer: W) -> Result<(), OsfError> {
         if self.channels.is_empty() {
             return Err(OsfError::WriterEmpty);
         }
+
+        autobump_size_of_length_value(&mut self.channels, &self.channel_data);
 
         let metablock = build_metablock_json(&self.file_info, &self.channels)?;
         write_magic_header(&mut writer, metablock.len() as u64)?;
@@ -335,6 +335,44 @@ impl WriterBuilder {
     }
 }
 
+/// Pre-pass before writing: variable-length channels (`string`,
+/// `binary`) whose largest sample would not fit into a `u16` length
+/// field are bumped up to `size_of_length_value = 4`. Numeric
+/// channels are not bumped — the block writer splits them into
+/// multiple blocks instead.
+fn autobump_size_of_length_value(channels: &mut [ChannelDef], data: &[ChannelData]) {
+    for (i, def) in channels.iter_mut().enumerate() {
+        if def.size_of_length_value == 4 {
+            continue;
+        }
+        let needed = match &data[i] {
+            ChannelData::Variable {
+                strings, binaries, ..
+            } => {
+                let s_max = strings.as_ref().map_or(0, |v| {
+                    v.iter().map(String::len).max().unwrap_or(0)
+                });
+                let b_max = binaries.as_ref().map_or(0, |v| {
+                    v.iter().map(Vec::len).max().unwrap_or(0)
+                });
+                let sample_bytes = s_max.max(b_max);
+                // Variable layout for one sample per block:
+                // [control][u32 N=1][i64 ts][bytes][0x00] = 14 + sample_bytes
+                14 + sample_bytes
+            }
+            _ => 0,
+        };
+        if needed > MAX_BLOCK_PAYLOAD_U16 {
+            debug!(
+                "channel {i} {:?}: auto-bumping size_of_length_value 2 -> 4 \
+                 (a single sample would need {needed} bytes)",
+                def.name
+            );
+            def.size_of_length_value = 4;
+        }
+    }
+}
+
 /// Write the magic-header line: `OSF5 <metablock_len>\n`.
 fn write_magic_header<W: Write>(writer: &mut W, metablock_len: u64) -> Result<(), OsfError> {
     let line = format!("{OSF5_IDENTIFIER} {metablock_len}\n");
@@ -342,15 +380,515 @@ fn write_magic_header<W: Write>(writer: &mut W, metablock_len: u64) -> Result<()
     Ok(())
 }
 
-/// Stub — block writing arrives in the next commit. Until then the
-/// writer emits header + metablock only, which is enough for
-/// metablock-shape tests but produces files with zero data.
+/// Maximum payload bytes (control byte + body) that fit into a
+/// `u16` length field.
+const MAX_BLOCK_PAYLOAD_U16: usize = u16::MAX as usize;
+
+/// Soft cap for `u32` length fields — a single block of ~2 GB is
+/// already enormous; pinning it just below `i32::MAX` avoids
+/// platform-dependent overflow on the body length conversion.
+const MAX_BLOCK_PAYLOAD_U32: usize = (i32::MAX as usize) - 1024;
+
+/// Control byte values per spec rev 2026-05-04.
+const CONTROL_CONTINUED_DATA: u8 = 0x05;
+const CONTROL_START_DATA: u8 = 0x06;
+const CONTROL_ABS_TIMESTAMP: u8 = 0x08;
+const MULTI_SAMPLE_FLAG: u8 = 0x80;
+
+/// Top-level dispatch: walks every channel and writes its data blocks.
 fn write_data_blocks<W: Write>(
-    _writer: &mut W,
-    _channels: &[ChannelDef],
-    _channel_data: &[ChannelData],
+    writer: &mut W,
+    channels: &[ChannelDef],
+    channel_data: &[ChannelData],
 ) -> Result<(), OsfError> {
-    // Implemented in the next commit.
+    for (index, def) in channels.iter().enumerate() {
+        let channel = u16::try_from(index).expect("channel index ≤ u16::MAX validated earlier");
+        match &channel_data[index] {
+            ChannelData::Empty => {}
+            ChannelData::Equidistant { segments } => {
+                for segment in segments {
+                    write_equidistant_segment(writer, channel, def, segment)?;
+                }
+            }
+            ChannelData::Timestamped {
+                timestamps_ns,
+                values,
+            } => {
+                write_abs_timestamp_numeric(writer, channel, def, timestamps_ns, values)?;
+            }
+            ChannelData::Variable {
+                timestamps_ns,
+                strings,
+                binaries,
+            } => {
+                write_abs_timestamp_variable(writer, channel, def, timestamps_ns, strings, binaries)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Maximum payload size in bytes for the channel's `size_of_length_value`.
+fn max_block_payload(size_of_length_value: u8) -> usize {
+    match size_of_length_value {
+        2 => MAX_BLOCK_PAYLOAD_U16,
+        4 => MAX_BLOCK_PAYLOAD_U32,
+        _ => MAX_BLOCK_PAYLOAD_U16,
+    }
+}
+
+/// Bytes per sample on disk for the given numeric data type.
+fn numeric_byte_size(dt: &DataType) -> Result<usize, OsfError> {
+    Ok(match dt {
+        DataType::Bool | DataType::Int8 | DataType::UInt8 => 1,
+        DataType::Int16 | DataType::UInt16 => 2,
+        DataType::Int32 | DataType::UInt32 | DataType::Float => 4,
+        DataType::Int64 | DataType::UInt64 | DataType::Double => 8,
+        DataType::GpsLocation => 24,
+        DataType::String | DataType::Binary | DataType::ByteArray => {
+            return Err(OsfError::InvalidBlock(
+                "string / binary do not have a fixed sample size".into(),
+            ));
+        }
+        DataType::Unsupported(_) => {
+            return Err(OsfError::InvalidBlock(
+                "Unsupported data type cannot be written".into(),
+            ));
+        }
+    })
+}
+
+/// Write the `[u16 channel][len][payload]` framing once the body of a
+/// block has been built into a `Vec<u8>`.
+fn write_block<W: Write>(
+    writer: &mut W,
+    channel: u16,
+    size_of_length_value: u8,
+    payload: &[u8],
+) -> Result<(), OsfError> {
+    binary_write::write_u16(writer, channel)?;
+    let len = u32::try_from(payload.len()).map_err(|_| {
+        OsfError::InvalidBlock(format!(
+            "channel {channel}: block payload {} bytes overflows u32 length field",
+            payload.len()
+        ))
+    })?;
+    if size_of_length_value == 2 && payload.len() > MAX_BLOCK_PAYLOAD_U16 {
+        return Err(OsfError::InvalidBlock(format!(
+            "channel {channel}: block payload {} bytes exceeds u16 length field; \
+             increase size_of_length_value to 4",
+            payload.len()
+        )));
+    }
+    binary_write::write_length_field(writer, size_of_length_value, len)?;
+    writer.write_all(payload)?;
+    Ok(())
+}
+
+// -----------------------------------------------------------
+// Equidistant: bcStartData (first chunk) + bcContinuedData (rest).
+// -----------------------------------------------------------
+
+fn write_equidistant_segment<W: Write>(
+    writer: &mut W,
+    channel: u16,
+    def: &ChannelDef,
+    segment: &EquidistantSegmentDraft,
+) -> Result<(), OsfError> {
+    let sample_size = numeric_byte_size(&def.data_type)?;
+    let total = segment.values.len();
+    let max_payload = max_block_payload(def.size_of_length_value);
+
+    // bcStartData multi-sample fixed overhead:
+    //   1 (control) + 8 (i64 ts) + 8 (f64 rate) + 4 (u32 N) = 21
+    let start_overhead = 1 + 8 + 8 + 4;
+    let max_samples_start = (max_payload - start_overhead) / sample_size;
+    let max_samples_start = max_samples_start.max(1);
+
+    // bcContinuedData multi-sample fixed overhead:
+    //   1 (control) + 4 (u32 N) = 5
+    let continued_overhead = 1 + 4;
+    let max_samples_continued = (max_payload - continued_overhead) / sample_size;
+    let max_samples_continued = max_samples_continued.max(1);
+
+    let first_chunk = total.min(max_samples_start);
+    write_start_data_block(
+        writer,
+        channel,
+        def.size_of_length_value,
+        segment.start_timestamp_ns,
+        segment.sample_rate_hz,
+        &segment.values,
+        0,
+        first_chunk,
+    )?;
+
+    let mut written = first_chunk;
+    while written < total {
+        let chunk = (total - written).min(max_samples_continued);
+        write_continued_data_block(
+            writer,
+            channel,
+            def.size_of_length_value,
+            &segment.values,
+            written,
+            chunk,
+        )?;
+        written += chunk;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)] // 8 fields are all genuinely needed for one block
+fn write_start_data_block<W: Write>(
+    writer: &mut W,
+    channel: u16,
+    size_of_length_value: u8,
+    start_timestamp_ns: i64,
+    sample_rate_hz: f64,
+    values: &NumericValues,
+    start: usize,
+    count: usize,
+) -> Result<(), OsfError> {
+    let multi = count != 1;
+    let mut payload = Vec::with_capacity(32);
+    binary_write::write_u8(
+        &mut payload,
+        if multi {
+            CONTROL_START_DATA | MULTI_SAMPLE_FLAG
+        } else {
+            CONTROL_START_DATA
+        },
+    )?;
+    binary_write::write_i64(&mut payload, start_timestamp_ns)?;
+    binary_write::write_f64(&mut payload, sample_rate_hz)?;
+    if multi {
+        binary_write::write_u32(&mut payload, count as u32)?;
+    }
+    write_numeric_values_slice(&mut payload, values, start, count)?;
+    write_block(writer, channel, size_of_length_value, &payload)
+}
+
+fn write_continued_data_block<W: Write>(
+    writer: &mut W,
+    channel: u16,
+    size_of_length_value: u8,
+    values: &NumericValues,
+    start: usize,
+    count: usize,
+) -> Result<(), OsfError> {
+    let multi = count != 1;
+    let mut payload = Vec::with_capacity(16);
+    binary_write::write_u8(
+        &mut payload,
+        if multi {
+            CONTROL_CONTINUED_DATA | MULTI_SAMPLE_FLAG
+        } else {
+            CONTROL_CONTINUED_DATA
+        },
+    )?;
+    if multi {
+        binary_write::write_u32(&mut payload, count as u32)?;
+    }
+    write_numeric_values_slice(&mut payload, values, start, count)?;
+    write_block(writer, channel, size_of_length_value, &payload)
+}
+
+// -----------------------------------------------------------
+// Timestamped numeric: bcAbsTimeStampData with multi-sample bit set.
+// -----------------------------------------------------------
+
+fn write_abs_timestamp_numeric<W: Write>(
+    writer: &mut W,
+    channel: u16,
+    def: &ChannelDef,
+    timestamps_ns: &[i64],
+    values: &NumericValues,
+) -> Result<(), OsfError> {
+    let sample_size = numeric_byte_size(&def.data_type)?;
+    let total = timestamps_ns.len();
+    if total == 0 {
+        return Ok(());
+    }
+
+    let max_payload = max_block_payload(def.size_of_length_value);
+    // [control][u32 N][N × (i64 ts + value)]
+    // overhead = 1 + 4 = 5; per-sample = 8 + sample_size.
+    let per_sample = 8 + sample_size;
+    let overhead = 1 + 4;
+    let max_samples = ((max_payload - overhead) / per_sample).max(1);
+
+    let mut written = 0;
+    while written < total {
+        let chunk = (total - written).min(max_samples);
+        let mut payload = Vec::with_capacity(overhead + chunk * per_sample);
+        binary_write::write_u8(
+            &mut payload,
+            CONTROL_ABS_TIMESTAMP | MULTI_SAMPLE_FLAG,
+        )?;
+        binary_write::write_u32(&mut payload, chunk as u32)?;
+        write_timestamped_numeric_run(
+            &mut payload,
+            timestamps_ns,
+            values,
+            written,
+            chunk,
+        )?;
+        write_block(writer, channel, def.size_of_length_value, &payload)?;
+        written += chunk;
+    }
+    Ok(())
+}
+
+// -----------------------------------------------------------
+// Timestamped variable: one sample per block; bcAbsTimeStampData with
+// the multi-sample bit set and N = 1, payload ends with 0x00.
+// -----------------------------------------------------------
+
+fn write_abs_timestamp_variable<W: Write>(
+    writer: &mut W,
+    channel: u16,
+    def: &ChannelDef,
+    timestamps_ns: &[i64],
+    strings: &Option<Vec<String>>,
+    binaries: &Option<Vec<Vec<u8>>>,
+) -> Result<(), OsfError> {
+    debug_assert!(strings.is_some() ^ binaries.is_some());
+    let count = timestamps_ns.len();
+    if count == 0 {
+        return Ok(());
+    }
+
+    if let Some(ss) = strings {
+        for (ts, s) in timestamps_ns.iter().zip(ss.iter()) {
+            write_variable_one_string(writer, channel, def, *ts, s)?;
+        }
+    } else if let Some(bs) = binaries {
+        for (ts, b) in timestamps_ns.iter().zip(bs.iter()) {
+            write_variable_one_binary(writer, channel, def, *ts, b)?;
+        }
+    }
+    Ok(())
+}
+
+fn write_variable_one_string<W: Write>(
+    writer: &mut W,
+    channel: u16,
+    def: &ChannelDef,
+    timestamp_ns: i64,
+    s: &str,
+) -> Result<(), OsfError> {
+    let payload_len = variable_payload_size(s.len());
+    check_variable_block_fits(channel, def.size_of_length_value, payload_len, s.len())?;
+    let mut payload = Vec::with_capacity(payload_len);
+    write_variable_header(&mut payload, timestamp_ns)?;
+    binary_write::write_string_with_terminator(&mut payload, s)?;
+    write_block(writer, channel, def.size_of_length_value, &payload)
+}
+
+fn write_variable_one_binary<W: Write>(
+    writer: &mut W,
+    channel: u16,
+    def: &ChannelDef,
+    timestamp_ns: i64,
+    bytes: &[u8],
+) -> Result<(), OsfError> {
+    let payload_len = variable_payload_size(bytes.len());
+    check_variable_block_fits(channel, def.size_of_length_value, payload_len, bytes.len())?;
+    let mut payload = Vec::with_capacity(payload_len);
+    write_variable_header(&mut payload, timestamp_ns)?;
+    binary_write::write_binary_with_terminator(&mut payload, bytes)?;
+    write_block(writer, channel, def.size_of_length_value, &payload)
+}
+
+/// Total payload bytes for a single-sample variable block:
+/// `[control][u32 N=1][i64 ts][bytes][0x00]`.
+fn variable_payload_size(sample_bytes: usize) -> usize {
+    1 + 4 + 8 + sample_bytes + 1
+}
+
+fn write_variable_header<W: Write>(w: &mut W, timestamp_ns: i64) -> Result<(), OsfError> {
+    binary_write::write_u8(w, CONTROL_ABS_TIMESTAMP | MULTI_SAMPLE_FLAG)?;
+    binary_write::write_u32(w, 1)?;
+    binary_write::write_i64(w, timestamp_ns)?;
+    Ok(())
+}
+
+fn check_variable_block_fits(
+    channel: u16,
+    size_of_length_value: u8,
+    payload_len: usize,
+    sample_bytes: usize,
+) -> Result<(), OsfError> {
+    if size_of_length_value == 2 && payload_len > MAX_BLOCK_PAYLOAD_U16 {
+        return Err(OsfError::InvalidBlock(format!(
+            "channel {channel}: variable sample {sample_bytes} bytes exceeds u16 block limit \
+             (auto-bump should have caught this; raise size_of_length_value to 4)"
+        )));
+    }
+    Ok(())
+}
+
+// -----------------------------------------------------------
+// Per-sample writers — dispatch over NumericValues variants.
+// -----------------------------------------------------------
+
+fn write_numeric_values_slice<W: Write>(
+    w: &mut W,
+    values: &NumericValues,
+    start: usize,
+    count: usize,
+) -> Result<(), OsfError> {
+    match values {
+        NumericValues::Bool(v) => {
+            for &x in &v[start..start + count] {
+                binary_write::write_bool(w, x)?;
+            }
+        }
+        NumericValues::Int8(v) => {
+            for &x in &v[start..start + count] {
+                binary_write::write_i8(w, x)?;
+            }
+        }
+        NumericValues::Int16(v) => {
+            for &x in &v[start..start + count] {
+                binary_write::write_i16(w, x)?;
+            }
+        }
+        NumericValues::Int32(v) => {
+            for &x in &v[start..start + count] {
+                binary_write::write_i32(w, x)?;
+            }
+        }
+        NumericValues::Int64(v) => {
+            for &x in &v[start..start + count] {
+                binary_write::write_i64(w, x)?;
+            }
+        }
+        NumericValues::UInt8(v) => {
+            for &x in &v[start..start + count] {
+                binary_write::write_u8(w, x)?;
+            }
+        }
+        NumericValues::UInt16(v) => {
+            for &x in &v[start..start + count] {
+                binary_write::write_u16(w, x)?;
+            }
+        }
+        NumericValues::UInt32(v) => {
+            for &x in &v[start..start + count] {
+                binary_write::write_u32(w, x)?;
+            }
+        }
+        NumericValues::UInt64(v) => {
+            for &x in &v[start..start + count] {
+                binary_write::write_u64(w, x)?;
+            }
+        }
+        NumericValues::Float(v) => {
+            for &x in &v[start..start + count] {
+                binary_write::write_f32(w, x)?;
+            }
+        }
+        NumericValues::Double(v) => {
+            for &x in &v[start..start + count] {
+                binary_write::write_f64(w, x)?;
+            }
+        }
+        NumericValues::GpsLocation(v) => {
+            for g in &v[start..start + count] {
+                binary_write::write_f64(w, g.latitude)?;
+                binary_write::write_f64(w, g.longitude)?;
+                binary_write::write_f64(w, g.altitude)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_timestamped_numeric_run<W: Write>(
+    w: &mut W,
+    timestamps_ns: &[i64],
+    values: &NumericValues,
+    start: usize,
+    count: usize,
+) -> Result<(), OsfError> {
+    match values {
+        NumericValues::Bool(v) => {
+            for i in start..start + count {
+                binary_write::write_i64(w, timestamps_ns[i])?;
+                binary_write::write_bool(w, v[i])?;
+            }
+        }
+        NumericValues::Int8(v) => {
+            for i in start..start + count {
+                binary_write::write_i64(w, timestamps_ns[i])?;
+                binary_write::write_i8(w, v[i])?;
+            }
+        }
+        NumericValues::Int16(v) => {
+            for i in start..start + count {
+                binary_write::write_i64(w, timestamps_ns[i])?;
+                binary_write::write_i16(w, v[i])?;
+            }
+        }
+        NumericValues::Int32(v) => {
+            for i in start..start + count {
+                binary_write::write_i64(w, timestamps_ns[i])?;
+                binary_write::write_i32(w, v[i])?;
+            }
+        }
+        NumericValues::Int64(v) => {
+            for i in start..start + count {
+                binary_write::write_i64(w, timestamps_ns[i])?;
+                binary_write::write_i64(w, v[i])?;
+            }
+        }
+        NumericValues::UInt8(v) => {
+            for i in start..start + count {
+                binary_write::write_i64(w, timestamps_ns[i])?;
+                binary_write::write_u8(w, v[i])?;
+            }
+        }
+        NumericValues::UInt16(v) => {
+            for i in start..start + count {
+                binary_write::write_i64(w, timestamps_ns[i])?;
+                binary_write::write_u16(w, v[i])?;
+            }
+        }
+        NumericValues::UInt32(v) => {
+            for i in start..start + count {
+                binary_write::write_i64(w, timestamps_ns[i])?;
+                binary_write::write_u32(w, v[i])?;
+            }
+        }
+        NumericValues::UInt64(v) => {
+            for i in start..start + count {
+                binary_write::write_i64(w, timestamps_ns[i])?;
+                binary_write::write_u64(w, v[i])?;
+            }
+        }
+        NumericValues::Float(v) => {
+            for i in start..start + count {
+                binary_write::write_i64(w, timestamps_ns[i])?;
+                binary_write::write_f32(w, v[i])?;
+            }
+        }
+        NumericValues::Double(v) => {
+            for i in start..start + count {
+                binary_write::write_i64(w, timestamps_ns[i])?;
+                binary_write::write_f64(w, v[i])?;
+            }
+        }
+        NumericValues::GpsLocation(v) => {
+            for i in start..start + count {
+                binary_write::write_i64(w, timestamps_ns[i])?;
+                binary_write::write_f64(w, v[i].latitude)?;
+                binary_write::write_f64(w, v[i].longitude)?;
+                binary_write::write_f64(w, v[i].altitude)?;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -1251,6 +1789,169 @@ mod tests {
             super::format_unix_seconds_utc(951_782_400),
             "2000-02-29T00:00:00Z"
         );
+    }
+
+    fn write_to_vec(b: WriterBuilder) -> Vec<u8> {
+        let mut buf: Vec<u8> = Vec::new();
+        b.write_to(&mut buf).unwrap();
+        buf
+    }
+
+    fn read_back(bytes: &[u8]) -> crate::DataManager {
+        crate::DataManager::load_from_reader(std::io::Cursor::new(bytes.to_vec())).unwrap()
+    }
+
+    #[test]
+    fn equidistant_double_block_round_trips_through_reader() {
+        let mut b = WriterBuilder::new().creator("test:1");
+        let i = b.add_channel(dbl_channel("eq")).unwrap();
+        let samples: Vec<f64> = (0..50).map(|x| x as f64 * 0.5).collect();
+        b.add_equidistant_segment_f64(i, 1_000_000_000, 1000.0, &samples)
+            .unwrap();
+
+        let bytes = write_to_vec(b);
+        let mgr = read_back(&bytes);
+
+        assert_eq!(mgr.channels().len(), 1);
+        let chan = mgr.channel("eq").unwrap();
+        let crate::Channel::Equidistant(eq) = chan else {
+            panic!("expected Equidistant");
+        };
+        assert_eq!(eq.segments().len(), 1);
+        assert_eq!(eq.segments()[0].start_timestamp_ns, 1_000_000_000);
+        assert!((eq.segments()[0].sample_rate_hz - 1000.0).abs() < 1e-9);
+        assert_eq!(eq.as_doubles_flat().unwrap(), samples);
+    }
+
+    #[test]
+    fn equidistant_two_segments_round_trip() {
+        let mut b = WriterBuilder::new();
+        let i = b.add_channel(dbl_channel("eq")).unwrap();
+        b.add_equidistant_segment_f64(i, 0, 100.0, &[1.0, 2.0, 3.0])
+            .unwrap();
+        b.add_equidistant_segment_f64(i, 1_000_000_000, 200.0, &[4.0, 5.0])
+            .unwrap();
+
+        let bytes = write_to_vec(b);
+        let mgr = read_back(&bytes);
+        let crate::Channel::Equidistant(eq) = mgr.channel("eq").unwrap() else {
+            panic!("expected Equidistant");
+        };
+        assert_eq!(eq.segments().len(), 2);
+        assert_eq!(eq.segments()[1].start_timestamp_ns, 1_000_000_000);
+        assert_eq!(eq.as_doubles_flat().unwrap(), vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+    }
+
+    #[test]
+    fn equidistant_block_splits_when_size_of_length_value_is_2() {
+        // 100k samples × 8 bytes = 800k > 65535. With size=2 the writer
+        // must split into multiple blocks.
+        let mut b = WriterBuilder::new();
+        let i = b.add_channel(dbl_channel("eq")).unwrap();
+        let samples: Vec<f64> = (0..100_000).map(|x| x as f64).collect();
+        b.add_equidistant_segment_f64(i, 0, 1000.0, &samples).unwrap();
+
+        let bytes = write_to_vec(b);
+        let mgr = read_back(&bytes);
+        let crate::Channel::Equidistant(eq) = mgr.channel("eq").unwrap() else {
+            panic!("expected Equidistant");
+        };
+        // The split is internal; the manager joins everything back
+        // into a single segment because all blocks belong to the
+        // same StartData group.
+        assert_eq!(eq.segments().len(), 1);
+        assert_eq!(eq.as_doubles_flat().unwrap(), samples);
+    }
+
+    #[test]
+    fn timestamped_int32_round_trips() {
+        let mut b = WriterBuilder::new();
+        let i = b
+            .add_channel(ChannelDef {
+                name: "ts".into(),
+                data_type: DataType::Int32,
+                ..Default::default()
+            })
+            .unwrap();
+        let timestamps: Vec<i64> = (0..200).map(|x| 1000 + x * 10).collect();
+        let values: Vec<i32> = (0..200).collect();
+        b.add_timestamped_samples_i32(i, &timestamps, &values).unwrap();
+
+        let bytes = write_to_vec(b);
+        let mgr = read_back(&bytes);
+        let crate::Channel::Timestamped(ts) = mgr.channel("ts").unwrap() else {
+            panic!("expected Timestamped");
+        };
+        let pairs = ts.as_int32_flat().unwrap();
+        assert_eq!(pairs.len(), 200);
+        for (i, (t, v)) in pairs.iter().enumerate() {
+            assert_eq!(*t, 1000 + (i as i64) * 10);
+            assert_eq!(*v, i as i32);
+        }
+    }
+
+    #[test]
+    fn variable_string_round_trips() {
+        let mut b = WriterBuilder::new();
+        let i = b
+            .add_channel(ChannelDef {
+                name: "msg".into(),
+                data_type: DataType::String,
+                size_of_length_value: 4,
+                ..Default::default()
+            })
+            .unwrap();
+        b.add_string_samples(
+            i,
+            &[100, 200, 300],
+            &["alpha".into(), "beta".into(), "gamma".into()],
+        )
+        .unwrap();
+
+        let bytes = write_to_vec(b);
+        let mgr = read_back(&bytes);
+        let crate::Channel::Variable(var) = mgr.channel("msg").unwrap() else {
+            panic!("expected Variable");
+        };
+        assert_eq!(var.timestamps_ns(), &[100, 200, 300]);
+        assert_eq!(
+            var.as_strings().unwrap(),
+            &["alpha".to_string(), "beta".into(), "gamma".into()]
+        );
+    }
+
+    #[test]
+    fn variable_binary_with_huge_sample_auto_bumps_size_of_length_value() {
+        // Default size_of_length_value=2, but a 70 KB sample forces a
+        // bump to 4. The metablock should reflect the bumped value.
+        let mut b = WriterBuilder::new();
+        let i = b
+            .add_channel(ChannelDef {
+                name: "img".into(),
+                data_type: DataType::Binary,
+                ..Default::default() // size_of_length_value = 2
+            })
+            .unwrap();
+        let big = vec![0xAAu8; 70_000];
+        b.add_binary_samples(i, &[42], std::slice::from_ref(&big)).unwrap();
+
+        let bytes = write_to_vec(b);
+        // Quick check: the metablock must declare size 4 for the bumped channel.
+        let newline = bytes.iter().position(|&x| x == b'\n').unwrap();
+        let metablock_bytes = &bytes[newline + 1..];
+        // Metablock continues until first non-JSON byte; we just look
+        // for the channel record.
+        let head_str = String::from_utf8_lossy(&metablock_bytes[..600.min(metablock_bytes.len())]);
+        assert!(
+            head_str.contains("\"sizeoflengthvalue\": 4"),
+            "auto-bump failed; metablock head: {head_str}"
+        );
+
+        let mgr = read_back(&bytes);
+        let crate::Channel::Variable(var) = mgr.channel("img").unwrap() else {
+            panic!("expected Variable");
+        };
+        assert_eq!(var.as_binaries().unwrap(), &[big]);
     }
 
     #[test]

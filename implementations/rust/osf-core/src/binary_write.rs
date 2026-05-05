@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Consumed end-to-end by writer.rs in subsequent commits. Without
-// the allow the lib build flags every helper as dead code until then.
-#![allow(dead_code)]
-
 //! Little-endian write helpers used by the OSF block writer.
 //!
 //! The reader side uses `byteorder::ReadBytesExt`; this module is the
