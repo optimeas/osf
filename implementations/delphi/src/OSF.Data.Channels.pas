@@ -443,70 +443,6 @@ type
     property Values: TList<TOSFCanData> read FValues;
   end;
 
-  // ── Concrete: Pair (OSF5) ───────────────────────────────────────────────────
-
-  TOSFTimestampedPairChannel = class(TOSFTimestampedDataChannel)
-  private
-    FValues: TList<TOSFPair>;
-  protected
-    function GetSampleCount: Integer; override;
-  public
-    constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
-    function ValueAsDouble(Index: Integer): Double; override;
-    function ValueAsString(Index: Integer): string; override;
-    function Clone: TOSFDataChannel; override;
-    procedure AddRawSample(TimestampNs: Int64; const RawBytes: TBytes); override;
-    property Values: TList<TOSFPair> read FValues;
-  end;
-
-  TOSFEquidistantPairChannel = class(TOSFEquidistantDataChannel)
-  private
-    FValues: TList<TOSFPair>;
-  protected
-    function GetSampleCount: Integer; override;
-  public
-    constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
-    function ValueAsDouble(Index: Integer): Double; override;
-    function ValueAsString(Index: Integer): string; override;
-    function Clone: TOSFDataChannel; override;
-    procedure AddRawSample(TimestampNs: Int64; const RawBytes: TBytes); override;
-    property Values: TList<TOSFPair> read FValues;
-  end;
-
-  // ── Concrete: Triple (OSF5) ─────────────────────────────────────────────────
-
-  TOSFTimestampedTripleChannel = class(TOSFTimestampedDataChannel)
-  private
-    FValues: TList<TOSFTriple>;
-  protected
-    function GetSampleCount: Integer; override;
-  public
-    constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
-    function ValueAsDouble(Index: Integer): Double; override;
-    function ValueAsString(Index: Integer): string; override;
-    function Clone: TOSFDataChannel; override;
-    procedure AddRawSample(TimestampNs: Int64; const RawBytes: TBytes); override;
-    property Values: TList<TOSFTriple> read FValues;
-  end;
-
-  TOSFEquidistantTripleChannel = class(TOSFEquidistantDataChannel)
-  private
-    FValues: TList<TOSFTriple>;
-  protected
-    function GetSampleCount: Integer; override;
-  public
-    constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
-    function ValueAsDouble(Index: Integer): Double; override;
-    function ValueAsString(Index: Integer): string; override;
-    function Clone: TOSFDataChannel; override;
-    procedure AddRawSample(TimestampNs: Int64; const RawBytes: TBytes); override;
-    property Values: TList<TOSFTriple> read FValues;
-  end;
-
 // Picks the right concrete subclass based on Def.DataType and Def.IsEquidistant.
 // The returned channel keeps a non-owning reference to Def — the caller (typically
 // TOSFDataManager) is responsible for keeping the def alive at least as long as
@@ -654,20 +590,6 @@ begin
 end;
 
 function DecodeAsCanData(const RawBytes: TBytes): TOSFCanData;
-begin
-  FillChar(Result, SizeOf(Result), 0);
-  if Length(RawBytes) >= SizeOf(Result) then
-    Move(RawBytes[0], Result, SizeOf(Result));
-end;
-
-function DecodeAsPair(const RawBytes: TBytes): TOSFPair;
-begin
-  FillChar(Result, SizeOf(Result), 0);
-  if Length(RawBytes) >= SizeOf(Result) then
-    Move(RawBytes[0], Result, SizeOf(Result));
-end;
-
-function DecodeAsTriple(const RawBytes: TBytes): TOSFTriple;
 begin
   FillChar(Result, SizeOf(Result), 0);
   if Length(RawBytes) >= SizeOf(Result) then
@@ -1763,206 +1685,6 @@ begin
   Result := C;
 end;
 
-// ── Pair channels ────────────────────────────────────────────────────────────
-
-constructor TOSFTimestampedPairChannel.Create(ADef: TOSFChannelDef);
-begin
-  inherited Create(ADef);
-  FValues := TList<TOSFPair>.Create;
-end;
-
-destructor TOSFTimestampedPairChannel.Destroy;
-begin
-  FValues.Free;
-  inherited;
-end;
-
-function TOSFTimestampedPairChannel.GetSampleCount: Integer;
-begin
-  Result := FValues.Count;
-end;
-
-function TOSFTimestampedPairChannel.ValueAsDouble(Index: Integer): Double;
-begin
-  // V1 is the conventional first axis projection.
-  Result := FValues[Index].V1;
-end;
-
-function TOSFTimestampedPairChannel.ValueAsString(Index: Integer): string;
-var
-  P: TOSFPair;
-begin
-  P := FValues[Index];
-  Result := Format('(%s, %s)',
-                   [FormatDoubleInvariant(P.V1), FormatDoubleInvariant(P.V2)]);
-end;
-
-procedure TOSFTimestampedPairChannel.AddRawSample(TimestampNs: Int64; const RawBytes: TBytes);
-begin
-  FTimestamps.Add(TimestampNs);
-  FValues.Add(DecodeAsPair(RawBytes));
-  UpdateTimeRange(TimestampNs);
-end;
-
-function TOSFTimestampedPairChannel.Clone: TOSFDataChannel;
-var
-  C: TOSFTimestampedPairChannel;
-begin
-  C := TOSFTimestampedPairChannel.Create(FChannelDef);
-  CopyTimingTo(C);
-  C.FValues.AddRange(Self.FValues);
-  Result := C;
-end;
-
-constructor TOSFEquidistantPairChannel.Create(ADef: TOSFChannelDef);
-begin
-  inherited Create(ADef);
-  FValues := TList<TOSFPair>.Create;
-end;
-
-destructor TOSFEquidistantPairChannel.Destroy;
-begin
-  FValues.Free;
-  inherited;
-end;
-
-function TOSFEquidistantPairChannel.GetSampleCount: Integer;
-begin
-  Result := FValues.Count;
-end;
-
-function TOSFEquidistantPairChannel.ValueAsDouble(Index: Integer): Double;
-begin
-  Result := FValues[Index].V1;
-end;
-
-function TOSFEquidistantPairChannel.ValueAsString(Index: Integer): string;
-var
-  P: TOSFPair;
-begin
-  P := FValues[Index];
-  Result := Format('(%s, %s)',
-                   [FormatDoubleInvariant(P.V1), FormatDoubleInvariant(P.V2)]);
-end;
-
-procedure TOSFEquidistantPairChannel.AddRawSample(TimestampNs: Int64; const RawBytes: TBytes);
-begin
-  FValues.Add(DecodeAsPair(RawBytes));
-  UpdateTimeRange(TimestampNs);
-end;
-
-function TOSFEquidistantPairChannel.Clone: TOSFDataChannel;
-var
-  C: TOSFEquidistantPairChannel;
-begin
-  C := TOSFEquidistantPairChannel.Create(FChannelDef);
-  CopyTimingTo(C);
-  C.FValues.AddRange(Self.FValues);
-  Result := C;
-end;
-
-// ── Triple channels ──────────────────────────────────────────────────────────
-
-constructor TOSFTimestampedTripleChannel.Create(ADef: TOSFChannelDef);
-begin
-  inherited Create(ADef);
-  FValues := TList<TOSFTriple>.Create;
-end;
-
-destructor TOSFTimestampedTripleChannel.Destroy;
-begin
-  FValues.Free;
-  inherited;
-end;
-
-function TOSFTimestampedTripleChannel.GetSampleCount: Integer;
-begin
-  Result := FValues.Count;
-end;
-
-function TOSFTimestampedTripleChannel.ValueAsDouble(Index: Integer): Double;
-begin
-  // V1 is the conventional first axis projection.
-  Result := FValues[Index].V1;
-end;
-
-function TOSFTimestampedTripleChannel.ValueAsString(Index: Integer): string;
-var
-  T: TOSFTriple;
-begin
-  T := FValues[Index];
-  Result := Format('(%s, %s, %s)',
-                   [FormatDoubleInvariant(T.V1),
-                    FormatDoubleInvariant(T.V2),
-                    FormatDoubleInvariant(T.V3)]);
-end;
-
-procedure TOSFTimestampedTripleChannel.AddRawSample(TimestampNs: Int64; const RawBytes: TBytes);
-begin
-  FTimestamps.Add(TimestampNs);
-  FValues.Add(DecodeAsTriple(RawBytes));
-  UpdateTimeRange(TimestampNs);
-end;
-
-function TOSFTimestampedTripleChannel.Clone: TOSFDataChannel;
-var
-  C: TOSFTimestampedTripleChannel;
-begin
-  C := TOSFTimestampedTripleChannel.Create(FChannelDef);
-  CopyTimingTo(C);
-  C.FValues.AddRange(Self.FValues);
-  Result := C;
-end;
-
-constructor TOSFEquidistantTripleChannel.Create(ADef: TOSFChannelDef);
-begin
-  inherited Create(ADef);
-  FValues := TList<TOSFTriple>.Create;
-end;
-
-destructor TOSFEquidistantTripleChannel.Destroy;
-begin
-  FValues.Free;
-  inherited;
-end;
-
-function TOSFEquidistantTripleChannel.GetSampleCount: Integer;
-begin
-  Result := FValues.Count;
-end;
-
-function TOSFEquidistantTripleChannel.ValueAsDouble(Index: Integer): Double;
-begin
-  Result := FValues[Index].V1;
-end;
-
-function TOSFEquidistantTripleChannel.ValueAsString(Index: Integer): string;
-var
-  T: TOSFTriple;
-begin
-  T := FValues[Index];
-  Result := Format('(%s, %s, %s)',
-                   [FormatDoubleInvariant(T.V1),
-                    FormatDoubleInvariant(T.V2),
-                    FormatDoubleInvariant(T.V3)]);
-end;
-
-procedure TOSFEquidistantTripleChannel.AddRawSample(TimestampNs: Int64; const RawBytes: TBytes);
-begin
-  FValues.Add(DecodeAsTriple(RawBytes));
-  UpdateTimeRange(TimestampNs);
-end;
-
-function TOSFEquidistantTripleChannel.Clone: TOSFDataChannel;
-var
-  C: TOSFEquidistantTripleChannel;
-begin
-  C := TOSFEquidistantTripleChannel.Create(FChannelDef);
-  CopyTimingTo(C);
-  C.FValues.AddRange(Self.FValues);
-  Result := C;
-end;
-
 // ── Factory ──────────────────────────────────────────────────────────────────
 
 function CreateOSFDataChannel(Def: TOSFChannelDef): TOSFDataChannel;
@@ -1980,8 +1702,6 @@ begin
       dtBinary:                             Result := TOSFEquidistantBinaryChannel.Create(Def);
       dtGpsData:                            Result := TOSFEquidistantGpsChannel.Create(Def);
       dtCanData:                            Result := TOSFEquidistantCanChannel.Create(Def);
-      dtPair:                               Result := TOSFEquidistantPairChannel.Create(Def);
-      dtTriple:                             Result := TOSFEquidistantTripleChannel.Create(Def);
     else
       Result := TOSFEquidistantDoubleChannel.Create(Def);
     end;
@@ -1999,8 +1719,6 @@ begin
       dtBinary:                             Result := TOSFTimestampedBinaryChannel.Create(Def);
       dtGpsData:                            Result := TOSFTimestampedGpsChannel.Create(Def);
       dtCanData:                            Result := TOSFTimestampedCanChannel.Create(Def);
-      dtPair:                               Result := TOSFTimestampedPairChannel.Create(Def);
-      dtTriple:                             Result := TOSFTimestampedTripleChannel.Create(Def);
     else
       Result := TOSFTimestampedDoubleChannel.Create(Def);
     end;

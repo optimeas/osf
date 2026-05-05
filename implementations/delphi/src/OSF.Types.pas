@@ -84,7 +84,6 @@ type
   );
 
   // Value data type of a channel, as declared in the meta block.
-  // dtPair and dtTriple are OSF5-only; an OSF4 file must never contain them.
   // Unsigned integer types (dtUInt8..dtUInt64) are supported in both OSF4 and OSF5.
   TOSFDataType = (
     dtBool,
@@ -92,9 +91,7 @@ type
     dtUInt8, dtUInt16, dtUInt32, dtUInt64,
     dtFloat, dtDouble,
     dtString, dtBinary,
-    dtCanData, dtGpsData,
-    dtPair,    // OSF5 only — two doubles, 16 bytes
-    dtTriple   // OSF5 only — three doubles, 24 bytes
+    dtCanData, dtGpsData
   );
 
   // Structural layout of a channel's data blocks.
@@ -130,21 +127,6 @@ type
     Altitude  : Double;
   end;
 
-  // Two-component double value (OSF5 only) — 16 bytes.
-  // Typical uses: X/Y coordinate pairs, force/displacement, real/imaginary.
-  TOSFPair = packed record
-    V1 : Double;
-    V2 : Double;
-  end;
-
-  // Three-component double value (OSF5 only) — 24 bytes.
-  // Typical uses: 3-axis accelerometer, gyroscope, magnetometer.
-  TOSFTriple = packed record
-    V1 : Double;
-    V2 : Double;
-    V3 : Double;
-  end;
-
   // Base exception for all OSF errors.
   EOSFException = class(Exception);
 
@@ -170,15 +152,10 @@ type
 {$IF SizeOf(TOSFGpsData) <> 24}
   {$MESSAGE ERROR 'TOSFGpsData must be exactly 24 bytes'}
 {$ENDIF}
-{$IF SizeOf(TOSFPair) <> 16}
-  {$MESSAGE ERROR 'TOSFPair must be exactly 16 bytes'}
-{$ENDIF}
-{$IF SizeOf(TOSFTriple) <> 24}
-  {$MESSAGE ERROR 'TOSFTriple must be exactly 24 bytes'}
-{$ENDIF}
 
 resourcestring
   SOSFUnknownDataType        = 'Unknown OSF data type: "%s"';
+  SOSFRemovedDataType        = 'OSF data type "%s" is no longer supported in this OSF revision';
   SOSFUnhandledDataType      = 'Unhandled TOSFDataType value: %d';
   SOSFUnknownChannelType     = 'Unknown OSF channel type: "%s"';
   SOSFUnhandledChannelType   = 'Unhandled TOSFChannelType value: %d';
@@ -238,9 +215,12 @@ begin
   else if Lower = 'binary'    then Exit(dtBinary)
   else if Lower = 'bytearray' then Exit(dtBinary)   // OSF4 legacy alias
   else if Lower = 'candata'   then Exit(dtCanData)
-  else if Lower = 'gpsdata'   then Exit(dtGpsData)
-  else if Lower = 'pair'      then Exit(dtPair)
-  else if Lower = 'triple'    then Exit(dtTriple);
+  else if Lower = 'gpsdata'   then Exit(dtGpsData);
+
+  // Datatypes removed in spec revision 2026-05-04 — fail loudly so callers
+  // see exactly which one tripped them up.
+  if (Lower = 'pair') or (Lower = 'triple') then
+    raise EOSFFormatError.CreateFmt(SOSFRemovedDataType, [S]);
 
   raise EOSFFormatError.CreateFmt(SOSFUnknownDataType, [S]);
 end;
@@ -263,8 +243,6 @@ begin
     dtBinary:  Result := 'binary';
     dtCanData: Result := 'candata';
     dtGpsData: Result := 'gpsdata';
-    dtPair:    Result := 'pair';
-    dtTriple:  Result := 'triple';
   else
     raise EOSFFormatError.CreateFmt(SOSFUnhandledDataType, [Ord(DT)]);
   end;
@@ -288,8 +266,6 @@ begin
     dtBinary:  Result := 0;
     dtCanData: Result := 16;
     dtGpsData: Result := 24;
-    dtPair:    Result := 16;
-    dtTriple:  Result := 24;
   else
     raise EOSFFormatError.CreateFmt(SOSFUnhandledDataType, [Ord(DT)]);
   end;
