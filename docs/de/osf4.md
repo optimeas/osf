@@ -8,10 +8,11 @@ keywords:
   - Fileformat
   - XML
 last_update:
-  date: 2025-07-27
+  date: 2026-05-04
   author: Optimeas GmbH
 ---
 
+🇬🇧 [English version](../en/osf4.md)
 
 # OSF4 – Spezifische Dokumentation
 

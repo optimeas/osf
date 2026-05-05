@@ -8,9 +8,11 @@ keywords:
   - Fileformat
   - JSON
 last_update:
-  date: 2025-07-27
+  date: 2026-05-04
   author: Optimeas GmbH
 ---
+
+🇬🇧 [English version](../en/osf5.md)
 
 # OSF5 – Spezifische Dokumentation
 

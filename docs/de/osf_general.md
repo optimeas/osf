@@ -12,9 +12,12 @@ keywords:
   - OSF5
   - OSF
 last_update:
-  date: 2025-07-26
+  date: 2026-05-04
   author: Optimeas GmbH
 ---
+
+🇬🇧 [English version](../en/osf_general.md)
+
 ## Allgemeine Beschreibung des OSF Formates
 - Gültig für Formatversion 4 und 5 -
 
