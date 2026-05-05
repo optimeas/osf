@@ -865,7 +865,7 @@ end;
 
 function TOSFTimestampedInt32Channel.ValueAsDouble(Index: Integer): Double;
 begin
-  Result := FValues[Index] * FChannelDef.Scale + FChannelDef.Offset;
+  Result := FValues[Index];
 end;
 
 function TOSFTimestampedInt32Channel.ValueAsString(Index: Integer): string;
@@ -909,7 +909,7 @@ end;
 
 function TOSFEquidistantInt32Channel.ValueAsDouble(Index: Integer): Double;
 begin
-  Result := FValues[Index] * FChannelDef.Scale + FChannelDef.Offset;
+  Result := FValues[Index];
 end;
 
 function TOSFEquidistantInt32Channel.ValueAsString(Index: Integer): string;
@@ -954,7 +954,7 @@ end;
 
 function TOSFTimestampedUInt32Channel.ValueAsDouble(Index: Integer): Double;
 begin
-  Result := FValues[Index] * FChannelDef.Scale + FChannelDef.Offset;
+  Result := FValues[Index];
 end;
 
 function TOSFTimestampedUInt32Channel.ValueAsString(Index: Integer): string;
@@ -998,7 +998,7 @@ end;
 
 function TOSFEquidistantUInt32Channel.ValueAsDouble(Index: Integer): Double;
 begin
-  Result := FValues[Index] * FChannelDef.Scale + FChannelDef.Offset;
+  Result := FValues[Index];
 end;
 
 function TOSFEquidistantUInt32Channel.ValueAsString(Index: Integer): string;
@@ -1051,7 +1051,7 @@ begin
   // Double has only ~15.95 significant decimal digits. Int64 values whose
   // magnitude exceeds 2^53 (~9.0e15) cannot be represented exactly here.
   // HasDoublePrecisionLoss returns True so callers can warn the user.
-  Result := FValues[Index] * FChannelDef.Scale + FChannelDef.Offset;
+  Result := FValues[Index];
 end;
 
 function TOSFTimestampedInt64Channel.ValueAsString(Index: Integer): string;
@@ -1101,7 +1101,7 @@ end;
 function TOSFEquidistantInt64Channel.ValueAsDouble(Index: Integer): Double;
 begin
   // See note on TOSFTimestampedInt64Channel.ValueAsDouble.
-  Result := FValues[Index] * FChannelDef.Scale + FChannelDef.Offset;
+  Result := FValues[Index];
 end;
 
 function TOSFEquidistantInt64Channel.ValueAsString(Index: Integer): string;
@@ -1153,7 +1153,7 @@ function TOSFTimestampedUInt64Channel.ValueAsDouble(Index: Integer): Double;
 begin
   // Same precision caveat as Int64: values above 2^53 lose accuracy when
   // converted to Double. HasDoublePrecisionLoss returns True.
-  Result := FValues[Index] * FChannelDef.Scale + FChannelDef.Offset;
+  Result := FValues[Index];
 end;
 
 function TOSFTimestampedUInt64Channel.ValueAsString(Index: Integer): string;
@@ -1203,7 +1203,7 @@ end;
 function TOSFEquidistantUInt64Channel.ValueAsDouble(Index: Integer): Double;
 begin
   // See note on TOSFTimestampedUInt64Channel.ValueAsDouble.
-  Result := FValues[Index] * FChannelDef.Scale + FChannelDef.Offset;
+  Result := FValues[Index];
 end;
 
 function TOSFEquidistantUInt64Channel.ValueAsString(Index: Integer): string;
