@@ -45,7 +45,22 @@ use crate::error::OsfError;
 use crate::meta::SpectrumType;
 use crate::types::{ChannelType, DataType};
 use log::debug;
+use serde_json::{Map, Value, json};
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Magic-header identifier emitted by this writer.
+const OSF5_IDENTIFIER: &str = "OSF5";
+
+/// Crate version reported in the `creator` field if the caller did
+/// not provide one.
+const DEFAULT_CREATOR: &str = concat!("osf-core/", env!("CARGO_PKG_VERSION"));
+
+/// Default `tag` per DECISIONS §13.
+const DEFAULT_TAG: &str = "default";
 
 /// Definition of one channel as it will appear in the metablock.
 ///
@@ -285,6 +300,261 @@ impl WriterBuilder {
     pub fn channel_index(&self, name: &str) -> Option<u16> {
         self.name_to_index.get(name).copied()
     }
+
+    /// Serialise the file to `path`. Always emits OSF5 (DECISIONS §6).
+    ///
+    /// # Errors
+    ///
+    /// - [`OsfError::WriterEmpty`] when no channels were declared.
+    /// - [`OsfError::Io`] for any write failure.
+    /// - [`OsfError::InvalidBlock`] for internal consistency checks.
+    pub fn write_to_file(self, path: impl AsRef<Path>) -> Result<(), OsfError> {
+        let file = File::create(path.as_ref())?;
+        let writer = BufWriter::new(file);
+        self.write_to(writer)
+    }
+
+    /// Serialise the file to any `Write` sink. Used by
+    /// [`Self::write_to_file`] and exposed for callers that need to
+    /// produce OSF5 to a memory buffer or a network socket.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::write_to_file`].
+    pub fn write_to<W: Write>(self, mut writer: W) -> Result<(), OsfError> {
+        if self.channels.is_empty() {
+            return Err(OsfError::WriterEmpty);
+        }
+
+        let metablock = build_metablock_json(&self.file_info, &self.channels)?;
+        write_magic_header(&mut writer, metablock.len() as u64)?;
+        writer.write_all(&metablock)?;
+        write_data_blocks(&mut writer, &self.channels, &self.channel_data)?;
+        writer.flush()?;
+        Ok(())
+    }
+}
+
+/// Write the magic-header line: `OSF5 <metablock_len>\n`.
+fn write_magic_header<W: Write>(writer: &mut W, metablock_len: u64) -> Result<(), OsfError> {
+    let line = format!("{OSF5_IDENTIFIER} {metablock_len}\n");
+    writer.write_all(line.as_bytes())?;
+    Ok(())
+}
+
+/// Stub — block writing arrives in the next commit. Until then the
+/// writer emits header + metablock only, which is enough for
+/// metablock-shape tests but produces files with zero data.
+fn write_data_blocks<W: Write>(
+    _writer: &mut W,
+    _channels: &[ChannelDef],
+    _channel_data: &[ChannelData],
+) -> Result<(), OsfError> {
+    // Implemented in the next commit.
+    Ok(())
+}
+
+// -----------------------------------------------------------
+// Metablock JSON serialisation.
+// -----------------------------------------------------------
+
+/// Build the OSF5 metablock JSON body. The output is pretty-printed
+/// (`serde_json::to_vec_pretty`) so files remain reasonably
+/// human-readable in a hex-viewer and small enough that we don't pay
+/// a measurable size penalty in normal usage.
+fn build_metablock_json(
+    file_info: &FileInfoDraft,
+    channels: &[ChannelDef],
+) -> Result<Vec<u8>, OsfError> {
+    let mut file_obj = Map::new();
+    file_obj.insert("created_utc".into(), Value::String(format_utc_now()));
+    file_obj.insert(
+        "creator".into(),
+        Value::String(
+            file_info
+                .creator
+                .clone()
+                .unwrap_or_else(|| DEFAULT_CREATOR.to_string()),
+        ),
+    );
+    file_obj.insert(
+        "tag".into(),
+        Value::String(
+            file_info
+                .tag
+                .clone()
+                .unwrap_or_else(|| DEFAULT_TAG.to_string()),
+        ),
+    );
+    if let Some(reason) = &file_info.reason {
+        file_obj.insert("reason".into(), Value::String(reason.clone()));
+    }
+    if let Some(sep) = &file_info.namespace_sep {
+        file_obj.insert("namespacesep".into(), Value::String(sep.clone()));
+    }
+    if let Some(comment) = &file_info.comment {
+        file_obj.insert("comment".into(), Value::String(comment.clone()));
+    }
+    if let Some(lat) = file_info.created_at_latitude {
+        file_obj.insert("created_at_latitude".into(), json!(lat));
+    }
+    if let Some(lon) = file_info.created_at_longitude {
+        file_obj.insert("created_at_longitude".into(), json!(lon));
+    }
+    if let Some(alt) = file_info.created_at_altitude {
+        file_obj.insert("created_at_altitude".into(), json!(alt));
+    }
+
+    let channels_arr: Vec<Value> = channels
+        .iter()
+        .enumerate()
+        .map(|(i, def)| channel_def_to_json(i as u16, def))
+        .collect();
+
+    let envelope = json!({
+        "osf": {
+            "format": "osf5",
+            "version": 5,
+            "file": Value::Object(file_obj),
+            "channels": Value::Array(channels_arr),
+        }
+    });
+
+    serde_json::to_vec_pretty(&envelope).map_err(OsfError::Json)
+}
+
+fn channel_def_to_json(index: u16, def: &ChannelDef) -> Value {
+    let mut obj = Map::new();
+    obj.insert("index".into(), json!(index));
+    obj.insert("name".into(), Value::String(def.name.clone()));
+    obj.insert(
+        "channeltype".into(),
+        Value::String(channel_type_to_wire(&def.channel_type).to_string()),
+    );
+    obj.insert(
+        "datatype".into(),
+        Value::String(data_type_to_wire(&def.data_type).to_string()),
+    );
+    obj.insert("sizeoflengthvalue".into(), json!(def.size_of_length_value));
+
+    if let Some(t) = def.time_increment_ns {
+        obj.insert("timeincrement".into(), json!(t));
+    }
+    if let Some(s) = &def.physical_unit {
+        obj.insert("physicalunit".into(), Value::String(s.clone()));
+    }
+    if let Some(s) = &def.physical_dimension {
+        obj.insert("physicaldimension".into(), Value::String(s.clone()));
+    }
+    if let Some(s) = &def.display_name {
+        obj.insert("displayname".into(), Value::String(s.clone()));
+    }
+    if let Some(s) = &def.mime_type {
+        obj.insert("mimetype".into(), Value::String(s.clone()));
+    }
+    if let Some(s) = &def.reference {
+        obj.insert("reference".into(), Value::String(s.clone()));
+    }
+    if let Some(s) = &def.comment {
+        obj.insert("comment".into(), Value::String(s.clone()));
+    }
+    if let Some(spec) = def.spectrum_type {
+        obj.insert(
+            "spectrumtype".into(),
+            Value::String(spectrum_type_to_wire(spec).to_string()),
+        );
+    }
+
+    Value::Object(obj)
+}
+
+fn channel_type_to_wire(ct: &ChannelType) -> &'static str {
+    match ct {
+        ChannelType::Scalar => "scalar",
+        ChannelType::Equidistant => "equidistant",
+        ChannelType::Timestamped => "timestamped",
+        ChannelType::Unsupported(_) => "scalar", // rejected at add_channel; defensive
+    }
+}
+
+fn data_type_to_wire(dt: &DataType) -> &'static str {
+    match dt {
+        DataType::Bool => "bool",
+        DataType::Int8 => "int8",
+        DataType::Int16 => "int16",
+        DataType::Int32 => "int32",
+        DataType::Int64 => "int64",
+        DataType::UInt8 => "uint8",
+        DataType::UInt16 => "uint16",
+        DataType::UInt32 => "uint32",
+        DataType::UInt64 => "uint64",
+        DataType::Float => "float",
+        DataType::Double => "double",
+        DataType::String => "string",
+        DataType::Binary | DataType::ByteArray => "binary",
+        DataType::GpsLocation => "gpslocation",
+        // add_channel rejects Unsupported up front so this branch
+        // should be unreachable, but we render something sensible
+        // rather than panic.
+        DataType::Unsupported(_) => "double",
+    }
+}
+
+fn spectrum_type_to_wire(st: SpectrumType) -> &'static str {
+    match st {
+        SpectrumType::Amplitude => "amplitude",
+        SpectrumType::RealImag => "realimag",
+        SpectrumType::AmpPhaseRad => "ampphaserad",
+        SpectrumType::AmpPhaseDeg => "ampphasedeg",
+    }
+}
+
+// -----------------------------------------------------------
+// `created_utc` helper: format current UTC time without chrono.
+// -----------------------------------------------------------
+
+/// Format the current UTC time as `YYYY-MM-DDTHH:MM:SSZ`.
+///
+/// Uses Howard Hinnant's days-from-civil algorithm
+/// (<https://howardhinnant.github.io/date_algorithms.html>) — public
+/// domain, no chrono dependency. Sub-second precision is dropped
+/// because the spec writer never needed it; if a future revision
+/// does, the format can be extended additively.
+fn format_utc_now() -> String {
+    let secs = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(d) => d.as_secs() as i64,
+        Err(e) => -(e.duration().as_secs() as i64),
+    };
+    format_unix_seconds_utc(secs)
+}
+
+/// Pure function used by `format_utc_now` and tests.
+fn format_unix_seconds_utc(secs: i64) -> String {
+    let day = secs.div_euclid(86_400);
+    let tod = secs.rem_euclid(86_400);
+    let h = (tod / 3600) as u32;
+    let m = ((tod % 3600) / 60) as u32;
+    let s = (tod % 60) as u32;
+    let (y, mo, d) = days_from_civil(day);
+    format!("{y:04}-{mo:02}-{d:02}T{h:02}:{m:02}:{s:02}Z")
+}
+
+/// Howard Hinnant's days-from-civil — converts days since
+/// 1970-01-01 (Unix epoch) into a `(year, month, day)` tuple. Valid
+/// for any 32-bit-day input; we use it on i64 days, which covers
+/// roughly ±25 million years.
+fn days_from_civil(days: i64) -> (i32, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let y = if m <= 2 { y + 1 } else { y };
+    (y as i32, m, d)
 }
 
 // -----------------------------------------------------------
@@ -900,6 +1170,108 @@ mod tests {
             .add_timestamped_samples_f64(i, &[1], &[1.0])
             .unwrap_err();
         assert!(matches!(err, OsfError::DataTypeMismatch { .. }), "got {err:?}");
+    }
+
+    #[test]
+    fn empty_builder_write_returns_writer_empty() {
+        let b = WriterBuilder::new();
+        let mut buf: Vec<u8> = Vec::new();
+        let err = b.write_to(&mut buf).unwrap_err();
+        assert!(matches!(err, OsfError::WriterEmpty), "got {err:?}");
+    }
+
+    #[test]
+    fn metablock_only_write_produces_valid_header_and_json() {
+        let mut b = WriterBuilder::new().creator("test:1").tag("preview");
+        let _ = b.add_channel(dbl_channel("Sensor/Temperature")).unwrap();
+        let mut buf: Vec<u8> = Vec::new();
+        b.write_to(&mut buf).unwrap();
+
+        // Header line: "OSF5 <len>\n"
+        let newline = buf.iter().position(|&b| b == b'\n').unwrap();
+        let header_line = std::str::from_utf8(&buf[..newline]).unwrap();
+        let parts: Vec<&str> = header_line.split(' ').collect();
+        assert_eq!(parts[0], "OSF5");
+        let metablock_len: usize = parts[1].parse().unwrap();
+        assert_eq!(buf.len(), newline + 1 + metablock_len, "header + metablock");
+
+        // JSON envelope shape.
+        let metablock_bytes = &buf[newline + 1..];
+        let v: serde_json::Value = serde_json::from_slice(metablock_bytes).unwrap();
+        let osf = &v["osf"];
+        assert_eq!(osf["format"], "osf5");
+        assert_eq!(osf["version"], 5);
+        assert_eq!(osf["file"]["creator"], "test:1");
+        assert_eq!(osf["file"]["tag"], "preview");
+        assert!(osf["file"]["created_utc"].is_string());
+
+        let channels = osf["channels"].as_array().unwrap();
+        assert_eq!(channels.len(), 1);
+        assert_eq!(channels[0]["index"], 0);
+        assert_eq!(channels[0]["name"], "Sensor/Temperature");
+        assert_eq!(channels[0]["channeltype"], "scalar");
+        assert_eq!(channels[0]["datatype"], "double");
+        assert_eq!(channels[0]["sizeoflengthvalue"], 2);
+    }
+
+    #[test]
+    fn metablock_omits_optional_fields_when_unset() {
+        let mut b = WriterBuilder::new();
+        let _ = b.add_channel(dbl_channel("a")).unwrap();
+        let mut buf: Vec<u8> = Vec::new();
+        b.write_to(&mut buf).unwrap();
+        let newline = buf.iter().position(|&b| b == b'\n').unwrap();
+        let metablock_bytes = &buf[newline + 1..];
+        let v: serde_json::Value = serde_json::from_slice(metablock_bytes).unwrap();
+        let file_obj = v["osf"]["file"].as_object().unwrap();
+        // creator falls back to a default; tag falls back to "default";
+        // optional fields are omitted (not null).
+        assert_eq!(file_obj["tag"], "default");
+        assert!(!file_obj.contains_key("reason"));
+        assert!(!file_obj.contains_key("comment"));
+        assert!(!file_obj.contains_key("created_at_latitude"));
+    }
+
+    #[test]
+    fn format_unix_seconds_utc_matches_known_dates() {
+        // 0 = 1970-01-01T00:00:00Z
+        assert_eq!(super::format_unix_seconds_utc(0), "1970-01-01T00:00:00Z");
+        // 1574200200 = 2019-11-19T21:50:00Z (78600 s past midnight UTC)
+        assert_eq!(
+            super::format_unix_seconds_utc(1_574_200_200),
+            "2019-11-19T21:50:00Z"
+        );
+        // 951696000 = 2000-02-28T00:00:00Z (one day before leap-day)
+        assert_eq!(
+            super::format_unix_seconds_utc(951_696_000),
+            "2000-02-28T00:00:00Z"
+        );
+        // 951782400 = 2000-02-29T00:00:00Z (the leap day)
+        assert_eq!(
+            super::format_unix_seconds_utc(951_782_400),
+            "2000-02-29T00:00:00Z"
+        );
+    }
+
+    #[test]
+    fn channel_def_serialises_optional_fields() {
+        let def = ChannelDef {
+            name: "Sensor/Pressure".into(),
+            data_type: DataType::Float,
+            channel_type: ChannelType::Scalar,
+            size_of_length_value: 4,
+            physical_unit: Some("bar".into()),
+            mime_type: Some("application/octet-stream".into()),
+            time_increment_ns: Some(1_000_000),
+            ..Default::default()
+        };
+        let v = super::channel_def_to_json(7, &def);
+        assert_eq!(v["index"], 7);
+        assert_eq!(v["datatype"], "float");
+        assert_eq!(v["sizeoflengthvalue"], 4);
+        assert_eq!(v["physicalunit"], "bar");
+        assert_eq!(v["mimetype"], "application/octet-stream");
+        assert_eq!(v["timeincrement"], 1_000_000);
     }
 
     #[test]
