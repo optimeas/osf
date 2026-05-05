@@ -43,8 +43,8 @@ pub use block::{
     TimestampedPayload,
 };
 pub use data_channel::{
-    Channel, ChannelMeta, EquidistantChannel, NumericValues, Segment, TimestampedChannel,
-    VariableChannel,
+    Channel, ChannelMeta, EquidistantChannel, NumericValueRef, NumericValues, Sample, Segment,
+    TimestampedChannel, VariableChannel, VariableValueRef,
 };
 pub use error::OsfError;
 pub use header::{MagicHeader, OsfVersion, parse_magic_header};

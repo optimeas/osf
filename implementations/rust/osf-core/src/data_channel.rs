@@ -36,6 +36,7 @@
 //! reference, where every `bcStartData` opens a new segment.
 
 use crate::block::GpsLocation;
+use crate::error::OsfError;
 use crate::meta::SpectrumType;
 use crate::types::{ChannelType, DataType};
 
@@ -280,6 +281,336 @@ impl NumericValues {
     }
 }
 
+/// One sample yielded by `samples_with_time`. Generic over the value
+/// representation (`NumericValueRef<'_>` for numeric / GPS channels,
+/// `VariableValueRef<'_>` for string / binary channels).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Sample<T> {
+    /// Absolute timestamp in nanoseconds since the Unix epoch (UTC).
+    pub timestamp_ns: i64,
+    /// Sample value.
+    pub value: T,
+}
+
+/// Borrowed view of one numeric (or GPS) sample. Copy-sized scalars
+/// are passed by value; the 24-byte [`GpsLocation`] is borrowed to
+/// avoid copying it on every iteration step.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NumericValueRef<'a> {
+    /// `bool` sample.
+    Bool(bool),
+    /// Signed 8-bit integer.
+    Int8(i8),
+    /// Signed 16-bit integer.
+    Int16(i16),
+    /// Signed 32-bit integer.
+    Int32(i32),
+    /// Signed 64-bit integer.
+    Int64(i64),
+    /// Unsigned 8-bit integer.
+    UInt8(u8),
+    /// Unsigned 16-bit integer.
+    UInt16(u16),
+    /// Unsigned 32-bit integer.
+    UInt32(u32),
+    /// Unsigned 64-bit integer.
+    UInt64(u64),
+    /// IEEE-754 single-precision float.
+    Float(f32),
+    /// IEEE-754 double-precision float.
+    Double(f64),
+    /// 24-byte GPS-location struct, borrowed from the channel.
+    GpsLocation(&'a GpsLocation),
+}
+
+/// Borrowed view of one string-or-binary sample.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VariableValueRef<'a> {
+    /// UTF-8 string sample.
+    String(&'a str),
+    /// Opaque byte payload.
+    Binary(&'a [u8]),
+}
+
+/// Project one element of a [`NumericValues`] storage at the given
+/// index into a [`NumericValueRef`]. Lifetime is elided to the input
+/// reference so the result can outlive the immediate call site.
+fn numeric_value_ref_at(samples: &NumericValues, idx: usize) -> NumericValueRef<'_> {
+    match samples {
+        NumericValues::Bool(v) => NumericValueRef::Bool(v[idx]),
+        NumericValues::Int8(v) => NumericValueRef::Int8(v[idx]),
+        NumericValues::Int16(v) => NumericValueRef::Int16(v[idx]),
+        NumericValues::Int32(v) => NumericValueRef::Int32(v[idx]),
+        NumericValues::Int64(v) => NumericValueRef::Int64(v[idx]),
+        NumericValues::UInt8(v) => NumericValueRef::UInt8(v[idx]),
+        NumericValues::UInt16(v) => NumericValueRef::UInt16(v[idx]),
+        NumericValues::UInt32(v) => NumericValueRef::UInt32(v[idx]),
+        NumericValues::UInt64(v) => NumericValueRef::UInt64(v[idx]),
+        NumericValues::Float(v) => NumericValueRef::Float(v[idx]),
+        NumericValues::Double(v) => NumericValueRef::Double(v[idx]),
+        NumericValues::GpsLocation(v) => NumericValueRef::GpsLocation(&v[idx]),
+    }
+}
+
+/// Compute the timestamp of sample `i` within a segment given its
+/// start time and sample rate. Returns the segment start when the
+/// rate is non-positive (defensive — would only happen on a
+/// malformed file).
+fn segment_timestamp(seg: &Segment, i: usize) -> i64 {
+    if seg.sample_rate_hz > 0.0 && i > 0 {
+        let offset = ((i as f64) * 1.0e9 / seg.sample_rate_hz) as i64;
+        seg.start_timestamp_ns.saturating_add(offset)
+    } else {
+        seg.start_timestamp_ns
+    }
+}
+
+// -----------------------------------------------------------
+// EquidistantChannel: segments + flat-access + iteration.
+// -----------------------------------------------------------
+
+impl EquidistantChannel {
+    /// Read-only view of this channel's segments.
+    #[must_use]
+    pub fn segments(&self) -> &[Segment] {
+        &self.segments
+    }
+
+    /// Read-only view of the flat sample storage (segments stitched
+    /// head-to-tail).
+    #[must_use]
+    pub fn values(&self) -> &NumericValues {
+        &self.samples
+    }
+
+    /// Iterate over every sample with a reconstructed absolute
+    /// timestamp.
+    ///
+    /// Within a segment, sample `i` lands at `segment.start +
+    /// i * (1e9 / sample_rate_hz)`. Time gaps **between** consecutive
+    /// segments are not interpolated — every segment starts at its
+    /// own `start_timestamp_ns`.
+    pub fn samples_with_time(&self) -> impl Iterator<Item = Sample<NumericValueRef<'_>>> + '_ {
+        let samples = &self.samples;
+        self.segments.iter().flat_map(move |seg| {
+            (0..seg.sample_count).map(move |i| Sample {
+                timestamp_ns: segment_timestamp(seg, i),
+                value: numeric_value_ref_at(samples, seg.start_index + i),
+            })
+        })
+    }
+}
+
+// -----------------------------------------------------------
+// TimestampedChannel: parallel timestamp + value vectors.
+// -----------------------------------------------------------
+
+impl TimestampedChannel {
+    /// Read-only view of the absolute timestamps.
+    #[must_use]
+    pub fn timestamps_ns(&self) -> &[i64] {
+        &self.timestamps_ns
+    }
+
+    /// Read-only view of the parallel value storage.
+    #[must_use]
+    pub fn values(&self) -> &NumericValues {
+        &self.values
+    }
+
+    /// Iterate over every sample as a `(timestamp, value)` pair.
+    pub fn samples_with_time(&self) -> impl Iterator<Item = Sample<NumericValueRef<'_>>> + '_ {
+        let values = &self.values;
+        self.timestamps_ns
+            .iter()
+            .enumerate()
+            .map(move |(i, &ts)| Sample {
+                timestamp_ns: ts,
+                value: numeric_value_ref_at(values, i),
+            })
+    }
+}
+
+// -----------------------------------------------------------
+// VariableChannel: parallel timestamp + string/binary vectors.
+// -----------------------------------------------------------
+
+impl VariableChannel {
+    /// Read-only view of the absolute timestamps.
+    #[must_use]
+    pub fn timestamps_ns(&self) -> &[i64] {
+        &self.timestamps_ns
+    }
+
+    /// Borrow the channel's string samples. Returns
+    /// [`OsfError::DataTypeAccessMismatch`] if the channel holds
+    /// binary data instead.
+    ///
+    /// # Errors
+    ///
+    /// `DataTypeAccessMismatch` when this is not a string channel.
+    pub fn as_strings(&self) -> Result<&[String], OsfError> {
+        match &self.string_values {
+            Some(v) => Ok(v),
+            None => Err(OsfError::DataTypeAccessMismatch {
+                channel: self.index,
+                requested: DataType::String,
+                actual: self.data_type.clone(),
+            }),
+        }
+    }
+
+    /// Borrow the channel's binary samples. Returns
+    /// [`OsfError::DataTypeAccessMismatch`] if the channel holds
+    /// string data instead.
+    ///
+    /// # Errors
+    ///
+    /// `DataTypeAccessMismatch` when this is not a binary channel.
+    pub fn as_binaries(&self) -> Result<&[Vec<u8>], OsfError> {
+        match &self.binary_values {
+            Some(v) => Ok(v),
+            None => Err(OsfError::DataTypeAccessMismatch {
+                channel: self.index,
+                requested: DataType::Binary,
+                actual: self.data_type.clone(),
+            }),
+        }
+    }
+
+    /// Iterate over every sample as a `(timestamp, value)` pair where
+    /// `value` borrows either a `&str` or a `&[u8]` depending on the
+    /// channel's data type.
+    pub fn samples_with_time(
+        &self,
+    ) -> impl Iterator<Item = Sample<VariableValueRef<'_>>> + '_ {
+        let strings = self.string_values.as_deref();
+        let binaries = self.binary_values.as_deref();
+        self.timestamps_ns
+            .iter()
+            .enumerate()
+            .map(move |(i, &ts)| {
+                let value = if let Some(s) = strings {
+                    VariableValueRef::String(s[i].as_str())
+                } else if let Some(b) = binaries {
+                    VariableValueRef::Binary(b[i].as_slice())
+                } else {
+                    // Constructor invariant: exactly one of the two is
+                    // Some. If neither is, the channel was built
+                    // incorrectly.
+                    unreachable!("VariableChannel must have either string_values or binary_values")
+                };
+                Sample {
+                    timestamp_ns: ts,
+                    value,
+                }
+            })
+    }
+}
+
+// -----------------------------------------------------------
+// Flat-access helpers.
+// -----------------------------------------------------------
+
+macro_rules! impl_numeric_flat_access {
+    ($variant:ident, $rust_ty:ty, $method:ident, $dt:expr) => {
+        impl EquidistantChannel {
+            #[doc = concat!("Clone the flat sample vector when this channel holds `",
+                            stringify!($variant), "` samples.\n\n# Errors\n\n",
+                            "[`OsfError::DataTypeAccessMismatch`] when the stored datatype \
+                             does not match.")]
+            pub fn $method(&self) -> Result<Vec<$rust_ty>, OsfError> {
+                match &self.samples {
+                    NumericValues::$variant(v) => Ok(v.clone()),
+                    other => Err(OsfError::DataTypeAccessMismatch {
+                        channel: self.index,
+                        requested: $dt,
+                        actual: other.data_type(),
+                    }),
+                }
+            }
+        }
+        impl TimestampedChannel {
+            #[doc = concat!("Pair every timestamp with its `",
+                            stringify!($variant), "` value.\n\n# Errors\n\n",
+                            "[`OsfError::DataTypeAccessMismatch`] when the stored datatype \
+                             does not match.")]
+            pub fn $method(&self) -> Result<Vec<(i64, $rust_ty)>, OsfError> {
+                match &self.values {
+                    NumericValues::$variant(v) => Ok(self
+                        .timestamps_ns
+                        .iter()
+                        .copied()
+                        .zip(v.iter().copied())
+                        .collect()),
+                    other => Err(OsfError::DataTypeAccessMismatch {
+                        channel: self.index,
+                        requested: $dt,
+                        actual: other.data_type(),
+                    }),
+                }
+            }
+        }
+    };
+}
+
+impl_numeric_flat_access!(Bool, bool, as_bools_flat, DataType::Bool);
+impl_numeric_flat_access!(Int8, i8, as_int8_flat, DataType::Int8);
+impl_numeric_flat_access!(Int16, i16, as_int16_flat, DataType::Int16);
+impl_numeric_flat_access!(Int32, i32, as_int32_flat, DataType::Int32);
+impl_numeric_flat_access!(Int64, i64, as_int64_flat, DataType::Int64);
+impl_numeric_flat_access!(UInt8, u8, as_uint8_flat, DataType::UInt8);
+impl_numeric_flat_access!(UInt16, u16, as_uint16_flat, DataType::UInt16);
+impl_numeric_flat_access!(UInt32, u32, as_uint32_flat, DataType::UInt32);
+impl_numeric_flat_access!(UInt64, u64, as_uint64_flat, DataType::UInt64);
+impl_numeric_flat_access!(Float, f32, as_floats_flat, DataType::Float);
+impl_numeric_flat_access!(Double, f64, as_doubles_flat, DataType::Double);
+
+impl EquidistantChannel {
+    /// Clone the flat sample vector when this channel holds
+    /// `gpslocation` samples (rare — equidistant blocks are normally
+    /// numeric).
+    ///
+    /// # Errors
+    ///
+    /// [`OsfError::DataTypeAccessMismatch`] when the stored datatype
+    /// is not `GpsLocation`.
+    pub fn as_gps_flat(&self) -> Result<Vec<GpsLocation>, OsfError> {
+        match &self.samples {
+            NumericValues::GpsLocation(v) => Ok(v.clone()),
+            other => Err(OsfError::DataTypeAccessMismatch {
+                channel: self.index,
+                requested: DataType::GpsLocation,
+                actual: other.data_type(),
+            }),
+        }
+    }
+}
+
+impl TimestampedChannel {
+    /// Pair every timestamp with its `gpslocation` value.
+    ///
+    /// # Errors
+    ///
+    /// [`OsfError::DataTypeAccessMismatch`] when the stored datatype
+    /// is not `GpsLocation`.
+    pub fn as_gps_flat(&self) -> Result<Vec<(i64, GpsLocation)>, OsfError> {
+        match &self.values {
+            NumericValues::GpsLocation(v) => Ok(self
+                .timestamps_ns
+                .iter()
+                .copied()
+                .zip(v.iter().copied())
+                .collect()),
+            other => Err(OsfError::DataTypeAccessMismatch {
+                channel: self.index,
+                requested: DataType::GpsLocation,
+                actual: other.data_type(),
+            }),
+        }
+    }
+}
+
 // -----------------------------------------------------------
 // Common accessors on Channel.
 // -----------------------------------------------------------
@@ -405,6 +736,160 @@ mod tests {
             samples,
             segments,
         }
+    }
+
+    #[test]
+    fn equidistant_samples_with_time_single_segment() {
+        let chan = make_eq_channel(
+            NumericValues::Double(vec![10.0, 20.0, 30.0, 40.0]),
+            vec![Segment {
+                start_timestamp_ns: 1_000_000_000,
+                sample_rate_hz: 1.0,
+                start_index: 0,
+                sample_count: 4,
+            }],
+        );
+        let pairs: Vec<(i64, f64)> = chan
+            .samples_with_time()
+            .map(|s| match s.value {
+                NumericValueRef::Double(v) => (s.timestamp_ns, v),
+                _ => panic!("expected Double"),
+            })
+            .collect();
+        assert_eq!(pairs.len(), 4);
+        assert_eq!(pairs[0], (1_000_000_000, 10.0));
+        assert_eq!(pairs[1], (2_000_000_000, 20.0));
+        assert_eq!(pairs[2], (3_000_000_000, 30.0));
+        assert_eq!(pairs[3], (4_000_000_000, 40.0));
+    }
+
+    #[test]
+    fn equidistant_samples_with_time_three_segments_no_interpolation() {
+        let chan = make_eq_channel(
+            NumericValues::Int32(vec![1, 2, 3, 100, 101, 200, 201]),
+            vec![
+                Segment {
+                    start_timestamp_ns: 1_000,
+                    sample_rate_hz: 1000.0,
+                    start_index: 0,
+                    sample_count: 3,
+                },
+                Segment {
+                    start_timestamp_ns: 1_000_000_000,
+                    sample_rate_hz: 1000.0,
+                    start_index: 3,
+                    sample_count: 2,
+                },
+                Segment {
+                    start_timestamp_ns: 5_000_000_000,
+                    sample_rate_hz: 1000.0,
+                    start_index: 5,
+                    sample_count: 2,
+                },
+            ],
+        );
+        let pairs: Vec<(i64, i32)> = chan
+            .samples_with_time()
+            .map(|s| match s.value {
+                NumericValueRef::Int32(v) => (s.timestamp_ns, v),
+                _ => panic!("expected Int32"),
+            })
+            .collect();
+        assert_eq!(pairs.len(), 7);
+        assert_eq!(pairs[0], (1_000, 1));
+        // Each segment must start at its own start_timestamp_ns; gaps
+        // between segments are NOT interpolated.
+        assert_eq!(pairs[3], (1_000_000_000, 100));
+        assert_eq!(pairs[5], (5_000_000_000, 200));
+    }
+
+    #[test]
+    fn flat_access_mismatch_returns_typed_error() {
+        let chan = make_eq_channel(
+            NumericValues::Int32(vec![1, 2, 3]),
+            vec![Segment {
+                start_timestamp_ns: 0,
+                sample_rate_hz: 1.0,
+                start_index: 0,
+                sample_count: 3,
+            }],
+        );
+        let err = chan.as_doubles_flat().unwrap_err();
+        match err {
+            OsfError::DataTypeAccessMismatch {
+                requested, actual, ..
+            } => {
+                assert_eq!(requested, DataType::Double);
+                assert_eq!(actual, DataType::Int32);
+            }
+            other => panic!("expected DataTypeAccessMismatch, got {other:?}"),
+        }
+        // Matching access works.
+        assert_eq!(chan.as_int32_flat().unwrap(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn empty_channel_iteration_yields_nothing() {
+        let chan = make_eq_channel(NumericValues::Double(Vec::new()), Vec::new());
+        assert_eq!(chan.samples_with_time().count(), 0);
+        assert!(chan.samples.is_empty());
+    }
+
+    #[test]
+    fn timestamped_samples_with_time_pairs_correctly() {
+        let chan = TimestampedChannel {
+            index: 0,
+            name: "ts".into(),
+            data_type: DataType::Int32,
+            physical_unit: None,
+            display_name: None,
+            channel_def: ChannelMeta::default(),
+            timestamps_ns: vec![100, 200, 300],
+            values: NumericValues::Int32(vec![10, 20, 30]),
+        };
+        let pairs: Vec<(i64, i32)> = chan
+            .samples_with_time()
+            .map(|s| match s.value {
+                NumericValueRef::Int32(v) => (s.timestamp_ns, v),
+                _ => panic!("expected Int32"),
+            })
+            .collect();
+        assert_eq!(pairs, vec![(100, 10), (200, 20), (300, 30)]);
+        // Flat helper produces the same data.
+        assert_eq!(
+            chan.as_int32_flat().unwrap(),
+            vec![(100, 10), (200, 20), (300, 30)]
+        );
+    }
+
+    #[test]
+    fn variable_string_iteration_borrows_values() {
+        let chan = VariableChannel {
+            index: 0,
+            name: "msg".into(),
+            data_type: DataType::String,
+            physical_unit: None,
+            display_name: None,
+            mime_type: None,
+            channel_def: ChannelMeta::default(),
+            timestamps_ns: vec![1, 2],
+            string_values: Some(vec!["hi".into(), "bye".into()]),
+            binary_values: None,
+        };
+        let collected: Vec<(i64, &str)> = chan
+            .samples_with_time()
+            .map(|s| match s.value {
+                VariableValueRef::String(v) => (s.timestamp_ns, v),
+                _ => panic!("expected String"),
+            })
+            .collect();
+        assert_eq!(collected, vec![(1, "hi"), (2, "bye")]);
+        assert_eq!(chan.as_strings().unwrap(), &["hi".to_string(), "bye".into()]);
+        // Asking for binaries on a string channel fails.
+        assert!(matches!(
+            chan.as_binaries(),
+            Err(OsfError::DataTypeAccessMismatch { .. })
+        ));
     }
 
     #[test]
