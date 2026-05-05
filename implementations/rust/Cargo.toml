@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["osf-core"]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.70"
+license = "Apache-2.0"
+authors = ["Optimeas GmbH"]
+repository = "https://github.com/burkhard154/osf"
+homepage = "https://github.com/burkhard154/osf"
+readme = "README.md"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

@@ -19,3 +19,7 @@ Win32/
 Win64/
 Debug/
 Release/
+
+# Rust build output
+implementations/rust/target/
+implementations/*/rust/target/
