@@ -274,12 +274,20 @@ Der Parameter `datatype` legt das Datenformat der Werte eines Kanals fest. Jeder
 | `int64`   | 8             | Ganzzahl mit Vorzeichen                                                                                                                              |
 | `float`   | 4             | IEEE 754 Single Precision                                                                                                                            |
 | `double`  | 8             | IEEE 754 Double Precision                                                                                                                            |
-| `string`  | variabel      | UTF-8 kodiert. Stringbehandlung versionsabhängig – siehe `osf4.md` bzw. `osf5.md`. |
-| `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen für Bild-, Audio- oder andere Binärdaten mit MIME-Type. Die maximale Länge des Blocks wird durch das `sizeoflengthvalue`-Feld des Kanals bestimmt. Behandlung versionsabhängig – siehe `osf4.md` bzw. `osf5.md`. |
+| `string`  | variabel      | UTF-8 kodiert, Länge durch Blockgröße definiert. Endet mit abschließender Nullbyte (`0x00`) – siehe Hinweisblock unten. |
+| `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen für Bild-, Audio- oder andere Binärdaten mit MIME-Type. Die maximale Länge des Blocks wird durch das `sizeoflengthvalue`-Feld des Kanals bestimmt. Endet mit abschließender Nullbyte (`0x00`) – siehe Hinweisblock unten. |
 | `candata` | 16            | Struktur für CAN-Frames (siehe unten)                                                                                                                |
 | `gpsdata` | 24            | Struktur für GPS-Positionen (siehe unten)                                                                                                            |
 
 > **Hinweis zu Integer-Typen:** Integer-Werte (`int8`, `int16`, `int32`, `int64`) werden in OSF-Dateien typischerweise für **Zustände, Statusinformationen oder Zählerwerte** verwendet, nicht als skalierte Rohwerte einer physikalischen Größe. Aus diesem Grund kennt OSF bewusst **keine** `scale`/`offset`-Parameter zur Umrechnung in physikalische Werte – physikalische Größen werden direkt als `float` oder `double` gespeichert.
+
+<a name="hinweis-zur-nullterminierung-von-string-und-binary"></a>
+> **Hinweis zur Nullterminierung von `string` und `binary`:**
+> Datenwerte vom Typ `string` oder `binary` enthalten **immer** eine abschließende Nullbyte (`0x00`) als letztes Byte des Datenblocks. Dies gilt für **OSF4 und OSF5** gleichermaßen.
+>
+> - **Schreiber** müssen beim Erzeugen eines Blocks ein zusätzliches `0x00` an die Nutzdaten anhängen. Die im Block angegebene Länge schließt dieses Byte ein.
+> - **Leser** müssen das letzte Byte des Datenfelds als Nullterminator interpretieren und **explizit entfernen**, bevor die Nutzdaten weiterverarbeitet werden. Geschieht dies nicht, erscheint das `0x00` als zusätzliches Zeichen am Ende eines Strings oder als zusätzliches Byte am Ende eines Binär-Payloads (z. B. einer JPEG-Datei mit angehängtem Nullbyte → ungültige Datei).
+> - Die effektive Nutzlänge ist daher: **Blocklänge des Datenfelds − 1 Byte**.
 
 #### Struktur `candata`
 
@@ -617,15 +625,14 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
 - **Beispiel `datatype=int16`:**[uint32 N] [int64 Zeit1] [int16 Wert1] [int64 Zeit2] [int16 Wert2] ...
 - **Beispiel `datatype=double`:**[uint32 N] [int64 Zeit1] [double Wert1] [int64 Zeit2] [double Wert2] ...
 - **Beispiel `datatype=string`:**
-  - Die Speicherung von Strings (mit/ohne abschließende Nullbyte) hängt von der OSF-Version ab. Details siehe `osf4.md` und `osf5.md`. Der hier gezeigte Aufbau zeigt die Nutzdaten **ohne** Versions-Spezifika.
+  - Strings werden **mit abschließender Nullbyte (`0x00`)** gespeichert. Die effektive Stringlänge ergibt sich aus der Nutzlänge des Datenfelds abzüglich des Nullbytes.
   - `Anzahl der Samples` bestimmt die Länge. Bit 7 muss gesetzt sein.
-  - [uint32 N] [int64 Zeit] [UTF-8 Bytes des Strings]
+  - [uint32 N] [int64 Zeit] [UTF-8 Bytes des Strings] [0x00]
 
 - **Beispiel `datatype=binary`:**
-  - Binärdaten werden als Rohbytes geschrieben. Behandlung am Blockende (Nullbyte oder nicht) ist versionsspezifisch.
-  - `mimetype` im Kanal definiert die Interpretation.
+  - Binärdaten werden als Rohbytes mit **abschließender Nullbyte (`0x00`)** geschrieben. Der `mimetype` im Kanal definiert die Interpretation. Die effektive Payload-Länge ist die Nutzlänge des Datenfelds abzüglich des Nullbytes.
   - `Anzahl der Samples` (N) bestimmt die Länge. Bit 7 muss gesetzt sein.
-  - [uint32 N] [int64 Zeit] [Byte1] [Byte2] ... [Byte N]
+  - [uint32 N] [int64 Zeit] [Byte1] [Byte2] ... [Byte M] [0x00]
 
 
 - **Hinweis:** Bei mehreren Samples pro Block (`N>1`) müssen Strings oder Binärdaten in gleich langen Segmenten vorliegen oder als einzelne Blöcke geschrieben werden.
@@ -660,8 +667,7 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
 
 - **Zeitgestempelte Kanäle (bcAbsTimeStampData, bcContinuedRelStampData):**
   - Unterstützen alle Datentypen.
-  - Strings: Behandlung der Terminierung versionsspezifisch (siehe OSF4/OSF5). Länge ergibt sich aus der Blockgröße.
-  - Binärdaten mit `datatype=binary` und optionalem `mimetype`; Behandlung am Blockende ebenfalls versionsspezifisch.
+  - Strings und Binärdaten werden mit abschließender Nullbyte (`0x00`) gespeichert. Die Nutzlänge ergibt sich aus der Blocklänge minus dem Nullbyte.
 
 #### Wichtige Punkte
 
@@ -675,7 +681,7 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
   - Nicht erkannte Blocktypen können anhand der Längenangabe übersprungen werden.
 
 - **Strings und Binärdaten:**
-  - Für `bcAbsTimeStampData` mit `datatype=string` oder `datatype=binary` ist die Behandlung am Blockende **versionsspezifisch**: OSF4 verwendet eine abschließende Nullbyte (`0x00`), OSF5 verzichtet darauf. Die exakte Definition steht in den versionsspezifischen Dokumenten.
+  - Für `bcAbsTimeStampData` mit `datatype=string` oder `datatype=binary` wird **immer** eine abschließende Nullbyte (`0x00`) geschrieben. Dies gilt für OSF4 und OSF5. Leser müssen das Nullbyte vor der Weiterverarbeitung entfernen.
   - Die Blocklänge ergibt sich aus `sizeoflengthvalue`.
   - Binärdaten verwenden `datatype=binary` plus `mimetype`.
 <br/>

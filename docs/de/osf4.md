@@ -127,19 +127,13 @@ Alle Parameter wie in der allgemeinen OSF-Doku beschrieben, für OSF4 gilt:
 | `int64`     | 8 Byte   | Ganzzahl mit Vorzeichen |
 | `float`     | 4 Byte   | IEEE 754 Single Precision |
 | `double`    | 8 Byte   | IEEE 754 Double Precision |
-| `string`    | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert, **mit abschließender Nullbyte (`0x00`)**. Effektive Stringlänge = Blockgröße − Zeitstempel − Nullbyte. |
+| `string`    | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert. Endet mit abschließender Nullbyte (`0x00`) – siehe [`osf_general.md`](osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
 | `candata`   | 16 Byte  | Struktur für CAN-Frames |
 | `gpsdata`   | 24 Byte  | Struktur für GPS-Positionen |
 
-### Stringterminierung in OSF4
+## Stringterminierung
 
-In OSF4 werden `string`- und `binary`-Datenwerte in `bcAbsTimeStampData`-Blöcken **mit abschließender Nullbyte (`0x00`)** geschrieben. Dies ist Bestandsverhalten und kein Breaking Change. Schreiber müssen das Nullbyte schreiben, Leser müssen es beim Bestimmen der Nutzlänge abziehen.
-
-**Beispiel `datatype=string` in OSF4:**
-`[uint32 N] [int64 Zeit] [UTF-8 Bytes des Strings] [0x00]`
-
-**Beispiel `datatype=binary` in OSF4:**
-`[uint32 N] [int64 Zeit] [Byte1] [Byte2] ... [Byte N] [0x00]`
+Für `bcAbsTimeStampData` mit `datatype=string` oder `datatype=binary` gilt die in [`osf_general.md`](osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary) beschriebene Regel: abschließende Nullbyte (`0x00`) am Ende des Datenfelds. Dies ist Bestandsverhalten in OSF4 und bleibt unverändert.
 
 ---
 

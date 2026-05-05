@@ -99,7 +99,7 @@ OSF5 übernimmt die Blockstruktur aus OSF4, reduziert aber die Anzahl der genutz
 
 ## Unterstützte Datentypen in OSF5
 
-OSF5 unterstützt dieselben Datentypen wie OSF4. Strings und Binärdaten in `bcAbsTimeStampData`-Blöcken werden in OSF5 jedoch **ohne Nullterminierung** gespeichert (Unterschied zu OSF4).
+OSF5 unterstützt dieselben Datentypen wie OSF4.
 
 | Datentyp   | Größe    | Beschreibung |
 |------------|----------|--------------|
@@ -110,22 +110,14 @@ OSF5 unterstützt dieselben Datentypen wie OSF4. Strings und Binärdaten in `bcA
 | `int64`    | 8 Byte   | Ganzzahl mit Vorzeichen |
 | `float`    | 4 Byte   | IEEE 754 Single Precision |
 | `double`   | 8 Byte   | IEEE 754 Double Precision |
-| `string`   | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert, **ohne Nullterminierung**. Effektive Stringlänge = Blockgröße − Zeitstempel. |
-| `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen, **ohne abschließende Nullbyte**. Maximale Länge wird durch `sizeoflengthvalue` bestimmt. |
+| `string`   | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert. Endet mit abschließender Nullbyte (`0x00`) – siehe [`osf_general.md`](osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
+| `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen für Bild-, Audio- oder andere Binärdaten mit MIME-Type. Maximale Länge wird durch `sizeoflengthvalue` bestimmt. Endet mit abschließender Nullbyte (`0x00`) – siehe [`osf_general.md`](osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
 | `candata`  | 16 Byte  | Struktur für CAN-Frames |
 | `gpsdata`  | 24 Byte  | Struktur für GPS-Positionen |
 
-### Stringterminierung in OSF5
+## Stringterminierung
 
-In OSF5 werden `string`- und `binary`-Datenwerte in `bcAbsTimeStampData`-Blöcken **ohne** abschließende Nullbyte geschrieben. Die Nutzlänge ergibt sich vollständig aus der Blockgröße abzüglich der Zeitstempel. Dies ist eine bewusste Vereinfachung gegenüber OSF4 zugunsten einer einfacheren Embedded-Implementierung.
-
-**Beispiel `datatype=string` in OSF5:**
-`[uint32 N] [int64 Zeit] [UTF-8 Bytes des Strings]`
-
-**Beispiel `datatype=binary` in OSF5:**
-`[uint32 N] [int64 Zeit] [Byte1] [Byte2] ... [Byte N]`
-
-> **Hinweis für OSF5-Leser:** Beim Lesen von OSF4-Dateien muss die Nullbyte-Konvention von OSF4 angewendet werden (siehe `osf4.md`).
+Für `bcAbsTimeStampData` mit `datatype=string` oder `datatype=binary` gilt die in [`osf_general.md`](osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary) beschriebene Regel: abschließende Nullbyte (`0x00`) am Ende des Datenfelds. Diese Regel ist mit OSF4 identisch.
 
 ### `bcStartData` mit Abtastrate
 
@@ -171,7 +163,6 @@ In OSF5 haben wir beide Elemente bewusst entfernt.
 
 - **JSON** als Hauptformat, XML nur für Abwärtskompatibilität.  
 - **Vereinfachtes Steuerbyte** mit weniger Blocktypen.  
-- Strings und Binärdaten werden **ohne** Nullterminierung gespeichert (Unterschied zu OSF4).
 - Keine Trailer oder Info-Datenblöcke am Dateiende.  
 - `bcContinuedRelStampData`, `bcStatusEvent`, `bcMessageEvent` werden nicht mehr erzeugt.
 
