@@ -30,6 +30,7 @@
 pub mod error;
 pub mod header;
 pub mod meta;
+pub mod meta_json;
 pub mod types;
 
 pub use error::OsfError;
@@ -37,4 +38,5 @@ pub use header::{MagicHeader, OsfVersion, parse_magic_header};
 pub use meta::{
     Channel, FileInfo, Info, MetaBlock, SpectrumType, parse_channel_type, parse_data_type,
 };
+pub use meta_json::parse_metablock_json;
 pub use types::{BlockContent, ChannelType, DataType};

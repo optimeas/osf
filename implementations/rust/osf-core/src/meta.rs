@@ -169,7 +169,6 @@ impl SpectrumType {
 /// 2026-05-04. Encountering them is **not** a hard error (real-world
 /// field files such as `examples/steam_loco.osf` still carry them on
 /// every channel) — the parser logs them with `log::warn!` and skips.
-#[allow(dead_code)] // consumed by meta_json/meta_xml parsers (next commits)
 pub(crate) const REMOVED_CHANNEL_FIELDS: &[&str] = &[
     "scale",
     "offset",
@@ -284,7 +283,6 @@ pub fn parse_channel_type(raw: &str) -> Result<ChannelType, OsfError> {
 /// # Errors
 ///
 /// Returns [`OsfError::InvalidMetablock`] for any value other than 2 or 4.
-#[allow(dead_code)] // consumed by meta_json/meta_xml parsers (next commits)
 pub(crate) fn validate_size_of_length_value(raw: u32) -> Result<u8, OsfError> {
     match raw {
         2 | 4 => Ok(raw as u8),
