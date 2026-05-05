@@ -31,6 +31,7 @@ pub mod error;
 pub mod header;
 pub mod meta;
 pub mod meta_json;
+pub mod meta_xml;
 pub mod types;
 
 pub use error::OsfError;
@@ -39,4 +40,23 @@ pub use meta::{
     Channel, FileInfo, Info, MetaBlock, SpectrumType, parse_channel_type, parse_data_type,
 };
 pub use meta_json::parse_metablock_json;
+pub use meta_xml::parse_metablock_xml;
 pub use types::{BlockContent, ChannelType, DataType};
+
+/// Parse the metablock body for the given OSF version.
+///
+/// `bytes` must be exactly the metablock payload (without the magic-header
+/// line and without any block-stream bytes that follow). Use the
+/// `metablock_len` field of the [`MagicHeader`] to slice the right
+/// portion out of the input.
+///
+/// # Errors
+///
+/// Forwards parser-level errors from [`parse_metablock_json`] /
+/// [`parse_metablock_xml`] and the validation helpers in [`crate::meta`].
+pub fn parse_metablock(version: OsfVersion, bytes: &[u8]) -> Result<MetaBlock, OsfError> {
+    match version {
+        OsfVersion::Osf4 => parse_metablock_xml(bytes),
+        OsfVersion::Osf5 => parse_metablock_json(bytes),
+    }
+}
