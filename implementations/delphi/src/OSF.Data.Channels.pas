@@ -28,6 +28,17 @@ uses
   OSF.Channel;
 
 type
+  // A contiguous run of samples in an equidistant channel. Recorded between
+  // bcStartData blocks: every bcStartData opens a new segment, every
+  // bcContinuedData appends samples to the most recent segment. The flat
+  // Values list of the channel grows linearly across segments — Segments
+  // describe how it splits up in time.
+  TOSFChannelSegment = record
+    StartTimestampNs: Int64;    // absolute start time of the first sample (ns since epoch)
+    StartIndex      : Integer;  // index of the first sample in the channel's flat Values list
+    SampleCount     : Integer;  // number of samples that belong to this segment
+  end;
+
   // ── Abstract base ───────────────────────────────────────────────────────────
 
   // Common interface for every typed data channel held by TOSFDataManager.
@@ -109,14 +120,32 @@ type
 
   // Stores only a start timestamp and a fixed increment. Timestamps are
   // computed on demand: t_i = StartTimestampNs + i * TimeIncrementNs.
+  //
+  // Equidistant channels may consist of multiple segments separated by time
+  // gaps — each bcStartData block opens a new segment, bcContinuedData blocks
+  // append to the most recent one. The Segments list describes how the flat
+  // Values list maps onto absolute time.
   TOSFEquidistantDataChannel = class abstract (TOSFDataChannel)
   protected
     FTimeIncrementNs: Int64;
+    FSegments       : TList<TOSFChannelSegment>;
     procedure CopyTimingTo(Other: TOSFEquidistantDataChannel);
   public
     constructor Create(ADef: TOSFChannelDef); override;
+    destructor  Destroy; override;
     function TimestampNsAt(Index: Integer): Int64; override;
+
+    // Opens a new segment starting at StartTimestampNs. The segment's
+    // StartIndex is set to the channel's current sample count, SampleCount to 0.
+    // Called by the data manager when a bcStartData block arrives.
+    procedure BeginSegment(StartTimestampNs: Int64);
+    // Bumps the most recent segment's SampleCount. Called by the data manager
+    // after decoding a bcStartData or bcContinuedData block. No-op if Segments
+    // is empty (defensive — should not happen with a well-formed file).
+    procedure AppendToCurrentSegment(Count: Integer);
+
     property TimeIncrementNs: Int64 read FTimeIncrementNs;
+    property Segments: TList<TOSFChannelSegment> read FSegments;
   end;
 
   // ── Concrete: Double (covers OSF dtDouble and dtFloat) ──────────────────────
@@ -663,6 +692,7 @@ end;
 constructor TOSFEquidistantDataChannel.Create(ADef: TOSFChannelDef);
 begin
   inherited Create(ADef);
+  FSegments := TList<TOSFChannelSegment>.Create;
   if Assigned(ADef) then
     FTimeIncrementNs := ADef.TimeIncrement
   else
@@ -678,17 +708,51 @@ begin
   end;
 end;
 
+destructor TOSFEquidistantDataChannel.Destroy;
+begin
+  FSegments.Free;
+  inherited;
+end;
+
 function TOSFEquidistantDataChannel.TimestampNsAt(Index: Integer): Int64;
 begin
   Result := FStartTimestampNs + Int64(Index) * FTimeIncrementNs;
 end;
 
+procedure TOSFEquidistantDataChannel.BeginSegment(StartTimestampNs: Int64);
+var
+  Seg: TOSFChannelSegment;
+begin
+  Seg.StartTimestampNs := StartTimestampNs;
+  Seg.StartIndex       := GetSampleCount;
+  Seg.SampleCount      := 0;
+  FSegments.Add(Seg);
+end;
+
+procedure TOSFEquidistantDataChannel.AppendToCurrentSegment(Count: Integer);
+var
+  Seg: TOSFChannelSegment;
+  Idx: Integer;
+begin
+  if FSegments.Count = 0 then Exit;
+  Idx := FSegments.Count - 1;
+  Seg := FSegments[Idx];
+  Inc(Seg.SampleCount, Count);
+  FSegments[Idx] := Seg;
+end;
+
 procedure TOSFEquidistantDataChannel.CopyTimingTo(Other: TOSFEquidistantDataChannel);
+var
+  I: Integer;
 begin
   Other.FStartTimestampNs := Self.FStartTimestampNs;
   Other.FEndTimestampNs   := Self.FEndTimestampNs;
   Other.FStartAssigned    := Self.FStartAssigned;
   Other.FTimeIncrementNs  := Self.FTimeIncrementNs;
+  Other.FSegments.Clear;
+  Other.FSegments.Capacity := Self.FSegments.Count;
+  for I := 0 to Self.FSegments.Count - 1 do
+    Other.FSegments.Add(Self.FSegments[I]);
 end;
 
 // ── Double channels ──────────────────────────────────────────────────────────

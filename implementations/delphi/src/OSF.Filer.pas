@@ -187,9 +187,15 @@ type
     // most common data type for equidistant measurement channels. For other
     // numeric types (int16, float, ...) write raw blocks using the stream directly.
     //
-    // First call per channel: writes bcStartData including FirstTimestampNs.
-    //   FirstTimestampNs must be a valid Unix timestamp in nanoseconds.
-    // Subsequent calls: writes bcContinuedData; FirstTimestampNs is ignored.
+    // FirstTimestampNs > 0 emits bcStartData and opens a new segment for the
+    // channel. The very first block of every channel must pass a non-zero
+    // timestamp; later in the file, passing a non-zero timestamp again starts
+    // an additional segment (used for triggered captures or drift correction).
+    // FirstTimestampNs = 0 (the default) emits bcContinuedData and appends to
+    // the most recent segment.
+    //
+    // Channel.SampleRate must be set before the first call. The same value is
+    // emitted on every bcStartData block.
     //
     // For OSF4 equidistant channels, also pre-set Channel.StartTimestampNs
     // before calling WriteHeader so the XML <channel> attribute carries the
@@ -1401,7 +1407,10 @@ begin
   N := Length(Samples);
   if N = 0 then Exit;
 
-  IsStart := not Channel.StartBlockWritten;
+  // A non-zero FirstTimestampNs always starts a new segment (bcStartData).
+  // If no timestamp was passed but no segment has been opened yet, the caller
+  // forgot to seed the channel — fail loudly.
+  IsStart := (FirstTimestampNs <> 0) or (not Channel.StartBlockWritten);
   if IsStart and (FirstTimestampNs = 0) then
     raise EOSFFormatError.Create(SOSFEquiNoFirstTimestamp);
   if IsStart and (Channel.SampleRate <= 0) then

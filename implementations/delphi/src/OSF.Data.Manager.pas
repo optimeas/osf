@@ -615,7 +615,16 @@ begin
       DecodeAbsTimestampedBlock(Channel, Block);
 
     bcStartData:
-      DecodeEquidistantBlock(Channel, Block, Block.StartTimestampNs);
+      begin
+        // Open a new segment whose start time matches the block. SampleRate
+        // has already been recorded on Channel.ChannelDef by the filer.
+        if Channel is TOSFEquidistantDataChannel then
+          TOSFEquidistantDataChannel(Channel).BeginSegment(Block.StartTimestampNs);
+        DecodeEquidistantBlock(Channel, Block, Block.StartTimestampNs);
+        if Channel is TOSFEquidistantDataChannel then
+          TOSFEquidistantDataChannel(Channel).AppendToCurrentSegment(
+            Integer(Block.SampleCount));
+      end;
 
     bcContinuedData:
       begin
@@ -629,6 +638,9 @@ begin
         else
           StartTs := Channel.EndTimestampNs;
         DecodeEquidistantBlock(Channel, Block, StartTs);
+        if Channel is TOSFEquidistantDataChannel then
+          TOSFEquidistantDataChannel(Channel).AppendToCurrentSegment(
+            Integer(Block.SampleCount));
       end;
 
     bcContinuedRelStampData:
