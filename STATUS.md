@@ -76,7 +76,7 @@ osf/
 │   │   ├── demos/osfcsvexport/      — OSF → CSV export demo
 │   │   └── OSFCompileCheck.dpr      — compile-only smoke test
 │   ├── rust/                        — Cargo workspace; foundation for Python (DECISIONS §18)
-│   │   └── osf-core/                — magic-header parser landed; metablock/blocks pending
+│   │   └── osf-core/                — magic-header + metablock parsers landed; block reader pending
 │   └── (c, cpp, csharp, python, …)/ — README placeholders only
 ├── integrations/(arrow, pytorch, tensorflow, mcp, langchain)/  — placeholders
 ├── examples/
@@ -133,23 +133,55 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
 
 | Module | Public surface |
 |---|---|
-| `error` | `OsfError` (thiserror): `Io`, `InvalidMagicHeader`, `UnsupportedVersion`, `MagicHeaderTooLong` |
+| `error` | `OsfError` (thiserror): `Io`, `InvalidMagicHeader`, `UnsupportedVersion`, `MagicHeaderTooLong`, `InvalidMetablock`, `RemovedInSpec2026_05_04`, `Json`, `Xml` |
 | `header` | `OsfVersion { Osf4, Osf5 }`, `MagicHeader { version, metablock_len }`, `parse_magic_header<R: Read>` — accepts `OSF4`, `OSF5`, `OCEAN_STREAM_FORMAT4`, `OCEAN_STREAMING_FORMAT4` |
-| `types` | `DataType` (spec rev 2026-05-04 set; no `pair`/`triple`/`candata`/`gpsdata`), `ChannelType`, `BlockContent` — enum skeletons; methods land with the metablock parser |
+| `types` | `DataType` (spec rev 2026-05-04 set + `Unsupported(String)` for forward-compat), `ChannelType { Scalar, Equidistant, Timestamped, Unsupported }`, `BlockContent` |
+| `meta` | `MetaBlock { file_info, channels, infos }`, `FileInfo`, `Channel`, `Info`, `SpectrumType`; validation helpers `parse_data_type` / `parse_channel_type` shared by both parsers |
+| `meta_json` | `parse_metablock_json(&[u8])` — OSF5 JSON parser via `serde_json::Value` (manual field picking; no derive, for forward-compat) |
+| `meta_xml` | `parse_metablock_xml(&[u8])` — OSF4 XML parser via `quick-xml` event reader; tolerates CP1252 bytes in real field files via `String::from_utf8_lossy` |
+| `lib` | top-level `parse_metablock(version, &[u8])` dispatcher |
 
-Dependencies wired up but only `thiserror` is exercised so far: `serde`,
-`serde_json`, `quick-xml`, `byteorder` are pre-staged for the next session.
+**Spec rev 2026-05-04 enforcement:**
 
-**Tests:** 11 unit tests in `header.rs` plus 2 integration tests in
-`tests/header_test.rs` that walk every `.osf` file under `examples/` and
-`examples/generated/` and assert clean parsing. `cargo build`, `cargo test`,
-and `cargo clippy --all-targets` all run clean.
+- Removed datatypes (`pair`, `triple`, `candata`, `gpsdata`) → hard
+  `OsfError::RemovedInSpec2026_05_04` with the spec replacement spelled
+  out in the error.
+- Removed channel-level fields (`scale`, `offset`, `physicalunit1..3`,
+  `physicaldimension1..3`) → `log::warn!` and skipped. Keeping these
+  tolerant is non-negotiable: every channel in `examples/steam_loco.osf`
+  carries `scale="1"` and `offset="0"`.
+- `bytearray` → normalised to `DataType::Binary` with a `log::debug!`.
+- `sizeoflengthvalue` other than 2 or 4 → hard `OsfError::InvalidMetablock`
+  (silent corruption otherwise).
+- Unknown fields → `log::debug!` and ignored. Unknown datatypes /
+  channel types → `Unsupported(String)` so the metablock as a whole still
+  parses; block reads against an `Unsupported` variant will fail
+  explicitly when implemented.
+- OSF4 short GPS spelling (`latitude` / `longitude` / `altitude`) accepted
+  on read with a `log::debug!`; writers emit only the spec form
+  `created_at_*`.
 
-**Inspect example:** `cargo run --example inspect -- <path>` prints the
-detected version and metablock length.
+**Tests:** 34 unit tests across `header.rs`, `meta.rs`, `meta_json.rs`,
+`meta_xml.rs`. Two integration suites:
 
-**Next steps:** OSF5 JSON metablock parser (Session 2), OSF4 XML metablock
-parser, block stream reader, typed channels, OSF5 writer, then PyO3 wrapper.
+- `tests/header_test.rs` — every shipped `.osf` parses its magic header.
+- `tests/metablock_test.rs` — every shipped `.osf` parses its metablock,
+  with named assertions on `examples/steam_loco.osf` (123 channels) and
+  `examples/generated/osf5_mixed.osf` (typed channel checks).
+
+`cargo build`, `cargo test`, and `cargo clippy --all-targets` all run
+clean. Smoke runs against all 19 shipped `.osf` files succeed (8 OSF4
+generated + 9 OSF5 generated + `motorbike.osf` + `steam_loco.osf`).
+
+**Inspect example:** `cargo run --example inspect -- <path>` prints
+header, file metadata, and a one-line summary per channel. Diagnostics
+go through `env_logger`; default `RUST_LOG=warn`, override with `debug`
+for full alias / unknown-field tracing or `error` for clean output on
+files that flood deprecated-field warnings.
+
+**Next steps:** block stream reader (Session 3), typed in-memory channels
+(Session 4), OSF5 writer (Session 5), then PyO3 wrapper for Python
+(Session 6).
 
 ---
 
@@ -176,8 +208,9 @@ parser, block stream reader, typed channels, OSF5 writer, then PyO3 wrapper.
 - **DUnitX test suite** for the Delphi implementation — not started; only
   `OSFCompileCheck.dpr` exists today. Brief F3 from the spec-revision task
   was deferred; would be its own scaffolding effort.
-- **Rust** — magic-header parser only; metablock parsers, block reader,
-  typed channels, and writer are pending (see Rust section above).
+- **Rust** — magic-header + OSF4/OSF5 metablock parsers landed; block
+  reader, typed channels, and writer are pending (see Rust section
+  above).
 - **Python bindings** — directory not yet started; will sit on `osf-core`
   via PyO3 once the Rust block reader/writer are in place.
 - **Other language implementations** (C, C++, C#, …) — README
