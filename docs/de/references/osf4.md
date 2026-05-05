@@ -12,12 +12,12 @@ last_update:
   author: Optimeas GmbH
 ---
 
-🇬🇧 [English version](../en/osf4.md)
+🇬🇧 [English version](../../en/references/osf4.md)
 
 # OSF4 – Spezifische Dokumentation
 
 Dieses Dokument beschreibt alle Aspekte des **Open Streaming Formats Version 4 (OSF4)**, die über die allgemeine OSF-Beschreibung hinausgehen.  
-Es ergänzt die Datei [`osf_general.md`](osf_general.md), in der alle für OSF4 und OSF5 gemeinsamen Strukturen erklärt sind.
+Es ergänzt die Datei [`osf_general.md`](../osf_general.md), in der alle für OSF4 und OSF5 gemeinsamen Strukturen erklärt sind.
 
 OSF4 ist die klassische Version des Formats. Sie nutzt ausschließlich **XML** für den Metablock und bildet die Basis für die Abwärtskompatibilität in OSF5.
 
@@ -133,12 +133,12 @@ Alle Parameter wie in der allgemeinen OSF-Doku beschrieben, für OSF4 gilt:
 | `uint64`    | 8 Byte   | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 18 446 744 073 709 551 615 |
 | `float`     | 4 Byte   | IEEE 754 Single Precision |
 | `double`    | 8 Byte   | IEEE 754 Double Precision |
-| `string`    | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert. Endet mit abschließender Nullbyte (`0x00`) – siehe [`osf_general.md`](osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
+| `string`    | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert. Endet mit abschließender Nullbyte (`0x00`) – siehe [`osf_general.md`](../osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
 | `gpslocation` | 24 Byte | Struktur für GPS-Positionen |
 
 ## Stringterminierung
 
-Für `bcAbsTimeStampData` mit `datatype=string` oder `datatype=binary` gilt die in [`osf_general.md`](osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary) beschriebene Regel: abschließende Nullbyte (`0x00`) am Ende des Datenfelds. Dies ist Bestandsverhalten in OSF4 und bleibt unverändert.
+Für `bcAbsTimeStampData` mit `datatype=string` oder `datatype=binary` gilt die in [`osf_general.md`](../osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary) beschriebene Regel: abschließende Nullbyte (`0x00`) am Ende des Datenfelds. Dies ist Bestandsverhalten in OSF4 und bleibt unverändert.
 
 ---
 
