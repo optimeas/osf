@@ -91,7 +91,7 @@ type
     dtUInt8, dtUInt16, dtUInt32, dtUInt64,
     dtFloat, dtDouble,
     dtString, dtBinary,
-    dtCanData, dtGpsData
+    dtGpsData
   );
 
   // Structural layout of a channel's data blocks.
@@ -110,15 +110,6 @@ type
     lfs2 = 2,  // uint16 — max 65 535 bytes per block
     lfs4 = 4   // uint32 — max ~4 GB per block
   );
-
-  // CAN frame — 16 bytes. Layout matches the OSF candata binary encoding.
-  // Bytes 13-15 are explicit padding required to reach the 16-byte total.
-  TOSFCanData = packed record
-    CanID   : UInt32;              // 32-bit CAN ID including flags
-    DLC     : Byte;                // data length code (0..8)
-    Payload : array[0..7] of Byte; // CAN payload bytes
-    Pad     : array[0..2] of Byte; // padding to 16 bytes total
-  end;
 
   // GPS position — 24 bytes.
   TOSFGpsData = packed record
@@ -146,9 +137,6 @@ type
   end;
 
 // Compile-time binary layout assertions.
-{$IF SizeOf(TOSFCanData) <> 16}
-  {$MESSAGE ERROR 'TOSFCanData must be exactly 16 bytes'}
-{$ENDIF}
 {$IF SizeOf(TOSFGpsData) <> 24}
   {$MESSAGE ERROR 'TOSFGpsData must be exactly 24 bytes'}
 {$ENDIF}
@@ -214,12 +202,11 @@ begin
   else if Lower = 'string'    then Exit(dtString)
   else if Lower = 'binary'    then Exit(dtBinary)
   else if Lower = 'bytearray' then Exit(dtBinary)   // OSF4 legacy alias
-  else if Lower = 'candata'   then Exit(dtCanData)
   else if Lower = 'gpsdata'   then Exit(dtGpsData);
 
   // Datatypes removed in spec revision 2026-05-04 — fail loudly so callers
   // see exactly which one tripped them up.
-  if (Lower = 'pair') or (Lower = 'triple') then
+  if (Lower = 'pair') or (Lower = 'triple') or (Lower = 'candata') then
     raise EOSFFormatError.CreateFmt(SOSFRemovedDataType, [S]);
 
   raise EOSFFormatError.CreateFmt(SOSFUnknownDataType, [S]);
@@ -241,7 +228,6 @@ begin
     dtDouble:  Result := 'double';
     dtString:  Result := 'string';
     dtBinary:  Result := 'binary';
-    dtCanData: Result := 'candata';
     dtGpsData: Result := 'gpsdata';
   else
     raise EOSFFormatError.CreateFmt(SOSFUnhandledDataType, [Ord(DT)]);
@@ -264,7 +250,6 @@ begin
     dtDouble:  Result := 8;
     dtString:  Result := 0;
     dtBinary:  Result := 0;
-    dtCanData: Result := 16;
     dtGpsData: Result := 24;
   else
     raise EOSFFormatError.CreateFmt(SOSFUnhandledDataType, [Ord(DT)]);

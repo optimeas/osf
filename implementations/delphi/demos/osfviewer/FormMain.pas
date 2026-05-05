@@ -67,6 +67,7 @@ type
     procedure lbChannelsClick(Sender: TObject);
     procedure lbChannelsDrawItem(Control: TWinControl; Index: Integer; Rect: TRect; State: TOwnerDrawState);
     procedure cbDebugClick(Sender: TObject);
+    procedure FormShow(Sender: TObject);
   private
     FDataManager: TOSFDataManager;
 
@@ -142,6 +143,13 @@ end;
 procedure TFormOSFViewer.FormDestroy(Sender: TObject);
 begin
   FDataManager.Free;
+end;
+
+procedure TFormOSFViewer.FormShow(Sender: TObject);
+begin
+  // Auto-scroll the memo so the most recent line is always visible.
+  memLog.SelStart := Length(memLog.Text);
+  memLog.SelLength := 0;
 end;
 
 procedure TFormOSFViewer.TryLoadDefaultExample;
@@ -276,7 +284,7 @@ function TFormOSFViewer.IsChartableType(DT: TOSFDataType): Boolean;
 begin
   // Non-numeric and structured types — ValueAsDouble is not meaningful
   // for plotting, so we show a placeholder label instead of an empty chart.
-  Result := not(DT in [dtString, dtBinary, dtGpsData, dtCanData]);
+  Result := not(DT in [dtString, dtBinary, dtGpsData]);
 end;
 
 procedure TFormOSFViewer.ClearChartSeries;
@@ -398,7 +406,7 @@ begin
   memLog.Lines.Add(Format(ROW_FMT, [Prefix, Msg]));
   // Auto-scroll the memo so the most recent line is always visible.
   memLog.SelStart := Length(memLog.Text);
-  SendMessage(memLog.Handle, EM_SCROLLCARET, 0, 0);
+  memLog.SelLength := 0;
 end;
 
 end.

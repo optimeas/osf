@@ -411,38 +411,6 @@ type
     property Values: TList<TOSFGpsData> read FValues;
   end;
 
-  // ── Concrete: CAN ───────────────────────────────────────────────────────────
-
-  TOSFTimestampedCanChannel = class(TOSFTimestampedDataChannel)
-  private
-    FValues: TList<TOSFCanData>;
-  protected
-    function GetSampleCount: Integer; override;
-  public
-    constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
-    function ValueAsDouble(Index: Integer): Double; override;
-    function ValueAsString(Index: Integer): string; override;
-    function Clone: TOSFDataChannel; override;
-    procedure AddRawSample(TimestampNs: Int64; const RawBytes: TBytes); override;
-    property Values: TList<TOSFCanData> read FValues;
-  end;
-
-  TOSFEquidistantCanChannel = class(TOSFEquidistantDataChannel)
-  private
-    FValues: TList<TOSFCanData>;
-  protected
-    function GetSampleCount: Integer; override;
-  public
-    constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
-    function ValueAsDouble(Index: Integer): Double; override;
-    function ValueAsString(Index: Integer): string; override;
-    function Clone: TOSFDataChannel; override;
-    procedure AddRawSample(TimestampNs: Int64; const RawBytes: TBytes); override;
-    property Values: TList<TOSFCanData> read FValues;
-  end;
-
 // Picks the right concrete subclass based on Def.DataType and Def.IsEquidistant.
 // The returned channel keeps a non-owning reference to Def — the caller (typically
 // TOSFDataManager) is responsible for keeping the def alive at least as long as
@@ -583,13 +551,6 @@ begin
 end;
 
 function DecodeAsGpsData(const RawBytes: TBytes): TOSFGpsData;
-begin
-  FillChar(Result, SizeOf(Result), 0);
-  if Length(RawBytes) >= SizeOf(Result) then
-    Move(RawBytes[0], Result, SizeOf(Result));
-end;
-
-function DecodeAsCanData(const RawBytes: TBytes): TOSFCanData;
 begin
   FillChar(Result, SizeOf(Result), 0);
   if Length(RawBytes) >= SizeOf(Result) then
@@ -1579,112 +1540,6 @@ begin
   Result := C;
 end;
 
-// ── CAN channels ─────────────────────────────────────────────────────────────
-
-constructor TOSFTimestampedCanChannel.Create(ADef: TOSFChannelDef);
-begin
-  inherited Create(ADef);
-  FValues := TList<TOSFCanData>.Create;
-end;
-
-destructor TOSFTimestampedCanChannel.Destroy;
-begin
-  FValues.Free;
-  inherited;
-end;
-
-function TOSFTimestampedCanChannel.GetSampleCount: Integer;
-begin
-  Result := FValues.Count;
-end;
-
-function TOSFTimestampedCanChannel.ValueAsDouble(Index: Integer): Double;
-begin
-  // CAN-ID as a Double is the simplest scalar projection for charting.
-  Result := FValues[Index].CanID;
-end;
-
-function TOSFTimestampedCanChannel.ValueAsString(Index: Integer): string;
-var
-  C: TOSFCanData;
-  I: Integer;
-  Hex: string;
-begin
-  C := FValues[Index];
-  Hex := '';
-  for I := 0 to C.DLC - 1 do
-    Hex := Hex + Format('%.2X', [C.Payload[I]]);
-  Result := Format('id=%X dlc=%d data=%s', [C.CanID, C.DLC, Hex]);
-end;
-
-procedure TOSFTimestampedCanChannel.AddRawSample(TimestampNs: Int64; const RawBytes: TBytes);
-begin
-  FTimestamps.Add(TimestampNs);
-  FValues.Add(DecodeAsCanData(RawBytes));
-  UpdateTimeRange(TimestampNs);
-end;
-
-function TOSFTimestampedCanChannel.Clone: TOSFDataChannel;
-var
-  C: TOSFTimestampedCanChannel;
-begin
-  C := TOSFTimestampedCanChannel.Create(FChannelDef);
-  CopyTimingTo(C);
-  C.FValues.AddRange(Self.FValues);
-  Result := C;
-end;
-
-constructor TOSFEquidistantCanChannel.Create(ADef: TOSFChannelDef);
-begin
-  inherited Create(ADef);
-  FValues := TList<TOSFCanData>.Create;
-end;
-
-destructor TOSFEquidistantCanChannel.Destroy;
-begin
-  FValues.Free;
-  inherited;
-end;
-
-function TOSFEquidistantCanChannel.GetSampleCount: Integer;
-begin
-  Result := FValues.Count;
-end;
-
-function TOSFEquidistantCanChannel.ValueAsDouble(Index: Integer): Double;
-begin
-  Result := FValues[Index].CanID;
-end;
-
-function TOSFEquidistantCanChannel.ValueAsString(Index: Integer): string;
-var
-  C: TOSFCanData;
-  I: Integer;
-  Hex: string;
-begin
-  C := FValues[Index];
-  Hex := '';
-  for I := 0 to C.DLC - 1 do
-    Hex := Hex + Format('%.2X', [C.Payload[I]]);
-  Result := Format('id=%X dlc=%d data=%s', [C.CanID, C.DLC, Hex]);
-end;
-
-procedure TOSFEquidistantCanChannel.AddRawSample(TimestampNs: Int64; const RawBytes: TBytes);
-begin
-  FValues.Add(DecodeAsCanData(RawBytes));
-  UpdateTimeRange(TimestampNs);
-end;
-
-function TOSFEquidistantCanChannel.Clone: TOSFDataChannel;
-var
-  C: TOSFEquidistantCanChannel;
-begin
-  C := TOSFEquidistantCanChannel.Create(FChannelDef);
-  CopyTimingTo(C);
-  C.FValues.AddRange(Self.FValues);
-  Result := C;
-end;
-
 // ── Factory ──────────────────────────────────────────────────────────────────
 
 function CreateOSFDataChannel(Def: TOSFChannelDef): TOSFDataChannel;
@@ -1701,7 +1556,6 @@ begin
       dtString:                             Result := TOSFEquidistantStringChannel.Create(Def);
       dtBinary:                             Result := TOSFEquidistantBinaryChannel.Create(Def);
       dtGpsData:                            Result := TOSFEquidistantGpsChannel.Create(Def);
-      dtCanData:                            Result := TOSFEquidistantCanChannel.Create(Def);
     else
       Result := TOSFEquidistantDoubleChannel.Create(Def);
     end;
@@ -1718,7 +1572,6 @@ begin
       dtString:                             Result := TOSFTimestampedStringChannel.Create(Def);
       dtBinary:                             Result := TOSFTimestampedBinaryChannel.Create(Def);
       dtGpsData:                            Result := TOSFTimestampedGpsChannel.Create(Def);
-      dtCanData:                            Result := TOSFTimestampedCanChannel.Create(Def);
     else
       Result := TOSFTimestampedDoubleChannel.Create(Def);
     end;
