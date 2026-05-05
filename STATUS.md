@@ -69,12 +69,14 @@ osf/
 │   │   └── media/                   — shared images
 │   └── en/                          — English mirror, same structure
 ├── implementations/
-│   ├── delphi/                      — only active implementation
+│   ├── delphi/                      — reference implementation (full)
 │   │   ├── src/                     — library units
 │   │   ├── demos/osfviewer/         — viewer (uses TeeChart)
 │   │   ├── demos/osfgenerator/      — writes the reference set
 │   │   ├── demos/osfcsvexport/      — OSF → CSV export demo
 │   │   └── OSFCompileCheck.dpr      — compile-only smoke test
+│   ├── rust/                        — Cargo workspace; foundation for Python (DECISIONS §18)
+│   │   └── osf-core/                — magic-header parser landed; metablock/blocks pending
 │   └── (c, cpp, csharp, python, …)/ — README placeholders only
 ├── integrations/(arrow, pytorch, tensorflow, mcp, langchain)/  — placeholders
 ├── examples/
@@ -121,6 +123,36 @@ All three projects compile clean with `dcc32` (Delphi 12 / RAD Studio 23.0;
 
 ---
 
+## Rust implementation — current state
+
+Started 2026-05-05 per [DECISIONS §18](DECISIONS.md#18-rust-as-foundation-for-python).
+The `osf-core` crate is the foundation for both standalone Rust use and the
+future Python bindings (PyO3 wrapper at `implementations/python/`).
+
+**Crate at `implementations/rust/osf-core/`:**
+
+| Module | Public surface |
+|---|---|
+| `error` | `OsfError` (thiserror): `Io`, `InvalidMagicHeader`, `UnsupportedVersion`, `MagicHeaderTooLong` |
+| `header` | `OsfVersion { Osf4, Osf5 }`, `MagicHeader { version, metablock_len }`, `parse_magic_header<R: Read>` — accepts `OSF4`, `OSF5`, `OCEAN_STREAM_FORMAT4`, `OCEAN_STREAMING_FORMAT4` |
+| `types` | `DataType` (spec rev 2026-05-04 set; no `pair`/`triple`/`candata`/`gpsdata`), `ChannelType`, `BlockContent` — enum skeletons; methods land with the metablock parser |
+
+Dependencies wired up but only `thiserror` is exercised so far: `serde`,
+`serde_json`, `quick-xml`, `byteorder` are pre-staged for the next session.
+
+**Tests:** 11 unit tests in `header.rs` plus 2 integration tests in
+`tests/header_test.rs` that walk every `.osf` file under `examples/` and
+`examples/generated/` and assert clean parsing. `cargo build`, `cargo test`,
+and `cargo clippy --all-targets` all run clean.
+
+**Inspect example:** `cargo run --example inspect -- <path>` prints the
+detected version and metablock length.
+
+**Next steps:** OSF5 JSON metablock parser (Session 2), OSF4 XML metablock
+parser, block stream reader, typed channels, OSF5 writer, then PyO3 wrapper.
+
+---
+
 ## Conventions in this repo
 
 - **Push after every commit** — feedback memory; do not batch.
@@ -144,7 +176,11 @@ All three projects compile clean with `dcc32` (Delphi 12 / RAD Studio 23.0;
 - **DUnitX test suite** for the Delphi implementation — not started; only
   `OSFCompileCheck.dpr` exists today. Brief F3 from the spec-revision task
   was deferred; would be its own scaffolding effort.
-- **Other language implementations** (C, C++, Python, …) — README
+- **Rust** — magic-header parser only; metablock parsers, block reader,
+  typed channels, and writer are pending (see Rust section above).
+- **Python bindings** — directory not yet started; will sit on `osf-core`
+  via PyO3 once the Rust block reader/writer are in place.
+- **Other language implementations** (C, C++, C#, …) — README
   placeholders only.
 - **Integrations** (Arrow, PyTorch, TensorFlow, MCP, LangChain) — README
   placeholders only.
