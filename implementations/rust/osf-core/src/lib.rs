@@ -19,14 +19,22 @@
 //! bindings in `implementations/python/` build on top of this crate via
 //! PyO3 (see DECISIONS.md §18).
 //!
-//! The current revision implements the magic-header detection that
-//! distinguishes OSF4 (XML metablock) from OSF5 (JSON metablock). Metablock
-//! parsing and block reading follow in subsequent sessions.
+//! Current revision implements:
+//! - Magic-header detection (OSF4 vs. OSF5, including legacy identifiers).
+//! - Shared metablock data model and validation helpers
+//!   ([`MetaBlock`], [`parse_data_type`], [`parse_channel_type`]).
+//!
+//! OSF4 (XML) and OSF5 (JSON) metablock parsers, block-stream reading,
+//! and writing follow in subsequent sessions.
 
 pub mod error;
 pub mod header;
+pub mod meta;
 pub mod types;
 
 pub use error::OsfError;
 pub use header::{MagicHeader, OsfVersion, parse_magic_header};
+pub use meta::{
+    Channel, FileInfo, Info, MetaBlock, SpectrumType, parse_channel_type, parse_data_type,
+};
 pub use types::{BlockContent, ChannelType, DataType};

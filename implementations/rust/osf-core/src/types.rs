@@ -18,10 +18,16 @@
 //! datatypes (`pair`, `triple`, `candata`, `gpsdata`) are intentionally
 //! absent — readers must reject those legacy strings rather than silently
 //! mapping them to a current type.
+//!
+//! Forward-compatible variants `DataType::Unsupported` and
+//! `ChannelType::Unsupported` carry the on-disk string verbatim so a file
+//! that uses a future-spec datatype can still be parsed channel-by-channel
+//! without aborting the whole metablock. Block reading for such a channel
+//! will fail explicitly when it is later requested (Session 3+).
 
 /// Data type carried by an OSF channel. Matches the on-disk `datatype`
 /// attribute / JSON field exactly (lowercase, ASCII).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DataType {
     /// 1-byte boolean (`0x00` = false, anything else = true).
     Bool,
@@ -48,25 +54,49 @@ pub enum DataType {
     /// UTF-8 string with a trailing `0x00` byte on disk
     /// (writer appends, reader strips).
     String,
-    /// Opaque byte payload with a trailing `0x00` byte on disk; the
-    /// `bytearray` spelling is accepted as a read-side alias.
+    /// Opaque byte payload with a trailing `0x00` byte on disk.
     Binary,
+    /// Reserved spelling for the read-side alias `bytearray`. The current
+    /// parser normalises `bytearray` directly to [`DataType::Binary`] on
+    /// read, and the writer always emits `binary`. This variant is kept
+    /// in the type so that downstream code can express "input was spelled
+    /// `bytearray`" if it ever needs that distinction; the metablock
+    /// parser does not produce it.
+    ByteArray,
     /// 24-byte struct of `latitude`, `longitude`, `altitude` as
     /// little-endian `double`s. Renamed from `gpsdata` in spec revision
     /// 2026-05-04.
     GpsLocation,
+    /// Forward-compatibility variant. Carries the on-disk string of a
+    /// datatype the current build does not know. The metablock parser
+    /// emits a `log::warn!` and continues; block-reader code rejects this
+    /// variant explicitly when it encounters one.
+    Unsupported(String),
 }
 
 /// Whether a channel stores values at a fixed sample rate
-/// (`equidistant`) or with an explicit timestamp per sample
-/// (`timestamped`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// (`equidistant`/`scalar` with a non-zero `timeincrement`) or with an
+/// explicit timestamp per sample (`timestamped`/`scalar` with
+/// `timeincrement` 0 or absent).
+///
+/// The on-disk strings `scalar`, `timestamped`, and `equidistant` all
+/// occur in the wild; the parser treats `scalar` as the canonical
+/// spelling for both equidistant and timestamped channels and uses
+/// `time_increment_ns` to disambiguate.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ChannelType {
-    /// Channel with a fixed sample rate; timestamps are reconstructed from
-    /// `bcStartData` segments and the sample index.
+    /// Default channel type used by the OSFGenerator and most field
+    /// devices. The actual layout (equidistant vs. timestamped) is
+    /// derived from `time_increment_ns` on the channel definition.
+    Scalar,
+    /// Channel with a fixed sample rate; timestamps are reconstructed
+    /// from `bcStartData` segments and the sample index.
     Equidistant,
     /// Channel with an absolute timestamp per sample.
     Timestamped,
+    /// Forward-compatibility variant. Carries the on-disk string of a
+    /// channel type the current build does not know.
+    Unsupported(String),
 }
 
 /// Block-content discriminator used in the OSF stream.

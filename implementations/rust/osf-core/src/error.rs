@@ -38,4 +38,39 @@ pub enum OsfError {
     /// before a newline was seen — almost certainly not an OSF file.
     #[error("magic header line exceeded {0} bytes without terminator")]
     MagicHeaderTooLong(usize),
+
+    /// The metablock body was structurally malformed in a way that we
+    /// cannot recover from (missing required field, unparseable number,
+    /// invalid `sizeoflengthvalue`, etc.). Other channels in the same
+    /// file are unaffected; the file as a whole is rejected because the
+    /// metablock is the contract for the binary blocks that follow.
+    #[error("invalid OSF metablock: {0}")]
+    InvalidMetablock(String),
+
+    /// Encountered a string, attribute, or datatype that was removed in
+    /// spec revision **2026-05-04**. Carries the field name that held
+    /// the removed value, the value itself, and (where applicable) the
+    /// replacement spelling so the caller can produce a useful message.
+    #[error(
+        "field {field:?} uses {value:?}, removed in spec revision 2026-05-04{}",
+        replacement.map(|r| format!(" — replacement: {r:?}")).unwrap_or_default()
+    )]
+    RemovedInSpec2026_05_04 {
+        /// Logical name of the field that carried the removed value
+        /// (e.g. `"datatype"`).
+        field: &'static str,
+        /// The literal value found on disk.
+        value: String,
+        /// Spelling that replaces the removed value, where the spec
+        /// defines a replacement.
+        replacement: Option<&'static str>,
+    },
+
+    /// `serde_json` was unable to parse the metablock body.
+    #[error("OSF5 metablock JSON parse error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    /// `quick-xml` was unable to parse the metablock body.
+    #[error("OSF4 metablock XML parse error: {0}")]
+    Xml(String),
 }
