@@ -12,12 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The contents of this module are exercised end-to-end by the unit
-// tests; the public DataManager that consumes build_channels lands
-// in the next commit. Until then the dead-code lint sees only the
-// test-side consumers, which it does not count.
-#![allow(dead_code)]
-
 //! Manager layer — assembles typed in-memory channels from the block
 //! stream.
 //!
@@ -39,10 +33,143 @@ use crate::data_channel::{
     VariableChannel,
 };
 use crate::error::OsfError;
+use crate::header::parse_magic_header;
 use crate::meta::MetaBlock;
+use crate::reader::BlockReader;
+use crate::stats::ReaderStats;
 use crate::types::{ChannelType, DataType};
 use log::warn;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read};
+use std::path::Path;
+
+// -----------------------------------------------------------
+// DataManager — public API on top of build_channels.
+// -----------------------------------------------------------
+
+/// High-level read-only view of an OSF file: parsed metablock,
+/// `ReaderStats`, and the typed channel list.
+///
+/// Construct with [`DataManager::load_from_file`] for the convenience
+/// case (open by path, BufReader internally), or
+/// [`DataManager::load_from_reader`] for streaming sources.
+pub struct DataManager {
+    /// The parsed metablock, kept verbatim so applications can read
+    /// file-level metadata (creator, created_utc, infos, …) without
+    /// re-opening the file.
+    pub meta: MetaBlock,
+    /// Telemetry from the [`BlockReader`] — file/section sizes,
+    /// elapsed time, per-channel sample counts and timing.
+    pub stats: ReaderStats,
+    channels: Vec<Channel>,
+    by_name: HashMap<String, usize>,
+    by_index: HashMap<u16, usize>,
+}
+
+impl DataManager {
+    /// Open `path`, parse the magic header and metablock, drive the
+    /// [`BlockReader`] to completion, and assemble the typed channel
+    /// list.
+    ///
+    /// Channel-by-name access is the documented entry point per
+    /// DECISIONS §10.
+    ///
+    /// # Errors
+    ///
+    /// Forwards errors from the magic-header parser, the metablock
+    /// parser, the block reader, and the manager-layer builder.
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, OsfError> {
+        let file = File::open(path.as_ref())?;
+        let file_size = file.metadata().ok().map(|m| m.len());
+        let reader = BufReader::new(file);
+        Self::load_from_buffered_with_size(reader, file_size)
+    }
+
+    /// Construct from any `Read`. The reader is wrapped in a
+    /// `BufReader` internally for efficient line-level magic-header
+    /// reading.
+    ///
+    /// # Errors
+    ///
+    /// Forwards errors from the magic-header parser, the metablock
+    /// parser, the block reader, and the manager-layer builder.
+    pub fn load_from_reader<R: Read>(reader: R) -> Result<Self, OsfError> {
+        Self::load_from_buffered_with_size(BufReader::new(reader), None)
+    }
+
+    fn load_from_buffered_with_size<R: BufRead>(
+        mut reader: R,
+        file_size: Option<u64>,
+    ) -> Result<Self, OsfError> {
+        let header = parse_magic_header(&mut reader)?;
+        let metablock_size_bytes = header.metablock_len;
+        let mut body = vec![0u8; header.metablock_len as usize];
+        reader.read_exact(&mut body)?;
+        let meta = crate::parse_metablock(header.version, &body)?;
+
+        let mut block_reader = BlockReader::new(reader, &meta);
+        if let Some(size) = file_size {
+            block_reader = block_reader.with_file_size(size);
+        }
+
+        let (channels, by_name, by_index) = build_channels(&meta, &mut block_reader)?;
+
+        let mut stats = block_reader.stats();
+        // Header size is unknown here without a counting reader; the
+        // streaming entry point therefore reports it as 0. Metablock
+        // size is exact.
+        stats.metablock_size_bytes = metablock_size_bytes;
+
+        Ok(Self {
+            meta,
+            stats,
+            channels,
+            by_name,
+            by_index,
+        })
+    }
+
+    /// Read-only view of all channels in metablock order.
+    #[must_use]
+    pub fn channels(&self) -> &[Channel] {
+        &self.channels
+    }
+
+    /// Look up a channel by its fully qualified name.
+    ///
+    /// **Mandatory access form** per DECISIONS §10.
+    #[must_use]
+    pub fn channel(&self, name: &str) -> Option<&Channel> {
+        self.by_name.get(name).map(|&i| &self.channels[i])
+    }
+
+    /// Look up a channel by its on-disk index (the integer `index`
+    /// attribute from the metablock). Optional access form per
+    /// DECISIONS §10.
+    #[must_use]
+    pub fn channel_by_index(&self, index: u16) -> Option<&Channel> {
+        self.by_index.get(&index).map(|&i| &self.channels[i])
+    }
+
+    /// Iterate over all channels in metablock order.
+    pub fn iter(&self) -> impl Iterator<Item = &Channel> + '_ {
+        self.channels.iter()
+    }
+
+    /// Iterate over channels whose data type matches `data_type`.
+    /// Convenience wrapper over `iter()` plus a closure.
+    pub fn channels_by_data_type(
+        &self,
+        data_type: DataType,
+    ) -> impl Iterator<Item = &Channel> + '_ {
+        self.channels
+            .iter()
+            .filter(move |c| c.data_type() == data_type)
+    }
+}
+
+
 
 /// Internal per-channel builder. Driven by `apply_block` and finalised
 /// into a [`Channel`] (or dropped, for `Unsupported`).

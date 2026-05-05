@@ -47,6 +47,7 @@ pub use data_channel::{
     Channel, ChannelMeta, EquidistantChannel, NumericValueRef, NumericValues, Sample, Segment,
     TimestampedChannel, VariableChannel, VariableValueRef,
 };
+pub use manager::DataManager;
 pub use error::OsfError;
 pub use header::{MagicHeader, OsfVersion, parse_magic_header};
 pub use meta::{
