@@ -280,3 +280,24 @@ be initialized with:
 Suggested session opener:
 > "Please read the OSF specification in docs/, DECISIONS.md, and CONTRIBUTING.md.
 > We are now implementing OSF in [language]. Start with the reader for OSF4."
+
+---
+
+## 18. Rust as Foundation for Python
+
+**Decision:** The Rust implementation in `implementations/rust/` is the
+primary codebase. The Python bindings in `implementations/python/` will be a
+thin PyO3 wrapper that depends on the local `osf-core` crate via a path
+dependency.
+
+**Why:** One codebase, two audiences. Rust users pull `osf-core` directly
+from crates.io. Python users get pre-built wheels from PyPI. Both sit on the
+same tested logic, which removes the risk of two implementations drifting
+apart and halves the maintenance surface for the parser, writer, and data
+type handling.
+
+**Consequence for the priority order in §15:** Rust and Python are now
+developed together. Rust is implicitly complete once the Python bindings
+ship. The list in §15 still describes the order in which language ecosystems
+become available to end users; it no longer implies that Rust waits for C,
+C++, and C#.
