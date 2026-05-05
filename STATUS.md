@@ -76,7 +76,7 @@ osf/
 │   │   ├── demos/osfcsvexport/      — OSF → CSV export demo
 │   │   └── OSFCompileCheck.dpr      — compile-only smoke test
 │   ├── rust/                        — Cargo workspace; foundation for Python (DECISIONS §18)
-│   │   └── osf-core/                — magic-header + metablock parsers landed; block reader pending
+│   │   └── osf-core/                — header + metablock + block reader landed; OSFZ + writer pending
 │   └── (c, cpp, csharp, python, …)/ — README placeholders only
 ├── integrations/(arrow, pytorch, tensorflow, mcp, langchain)/  — placeholders
 ├── examples/
@@ -139,7 +139,10 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
 | `meta` | `MetaBlock { file_info, channels, infos }`, `FileInfo`, `Channel`, `Info`, `SpectrumType`; validation helpers `parse_data_type` / `parse_channel_type` shared by both parsers |
 | `meta_json` | `parse_metablock_json(&[u8])` — OSF5 JSON parser via `serde_json::Value` (manual field picking; no derive, for forward-compat) |
 | `meta_xml` | `parse_metablock_xml(&[u8])` — OSF4 XML parser via `quick-xml` event reader; tolerates CP1252 bytes in real field files via `String::from_utf8_lossy` |
-| `lib` | top-level `parse_metablock(version, &[u8])` dispatcher |
+| `block` | `Block { channel_index, kind }`, `BlockKind` (StartData / ContinuedData / AbsTimestampData / ContinuedRelStampData / Skipped), `NumericPayload` / `TimestampedPayload` / `RelTimestampedPayload`, `GpsLocation`, `SkipReason`, control-byte decoder |
+| `reader` | `BlockReader<R: Read>` — Iterator over `Result<Block, OsfError>`. Builder `with_capture_skipped_payload(bool)` (default off, no allocation) and `with_file_size(u64)`. Best-effort on truncation, hard error on unknown channel index, silent consume of optional `0xFFFF` info block plus 40-byte magic trailer |
+| `stats` | `ReaderStats` with file/section sizes, elapsed, channels and per-reason block counters, plus `per_channel: HashMap<u16, ChannelStats>` (segments, samples_total, time_range_ns); `Display` impls for both |
+| `lib` | top-level `parse_metablock(version, &[u8])` dispatcher and `read_file(path) -> (MetaBlock, Vec<Block>, ReaderStats)` convenience |
 
 **Spec rev 2026-05-04 enforcement:**
 
@@ -161,27 +164,62 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
   on read with a `log::debug!`; writers emit only the spec form
   `created_at_*`.
 
-**Tests:** 34 unit tests across `header.rs`, `meta.rs`, `meta_json.rs`,
-`meta_xml.rs`. Two integration suites:
+**Block-reader behaviour (Session 3):**
+
+- Iterator-only API: `for block in &mut reader { … }`.
+- Best-effort on truncation: file ending mid-block bumps
+  `stats.blocks_truncated` from 0 to 1 (capped) and yields `None`.
+- Skip-on-unsupported: channels declared as `DataType::Unsupported` or
+  `ChannelType::Unsupported` produce `BlockKind::Skipped` with the
+  payload bytes drained from the stream so other channels stay aligned.
+- Skipped-payload capture is opt-in via
+  `with_capture_skipped_payload(true)` — default is `None` / no
+  allocation; specialists can fish out raw bytes of deprecated event
+  blocks (`bcMessageEvent` etc.) without the library having to expose
+  deprecated enum variants.
+- Hard error `OsfError::UnknownChannelIndex(u16)` for indices missing
+  from the metablock — without the channel record we cannot guess the
+  length-prefix width, so this is a corruption signal.
+- Optional `0xFFFF` info-data block plus 40-byte
+  `OSF_STREAM_END <pos>===` magic trailer are consumed silently;
+  `stats.trailer_seen` flips to `true`.
+- All four supported control bytes (5/6/7/8) parse to typed payloads
+  via `byteorder` little-endian primitives. String / binary blocks
+  strip the trailing `0x00` per spec rev 2026-05-04 and try
+  equal-length splitting for `N>1`, falling back to single-sample on
+  uneven body lengths with a `log::warn!`.
+
+**Tests:** 64 unit tests across `header.rs`, `meta.rs`, `meta_json.rs`,
+`meta_xml.rs`, `block.rs`, `reader.rs`, `stats.rs`. Three integration
+suites:
 
 - `tests/header_test.rs` — every shipped `.osf` parses its magic header.
 - `tests/metablock_test.rs` — every shipped `.osf` parses its metablock,
   with named assertions on `examples/steam_loco.osf` (123 channels) and
   `examples/generated/osf5_mixed.osf` (typed channel checks).
+- `tests/block_test.rs` — every shipped `.osf` streams blocks cleanly
+  via `BlockReader`; named assertions on the typed payloads of the
+  first two `osf5_scalar_int64.osf` blocks.
 
 `cargo build`, `cargo test`, and `cargo clippy --all-targets` all run
-clean. Smoke runs against all 19 shipped `.osf` files succeed (8 OSF4
-generated + 9 OSF5 generated + `motorbike.osf` + `steam_loco.osf`).
+clean. End-to-end smoke runs (debug build): `steam_loco.osf` 123
+channels / 164004 samples in 15 ms; `motorbike.osf` 81 channels / 14067
+blocks (13898 typed + 169 deprecated event types skipped) in 29 ms.
 
-**Inspect example:** `cargo run --example inspect -- <path>` prints
-header, file metadata, and a one-line summary per channel. Diagnostics
-go through `env_logger`; default `RUST_LOG=warn`, override with `debug`
-for full alias / unknown-field tracing or `error` for clean output on
-files that flood deprecated-field warnings.
+**Examples:**
 
-**Next steps:** block stream reader (Session 3), typed in-memory channels
-(Session 4), OSF5 writer (Session 5), then PyO3 wrapper for Python
-(Session 6).
+- `cargo run --example inspect -- <path>` — header + metadata +
+  per-channel summary (no block reading).
+- `cargo run --example stats -- <path> [top_n]` — full read producing
+  `ReaderStats` plus the top-N channels by sample count.
+
+Diagnostics flow through `env_logger`; default `RUST_LOG=warn`, override
+with `debug` for full alias / unknown-field tracing or `error` for
+clean output on files that flood deprecated-field warnings.
+
+**Next steps:** OSFZ transparent decompression (Session 4), typed
+in-memory channels with segment tracking (Session 5), OSF5 writer
+(Session 6), then PyO3 wrapper for Python (Session 7).
 
 ---
 
@@ -208,9 +246,9 @@ files that flood deprecated-field warnings.
 - **DUnitX test suite** for the Delphi implementation — not started; only
   `OSFCompileCheck.dpr` exists today. Brief F3 from the spec-revision task
   was deferred; would be its own scaffolding effort.
-- **Rust** — magic-header + OSF4/OSF5 metablock parsers landed; block
-  reader, typed channels, and writer are pending (see Rust section
-  above).
+- **Rust** — magic-header + OSF4/OSF5 metablock parsers + block-stream
+  reader landed; OSFZ transparent decompression, typed in-memory
+  channels, and writer are pending (see Rust section above).
 - **Python bindings** — directory not yet started; will sit on `osf-core`
   via PyO3 once the Rust block reader/writer are in place.
 - **Other language implementations** (C, C++, C#, …) — README
