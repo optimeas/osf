@@ -27,6 +27,7 @@
 //! OSF4 (XML) and OSF5 (JSON) metablock parsers, block-stream reading,
 //! and writing follow in subsequent sessions.
 
+pub(crate) mod binary_write;
 pub mod block;
 pub mod data_channel;
 pub mod error;
