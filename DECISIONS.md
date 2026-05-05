@@ -124,7 +124,7 @@ The format version is detected automatically:
 
 **Why:** Partial data type support creates compatibility gaps that hurt adoption. A reader that cannot handle a channel simply because of its data type is unreliable.
 
-### Required data types:
+### Required data types (spec revision 2026-05-04):
 
 | Data type | Size | OSF4 | OSF5 |
 |---|---|---|---|
@@ -133,14 +133,26 @@ The format version is detected automatically:
 | `int16` | 2 Byte | ✅ | ✅ |
 | `int32` | 4 Byte | ✅ | ✅ |
 | `int64` | 8 Byte | ✅ | ✅ |
+| `uint8` | 1 Byte | ✅ | ✅ |
+| `uint16` | 2 Byte | ✅ | ✅ |
+| `uint32` | 4 Byte | ✅ | ✅ |
+| `uint64` | 8 Byte | ✅ | ✅ |
 | `float` | 4 Byte | ✅ | ✅ |
 | `double` | 8 Byte | ✅ | ✅ |
 | `string` | variable | ✅ | ✅ |
-| `candata` | 16 Byte | ✅ | ✅ |
-| `gpsdata` | 24 Byte | ✅ | ✅ |
-| `binary` | variable | ✅ | ✅ |
-| `pair` | 16 Byte | — | ✅ |
-| `triple` | 24 Byte | — | ✅ |
+| `binary` *(alias on read: `bytearray`)* | variable | ✅ | ✅ |
+| `gpslocation` | 24 Byte | ✅ | ✅ |
+
+### Removed in spec revision 2026-05-04 (no longer required, no longer accepted):
+
+| Data type | Replacement |
+|---|---|
+| `pair`, `triple` | use two/three separate `double` channels instead |
+| `candata` | encode CAN frames as `binary` with an application-specific MIME type |
+| `gpsdata` | renamed to `gpslocation` (struct field order corrected to latitude, longitude, altitude) |
+
+Readers must reject these legacy datatype strings with a clear error message;
+they must not silently fall back to the closest current type.
 
 ### Required MIME types for `binary`:
 - `image/jpeg`
@@ -250,7 +262,7 @@ Integrations (Arrow, PyTorch, TensorFlow, MCP, LangChain) follow after the Pytho
 - Added: `bcStartData` carries sample rate as `double` and may appear multiple times per channel (OSF4 + OSF5).
 - Documentation split into `docs/en/` (default) and `docs/de/`. Structure prepared for future spec documents (e.g. `vector_matrix.md`).
 
-The data-type table in section 9 above predates this revision and lists `candata`, `gpsdata`, `pair`, and `triple` as still required. They are removed; `gpslocation` replaces `gpsdata`. New unsigned-integer types are required across all implementations.
+Section 9 (Data Types) above has been updated to reflect this revision.
 
 ---
 
