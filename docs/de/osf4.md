@@ -132,8 +132,7 @@ Alle Parameter wie in der allgemeinen OSF-Doku beschrieben, für OSF4 gilt:
 | `float`     | 4 Byte   | IEEE 754 Single Precision |
 | `double`    | 8 Byte   | IEEE 754 Double Precision |
 | `string`    | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert. Endet mit abschließender Nullbyte (`0x00`) – siehe [`osf_general.md`](osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
-| `candata`   | 16 Byte  | Struktur für CAN-Frames |
-| `gpsdata`   | 24 Byte  | Struktur für GPS-Positionen |
+| `gpslocation` | 24 Byte | Struktur für GPS-Positionen |
 
 ## Stringterminierung
 

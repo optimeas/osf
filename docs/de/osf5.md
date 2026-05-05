@@ -116,8 +116,7 @@ OSF5 unterstützt dieselben Datentypen wie OSF4.
 | `double`   | 8 Byte   | IEEE 754 Double Precision |
 | `string`   | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert. Endet mit abschließender Nullbyte (`0x00`) – siehe [`osf_general.md`](osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
 | `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen für Bild-, Audio- oder andere Binärdaten mit MIME-Type. Maximale Länge wird durch `sizeoflengthvalue` bestimmt. Endet mit abschließender Nullbyte (`0x00`) – siehe [`osf_general.md`](osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
-| `candata`  | 16 Byte  | Struktur für CAN-Frames |
-| `gpsdata`  | 24 Byte  | Struktur für GPS-Positionen |
+| `gpslocation` | 24 Byte | Struktur für GPS-Positionen |
 
 ## Stringterminierung
 

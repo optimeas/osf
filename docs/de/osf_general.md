@@ -178,7 +178,7 @@ Die Parameter werden nachfolgend beschrieben
 #### **Datentypen und Struktur**
 
 * **datatype**
-  Datentyp der gespeicherten Werte (z. B. `bool`, `int32`, `double`, `string`, `candata`, `gpsdata`).
+  Datentyp der gespeicherten Werte (z. B. `bool`, `int32`, `double`, `string`, `gpslocation`).
   → *Eine vollständige Beschreibung aller Datentypen und ihrer Kodierung befindet sich im Kapitel [Datentypen](#datentypen).*
 
 * **channeltype**
@@ -280,8 +280,7 @@ Der Parameter `datatype` legt das Datenformat der Werte eines Kanals fest. Jeder
 | `double`  | 8             | IEEE 754 Double Precision                                                                                                                            |
 | `string`  | variabel      | UTF-8 kodiert, Länge durch Blockgröße definiert. Endet mit abschließender Nullbyte (`0x00`) – siehe Hinweisblock unten. |
 | `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen für Bild-, Audio- oder andere Binärdaten mit MIME-Type. Die maximale Länge des Blocks wird durch das `sizeoflengthvalue`-Feld des Kanals bestimmt. Endet mit abschließender Nullbyte (`0x00`) – siehe Hinweisblock unten. |
-| `candata` | 16            | Struktur für CAN-Frames (siehe unten)                                                                                                                |
-| `gpsdata` | 24            | Struktur für GPS-Positionen (siehe unten)                                                                                                            |
+| `gpslocation` | 24        | Struktur für GPS-Positionen (siehe unten)                                                                                                            |
 
 > **Hinweis zu Integer-Typen:** Integer-Werte (`int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) werden in OSF-Dateien typischerweise für **Zustände, Statusinformationen oder Zählerwerte** verwendet, nicht als skalierte Rohwerte einer physikalischen Größe. Aus diesem Grund kennt OSF bewusst **keine** `scale`/`offset`-Parameter zur Umrechnung in physikalische Werte – physikalische Größen werden direkt als `float` oder `double` gespeichert.
 
@@ -293,22 +292,12 @@ Der Parameter `datatype` legt das Datenformat der Werte eines Kanals fest. Jeder
 > - **Leser** müssen das letzte Byte des Datenfelds als Nullterminator interpretieren und **explizit entfernen**, bevor die Nutzdaten weiterverarbeitet werden. Geschieht dies nicht, erscheint das `0x00` als zusätzliches Zeichen am Ende eines Strings oder als zusätzliches Byte am Ende eines Binär-Payloads (z. B. einer JPEG-Datei mit angehängtem Nullbyte → ungültige Datei).
 > - Die effektive Nutzlänge ist daher: **Blocklänge des Datenfelds − 1 Byte**.
 
-#### Struktur `candata`
-
-```c
-struct can_frame {
-    uint32 can_id;   // 32-Bit CAN-ID + Flags
-    uint8  can_dlc;  // Länge der Payload (0..8 Byte)
-    uint8  data[8];  // CAN-Nutzdaten
-} __attribute__((aligned(8)));
-```
-
-#### Struktur `gpsdata`
+#### Struktur `gpslocation`
 
 ```c
 struct gps_location {
-    double longitude;  // Längengrad
     double latitude;   // Breitengrad
+    double longitude;  // Längengrad
     double altitude;   // Höhe
 };
 ```
