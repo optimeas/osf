@@ -76,7 +76,7 @@ osf/
 │   │   ├── demos/osfcsvexport/      — OSF → CSV export demo
 │   │   └── OSFCompileCheck.dpr      — compile-only smoke test
 │   ├── rust/                        — Cargo workspace; foundation for Python (DECISIONS §18)
-│   │   └── osf-core/                — header + metablock + block reader landed; OSFZ + writer pending
+│   │   └── osf-core/                — header + metablock + block reader + DataManager landed; writer + OSFZ pending
 │   └── (c, cpp, csharp, python, …)/ — README placeholders only
 ├── integrations/(arrow, pytorch, tensorflow, mcp, langchain)/  — placeholders
 ├── examples/
@@ -142,6 +142,8 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
 | `block` | `Block { channel_index, kind }`, `BlockKind` (StartData / ContinuedData / AbsTimestampData / ContinuedRelStampData / Skipped), `NumericPayload` / `TimestampedPayload` / `RelTimestampedPayload`, `GpsLocation`, `SkipReason`, control-byte decoder |
 | `reader` | `BlockReader<R: Read>` — Iterator over `Result<Block, OsfError>`. Builder `with_capture_skipped_payload(bool)` (default off, no allocation) and `with_file_size(u64)`. Best-effort on truncation, hard error on unknown channel index, silent consume of optional `0xFFFF` info block plus 40-byte magic trailer |
 | `stats` | `ReaderStats` with file/section sizes, elapsed, channels and per-reason block counters, plus `per_channel: HashMap<u16, ChannelStats>` (segments, samples_total, time_range_ns); `Display` impls for both |
+| `data_channel` | `Channel` enum (`Equidistant` / `Timestamped` / `Variable`), per-variant typed structs, `Segment`, `ChannelMeta`, `NumericValues`; `samples_with_time()` iterators yielding `Sample<NumericValueRef<'_>>` / `Sample<VariableValueRef<'_>>`; `as_doubles_flat` etc. helpers |
+| `manager` | `DataManager` — `load_from_file(path)` / `load_from_reader(R)` build the typed channel list, expose `channel(name)` (mandatory per DECISIONS §10) and `channel_by_index(u16)` (optional). Internal `build_channels` runs the per-channel builder state machine (Pending → Equidistant or Timestamped on first typed block; Variable upfront for string/binary). |
 | `lib` | top-level `parse_metablock(version, &[u8])` dispatcher and `read_file(path) -> (MetaBlock, Vec<Block>, ReaderStats)` convenience |
 
 **Spec rev 2026-05-04 enforcement:**
@@ -189,37 +191,72 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
   equal-length splitting for `N>1`, falling back to single-sample on
   uneven body lengths with a `log::warn!`.
 
-**Tests:** 64 unit tests across `header.rs`, `meta.rs`, `meta_json.rs`,
-`meta_xml.rs`, `block.rs`, `reader.rs`, `stats.rs`. Three integration
-suites:
+**Manager-layer behaviour (Session 4):**
+
+- `Channel` is an enum over three storage layouts: `Equidistant`
+  (flat samples plus `Vec<Segment>`), `Timestamped` (parallel
+  timestamp and value vectors), `Variable` (string / binary).
+- Multi-`bcStartData` is first-class: every start block opens a new
+  segment with `(start_timestamp_ns, sample_rate_hz, start_index,
+  sample_count)` indexing into the channel's flat sample vector.
+- Builder state machine: numeric channels start `Pending`, lock to
+  `Equidistant` on first `bcStartData` or `Timestamped` on first
+  `bcAbsTimeStampData`; mismatched later blocks return
+  `OsfError::ChannelMixedBlockTypes`. Orphan continuations return
+  `ContinuedDataWithoutStart`. `bcContinuedRelStampData` deltas are
+  converted to absolute timestamps using the channel's last absolute
+  ts as anchor; missing anchor → `RelStampWithoutAnchor`.
+- Forward-compat: channels declared with `DataType::Unsupported` or
+  `ChannelType::Unsupported` are dropped from the manager's channel
+  list (their blocks are already `Skipped` at the reader level).
+- Channel access mirrors DECISIONS §10: `channel(name)` is mandatory,
+  `channel_by_index(u16)` is optional.
+- Sample iteration: `samples_with_time()` yields
+  `Sample<NumericValueRef<'_>>` for numeric / GPS channels and
+  `Sample<VariableValueRef<'_>>` for string / binary. Eleven Copy
+  scalars pass by value; `GpsLocation`, `&str`, `&[u8]` borrow from
+  the channel.
+- Flat-access helpers (`as_doubles_flat`, `as_int32_flat`, etc.)
+  allocate fresh on every call and return
+  `OsfError::DataTypeAccessMismatch` when the requested type does
+  not match the stored datatype.
+
+**Tests:** 83 unit tests across `header.rs`, `meta.rs`, `meta_json.rs`,
+`meta_xml.rs`, `block.rs`, `reader.rs`, `stats.rs`, `data_channel.rs`,
+`manager.rs`. Four integration suites:
 
 - `tests/header_test.rs` — every shipped `.osf` parses its magic header.
-- `tests/metablock_test.rs` — every shipped `.osf` parses its metablock,
-  with named assertions on `examples/steam_loco.osf` (123 channels) and
-  `examples/generated/osf5_mixed.osf` (typed channel checks).
+- `tests/metablock_test.rs` — every shipped `.osf` parses its metablock.
 - `tests/block_test.rs` — every shipped `.osf` streams blocks cleanly
-  via `BlockReader`; named assertions on the typed payloads of the
-  first two `osf5_scalar_int64.osf` blocks.
+  via `BlockReader`.
+- `tests/manager_test.rs` — every shipped `.osf` assembles into a
+  `DataManager`; channel-by-name lookup verified on `steam_loco.osf`
+  (`GPS.PosFixMode`). Plus a `#[ignore]`-gated performance smoke
+  (`steam_loco_load_time_within_budget`) that asserts ≤ 100 ms in
+  release / ≤ 200 ms in debug. Manual run with `cargo test --release
+  -- --ignored` measures ~3 ms locally.
 
 `cargo build`, `cargo test`, and `cargo clippy --all-targets` all run
-clean. End-to-end smoke runs (debug build): `steam_loco.osf` 123
-channels / 164004 samples in 15 ms; `motorbike.osf` 81 channels / 14067
-blocks (13898 typed + 169 deprecated event types skipped) in 29 ms.
+clean. Manager-layer smoke (debug build, `dump` example): `steam_loco`
+123 channels in 21 ms.
 
 **Examples:**
 
 - `cargo run --example inspect -- <path>` — header + metadata +
   per-channel summary (no block reading).
 - `cargo run --example stats -- <path> [top_n]` — full read producing
-  `ReaderStats` plus the top-N channels by sample count.
+  `ReaderStats` plus the top-N raw channels.
+- `cargo run --example dump -- <path> [top_n]` — manager-driven typed
+  channel summary plus first-channel detail with reconstructed
+  per-sample timestamps.
 
 Diagnostics flow through `env_logger`; default `RUST_LOG=warn`, override
 with `debug` for full alias / unknown-field tracing or `error` for
 clean output on files that flood deprecated-field warnings.
 
-**Next steps:** OSFZ transparent decompression (Session 4), typed
-in-memory channels with segment tracking (Session 5), OSF5 writer
-(Session 6), then PyO3 wrapper for Python (Session 7).
+**Next steps:** OSF5 block writer (Session 5; block-mode only per
+DECISIONS §7), then OSFZ transparent decompression (Session 6), then
+PyO3 wrapper for Python (Session 7).
 
 ---
 
