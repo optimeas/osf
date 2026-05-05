@@ -45,8 +45,6 @@ type
     FPhysicalDimension1: string;
     FPhysicalDimension2: string;
     FPhysicalDimension3: string;
-    FScale             : Double;
-    FOffset            : Double;
     FMimeType          : string;
     FSpectrumType      : string;
     FLastTimestampNs   : Int64;
@@ -104,8 +102,6 @@ type
     property PhysicalDimension1: string             read FPhysicalDimension1 write FPhysicalDimension1;
     property PhysicalDimension2: string             read FPhysicalDimension2 write FPhysicalDimension2;
     property PhysicalDimension3: string             read FPhysicalDimension3 write FPhysicalDimension3;
-    property Scale             : Double             read FScale             write FScale;
-    property Offset            : Double             read FOffset            write FOffset;
     property MimeType          : string             read FMimeType          write FMimeType;
     property SpectrumType      : string             read FSpectrumType      write FSpectrumType;
 
@@ -142,22 +138,6 @@ begin
     Result := StrToInt64Def(Node.Attributes[AttrName], Default)
   else
     Result := Default;
-end;
-
-// Locale-tolerant float attribute reader. Accepts both '.' and ',' as the
-// decimal separator so that files written with non-invariant locales still
-// parse correctly.
-function XMLAttrDouble(Node: IXMLNode; const AttrName: string; Default: Double): Double;
-var
-  FS : TFormatSettings;
-  S  : string;
-begin
-  if not Node.HasAttribute(AttrName) then
-    Exit(Default);
-  S  := Node.Attributes[AttrName];
-  S  := StringReplace(S, ',', '.', [rfReplaceAll]);
-  FS := TFormatSettings.Invariant;
-  Result := StrToFloatDef(S, Default, FS);
 end;
 
 function XMLEscape(const S: string): string;
@@ -200,24 +180,6 @@ begin
   else                   Result := Default;
 end;
 
-function JSONDouble(Obj: TJSONObject; const Key: string; Default: Double): Double;
-var
-  Val : TJSONValue;
-  FS  : TFormatSettings;
-  S   : string;
-begin
-  Val := Obj.GetValue(Key);
-  if not Assigned(Val) then
-    Exit(Default);
-  if Val is TJSONNumber then
-    Exit((Val as TJSONNumber).AsDouble);
-  // Fallback for tools that store numbers as strings: locale-tolerant parse.
-  S  := Val.Value;
-  S  := StringReplace(S, ',', '.', [rfReplaceAll]);
-  FS := TFormatSettings.Invariant;
-  Result := StrToFloatDef(S, Default, FS);
-end;
-
 // ── TOSFChannelDef ────────────────────────────────────────────────────────────
 
 constructor TOSFChannelDef.Create(AIndex: Integer; const AName: string;
@@ -230,8 +192,6 @@ begin
   FChannelType       := AChannelType;
   FDataType          := ADataType;
   FLengthFieldSize   := lfs2;
-  FScale             := 1.0;
-  FOffset            := 0.0;
   FTimeIncrement     := 0;
   FStartTimestampNs  := 0;
   FDataIdentifier    := 0;
@@ -274,8 +234,6 @@ begin
     Ch.PhysicalDimension1 := XMLAttrStr   (Node, 'physicaldimension1', '');
     Ch.PhysicalDimension2 := XMLAttrStr   (Node, 'physicaldimension2', '');
     Ch.PhysicalDimension3 := XMLAttrStr   (Node, 'physicaldimension3', '');
-    Ch.Scale              := XMLAttrDouble(Node, 'scale',               1.0);
-    Ch.Offset             := XMLAttrDouble(Node, 'offset',              0.0);
     Ch.MimeType           := XMLAttrStr   (Node, 'mimetype',            '');
     Ch.SpectrumType       := XMLAttrStr   (Node, 'spectrumtype',        '');
     Ch.DisplayName        := XMLAttrStr   (Node, 'displayname',         '');
@@ -283,11 +241,6 @@ begin
     // OSF4 legacy uses the 'description' attribute; map to Comment if 'comment' is absent.
     Ch.Comment            := XMLAttrStr   (Node, 'comment',
                                 XMLAttrStr(Node, 'description',         ''));
-
-    // A scale of 0 would silently zero out every value the channel produces.
-    // Treat it as a "field absent" marker and use the safe default of 1.0.
-    if Ch.Scale = 0.0 then
-      Ch.Scale := 1.0;
 
     Result := Ch;
   except
@@ -320,17 +273,12 @@ begin
     Ch.PhysicalDimension1 := JSONStr   (Obj, 'physicaldimension1', '');
     Ch.PhysicalDimension2 := JSONStr   (Obj, 'physicaldimension2', '');
     Ch.PhysicalDimension3 := JSONStr   (Obj, 'physicaldimension3', '');
-    Ch.Scale              := JSONDouble(Obj, 'scale',               1.0);
-    Ch.Offset             := JSONDouble(Obj, 'offset',              0.0);
     Ch.MimeType           := JSONStr   (Obj, 'mimetype',            '');
     Ch.SpectrumType       := JSONStr   (Obj, 'spectrumtype',        '');
     Ch.DisplayName        := JSONStr   (Obj, 'displayname',         '');
     Ch.Reference          := JSONStr   (Obj, 'reference',           '');
     Ch.Comment            := JSONStr   (Obj, 'comment',
                                 JSONStr(Obj, 'description',         ''));
-
-    if Ch.Scale = 0.0 then
-      Ch.Scale := 1.0;
 
     Result := Ch;
   except
@@ -340,10 +288,7 @@ begin
 end;
 
 procedure TOSFChannelDef.AppendXML(Builder: TStringBuilder);
-var
-  FS: TFormatSettings;
 begin
-  FS := TFormatSettings.Invariant;
   Builder.Append('    <channel');
   Builder.AppendFormat(' index="%d"',             [FIndex]);
   Builder.AppendFormat(' name="%s"',              [XMLEscape(FName)]);
@@ -372,10 +317,6 @@ begin
     Builder.AppendFormat(' physicaldimension2="%s"', [XMLEscape(FPhysicalDimension2)]);
   if FPhysicalDimension3 <> '' then
     Builder.AppendFormat(' physicaldimension3="%s"', [XMLEscape(FPhysicalDimension3)]);
-  if FScale <> 1.0 then
-    Builder.AppendFormat(' scale="%s"', [FloatToStr(FScale, FS)]);
-  if FOffset <> 0.0 then
-    Builder.AppendFormat(' offset="%s"', [FloatToStr(FOffset, FS)]);
   if FMimeType <> '' then
     Builder.AppendFormat(' mimetype="%s"', [XMLEscape(FMimeType)]);
   if FSpectrumType <> '' then
@@ -421,10 +362,6 @@ begin
     Obj.AddPair('physicaldimension2', FPhysicalDimension2);
   if FPhysicalDimension3 <> '' then
     Obj.AddPair('physicaldimension3', FPhysicalDimension3);
-  if FScale <> 1.0 then
-    Obj.AddPair('scale', TJSONNumber.Create(FScale));
-  if FOffset <> 0.0 then
-    Obj.AddPair('offset', TJSONNumber.Create(FOffset));
   if FMimeType <> '' then
     Obj.AddPair('mimetype', FMimeType);
   if FSpectrumType <> '' then
