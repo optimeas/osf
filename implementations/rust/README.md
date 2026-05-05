@@ -13,16 +13,18 @@ One codebase, two audiences.
 
 ## Status
 
-**In progress.** The crate skeleton and the magic-header parser are in
-place; metablock parsing, block reading, and writing follow in subsequent
-sessions.
+**In progress.** Magic header detection and metablock parsing for both
+OSF4 and OSF5 are in place; block-stream reading and writing follow in
+subsequent sessions.
 
 | Capability                                                          | State   |
 |---------------------------------------------------------------------|---------|
 | Magic-header detection (OSF4 / OSF5)                                | ✅      |
 | Legacy identifiers `OCEAN_STREAM_FORMAT4`, `OCEAN_STREAMING_FORMAT4`| ✅      |
-| OSF4 XML metablock parser                                           | Pending |
-| OSF5 JSON metablock parser                                          | Pending |
+| OSF4 XML metablock parser                                           | ✅      |
+| OSF5 JSON metablock parser                                          | ✅      |
+| Removed-datatype detection (spec rev 2026-05-04)                    | ✅      |
+| Deprecated-field tolerance (real field files parse)                 | ✅      |
 | Block reader (all data types)                                       | Pending |
 | Block writer (OSF5)                                                 | Pending |
 | PyO3 bindings (`implementations/python/`)                           | Pending |
@@ -35,14 +37,18 @@ implementations/rust/
 └── osf-core/
     ├── Cargo.toml
     ├── src/
-    │   ├── lib.rs      — pub re-exports
-    │   ├── error.rs    — OsfError (thiserror)
-    │   ├── header.rs   — parse_magic_header + unit tests
-    │   └── types.rs    — DataType, ChannelType, BlockContent
+    │   ├── lib.rs       — re-exports + parse_metablock dispatcher
+    │   ├── error.rs     — OsfError (thiserror)
+    │   ├── header.rs    — parse_magic_header + unit tests
+    │   ├── types.rs     — DataType, ChannelType, BlockContent
+    │   ├── meta.rs      — MetaBlock model + datatype/channel-type validation
+    │   ├── meta_json.rs — OSF5 JSON metablock parser
+    │   └── meta_xml.rs  — OSF4 XML metablock parser
     ├── examples/
-    │   └── inspect.rs  — CLI: print version + metablock length
+    │   └── inspect.rs   — CLI: print header + metadata + channel list
     └── tests/
-        └── header_test.rs  — runs against ../../../examples/
+        ├── header_test.rs    — every shipped .osf parses its magic header
+        └── metablock_test.rs — every shipped .osf parses its metablock
 ```
 
 ## Build
@@ -55,59 +61,83 @@ cargo test
 cargo clippy
 ```
 
-The integration test in `osf-core/tests/header_test.rs` walks
-`../../examples/` and `../../examples/generated/` and asserts that
-`parse_magic_header` succeeds for every shipped `.osf` file. Updating the
-reference set (e.g. by re-running `OSFGenerator`) is therefore exercised
-automatically.
+The integration tests walk `../../examples/` and `../../examples/generated/`
+and assert that every shipped `.osf` file parses both its magic header and
+its metablock. Updating the reference set (e.g. by re-running
+`OSFGenerator`) is therefore exercised automatically.
 
 ## Inspect a file
 
 ```bash
 cargo run --example inspect -- ../../examples/steam_loco.osf
-cargo run --example inspect -- ../../examples/generated/osf5_scalar_numeric.osf
+cargo run --example inspect -- ../../examples/generated/osf5_mixed.osf
 ```
 
-Output for an OSF4 field file:
+Output for an OSF4 field file (with deprecated-field warnings silenced
+via `RUST_LOG=error`):
 
 ```text
 path:           ../../examples/steam_loco.osf
 version:        Osf4
 metablock_len:  26279 bytes
+created_utc:    2023-08-15T21:14:40Z
+creator:        optimeas
+channels:       123
+   [ 52] GPS.PosFixMode      scalar  double  unit=-    incr_ns=0
+   [ 39] P_3_Schieberkasten  scalar  double  unit=bar  incr_ns=0
+   [ 22] T_2_Heissdampf      scalar  double  unit=°C   incr_ns=0
+   ...
+infos:          0
 ```
 
-## Dependencies
-
-| Crate         | Purpose                                                       |
-|---------------|---------------------------------------------------------------|
-| `thiserror`   | Ergonomic error enum (`OsfError`)                             |
-| `serde`       | Derive support for the upcoming OSF5 metablock structures     |
-| `serde_json`  | OSF5 metablock parser (Session 2)                             |
-| `quick-xml`   | OSF4 metablock parser (Session 2)                             |
-| `byteorder`   | Little-endian binary block reader (Session 2)                 |
-
-`serde_json` and `quick-xml` are wired in already so that the Session 2
-work touches only library code, not `Cargo.toml`.
+Run with `RUST_LOG=debug` to see the full diagnostic output: read-side
+alias usage (`bytearray` → `binary`), accepted alternative spellings
+(short GPS attributes), unknown fields, and channel-by-channel
+deprecated-attribute warnings.
 
 ## Spec revision tracked
 
 OSF specification revision **2026-05-04** ([English](../../docs/en/osf_general.md),
-[Deutsch](../../docs/de/osf_general.md)). The `DataType` enum already
-omits the removed types (`pair`, `triple`, `candata`, `gpsdata`); readers
-will reject those legacy strings explicitly rather than silently mapping
-them to a current type.
+[Deutsch](../../docs/de/osf_general.md)).
+
+The metablock parsers reject the four removed datatypes (`pair`,
+`triple`, `candata`, `gpsdata`) explicitly with an error that names the
+replacement, rather than silently mapping them to a current type. The
+eight removed channel-level fields (`scale`, `offset`, `physicalunit1`
+through `3`, `physicaldimension1` through `3`) are accepted on read with
+a `log::warn!` because real field files (`examples/steam_loco.osf`,
+`examples/motorbike.osf`) still carry them on every channel — failing
+on them would make the parser unusable on existing data.
+
+Forward-compatibility variants `DataType::Unsupported(String)` and
+`ChannelType::Unsupported(String)` carry the on-disk spelling so a file
+that uses a future-spec datatype still parses channel-by-channel; the
+upcoming block reader will reject the channel explicitly when an
+`Unsupported` variant is accessed.
+
+## Dependencies
+
+| Crate                | Purpose                                                |
+|----------------------|--------------------------------------------------------|
+| `thiserror`          | Ergonomic error enum (`OsfError`)                      |
+| `serde_json`         | OSF5 metablock parser                                  |
+| `quick-xml`          | OSF4 metablock parser                                  |
+| `log`                | Standard logging facade (parser diagnostics)           |
+| `serde`              | Derive support for upcoming structures                 |
+| `byteorder`          | Little-endian binary block reader (Session 3)          |
+| `env_logger` (dev)   | Test-time logger backend                               |
 
 ## Next steps
 
-1. **Session 2** — OSF4 XML metablock parser (`quick-xml`) and OSF5 JSON
-   metablock parser (`serde_json`); shared `MetaBlock` model.
-2. **Session 3** — block stream reader: control byte, `bcStartData`,
+1. **Session 3** — block stream reader: control byte, `bcStartData`,
    `bcAbsTimeStampData`, `bcEquidistantData`; little-endian primitive
-   readers via `byteorder`.
-3. **Session 4** — typed in-memory channels (mirror of
-   `OSF.Data.Channels` from the Delphi reference).
-4. **Session 5** — block writer for OSF5.
-5. **Session 6** — PyO3 wrapper crate at `implementations/python/`,
+   readers via `byteorder`. Will exercise the `Unsupported` channel
+   types as hard errors at access time.
+2. **Session 4** — typed in-memory channels (mirror of
+   `OSF.Data.Channels` from the Delphi reference), including the
+   per-channel `Segments` list for equidistant data.
+3. **Session 5** — block writer for OSF5.
+4. **Session 6** — PyO3 wrapper crate at `implementations/python/`,
    exposing the reader and writer to Python with NumPy interop.
 
 ## License
