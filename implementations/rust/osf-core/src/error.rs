@@ -159,4 +159,11 @@ pub enum OsfError {
         /// Datatype the channel actually stores.
         actual: crate::types::DataType,
     },
+
+    /// `WriterBuilder::write_to_*` was called on a builder that has
+    /// no channels declared. OSF readers expect at least one channel
+    /// in the metablock; emitting an empty channel list would produce
+    /// a file that no reader can usefully consume.
+    #[error("writer has no channels declared")]
+    WriterEmpty,
 }

@@ -39,6 +39,7 @@ pub mod meta_xml;
 pub mod reader;
 pub mod stats;
 pub mod types;
+pub mod writer;
 
 pub use block::{
     Block, BlockKind, GpsLocation, NumericPayload, RelTimestampedPayload, SkipReason,
