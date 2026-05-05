@@ -73,4 +73,11 @@ pub enum OsfError {
     /// `quick-xml` was unable to parse the metablock body.
     #[error("OSF4 metablock XML parse error: {0}")]
     Xml(String),
+
+    /// The block stream referenced a channel index that does not appear
+    /// in the metablock. Without the channel definition the reader does
+    /// not know how wide the length prefix is, so this is a hard error
+    /// rather than a graceful skip — the file is corrupted.
+    #[error("block references unknown channel index {0}")]
+    UnknownChannelIndex(u16),
 }

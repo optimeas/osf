@@ -33,6 +33,7 @@ pub mod header;
 pub mod meta;
 pub mod meta_json;
 pub mod meta_xml;
+pub mod reader;
 pub mod types;
 
 pub use block::{
@@ -46,6 +47,7 @@ pub use meta::{
 };
 pub use meta_json::parse_metablock_json;
 pub use meta_xml::parse_metablock_xml;
+pub use reader::BlockReader;
 pub use types::{BlockContent, ChannelType, DataType};
 
 /// Parse the metablock body for the given OSF version.

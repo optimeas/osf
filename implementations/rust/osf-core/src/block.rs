@@ -307,7 +307,6 @@ impl RelTimestampedPayload {
 /// Bit 7 carries the multi-sample flag; bits 0–6 select the block
 /// type. Spec rev 2026-05-04 defines values 0 through 8; anything else
 /// is reserved and produces [`ControlKind::Unknown`].
-#[allow(dead_code)] // consumed by BlockReader in the next commit
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ControlByte {
     pub(crate) kind: ControlKind,
@@ -320,7 +319,6 @@ pub(crate) struct ControlByte {
 
 /// Block-type discriminator extracted from the lower 7 bits of the
 /// control byte.
-#[allow(dead_code)] // consumed by BlockReader in the next commit
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ControlKind {
     /// 0 — `bcReserved`. Originally `bcMetaData`, never used.
@@ -348,7 +346,6 @@ pub(crate) enum ControlKind {
 }
 
 /// Decode the 1-byte control byte that follows the length field.
-#[allow(dead_code)] // consumed by BlockReader in the next commit
 pub(crate) fn decode_control_byte(byte: u8) -> ControlByte {
     let multi_sample = byte & 0x80 != 0;
     let kind = match byte & 0x7F {
