@@ -34,6 +34,7 @@ type
     FDataIdentifier    : Integer;
     FTimeIncrement     : Int64;
     FStartTimestampNs  : Int64;
+    FSampleRate        : Double;
     FDataType          : TOSFDataType;
     FChannelType       : TOSFChannelType;
     FLengthFieldSize   : TOSFLengthFieldSize;
@@ -74,8 +75,14 @@ type
     // the writer emits the starttime attribute. For OSF5 equidistant channels,
     // the start timestamp is embedded in the bcStartData block and need not be
     // pre-set.
+    //
+    // SampleRate is the authoritative sample rate (Hz) for equidistant channels;
+    // it must be set before the first WriteEquidistantBlock call. The writer
+    // emits it in every bcStartData block. The reader populates it from the
+    // first bcStartData it encounters and updates it on each subsequent one.
     property TimeIncrement     : Int64              read FTimeIncrement     write FTimeIncrement;
     property StartTimestampNs  : Int64              read FStartTimestampNs  write FStartTimestampNs;
+    property SampleRate        : Double             read FSampleRate        write FSampleRate;
     property IsEquidistant     : Boolean            read GetIsEquidistant;
     property IsTimestamped     : Boolean            read GetIsTimestamped;
 
@@ -179,6 +186,7 @@ begin
   FLengthFieldSize   := lfs2;
   FTimeIncrement     := 0;
   FStartTimestampNs  := 0;
+  FSampleRate        := 0.0;
   FDataIdentifier    := 0;
   FLastTimestampNs   := 0;
   FSampleCount       := 0;

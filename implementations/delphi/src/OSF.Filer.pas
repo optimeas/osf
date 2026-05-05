@@ -59,6 +59,7 @@ type
     MultiValue      : Boolean;          // bit 7 of the control byte
     SampleCount     : UInt32;           // 1 when not MultiValue
     StartTimestampNs: Int64;            // bcStartData only; 0 for all other types
+    SampleRate      : Double;           // bcStartData only; 0.0 for all other types
     RawPayload      : TBytes;
     IsInfoBlock     : Boolean;          // True when ChannelIndex = $FFFF
   end;
@@ -271,6 +272,7 @@ resourcestring
   // Data-block write errors.
   SOSFEquiUnknownChannel       = 'WriteEquidistantBlock: unknown channel index %d';
   SOSFEquiNoFirstTimestamp     = 'WriteEquidistantBlock: FirstTimestampNs must be provided for the first block of each channel';
+  SOSFEquiNoSampleRate         = 'WriteEquidistantBlock: Channel.SampleRate must be > 0 before the first equidistant block is written';
   SOSFTimestampedUnknown       = 'WriteTimestampedSample: unknown channel index %d';
   SOSFTSBlockUnknown           = 'WriteTimestampedBlock: unknown channel index %d';
   SOSFTSBlockLengthMismatch    = 'WriteTimestampedBlock: Timestamps and Values lengths must match';
@@ -450,9 +452,9 @@ begin
 end;
 
 // Builds the binary payload of an equidistant data block.
-// Layout: [ctrl 1B] [int64 ts 8B if start] [uint32 N 4B if N>1] [double × N]
+// Layout: [ctrl 1B] [int64 ts 8B + double SampleRate 8B if start] [uint32 N 4B if N>1] [double × N]
 function EncodeEquidistantPayload(IsStart: Boolean; FirstTimestampNs: Int64;
-  const Samples: array of Double): TBytes;
+  SampleRate: Double; const Samples: array of Double): TBytes;
 var
   CtrlByte    : Byte;
   PayloadSize : Integer;
@@ -467,7 +469,7 @@ begin
     CtrlByte := OSFMakeControlByte(bcContinuedData, N > 1);
 
   PayloadSize := 1;
-  if IsStart then Inc(PayloadSize, 8);
+  if IsStart then Inc(PayloadSize, 16);  // int64 ts + double SampleRate
   if N > 1   then Inc(PayloadSize, 4);
   Inc(PayloadSize, N * SizeOf(Double));
 
@@ -479,6 +481,8 @@ begin
   if IsStart then
   begin
     Move(FirstTimestampNs, Result[Pos], 8);
+    Inc(Pos, 8);
+    Move(SampleRate, Result[Pos], 8);
     Inc(Pos, 8);
   end;
 
@@ -1048,6 +1052,7 @@ var
   PayloadSize : Integer;
   SampleCount : UInt32;
   Pos         : Int64;
+  SampleRate  : Double;
 begin
   Result := False;
   if Length(Payload) < 1 then Exit;
@@ -1069,8 +1074,9 @@ begin
   Block.MultiValue := OSFBlockHasMultipleValues(CtrlByte);
 
   // Pre-validate the encoded prefix length so the body needs no further checks.
+  // bcStartData carries 8 bytes (int64 timestamp) + 8 bytes (double SampleRate).
   RequiredLen := 1;
-  if Block.BlockType = bcStartData then Inc(RequiredLen, 8);
+  if Block.BlockType = bcStartData then Inc(RequiredLen, 16);
   if Block.MultiValue              then Inc(RequiredLen, 4);
   if Integer(LenField) < RequiredLen then Exit;
 
@@ -1080,6 +1086,10 @@ begin
     Move(Payload[Offset], Block.StartTimestampNs, 8);
     Inc(Offset, 8);
     Channel.LastTimestampNs := Block.StartTimestampNs;
+    Move(Payload[Offset], SampleRate, 8);
+    Inc(Offset, 8);
+    Block.SampleRate    := SampleRate;
+    Channel.SampleRate  := SampleRate;
   end;
 
   if Block.MultiValue then
@@ -1394,8 +1404,11 @@ begin
   IsStart := not Channel.StartBlockWritten;
   if IsStart and (FirstTimestampNs = 0) then
     raise EOSFFormatError.Create(SOSFEquiNoFirstTimestamp);
+  if IsStart and (Channel.SampleRate <= 0) then
+    raise EOSFFormatError.Create(SOSFEquiNoSampleRate);
 
-  Payload := EncodeEquidistantPayload(IsStart, FirstTimestampNs, Samples);
+  Payload := EncodeEquidistantPayload(
+    IsStart, FirstTimestampNs, Channel.SampleRate, Samples);
   WriteDataBlock(Channel, Payload);
 
   Channel.StartBlockWritten := True;

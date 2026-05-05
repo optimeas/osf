@@ -145,6 +145,7 @@ begin
     Result.TimeIncrement      := Src.TimeIncrement;
     Result.StartTimestampNs   := Src.StartTimestampNs;
     Result.LengthFieldSize    := Src.LengthFieldSize;
+    Result.SampleRate         := Src.SampleRate;
     Result.PhysicalUnit       := Src.PhysicalUnit;
     Result.PhysicalDimension  := Src.PhysicalDimension;
     Result.MimeType           := Src.MimeType;
@@ -232,6 +233,8 @@ end;
 // Decodes an equidistant data block (bcStartData or bcContinuedData).
 // Layout: [value bytes] × SampleCount, all of fixed size.
 // StartTs is the timestamp of the first sample in this block.
+// The per-sample increment is derived from Channel.SampleRate (1e9 / SampleRate);
+// TimeIncrement from the metablock is only a fallback.
 procedure DecodeEquidistantBlock(Channel: TOSFDataChannel;
                                   const Block: TOSFDataBlock; StartTs: Int64);
 var
@@ -247,7 +250,10 @@ begin
   ValSize := OSFDataTypeFixedSize(ChannelDef.DataType);
   if ValSize <= 0 then Exit;  // variable-length equidistant not supported here
 
-  Increment  := ChannelDef.TimeIncrement;
+  if ChannelDef.SampleRate > 0 then
+    Increment := Round(1.0e9 / ChannelDef.SampleRate)
+  else
+    Increment := ChannelDef.TimeIncrement;
   PayloadLen := Length(Block.RawPayload);
 
   Pos := 0;
@@ -614,7 +620,11 @@ begin
     bcContinuedData:
       begin
         // Continue from the channel's last known timestamp + one increment.
-        if Assigned(Channel.ChannelDef) then
+        // The increment comes from SampleRate (authoritative); TimeIncrement
+        // is only used as a fallback when SampleRate has not been set.
+        if Assigned(Channel.ChannelDef) and (Channel.ChannelDef.SampleRate > 0) then
+          StartTs := Channel.EndTimestampNs + Round(1.0e9 / Channel.ChannelDef.SampleRate)
+        else if Assigned(Channel.ChannelDef) then
           StartTs := Channel.EndTimestampNs + Channel.ChannelDef.TimeIncrement
         else
           StartTs := Channel.EndTimestampNs;
