@@ -91,7 +91,7 @@ type
     dtUInt8, dtUInt16, dtUInt32, dtUInt64,
     dtFloat, dtDouble,
     dtString, dtBinary,
-    dtGpsData
+    dtGpsLocation
   );
 
   // Structural layout of a channel's data blocks.
@@ -111,10 +111,11 @@ type
     lfs4 = 4   // uint32 — max ~4 GB per block
   );
 
-  // GPS position — 24 bytes.
-  TOSFGpsData = packed record
-    Longitude : Double;
+  // GPS position — 24 bytes. Field order is fixed by spec revision 2026-05-04
+  // to latitude, longitude, altitude.
+  TOSFGpsLocation = packed record
     Latitude  : Double;
+    Longitude : Double;
     Altitude  : Double;
   end;
 
@@ -137,8 +138,8 @@ type
   end;
 
 // Compile-time binary layout assertions.
-{$IF SizeOf(TOSFGpsData) <> 24}
-  {$MESSAGE ERROR 'TOSFGpsData must be exactly 24 bytes'}
+{$IF SizeOf(TOSFGpsLocation) <> 24}
+  {$MESSAGE ERROR 'TOSFGpsLocation must be exactly 24 bytes'}
 {$ENDIF}
 
 resourcestring
@@ -201,12 +202,15 @@ begin
   else if Lower = 'double'    then Exit(dtDouble)
   else if Lower = 'string'    then Exit(dtString)
   else if Lower = 'binary'    then Exit(dtBinary)
-  else if Lower = 'bytearray' then Exit(dtBinary)   // OSF4 legacy alias
-  else if Lower = 'gpsdata'   then Exit(dtGpsData);
+  else if Lower = 'bytearray'   then Exit(dtBinary)   // OSF4 legacy alias
+  else if Lower = 'gpslocation' then Exit(dtGpsLocation);
 
   // Datatypes removed in spec revision 2026-05-04 — fail loudly so callers
-  // see exactly which one tripped them up.
-  if (Lower = 'pair') or (Lower = 'triple') or (Lower = 'candata') then
+  // see exactly which one tripped them up. 'gpsdata' is rejected here because
+  // it was renamed to 'gpslocation' (no backward-compat: the old name was
+  // never used in production).
+  if (Lower = 'pair') or (Lower = 'triple') or (Lower = 'candata') or
+     (Lower = 'gpsdata') then
     raise EOSFFormatError.CreateFmt(SOSFRemovedDataType, [S]);
 
   raise EOSFFormatError.CreateFmt(SOSFUnknownDataType, [S]);
@@ -228,7 +232,7 @@ begin
     dtDouble:  Result := 'double';
     dtString:  Result := 'string';
     dtBinary:  Result := 'binary';
-    dtGpsData: Result := 'gpsdata';
+    dtGpsLocation: Result := 'gpslocation';
   else
     raise EOSFFormatError.CreateFmt(SOSFUnhandledDataType, [Ord(DT)]);
   end;
@@ -250,7 +254,7 @@ begin
     dtDouble:  Result := 8;
     dtString:  Result := 0;
     dtBinary:  Result := 0;
-    dtGpsData: Result := 24;
+    dtGpsLocation: Result := 24;
   else
     raise EOSFFormatError.CreateFmt(SOSFUnhandledDataType, [Ord(DT)]);
   end;

@@ -284,7 +284,7 @@ function TFormOSFViewer.IsChartableType(DT: TOSFDataType): Boolean;
 begin
   // Non-numeric and structured types — ValueAsDouble is not meaningful
   // for plotting, so we show a placeholder label instead of an empty chart.
-  Result := not(DT in [dtString, dtBinary, dtGpsData]);
+  Result := not(DT in [dtString, dtBinary, dtGpsLocation]);
 end;
 
 procedure TFormOSFViewer.ClearChartSeries;

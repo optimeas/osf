@@ -383,7 +383,7 @@ type
 
   TOSFTimestampedGpsChannel = class(TOSFTimestampedDataChannel)
   private
-    FValues: TList<TOSFGpsData>;
+    FValues: TList<TOSFGpsLocation>;
   protected
     function GetSampleCount: Integer; override;
   public
@@ -393,12 +393,12 @@ type
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
     procedure AddRawSample(TimestampNs: Int64; const RawBytes: TBytes); override;
-    property Values: TList<TOSFGpsData> read FValues;
+    property Values: TList<TOSFGpsLocation> read FValues;
   end;
 
   TOSFEquidistantGpsChannel = class(TOSFEquidistantDataChannel)
   private
-    FValues: TList<TOSFGpsData>;
+    FValues: TList<TOSFGpsLocation>;
   protected
     function GetSampleCount: Integer; override;
   public
@@ -408,7 +408,7 @@ type
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
     procedure AddRawSample(TimestampNs: Int64; const RawBytes: TBytes); override;
-    property Values: TList<TOSFGpsData> read FValues;
+    property Values: TList<TOSFGpsLocation> read FValues;
   end;
 
 // Picks the right concrete subclass based on Def.DataType and Def.IsEquidistant.
@@ -550,7 +550,7 @@ begin
   Result := Copy(RawBytes, 0, Length(RawBytes));
 end;
 
-function DecodeAsGpsData(const RawBytes: TBytes): TOSFGpsData;
+function DecodeAsGpsLocation(const RawBytes: TBytes): TOSFGpsLocation;
 begin
   FillChar(Result, SizeOf(Result), 0);
   if Length(RawBytes) >= SizeOf(Result) then
@@ -1443,7 +1443,7 @@ end;
 constructor TOSFTimestampedGpsChannel.Create(ADef: TOSFChannelDef);
 begin
   inherited Create(ADef);
-  FValues := TList<TOSFGpsData>.Create;
+  FValues := TList<TOSFGpsLocation>.Create;
 end;
 
 destructor TOSFTimestampedGpsChannel.Destroy;
@@ -1465,7 +1465,7 @@ end;
 
 function TOSFTimestampedGpsChannel.ValueAsString(Index: Integer): string;
 var
-  G: TOSFGpsData;
+  G: TOSFGpsLocation;
 begin
   G := FValues[Index];
   Result := Format('lat=%s lon=%s alt=%s',
@@ -1477,7 +1477,7 @@ end;
 procedure TOSFTimestampedGpsChannel.AddRawSample(TimestampNs: Int64; const RawBytes: TBytes);
 begin
   FTimestamps.Add(TimestampNs);
-  FValues.Add(DecodeAsGpsData(RawBytes));
+  FValues.Add(DecodeAsGpsLocation(RawBytes));
   UpdateTimeRange(TimestampNs);
 end;
 
@@ -1494,7 +1494,7 @@ end;
 constructor TOSFEquidistantGpsChannel.Create(ADef: TOSFChannelDef);
 begin
   inherited Create(ADef);
-  FValues := TList<TOSFGpsData>.Create;
+  FValues := TList<TOSFGpsLocation>.Create;
 end;
 
 destructor TOSFEquidistantGpsChannel.Destroy;
@@ -1515,7 +1515,7 @@ end;
 
 function TOSFEquidistantGpsChannel.ValueAsString(Index: Integer): string;
 var
-  G: TOSFGpsData;
+  G: TOSFGpsLocation;
 begin
   G := FValues[Index];
   Result := Format('lat=%s lon=%s alt=%s',
@@ -1526,7 +1526,7 @@ end;
 
 procedure TOSFEquidistantGpsChannel.AddRawSample(TimestampNs: Int64; const RawBytes: TBytes);
 begin
-  FValues.Add(DecodeAsGpsData(RawBytes));
+  FValues.Add(DecodeAsGpsLocation(RawBytes));
   UpdateTimeRange(TimestampNs);
 end;
 
@@ -1555,7 +1555,7 @@ begin
       dtBool:                               Result := TOSFEquidistantBoolChannel.Create(Def);
       dtString:                             Result := TOSFEquidistantStringChannel.Create(Def);
       dtBinary:                             Result := TOSFEquidistantBinaryChannel.Create(Def);
-      dtGpsData:                            Result := TOSFEquidistantGpsChannel.Create(Def);
+      dtGpsLocation:                            Result := TOSFEquidistantGpsChannel.Create(Def);
     else
       Result := TOSFEquidistantDoubleChannel.Create(Def);
     end;
@@ -1571,7 +1571,7 @@ begin
       dtBool:                               Result := TOSFTimestampedBoolChannel.Create(Def);
       dtString:                             Result := TOSFTimestampedStringChannel.Create(Def);
       dtBinary:                             Result := TOSFTimestampedBinaryChannel.Create(Def);
-      dtGpsData:                            Result := TOSFTimestampedGpsChannel.Create(Def);
+      dtGpsLocation:                            Result := TOSFTimestampedGpsChannel.Create(Def);
     else
       Result := TOSFTimestampedDoubleChannel.Create(Def);
     end;
