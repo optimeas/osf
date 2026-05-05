@@ -13,10 +13,10 @@ One codebase, two audiences.
 
 ## Status
 
-**In progress.** The two reading layers are complete: the streaming
-`BlockReader` for raw block-by-block access, and the higher-level
-`DataManager` that aggregates blocks into typed channels with segment
-metadata. Writing follows in subsequent sessions.
+**In progress.** Read path is complete (raw `BlockReader` plus typed
+`DataManager`); write path emits OSF5 in block mode. The crate now
+round-trips every shipped reference file. OSFZ decompression and
+PyO3 bindings remain.
 
 | Capability                                                          | State   |
 |---------------------------------------------------------------------|---------|
@@ -33,8 +33,9 @@ metadata. Writing follows in subsequent sessions.
 | In-memory data manager with typed channels                          | ✅      |
 | Channel access by name and by index (DECISIONS §10)                 | ✅      |
 | Equidistant segments (multi-`bcStartData`)                          | ✅      |
+| Block writer (OSF5)                                                 | ✅      |
+| Roundtrip validation                                                | ✅      |
 | OSFZ (zlib) transparent decompression                               | Pending |
-| Block writer (OSF5)                                                 | Pending |
 | PyO3 bindings (`implementations/python/`)                           | Pending |
 
 ## Layout
@@ -56,16 +57,20 @@ implementations/rust/
     │   ├── reader.rs        — BlockReader<R: Read> iterator + payload parsers
     │   ├── stats.rs         — ReaderStats, ChannelStats, Display impls
     │   ├── data_channel.rs  — typed Channel enum, Segment, samples_with_time
-    │   └── manager.rs       — DataManager + private build_channels logic
+    │   ├── manager.rs       — DataManager + private build_channels logic
+    │   ├── binary_write.rs  — little-endian write helpers (private)
+    │   └── writer.rs        — WriterBuilder + write_to_file convenience
     ├── examples/
     │   ├── inspect.rs       — header + metadata + channel list (no block reading)
     │   ├── stats.rs         — full read + ReaderStats + top-N raw channels
-    │   └── dump.rs          — manager-driven per-channel summary + first-channel detail
+    │   ├── dump.rs          — manager-driven per-channel summary + first-channel detail
+    │   └── copy.rs          — load + write_to_file + verify reload (writer demo)
     └── tests/
         ├── header_test.rs    — every shipped .osf parses its magic header
         ├── metablock_test.rs — every shipped .osf parses its metablock
         ├── block_test.rs     — every shipped .osf streams blocks cleanly
-        └── manager_test.rs   — every shipped .osf assembles into a DataManager
+        ├── manager_test.rs   — every shipped .osf assembles into a DataManager
+        └── roundtrip_test.rs — every shipped .osf survives load + write + reload
 ```
 
 ## Build
@@ -78,24 +83,28 @@ cargo test
 cargo clippy
 ```
 
-Four integration suites walk `../../examples/` and
+Five integration suites walk `../../examples/` and
 `../../examples/generated/`:
 
 - `header_test.rs` — every shipped `.osf` parses its magic header.
 - `metablock_test.rs` — every shipped `.osf` parses its metablock.
 - `block_test.rs` — `BlockReader` streams every shipped `.osf`.
 - `manager_test.rs` — `DataManager::load_from_file` succeeds on every
-  shipped `.osf` and channels are reachable both by name and by index.
+  shipped `.osf`.
+- `roundtrip_test.rs` — load + write + reload, with bitwise sample
+  comparison, on every shipped `.osf` (including OSF4-source →
+  OSF5-target conversion).
 
-`manager_test.rs` also has a `#[ignore]`-gated performance smoke
-(`steam_loco_load_time_within_budget`) that asserts the brief's
-budget (≤ 100 ms in release, ≤ 200 ms in debug). Run it manually:
+`manager_test.rs` and `roundtrip_test.rs` each have a `#[ignore]`-gated
+performance smoke. Run them manually:
 
 ```bash
 cargo test --release -- --ignored
 ```
 
-Local measurement: ~3 ms in release, well under budget.
+Local measurement: `steam_loco.osf` reads in ~3 ms in release; full
+write of the same data also ~3 ms. Both well under the brief budgets
+(100 ms read, 100 ms write).
 
 ## Inspect a file
 
@@ -105,7 +114,8 @@ cargo run --example inspect -- ../../examples/generated/osf5_mixed.osf
 ```
 
 `inspect` is fast (header + metablock only). For a full read with
-counters use `stats`; for a typed-channel summary use `dump`.
+counters use `stats`; for a typed-channel summary use `dump`; to
+copy a file via the writer use `copy`.
 
 ## Manager API
 
@@ -123,14 +133,9 @@ for sample in temp.samples_with_time() {
     println!("{} ns: {:?}", sample.timestamp_ns, sample.value);
 }
 
-// Or dump everything as f64s in stream order (segments transparently
-// joined, equidistant channels stitched)
-if let Channel::Equidistant(eq) = temp {
-    let values: Vec<f64> = eq.as_doubles_flat()?;
-}
-
 // Equidistant segments are first-class — every bcStartData opens one
 if let Channel::Equidistant(eq) = temp {
+    let values: Vec<f64> = eq.as_doubles_flat()?;
     for segment in eq.segments() {
         println!(
             "seg start={}, samples={}, rate={}",
@@ -149,55 +154,74 @@ caller-supplied reader.
 The lower-level `BlockReader` iterator is still available for callers
 that want raw blocks; the manager sits on top of it.
 
-### Sample iteration: `NumericValueRef` and `VariableValueRef`
+## Writer API
 
-`samples_with_time()` returns `Sample<NumericValueRef<'_>>` for
-numeric / GPS channels and `Sample<VariableValueRef<'_>>` for
-string / binary channels. `NumericValueRef` passes the eleven Copy
-scalars by value and borrows only `GpsLocation` (24 bytes); the
-lifetime parameter exists for that single variant. `VariableValueRef`
-borrows in both variants because the values are heap-allocated.
+Two tiers, symmetric to the read side:
+
+### Convenience: round-trip a DataManager
 
 ```rust
-match sample.value {
-    NumericValueRef::Double(v)    => println!("{v}"),
-    NumericValueRef::GpsLocation(g) => println!("{}, {}", g.latitude, g.longitude),
-    other => println!("{other:?}"),
-}
+use osf_core::{DataManager, writer};
+
+let mgr = DataManager::load_from_file("input.osf")?;
+writer::write_to_file(&mgr, "output.osf")?;
 ```
 
-## Stats and dump
+Always emits OSF5 (DECISIONS §6) — even when the source was OSF4.
 
-```bash
-# Raw-block telemetry; faster, no channel aggregation.
-cargo run --example stats -- ../../examples/steam_loco.osf
+### Builder: programmatic construction
 
-# Manager-driven summary; slower but with typed channels.
-cargo run --example dump -- ../../examples/motorbike.osf
+```rust
+use osf_core::writer::{WriterBuilder, ChannelDef};
+use osf_core::types::{ChannelType, DataType};
+
+let mut builder = WriterBuilder::new()
+    .creator("my-app:1.0")
+    .tag("preview")
+    .reason("BOOT");
+
+let temp_idx = builder.add_channel(ChannelDef {
+    name: "Sensor/Temperature".into(),
+    data_type: DataType::Double,
+    channel_type: ChannelType::Scalar,
+    physical_unit: Some("°C".into()),
+    ..Default::default()
+})?;
+
+// Equidistant segment — multiple calls accumulate as separate segments.
+builder.add_equidistant_segment_f64(
+    temp_idx,
+    1_574_200_200_000_000_000,
+    1.0,
+    &samples_f64,
+)?;
+
+// Or timestamped:
+builder.add_timestamped_samples_f64(idx, &timestamps_ns, &values)?;
+
+// Or strings (one block per sample):
+builder.add_string_samples(idx, &timestamps_ns, &strings)?;
+
+builder.write_to_file("output.osf")?;
 ```
 
-`dump` output for an OSF4 field file with `RUST_LOG=error`:
+### Constraints
 
-```text
-File:            ../../examples/steam_loco.osf
-Channels:        123 (123 with data, 0 unsupported)
-Load time:       21 ms
-
-Top 10 channels by sample count:
-   index  name                                      type            samples  segments  unit
-   -----  ----------------------------------------  -----------  ----------  --------  ----
-      32  R_9                                       timestamped       19507         0  Ohm
-      ...
-
-First channel detail:
-   name:           GPS.PosFixMode
-   data type:      Double
-   sample count:   109
-   first 5 samples:
-     0:  ts=1692093763318471742  value=3
-     1:  ts=1692093779317336374  value=3
-     ...
-```
+- **OSF5 only** — DECISIONS §6.
+- **Block mode only** — DECISIONS §7. Streaming write is reserved
+  for embedded language targets.
+- **No OSFZ** — writer never produces compressed output.
+  DECISIONS §12.
+- **No trailer / no magic trailer** — OSF5 dropped both.
+- **`bcStartData` numeric only** — equidistant blocks support `float`
+  and `double` only per spec rev 2026-05-04. Add equidistant data of
+  other numeric types as `bcAbsTimeStampData` instead.
+- **Block splitting** is automatic for numeric channels: a 100k-sample
+  run with `sizeoflengthvalue=2` is silently split into multiple blocks
+  the reader merges back into one segment.
+- **Auto-bump** of `sizeoflengthvalue` for variable channels: a single
+  string / binary sample > 65 521 bytes triggers a debug-logged bump
+  from 2 → 4 so the file remains writable.
 
 ## Spec revision tracked
 
@@ -213,38 +237,40 @@ a `log::warn!` because real field files (`examples/steam_loco.osf`,
 `examples/motorbike.osf`) still carry them on every channel — failing
 on them would make the parser unusable on existing data.
 
+The writer never emits any removed datatype or deprecated field;
+`add_channel` rejects `DataType::Unsupported` and `DataType::ByteArray`
+(read-side alias only) up front, and the metablock JSON output uses
+the canonical spec spellings.
+
 The manager layer adds spec-level consistency checks per channel:
 mixing `bcStartData` and `bcAbsTimeStampData` blocks on one channel
 fails with `OsfError::ChannelMixedBlockTypes`; orphan
 `bcContinuedData` (no preceding `bcStartData`) fails with
 `OsfError::ContinuedDataWithoutStart`; `bcContinuedRelStampData`
 without a prior absolute timestamp fails with
-`OsfError::RelStampWithoutAnchor`. Forward-compat `Unsupported`
-channels are silently dropped from the manager's channel list so
-applications can iterate without filtering.
+`OsfError::RelStampWithoutAnchor`. The writer applies the same rules
+from the producer side.
+
+Forward-compat `Unsupported` channels are silently dropped from the
+manager's channel list so applications can iterate without filtering.
 
 ## Dependencies
 
 | Crate                | Purpose                                                |
 |----------------------|--------------------------------------------------------|
 | `thiserror`          | Ergonomic error enum (`OsfError`)                      |
-| `serde_json`         | OSF5 metablock parser                                  |
+| `serde_json`         | OSF5 metablock parser + writer                         |
 | `quick-xml`          | OSF4 metablock parser                                  |
-| `byteorder`          | Little-endian binary block reader                      |
-| `log`                | Standard logging facade (parser + manager diagnostics) |
+| `byteorder`          | Little-endian binary reader and writer                 |
+| `log`                | Standard logging facade                                |
 | `serde`              | Derive support for upcoming structures                 |
 | `env_logger` (dev)   | Test-time + example-time logger backend                |
 
 ## Next steps
 
-1. **Session 5** — block writer for OSF5 (block-mode only per
-   DECISIONS §7). Will mirror the typed-channel structures from this
-   session into a writer that produces `bcStartData` and
-   `bcAbsTimeStampData` blocks. Embedded streaming-write is a separate,
-   later language target.
-2. **Session 6** — OSFZ transparent decompression (zlib wrapper). Small
-   isolated change.
-3. **Session 7** — PyO3 wrapper crate at `implementations/python/`,
+1. **Session 6** — OSFZ transparent decompression on the read side
+   (zlib wrapper). Small isolated change.
+2. **Session 7** — PyO3 wrapper crate at `implementations/python/`,
    exposing the reader, manager, and writer to Python with NumPy
    interop on flat numeric channels.
 
