@@ -494,18 +494,26 @@ end;
 
 // Builds the binary payload of an absolute-timestamped data block.
 // Layout: [ctrl 1B] [uint32 N 4B if N>1] [int64 ts | (uint32 len if variable) | bytes]*
+//
+// For variable-length data types (string, binary), every value is written with
+// a trailing 0x00 byte per the spec (revision 2026-05-04). The trailing byte is
+// included in the per-value uint32 length when present, and in the block-level
+// length field for the single-sample / no-length-prefix case.
 function EncodeTimestampedPayload(IsVariableLength: Boolean;
   const Timestamps: array of Int64;
   const Values: array of TBytes): TBytes;
+const
+  ZERO_BYTE: Byte = 0;
 var
-  N        : Integer;
-  IsMulti  : Boolean;
-  CtrlByte : Byte;
-  MS       : TMemoryStream;
-  I        : Integer;
-  Cnt      : UInt32;
-  Len4     : UInt32;
-  TS       : Int64;
+  N         : Integer;
+  IsMulti   : Boolean;
+  CtrlByte  : Byte;
+  MS        : TMemoryStream;
+  I         : Integer;
+  Cnt       : UInt32;
+  Len4      : UInt32;
+  TS        : Int64;
+  ValueLen  : Integer;
 begin
   N        := Length(Timestamps);
   IsMulti  := N > 1;
@@ -524,16 +532,20 @@ begin
     begin
       TS := Timestamps[I];
       MS.WriteBuffer(TS, SizeOf(TS));
+      ValueLen := Length(Values[I]);
       // Variable-length values inside a multi-sample block need a uint32
-      // length prefix per value. Single-sample blocks don't need it because
-      // the block length already determines the value size.
+      // length prefix per value. The length includes the trailing null byte.
+      // Single-sample blocks don't need a per-value prefix because the block
+      // length already determines the value size (also including the null byte).
       if IsVariableLength and IsMulti then
       begin
-        Len4 := Length(Values[I]);
+        Len4 := UInt32(ValueLen + 1);   // +1 for the trailing 0x00
         MS.WriteBuffer(Len4, SizeOf(Len4));
       end;
-      if Length(Values[I]) > 0 then
-        MS.WriteBuffer(Values[I][0], Length(Values[I]));
+      if ValueLen > 0 then
+        MS.WriteBuffer(Values[I][0], ValueLen);
+      if IsVariableLength then
+        MS.WriteBuffer(ZERO_BYTE, 1);
     end;
 
     SetLength(Result, MS.Size);

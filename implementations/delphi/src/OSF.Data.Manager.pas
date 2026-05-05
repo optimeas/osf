@@ -157,12 +157,17 @@ end;
 
 // Decodes a bcAbsTimeStampData block and feeds samples to Channel.
 // Layout depends on Block.SampleCount and the channel's data type:
-//   Single-sample  : [int64 ts][value bytes]
-//   Multi-sample   : [int64 ts][value bytes] × N
-//   Multi-sample variable-length: [int64 ts][uint32 len][value bytes] × N
+//   Single-sample fixed         : [int64 ts][value bytes]
+//   Multi-sample fixed          : [int64 ts][value bytes] × N
+//   Single-sample variable      : [int64 ts][value bytes][0x00]
+//   Multi-sample  variable      : [int64 ts][uint32 len][value bytes including 0x00] × N
+// For variable-length values the trailing 0x00 is included in the length
+// (per spec revision 2026-05-04) and is stripped before the value reaches
+// the channel.
 procedure DecodeAbsTimestampedBlock(Channel: TOSFDataChannel; const Block: TOSFDataBlock);
 var
   Pos, ValSize : Integer;
+  PayloadSize  : Integer;
   Ts           : Int64;
   Len          : UInt32;
   ValueBytes   : TBytes;
@@ -204,9 +209,20 @@ begin
       ValSize := FixedSize;
 
     if (ValSize < 0) or (Pos + ValSize > PayloadLen) then Exit;
-    SetLength(ValueBytes, ValSize);
-    if ValSize > 0 then
-      Move(Block.RawPayload[Pos], ValueBytes[0], ValSize);
+
+    if IsVariable then
+    begin
+      // Drop the trailing 0x00. ValSize counts the null byte; the channel
+      // gets the bare payload.
+      if ValSize < 1 then Exit;
+      PayloadSize := ValSize - 1;
+    end
+    else
+      PayloadSize := ValSize;
+
+    SetLength(ValueBytes, PayloadSize);
+    if PayloadSize > 0 then
+      Move(Block.RawPayload[Pos], ValueBytes[0], PayloadSize);
     Inc(Pos, ValSize);
 
     Channel.AddRawSample(Ts, ValueBytes);
