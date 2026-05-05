@@ -1,0 +1,365 @@
+// Copyright 2026 Optimeas GmbH
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//! OSF block model.
+//!
+//! Every block in the binary stream consists of a 2-byte channel index,
+//! a length field (2 or 4 bytes per the channel's `sizeoflengthvalue`),
+//! a 1-byte control byte, and a payload. This module defines the typed
+//! representation a block lands in once the reader has decoded it.
+//!
+//! Two design choices are intentional:
+//!
+//! 1. **Unpacked typed payloads, not zero-copy.** Each `Block` carries
+//!    its samples in pre-allocated typed vectors (`Vec<f64>`,
+//!    `Vec<i32>`, …). Block sizes in OSF are typically KB to a few MB,
+//!    so the per-block allocation is acceptable, and the lifetime
+//!    story is dramatically simpler than a `&[u8]`-borrowing API. A
+//!    zero-copy `RawBlockReader` is conceivable as a *future second
+//!    layer* if profiling justifies it — not now.
+//!
+//! 2. **Skipped blocks remain visible.** Blocks the reader cannot
+//!    interpret (deprecated control bytes, `Unsupported` channels,
+//!    unknown control values) come through as [`BlockKind::Skipped`]
+//!    rather than being silently swallowed. Stream position is
+//!    preserved either way; the caller can opt to inspect skipped
+//!    payloads via [`crate::reader::BlockReader`] options that ship in
+//!    a later commit.
+
+/// A decoded data block from an OSF stream.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Block {
+    /// Channel this block belongs to. `0xFFFF` is reserved for the
+    /// optional info-data block at the end of an OSF4 file and is not
+    /// produced as a regular `Block` by the reader.
+    pub channel_index: u16,
+    /// Decoded payload, discriminated by control byte.
+    pub kind: BlockKind,
+}
+
+/// Discriminated union of OSF block payloads.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BlockKind {
+    /// `bcStartData`: opens a new equidistant segment with absolute
+    /// start timestamp and sample rate; carries the first samples.
+    /// Allowed only for numeric data types per spec.
+    StartData {
+        /// Absolute start timestamp of this segment in nanoseconds
+        /// since the Unix epoch (UTC).
+        start_timestamp_ns: i64,
+        /// Sample rate in Hz, valid until the next `bcStartData` block
+        /// of the same channel. Spec rev 2026-05-04 makes this field
+        /// mandatory in both OSF4 and OSF5.
+        sample_rate_hz: f64,
+        /// Sample values in their typed form.
+        samples: NumericPayload,
+    },
+    /// `bcContinuedData`: continuation of the current equidistant
+    /// segment of the same channel. Time per sample is `1 /
+    /// sample_rate_hz` from the most recent `StartData` of the same
+    /// channel. Numeric only.
+    ContinuedData {
+        /// Sample values, picking up where the previous block ended.
+        samples: NumericPayload,
+    },
+    /// `bcAbsTimeStampData`: each sample carries its own absolute
+    /// timestamp. Supports all data types including string and binary.
+    AbsTimestampData {
+        /// `(timestamp_ns, value)` pairs in stream order.
+        samples: TimestampedPayload,
+    },
+    /// `bcContinuedRelStampData`: OSF4-only. Each sample carries a
+    /// relative time delta in nanoseconds (`uint32`) plus a value.
+    /// Reader supports it; writers never produce it.
+    ContinuedRelStampData {
+        /// `(delta_ns, value)` pairs in stream order.
+        samples: RelTimestampedPayload,
+    },
+    /// Block kept for stream-position purposes after the reader chose
+    /// not to interpret it: known control byte but channel marked as
+    /// `Unsupported`, or block type intentionally skipped
+    /// (`bcStatusEvent`, `bcMessageEvent`, `bcTrustedTimestamp`,
+    /// `bcTimebaseRealign`, `bcReserved`, unknown control values).
+    Skipped {
+        /// Why the reader skipped this block.
+        reason: SkipReason,
+        /// Number of payload bytes the reader had to consume from the
+        /// stream (control byte + payload). Always ≥ 1.
+        bytes_skipped: u64,
+        /// Captured payload bytes after the control byte. Default
+        /// behaviour is `None` (bytes are dropped without allocation).
+        /// Opt in with
+        /// `BlockReader::with_capture_skipped_payload(true)` to have
+        /// the reader keep the bytes here so application code can
+        /// parse them without re-implementing block-framing.
+        payload: Option<Vec<u8>>,
+    },
+}
+
+/// Reason why a block ended up as [`BlockKind::Skipped`].
+#[derive(Debug, Clone, PartialEq)]
+pub enum SkipReason {
+    /// The channel's `data_type` is [`crate::DataType::Unsupported`] —
+    /// either a future-spec spelling or one not implemented yet.
+    UnsupportedDataType,
+    /// The channel's `channel_type` is [`crate::ChannelType::Unsupported`].
+    UnsupportedChannelType,
+    /// Deprecated control byte that newer writers no longer emit but
+    /// readers must tolerate. The inner `u8` is the raw control-byte
+    /// value (1 = `bcTrustedTimestamp`, 3 = `bcStatusEvent`,
+    /// 4 = `bcMessageEvent`).
+    DeprecatedBlockType(u8),
+    /// Reserved control byte (0 = `bcReserved`, 2 = `bcTimebaseRealign`)
+    /// or any value above 8 the spec does not currently define.
+    ReservedBlockType(u8),
+}
+
+/// Equidistant numeric payload: a single typed vector for the channel's
+/// `data_type`. One variant per supported numeric data type.
+#[derive(Debug, Clone, PartialEq)]
+pub enum NumericPayload {
+    /// `bool` samples — 1 byte per sample on disk, `0x00` is `false`.
+    Bool(Vec<bool>),
+    /// Signed 8-bit integers.
+    Int8(Vec<i8>),
+    /// Signed 16-bit integers.
+    Int16(Vec<i16>),
+    /// Signed 32-bit integers.
+    Int32(Vec<i32>),
+    /// Signed 64-bit integers.
+    Int64(Vec<i64>),
+    /// Unsigned 8-bit integers.
+    UInt8(Vec<u8>),
+    /// Unsigned 16-bit integers.
+    UInt16(Vec<u16>),
+    /// Unsigned 32-bit integers.
+    UInt32(Vec<u32>),
+    /// Unsigned 64-bit integers.
+    UInt64(Vec<u64>),
+    /// IEEE-754 single-precision floats.
+    Float(Vec<f32>),
+    /// IEEE-754 double-precision floats.
+    Double(Vec<f64>),
+}
+
+impl NumericPayload {
+    /// Number of samples held by this payload.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Bool(v) => v.len(),
+            Self::Int8(v) => v.len(),
+            Self::Int16(v) => v.len(),
+            Self::Int32(v) => v.len(),
+            Self::Int64(v) => v.len(),
+            Self::UInt8(v) => v.len(),
+            Self::UInt16(v) => v.len(),
+            Self::UInt32(v) => v.len(),
+            Self::UInt64(v) => v.len(),
+            Self::Float(v) => v.len(),
+            Self::Double(v) => v.len(),
+        }
+    }
+
+    /// True when no samples are held.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// Timestamped payload: `(timestamp_ns, value)` pairs, with one variant
+/// per supported data type. `String`, `Binary`, and `GpsLocation` only
+/// occur in this kind of block (equidistant blocks are numeric-only per
+/// spec).
+#[derive(Debug, Clone, PartialEq)]
+pub enum TimestampedPayload {
+    /// `bool` samples paired with absolute timestamps.
+    Bool(Vec<(i64, bool)>),
+    /// Signed 8-bit integers paired with absolute timestamps.
+    Int8(Vec<(i64, i8)>),
+    /// Signed 16-bit integers paired with absolute timestamps.
+    Int16(Vec<(i64, i16)>),
+    /// Signed 32-bit integers paired with absolute timestamps.
+    Int32(Vec<(i64, i32)>),
+    /// Signed 64-bit integers paired with absolute timestamps.
+    Int64(Vec<(i64, i64)>),
+    /// Unsigned 8-bit integers paired with absolute timestamps.
+    UInt8(Vec<(i64, u8)>),
+    /// Unsigned 16-bit integers paired with absolute timestamps.
+    UInt16(Vec<(i64, u16)>),
+    /// Unsigned 32-bit integers paired with absolute timestamps.
+    UInt32(Vec<(i64, u32)>),
+    /// Unsigned 64-bit integers paired with absolute timestamps.
+    UInt64(Vec<(i64, u64)>),
+    /// IEEE-754 single-precision floats with absolute timestamps.
+    Float(Vec<(i64, f32)>),
+    /// IEEE-754 double-precision floats with absolute timestamps.
+    Double(Vec<(i64, f64)>),
+    /// UTF-8 strings with absolute timestamps; the trailing `0x00`
+    /// has been stripped by the reader.
+    String(Vec<(i64, String)>),
+    /// Opaque byte payloads with absolute timestamps; the trailing
+    /// `0x00` has been stripped by the reader.
+    Binary(Vec<(i64, Vec<u8>)>),
+    /// 24-byte GPS-location structs paired with absolute timestamps.
+    GpsLocation(Vec<(i64, GpsLocation)>),
+}
+
+impl TimestampedPayload {
+    /// Number of samples held by this payload.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Bool(v) => v.len(),
+            Self::Int8(v) => v.len(),
+            Self::Int16(v) => v.len(),
+            Self::Int32(v) => v.len(),
+            Self::Int64(v) => v.len(),
+            Self::UInt8(v) => v.len(),
+            Self::UInt16(v) => v.len(),
+            Self::UInt32(v) => v.len(),
+            Self::UInt64(v) => v.len(),
+            Self::Float(v) => v.len(),
+            Self::Double(v) => v.len(),
+            Self::String(v) => v.len(),
+            Self::Binary(v) => v.len(),
+            Self::GpsLocation(v) => v.len(),
+        }
+    }
+
+    /// True when no samples are held.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// Relative-timestamped payload (OSF4 `bcContinuedRelStampData`):
+/// `(delta_ns, value)` pairs where `delta_ns` is the offset from the
+/// previous sample of the same channel.
+#[derive(Debug, Clone, PartialEq)]
+pub enum RelTimestampedPayload {
+    /// `bool` samples paired with relative time deltas.
+    Bool(Vec<(u32, bool)>),
+    /// Signed 8-bit integers paired with relative time deltas.
+    Int8(Vec<(u32, i8)>),
+    /// Signed 16-bit integers paired with relative time deltas.
+    Int16(Vec<(u32, i16)>),
+    /// Signed 32-bit integers paired with relative time deltas.
+    Int32(Vec<(u32, i32)>),
+    /// Signed 64-bit integers paired with relative time deltas.
+    Int64(Vec<(u32, i64)>),
+    /// Unsigned 8-bit integers paired with relative time deltas.
+    UInt8(Vec<(u32, u8)>),
+    /// Unsigned 16-bit integers paired with relative time deltas.
+    UInt16(Vec<(u32, u16)>),
+    /// Unsigned 32-bit integers paired with relative time deltas.
+    UInt32(Vec<(u32, u32)>),
+    /// Unsigned 64-bit integers paired with relative time deltas.
+    UInt64(Vec<(u32, u64)>),
+    /// IEEE-754 single-precision floats with relative time deltas.
+    Float(Vec<(u32, f32)>),
+    /// IEEE-754 double-precision floats with relative time deltas.
+    Double(Vec<(u32, f64)>),
+}
+
+impl RelTimestampedPayload {
+    /// Number of samples held by this payload.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Bool(v) => v.len(),
+            Self::Int8(v) => v.len(),
+            Self::Int16(v) => v.len(),
+            Self::Int32(v) => v.len(),
+            Self::Int64(v) => v.len(),
+            Self::UInt8(v) => v.len(),
+            Self::UInt16(v) => v.len(),
+            Self::UInt32(v) => v.len(),
+            Self::UInt64(v) => v.len(),
+            Self::Float(v) => v.len(),
+            Self::Double(v) => v.len(),
+        }
+    }
+
+    /// True when no samples are held.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// On-disk `gpslocation` payload (24 bytes: three little-endian
+/// `double`s in the order `latitude`, `longitude`, `altitude` per spec
+/// revision 2026-05-04).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GpsLocation {
+    /// Latitude in decimal degrees, north-positive.
+    pub latitude: f64,
+    /// Longitude in decimal degrees, east-positive.
+    pub longitude: f64,
+    /// Altitude in meters above the WGS-84 ellipsoid.
+    pub altitude: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numeric_payload_len_works_for_each_variant() {
+        assert_eq!(NumericPayload::Bool(vec![true, false]).len(), 2);
+        assert_eq!(NumericPayload::Double(vec![1.0; 7]).len(), 7);
+        assert!(NumericPayload::Int32(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn timestamped_payload_len_works_for_each_variant() {
+        assert_eq!(
+            TimestampedPayload::String(vec![(0, "x".into())]).len(),
+            1
+        );
+        assert_eq!(
+            TimestampedPayload::Binary(vec![(1, vec![1, 2, 3]); 4]).len(),
+            4
+        );
+        assert!(TimestampedPayload::Double(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn rel_timestamped_payload_len_works() {
+        assert_eq!(
+            RelTimestampedPayload::Float(vec![(100, 1.0), (200, 2.0)]).len(),
+            2
+        );
+        assert!(RelTimestampedPayload::Bool(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn block_skipped_default_payload_is_none() {
+        let blk = Block {
+            channel_index: 7,
+            kind: BlockKind::Skipped {
+                reason: SkipReason::ReservedBlockType(0),
+                bytes_skipped: 1,
+                payload: None,
+            },
+        };
+        match blk.kind {
+            BlockKind::Skipped { payload, .. } => assert!(payload.is_none()),
+            _ => panic!("expected Skipped"),
+        }
+    }
+}

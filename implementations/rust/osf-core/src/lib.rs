@@ -27,6 +27,7 @@
 //! OSF4 (XML) and OSF5 (JSON) metablock parsers, block-stream reading,
 //! and writing follow in subsequent sessions.
 
+pub mod block;
 pub mod error;
 pub mod header;
 pub mod meta;
@@ -34,6 +35,10 @@ pub mod meta_json;
 pub mod meta_xml;
 pub mod types;
 
+pub use block::{
+    Block, BlockKind, GpsLocation, NumericPayload, RelTimestampedPayload, SkipReason,
+    TimestampedPayload,
+};
 pub use error::OsfError;
 pub use header::{MagicHeader, OsfVersion, parse_magic_header};
 pub use meta::{
