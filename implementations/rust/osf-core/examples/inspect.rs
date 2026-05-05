@@ -28,7 +28,9 @@
 //! see diagnostics about deprecated fields, accepted alternatives, and
 //! unknown attributes.
 
-use osf_core::{Channel, ChannelType, DataType, MetaBlock, parse_magic_header, parse_metablock};
+use osf_core::{
+    ChannelType, DataType, MetaBlock, MetaChannel, parse_magic_header, parse_metablock,
+};
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -110,7 +112,7 @@ fn print_summary(path: &str, header: &osf_core::MagicHeader, mb: &MetaBlock) {
     println!("infos:          {}", mb.infos.len());
 }
 
-fn format_channel(chan: &Channel, name_width: usize) -> String {
+fn format_channel(chan: &MetaChannel, name_width: usize) -> String {
     let display_name = truncate_to(&chan.name, name_width);
     let ct = format_channel_type(&chan.channel_type);
     let dt = format_data_type(&chan.data_type);

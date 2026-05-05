@@ -28,6 +28,7 @@
 //! and writing follow in subsequent sessions.
 
 pub mod block;
+pub mod data_channel;
 pub mod error;
 pub mod header;
 pub mod meta;
@@ -41,10 +42,15 @@ pub use block::{
     Block, BlockKind, GpsLocation, NumericPayload, RelTimestampedPayload, SkipReason,
     TimestampedPayload,
 };
+pub use data_channel::{
+    Channel, ChannelMeta, EquidistantChannel, NumericValues, Segment, TimestampedChannel,
+    VariableChannel,
+};
 pub use error::OsfError;
 pub use header::{MagicHeader, OsfVersion, parse_magic_header};
 pub use meta::{
-    Channel, FileInfo, Info, MetaBlock, SpectrumType, parse_channel_type, parse_data_type,
+    Channel as MetaChannel, FileInfo, Info, MetaBlock, SpectrumType, parse_channel_type,
+    parse_data_type,
 };
 pub use meta_json::parse_metablock_json;
 pub use meta_xml::parse_metablock_xml;

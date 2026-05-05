@@ -178,7 +178,7 @@ fn osf5_mixed_has_four_channels_with_diverse_types() {
 
     assert_eq!(mb.channels.len(), 4);
 
-    let by_name: std::collections::HashMap<&str, &osf_core::Channel> = mb
+    let by_name: std::collections::HashMap<&str, &osf_core::MetaChannel> = mb
         .channels
         .iter()
         .map(|c| (c.name.as_str(), c))

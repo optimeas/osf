@@ -83,11 +83,12 @@ pub enum DataType {
 /// occur in the wild; the parser treats `scalar` as the canonical
 /// spelling for both equidistant and timestamped channels and uses
 /// `time_increment_ns` to disambiguate.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub enum ChannelType {
     /// Default channel type used by the OSFGenerator and most field
     /// devices. The actual layout (equidistant vs. timestamped) is
     /// derived from `time_increment_ns` on the channel definition.
+    #[default]
     Scalar,
     /// Channel with a fixed sample rate; timestamps are reconstructed
     /// from `bcStartData` segments and the sample index.

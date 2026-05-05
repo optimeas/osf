@@ -86,4 +86,77 @@ pub enum OsfError {
     /// equidistant block on a string/binary channel, etc.
     #[error("invalid OSF block payload: {0}")]
     InvalidBlock(String),
+
+    /// The same channel produced both equidistant blocks
+    /// (`bcStartData` / `bcContinuedData`) and timestamped blocks
+    /// (`bcAbsTimeStampData` / `bcContinuedRelStampData`). Spec rev
+    /// 2026-05-04 (Restrictions table in `osf_general.md`) forbids
+    /// the mix per channel; see `BlockReader` for stream-level skip
+    /// behaviour.
+    #[error("channel {index} mixes equidistant and timestamped blocks")]
+    ChannelMixedBlockTypes {
+        /// Channel index whose block types disagree.
+        index: u16,
+    },
+
+    /// A `bcContinuedData` block arrived for a channel that has not
+    /// yet seen a `bcStartData`. Equidistant continuation depends on
+    /// the most recent start block for its sample rate, so without an
+    /// open segment the data has no meaningful timeline.
+    #[error("channel {index} produced bcContinuedData without a preceding bcStartData")]
+    ContinuedDataWithoutStart {
+        /// Channel index that produced the orphan continuation.
+        index: u16,
+    },
+
+    /// A `bcContinuedRelStampData` block arrived for a channel that
+    /// has not yet observed an absolute timestamp. The first relative
+    /// delta is anchored to the channel's last known absolute time;
+    /// without an anchor the deltas cannot be lifted to absolute time.
+    #[error("channel {index} produced bcContinuedRelStampData without an absolute anchor")]
+    RelStampWithoutAnchor {
+        /// Channel index that produced the orphan rel-stamp block.
+        index: u16,
+    },
+
+    /// A block payload's typed variant did not match the channel's
+    /// declared `data_type`. The reader normally enforces this at the
+    /// stream level; the manager defends against it as well in case a
+    /// future refactor weakens the reader-side check.
+    #[error(
+        "channel {channel} data type mismatch: expected {expected:?}, got block payload {got:?}"
+    )]
+    DataTypeMismatch {
+        /// Channel index that produced the mismatched block.
+        channel: u16,
+        /// Datatype declared in the metablock.
+        expected: crate::types::DataType,
+        /// Datatype implied by the block payload.
+        got: crate::types::DataType,
+    },
+
+    /// `DataManager::channel(name)` was called with a name that does
+    /// not match any channel in the file. The manager's lookup methods
+    /// return `Option`, but this variant is reserved so future
+    /// fallible APIs (e.g. `try_channel`) can use a typed error.
+    #[error("channel {name:?} not found")]
+    ChannelNotFound {
+        /// Name that was looked up.
+        name: String,
+    },
+
+    /// A typed flat-access helper (e.g. `as_doubles_flat`) was called
+    /// on a channel whose stored data type does not match the
+    /// requested one.
+    #[error(
+        "channel {channel} flat-access mismatch: requested {requested:?}, channel holds {actual:?}"
+    )]
+    DataTypeAccessMismatch {
+        /// Channel index whose typed access failed.
+        channel: u16,
+        /// Datatype the helper was asked to produce.
+        requested: crate::types::DataType,
+        /// Datatype the channel actually stores.
+        actual: crate::types::DataType,
+    },
 }
