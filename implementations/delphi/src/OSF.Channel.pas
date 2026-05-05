@@ -38,13 +38,7 @@ type
     FChannelType       : TOSFChannelType;
     FLengthFieldSize   : TOSFLengthFieldSize;
     FPhysicalUnit      : string;
-    FPhysicalUnit1     : string;
-    FPhysicalUnit2     : string;
-    FPhysicalUnit3     : string;
     FPhysicalDimension : string;
-    FPhysicalDimension1: string;
-    FPhysicalDimension2: string;
-    FPhysicalDimension3: string;
     FMimeType          : string;
     FSpectrumType      : string;
     FLastTimestampNs   : Int64;
@@ -91,17 +85,8 @@ type
     property LengthFieldSize   : TOSFLengthFieldSize read FLengthFieldSize  write FLengthFieldSize;
 
     // Physical properties.
-    // PhysicalUnit / PhysicalDimension are the primary fields used by scalars.
-    // PhysicalUnit1..3 / PhysicalDimension1..3 are per-component fields used by
-    // OSF5 pair (1, 2) and triple (1, 2, 3) channels.
     property PhysicalUnit      : string             read FPhysicalUnit      write FPhysicalUnit;
-    property PhysicalUnit1     : string             read FPhysicalUnit1     write FPhysicalUnit1;
-    property PhysicalUnit2     : string             read FPhysicalUnit2     write FPhysicalUnit2;
-    property PhysicalUnit3     : string             read FPhysicalUnit3     write FPhysicalUnit3;
     property PhysicalDimension : string             read FPhysicalDimension write FPhysicalDimension;
-    property PhysicalDimension1: string             read FPhysicalDimension1 write FPhysicalDimension1;
-    property PhysicalDimension2: string             read FPhysicalDimension2 write FPhysicalDimension2;
-    property PhysicalDimension3: string             read FPhysicalDimension3 write FPhysicalDimension3;
     property MimeType          : string             read FMimeType          write FMimeType;
     property SpectrumType      : string             read FSpectrumType      write FSpectrumType;
 
@@ -227,13 +212,7 @@ begin
     Ch.LengthFieldSize    := OSFLengthFieldSizeFromInt(
                                XMLAttrInt(Node, 'sizeoflengthvalue', OSF_DEFAULT_LENGTH_FIELD_SIZE));
     Ch.PhysicalUnit       := XMLAttrStr   (Node, 'physicalunit',       '');
-    Ch.PhysicalUnit1      := XMLAttrStr   (Node, 'physicalunit1',      '');
-    Ch.PhysicalUnit2      := XMLAttrStr   (Node, 'physicalunit2',      '');
-    Ch.PhysicalUnit3      := XMLAttrStr   (Node, 'physicalunit3',      '');
     Ch.PhysicalDimension  := XMLAttrStr   (Node, 'physicaldimension',  '');
-    Ch.PhysicalDimension1 := XMLAttrStr   (Node, 'physicaldimension1', '');
-    Ch.PhysicalDimension2 := XMLAttrStr   (Node, 'physicaldimension2', '');
-    Ch.PhysicalDimension3 := XMLAttrStr   (Node, 'physicaldimension3', '');
     Ch.MimeType           := XMLAttrStr   (Node, 'mimetype',            '');
     Ch.SpectrumType       := XMLAttrStr   (Node, 'spectrumtype',        '');
     Ch.DisplayName        := XMLAttrStr   (Node, 'displayname',         '');
@@ -266,13 +245,7 @@ begin
     Ch.LengthFieldSize    := OSFLengthFieldSizeFromInt(
                                JSONInt(Obj, 'sizeoflengthvalue',   OSF_DEFAULT_LENGTH_FIELD_SIZE));
     Ch.PhysicalUnit       := JSONStr   (Obj, 'physicalunit',       '');
-    Ch.PhysicalUnit1      := JSONStr   (Obj, 'physicalunit1',      '');
-    Ch.PhysicalUnit2      := JSONStr   (Obj, 'physicalunit2',      '');
-    Ch.PhysicalUnit3      := JSONStr   (Obj, 'physicalunit3',      '');
     Ch.PhysicalDimension  := JSONStr   (Obj, 'physicaldimension',  '');
-    Ch.PhysicalDimension1 := JSONStr   (Obj, 'physicaldimension1', '');
-    Ch.PhysicalDimension2 := JSONStr   (Obj, 'physicaldimension2', '');
-    Ch.PhysicalDimension3 := JSONStr   (Obj, 'physicaldimension3', '');
     Ch.MimeType           := JSONStr   (Obj, 'mimetype',            '');
     Ch.SpectrumType       := JSONStr   (Obj, 'spectrumtype',        '');
     Ch.DisplayName        := JSONStr   (Obj, 'displayname',         '');
@@ -303,20 +276,8 @@ begin
     Builder.AppendFormat(' dataidentifier="%d"', [FDataIdentifier]);
   if FPhysicalUnit <> '' then
     Builder.AppendFormat(' physicalunit="%s"', [XMLEscape(FPhysicalUnit)]);
-  if FPhysicalUnit1 <> '' then
-    Builder.AppendFormat(' physicalunit1="%s"', [XMLEscape(FPhysicalUnit1)]);
-  if FPhysicalUnit2 <> '' then
-    Builder.AppendFormat(' physicalunit2="%s"', [XMLEscape(FPhysicalUnit2)]);
-  if FPhysicalUnit3 <> '' then
-    Builder.AppendFormat(' physicalunit3="%s"', [XMLEscape(FPhysicalUnit3)]);
   if FPhysicalDimension <> '' then
     Builder.AppendFormat(' physicaldimension="%s"', [XMLEscape(FPhysicalDimension)]);
-  if FPhysicalDimension1 <> '' then
-    Builder.AppendFormat(' physicaldimension1="%s"', [XMLEscape(FPhysicalDimension1)]);
-  if FPhysicalDimension2 <> '' then
-    Builder.AppendFormat(' physicaldimension2="%s"', [XMLEscape(FPhysicalDimension2)]);
-  if FPhysicalDimension3 <> '' then
-    Builder.AppendFormat(' physicaldimension3="%s"', [XMLEscape(FPhysicalDimension3)]);
   if FMimeType <> '' then
     Builder.AppendFormat(' mimetype="%s"', [XMLEscape(FMimeType)]);
   if FSpectrumType <> '' then
@@ -348,20 +309,8 @@ begin
     Obj.AddPair('dataidentifier', TJSONNumber.Create(FDataIdentifier));
   if FPhysicalUnit <> '' then
     Obj.AddPair('physicalunit', FPhysicalUnit);
-  if FPhysicalUnit1 <> '' then
-    Obj.AddPair('physicalunit1', FPhysicalUnit1);
-  if FPhysicalUnit2 <> '' then
-    Obj.AddPair('physicalunit2', FPhysicalUnit2);
-  if FPhysicalUnit3 <> '' then
-    Obj.AddPair('physicalunit3', FPhysicalUnit3);
   if FPhysicalDimension <> '' then
     Obj.AddPair('physicaldimension', FPhysicalDimension);
-  if FPhysicalDimension1 <> '' then
-    Obj.AddPair('physicaldimension1', FPhysicalDimension1);
-  if FPhysicalDimension2 <> '' then
-    Obj.AddPair('physicaldimension2', FPhysicalDimension2);
-  if FPhysicalDimension3 <> '' then
-    Obj.AddPair('physicaldimension3', FPhysicalDimension3);
   if FMimeType <> '' then
     Obj.AddPair('mimetype', FMimeType);
   if FSpectrumType <> '' then
