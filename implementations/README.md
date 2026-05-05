@@ -11,7 +11,7 @@ This directory contains standalone OSF reader and writer implementations in vari
 | [Python](python/) | Data analytics, scientific computing | Planned | NumPy and pandas integration; primary language for data exploration |
 | [MicroPython](micropython/) | Embedded only — ESP32, RP2040 | Planned | Minimal footprint; writer-focused for sensor nodes |
 | [Java](java/) | Enterprise systems, Android | Planned | JVM ecosystem; Android mobile data logging |
-| [Rust](rust/) | Systems programming, embedded | Planned | Memory-safe, high-performance; suitable for embedded and server |
+| [Rust](rust/) | Systems programming, embedded | In Progress | Foundation for Python bindings (see [DECISIONS §18](../DECISIONS.md#18-rust-as-foundation-for-python)); magic-header parser landed |
 | [MATLAB](matlab/) | Engineering analysis | Planned | Reader only; integration with MATLAB/Simulink workflows |
 | [JavaScript](javascript/) | Browser and Node.js | Planned | Web dashboards, real-time visualization, Node.js data pipelines |
 | [Swift](swift/) | iOS / macOS / iPadOS | Planned | Reader-focused; Apple ecosystem for field and analysis apps |
