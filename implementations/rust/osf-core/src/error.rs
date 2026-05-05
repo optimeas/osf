@@ -80,4 +80,10 @@ pub enum OsfError {
     /// rather than a graceful skip — the file is corrupted.
     #[error("block references unknown channel index {0}")]
     UnknownChannelIndex(u16),
+
+    /// The block stream payload was structurally malformed — wrong
+    /// length for the declared data type, required field missing,
+    /// equidistant block on a string/binary channel, etc.
+    #[error("invalid OSF block payload: {0}")]
+    InvalidBlock(String),
 }

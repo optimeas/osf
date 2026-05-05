@@ -44,7 +44,8 @@
 //! it is not part of the current scope.
 
 use crate::block::{
-    Block, BlockKind, ControlKind, SkipReason, decode_control_byte,
+    Block, BlockKind, ControlKind, GpsLocation, NumericPayload, RelTimestampedPayload,
+    SkipReason, TimestampedPayload, decode_control_byte,
 };
 use crate::error::OsfError;
 use crate::meta::MetaBlock;
@@ -354,52 +355,72 @@ impl<R: Read> Iterator for BlockReader<R> {
             }
         };
 
-        // Step 7: decode the control byte. Reserved / deprecated /
-        // unknown values become Skipped. The full per-control-byte
-        // typed parsing arrives in the next commit; until then a
-        // recognised control byte still produces a Skipped block so
-        // the stream cursor stays consistent.
-        let (control_byte, body) = payload.split_first().expect("length > 0 guaranteed above");
-        let control = decode_control_byte(*control_byte);
+        // Step 7: decode the control byte and route to the typed
+        // parser for the four supported block types. Reserved /
+        // deprecated / unknown values become Skipped; the stream
+        // cursor is already past the payload so the next next() call
+        // sees the next block.
+        let (control_byte_ref, body) =
+            payload.split_first().expect("length > 0 guaranteed above");
+        let control_byte = *control_byte_ref;
+        let control = decode_control_byte(control_byte);
 
         let bytes_skipped = u64::from(length);
-        let body_bytes = body.to_vec();
         let payload_field = if self.capture_skipped {
-            Some(body_bytes)
+            Some(body.to_vec())
         } else {
             None
         };
 
-        let reason = match control.kind {
-            ControlKind::Reserved | ControlKind::TimebaseRealign => {
-                SkipReason::ReservedBlockType(*control_byte & 0x7F)
-            }
+        let block_kind = match control.kind {
+            ControlKind::Reserved | ControlKind::TimebaseRealign => BlockKind::Skipped {
+                reason: SkipReason::ReservedBlockType(control_byte & 0x7F),
+                bytes_skipped,
+                payload: payload_field,
+            },
             ControlKind::TrustedTimestamp
             | ControlKind::StatusEvent
-            | ControlKind::MessageEvent => {
-                SkipReason::DeprecatedBlockType(*control_byte & 0x7F)
+            | ControlKind::MessageEvent => BlockKind::Skipped {
+                reason: SkipReason::DeprecatedBlockType(control_byte & 0x7F),
+                bytes_skipped,
+                payload: payload_field,
+            },
+            ControlKind::Unknown(raw) => BlockKind::Skipped {
+                reason: SkipReason::ReservedBlockType(raw),
+                bytes_skipped,
+                payload: payload_field,
+            },
+            ControlKind::StartData => match parse_start_data(body, &info.data_type, control.multi_sample) {
+                Ok((ts, rate, samples)) => BlockKind::StartData {
+                    start_timestamp_ns: ts,
+                    sample_rate_hz: rate,
+                    samples,
+                },
+                Err(e) => return Some(Err(e)),
+            },
+            ControlKind::ContinuedData => {
+                match parse_continued_data(body, &info.data_type, control.multi_sample) {
+                    Ok(samples) => BlockKind::ContinuedData { samples },
+                    Err(e) => return Some(Err(e)),
+                }
             }
-            ControlKind::Unknown(raw) => SkipReason::ReservedBlockType(raw),
-            // The four "supported" block types fall through to Skipped
-            // in this commit; the next commit replaces this branch with
-            // typed parsers. Using ReservedBlockType as the placeholder
-            // here is *intentional* — for Session 3 commit 3 the reader
-            // is genuinely treating these as opaque.
-            ControlKind::StartData
-            | ControlKind::ContinuedData
-            | ControlKind::AbsTimeStampData
-            | ControlKind::ContinuedRelStampData => {
-                SkipReason::ReservedBlockType(*control_byte & 0x7F)
+            ControlKind::AbsTimeStampData => {
+                match parse_abs_timestamp_data(body, &info.data_type, control.multi_sample) {
+                    Ok(samples) => BlockKind::AbsTimestampData { samples },
+                    Err(e) => return Some(Err(e)),
+                }
+            }
+            ControlKind::ContinuedRelStampData => {
+                match parse_continued_rel_stamp_data(body, &info.data_type, control.multi_sample) {
+                    Ok(samples) => BlockKind::ContinuedRelStampData { samples },
+                    Err(e) => return Some(Err(e)),
+                }
             }
         };
 
         Some(Ok(Block {
             channel_index,
-            kind: BlockKind::Skipped {
-                reason,
-                bytes_skipped,
-                payload: payload_field,
-            },
+            kind: block_kind,
         }))
     }
 }
@@ -462,6 +483,349 @@ fn unsupported_reason(info: &ChannelInfo) -> Option<SkipReason> {
         return Some(SkipReason::UnsupportedChannelType);
     }
     None
+}
+
+// ---------------------------------------------------------------
+// Payload parsers. All multi-byte integers are little-endian.
+//
+// The functions take the body slice (everything *after* the control
+// byte) plus the channel's data type and the multi-sample flag from
+// bit 7 of the control byte. They return typed payload structs.
+//
+// Sample-count `N` semantics:
+// - `multi_sample = false`: implicit N = 1, no `[u32 N]` prefix.
+// - `multi_sample = true`: explicit `[u32 N]` prefix.
+// ---------------------------------------------------------------
+
+fn parse_start_data(
+    body: &[u8],
+    dt: &DataType,
+    multi: bool,
+) -> Result<(i64, f64, NumericPayload), OsfError> {
+    let mut cur = body;
+    let start_timestamp_ns = cur
+        .read_i64::<LittleEndian>()
+        .map_err(|e| invalid_block(format!("StartData timestamp: {e}")))?;
+    let sample_rate_hz = cur
+        .read_f64::<LittleEndian>()
+        .map_err(|e| invalid_block(format!("StartData sample rate: {e}")))?;
+    let n = read_sample_count(&mut cur, multi)?;
+    let samples = read_numeric_n(&mut cur, dt, n)?;
+    Ok((start_timestamp_ns, sample_rate_hz, samples))
+}
+
+fn parse_continued_data(
+    body: &[u8],
+    dt: &DataType,
+    multi: bool,
+) -> Result<NumericPayload, OsfError> {
+    let mut cur = body;
+    let n = read_sample_count(&mut cur, multi)?;
+    read_numeric_n(&mut cur, dt, n)
+}
+
+fn parse_abs_timestamp_data(
+    body: &[u8],
+    dt: &DataType,
+    multi: bool,
+) -> Result<TimestampedPayload, OsfError> {
+    // String / binary always require bit 7 set per spec; we tolerate
+    // bit-7-clear with a warn and treat it as N=1.
+    if matches!(dt, DataType::String | DataType::Binary) {
+        return parse_abs_timestamp_string_or_binary(body, dt, multi);
+    }
+    if matches!(dt, DataType::ByteArray) {
+        // Reader normalises bytearray -> Binary in the metablock parser,
+        // so this branch is theoretically unreachable. Defensive only.
+        return parse_abs_timestamp_string_or_binary(body, &DataType::Binary, multi);
+    }
+
+    let mut cur = body;
+    let n = read_sample_count(&mut cur, multi)?;
+
+    macro_rules! read_pairs {
+        ($variant:ident, $reader:expr, $len:expr) => {{
+            let mut v = Vec::with_capacity(n);
+            for _ in 0..n {
+                let ts = cur
+                    .read_i64::<LittleEndian>()
+                    .map_err(|e| invalid_block(format!("AbsTs ts: {e}")))?;
+                let value = $reader(&mut cur)
+                    .map_err(|e| invalid_block(format!("AbsTs value ({}): {e}", $len)))?;
+                v.push((ts, value));
+            }
+            TimestampedPayload::$variant(v)
+        }};
+    }
+
+    let payload = match dt {
+        DataType::Bool => read_pairs!(Bool, |c: &mut &[u8]| c.read_u8().map(|b| b != 0), 1usize),
+        DataType::Int8 => read_pairs!(Int8, |c: &mut &[u8]| c.read_i8(), 1usize),
+        DataType::Int16 => read_pairs!(Int16, |c: &mut &[u8]| c.read_i16::<LittleEndian>(), 2usize),
+        DataType::Int32 => read_pairs!(Int32, |c: &mut &[u8]| c.read_i32::<LittleEndian>(), 4usize),
+        DataType::Int64 => read_pairs!(Int64, |c: &mut &[u8]| c.read_i64::<LittleEndian>(), 8usize),
+        DataType::UInt8 => read_pairs!(UInt8, |c: &mut &[u8]| c.read_u8(), 1usize),
+        DataType::UInt16 => {
+            read_pairs!(UInt16, |c: &mut &[u8]| c.read_u16::<LittleEndian>(), 2usize)
+        }
+        DataType::UInt32 => {
+            read_pairs!(UInt32, |c: &mut &[u8]| c.read_u32::<LittleEndian>(), 4usize)
+        }
+        DataType::UInt64 => {
+            read_pairs!(UInt64, |c: &mut &[u8]| c.read_u64::<LittleEndian>(), 8usize)
+        }
+        DataType::Float => read_pairs!(Float, |c: &mut &[u8]| c.read_f32::<LittleEndian>(), 4usize),
+        DataType::Double => {
+            read_pairs!(Double, |c: &mut &[u8]| c.read_f64::<LittleEndian>(), 8usize)
+        }
+        DataType::GpsLocation => {
+            let mut v = Vec::with_capacity(n);
+            for _ in 0..n {
+                let ts = cur
+                    .read_i64::<LittleEndian>()
+                    .map_err(|e| invalid_block(format!("AbsTs gps ts: {e}")))?;
+                let gps = read_gps_location(&mut cur)?;
+                v.push((ts, gps));
+            }
+            TimestampedPayload::GpsLocation(v)
+        }
+        DataType::String | DataType::Binary | DataType::ByteArray => {
+            unreachable!("string/binary handled at top of function")
+        }
+        DataType::Unsupported(_) => {
+            // Should already have been routed to Skipped in next();
+            // defensive fallback.
+            return Err(invalid_block(
+                "AbsTimeStampData on Unsupported channel reached the typed parser".into(),
+            ));
+        }
+    };
+    Ok(payload)
+}
+
+/// Handle `bcAbsTimeStampData` for `string` and `binary`. Per spec the
+/// multi-sample bit is always set; we additionally tolerate
+/// `multi == false` as an implicit `N=1`. With `N>1` the spec mandates
+/// equal-length segments — we split the body equally and parse each
+/// chunk. If the body length is not divisible by `N`, we log a warn
+/// and fall back to a single-sample interpretation rather than failing.
+fn parse_abs_timestamp_string_or_binary(
+    body: &[u8],
+    dt: &DataType,
+    multi: bool,
+) -> Result<TimestampedPayload, OsfError> {
+    let (n, rest) = if multi {
+        let mut cur = body;
+        let raw = cur
+            .read_u32::<LittleEndian>()
+            .map_err(|e| invalid_block(format!("AbsTs string/binary N: {e}")))?;
+        if raw == 0 {
+            return build_string_or_binary(dt, Vec::new());
+        }
+        (raw as usize, cur)
+    } else {
+        warn!(
+            "bcAbsTimeStampData for {dt:?} found with bit 7 clear; \
+             spec mandates bit 7 set. Treating as implicit N=1."
+        );
+        (1usize, body)
+    };
+
+    if n == 1 {
+        let mut cur = rest;
+        let ts = cur
+            .read_i64::<LittleEndian>()
+            .map_err(|e| invalid_block(format!("AbsTs string/binary ts: {e}")))?;
+        let payload = strip_trailing_nul(cur);
+        return build_string_or_binary(dt, vec![(ts, payload.to_vec())]);
+    }
+
+    // N > 1: equal-length segments.
+    let total = rest.len();
+    if total % n != 0 {
+        warn!(
+            "bcAbsTimeStampData for {dt:?} with N={n} has body length {total} \
+             that is not divisible by N; falling back to single-sample parse"
+        );
+        let mut cur = rest;
+        let ts = cur
+            .read_i64::<LittleEndian>()
+            .map_err(|e| invalid_block(format!("AbsTs string/binary ts: {e}")))?;
+        let payload = strip_trailing_nul(cur);
+        return build_string_or_binary(dt, vec![(ts, payload.to_vec())]);
+    }
+
+    let per_sample = total / n;
+    if per_sample < 9 {
+        return Err(invalid_block(format!(
+            "bcAbsTimeStampData for {dt:?} N={n}: per-sample size {per_sample} \
+             is less than 9 (need i64 ts + at least one byte + null terminator)"
+        )));
+    }
+    let mut samples = Vec::with_capacity(n);
+    for i in 0..n {
+        let chunk = &rest[i * per_sample..(i + 1) * per_sample];
+        let mut chunk_cur = chunk;
+        let ts = chunk_cur
+            .read_i64::<LittleEndian>()
+            .map_err(|e| invalid_block(format!("AbsTs string/binary ts (chunk {i}): {e}")))?;
+        let payload = strip_trailing_nul(chunk_cur);
+        samples.push((ts, payload.to_vec()));
+    }
+    build_string_or_binary(dt, samples)
+}
+
+fn build_string_or_binary(
+    dt: &DataType,
+    samples: Vec<(i64, Vec<u8>)>,
+) -> Result<TimestampedPayload, OsfError> {
+    match dt {
+        DataType::String => {
+            let mut decoded = Vec::with_capacity(samples.len());
+            for (ts, bytes) in samples {
+                let s = String::from_utf8(bytes).map_err(|e| {
+                    invalid_block(format!("AbsTs string is not valid UTF-8: {e}"))
+                })?;
+                decoded.push((ts, s));
+            }
+            Ok(TimestampedPayload::String(decoded))
+        }
+        DataType::Binary | DataType::ByteArray => Ok(TimestampedPayload::Binary(samples)),
+        other => Err(invalid_block(format!(
+            "build_string_or_binary called with non-string/binary datatype {other:?}"
+        ))),
+    }
+}
+
+/// Strip a single trailing `0x00` if present; log a warn if the byte
+/// is not `0x00` (writer bug). Returns the remaining slice.
+fn strip_trailing_nul(bytes: &[u8]) -> &[u8] {
+    if let Some((last, rest)) = bytes.split_last() {
+        if *last == 0x00 {
+            return rest;
+        }
+        warn!(
+            "string/binary block did not end with the spec-mandated 0x00; \
+             keeping the byte"
+        );
+    }
+    bytes
+}
+
+fn parse_continued_rel_stamp_data(
+    body: &[u8],
+    dt: &DataType,
+    multi: bool,
+) -> Result<RelTimestampedPayload, OsfError> {
+    let mut cur = body;
+    let n = read_sample_count(&mut cur, multi)?;
+
+    macro_rules! read_rel_pairs {
+        ($variant:ident, $reader:expr) => {{
+            let mut v = Vec::with_capacity(n);
+            for _ in 0..n {
+                let dt_ns = cur
+                    .read_u32::<LittleEndian>()
+                    .map_err(|e| invalid_block(format!("RelTs delta: {e}")))?;
+                let value = $reader(&mut cur)
+                    .map_err(|e| invalid_block(format!("RelTs value: {e}")))?;
+                v.push((dt_ns, value));
+            }
+            RelTimestampedPayload::$variant(v)
+        }};
+    }
+
+    let payload = match dt {
+        DataType::Bool => read_rel_pairs!(Bool, |c: &mut &[u8]| c.read_u8().map(|b| b != 0)),
+        DataType::Int8 => read_rel_pairs!(Int8, |c: &mut &[u8]| c.read_i8()),
+        DataType::Int16 => read_rel_pairs!(Int16, |c: &mut &[u8]| c.read_i16::<LittleEndian>()),
+        DataType::Int32 => read_rel_pairs!(Int32, |c: &mut &[u8]| c.read_i32::<LittleEndian>()),
+        DataType::Int64 => read_rel_pairs!(Int64, |c: &mut &[u8]| c.read_i64::<LittleEndian>()),
+        DataType::UInt8 => read_rel_pairs!(UInt8, |c: &mut &[u8]| c.read_u8()),
+        DataType::UInt16 => read_rel_pairs!(UInt16, |c: &mut &[u8]| c.read_u16::<LittleEndian>()),
+        DataType::UInt32 => read_rel_pairs!(UInt32, |c: &mut &[u8]| c.read_u32::<LittleEndian>()),
+        DataType::UInt64 => read_rel_pairs!(UInt64, |c: &mut &[u8]| c.read_u64::<LittleEndian>()),
+        DataType::Float => read_rel_pairs!(Float, |c: &mut &[u8]| c.read_f32::<LittleEndian>()),
+        DataType::Double => read_rel_pairs!(Double, |c: &mut &[u8]| c.read_f64::<LittleEndian>()),
+        other => {
+            return Err(invalid_block(format!(
+                "bcContinuedRelStampData not allowed for datatype {other:?}"
+            )));
+        }
+    };
+    Ok(payload)
+}
+
+/// Read a numeric sample run of length `n` from `cur`, building the
+/// matching [`NumericPayload`] variant. Numeric data types only —
+/// equidistant blocks (`bcStartData`, `bcContinuedData`) reject the
+/// non-numeric types per spec.
+fn read_numeric_n(
+    cur: &mut &[u8],
+    dt: &DataType,
+    n: usize,
+) -> Result<NumericPayload, OsfError> {
+    macro_rules! read_run {
+        ($variant:ident, $reader:expr) => {{
+            let mut v = Vec::with_capacity(n);
+            for _ in 0..n {
+                v.push($reader(cur).map_err(|e| invalid_block(format!("numeric run: {e}")))?);
+            }
+            NumericPayload::$variant(v)
+        }};
+    }
+
+    let payload = match dt {
+        DataType::Bool => read_run!(Bool, |c: &mut &[u8]| c.read_u8().map(|b| b != 0)),
+        DataType::Int8 => read_run!(Int8, |c: &mut &[u8]| c.read_i8()),
+        DataType::Int16 => read_run!(Int16, |c: &mut &[u8]| c.read_i16::<LittleEndian>()),
+        DataType::Int32 => read_run!(Int32, |c: &mut &[u8]| c.read_i32::<LittleEndian>()),
+        DataType::Int64 => read_run!(Int64, |c: &mut &[u8]| c.read_i64::<LittleEndian>()),
+        DataType::UInt8 => read_run!(UInt8, |c: &mut &[u8]| c.read_u8()),
+        DataType::UInt16 => read_run!(UInt16, |c: &mut &[u8]| c.read_u16::<LittleEndian>()),
+        DataType::UInt32 => read_run!(UInt32, |c: &mut &[u8]| c.read_u32::<LittleEndian>()),
+        DataType::UInt64 => read_run!(UInt64, |c: &mut &[u8]| c.read_u64::<LittleEndian>()),
+        DataType::Float => read_run!(Float, |c: &mut &[u8]| c.read_f32::<LittleEndian>()),
+        DataType::Double => read_run!(Double, |c: &mut &[u8]| c.read_f64::<LittleEndian>()),
+        other => {
+            return Err(invalid_block(format!(
+                "equidistant blocks (bcStartData / bcContinuedData) only support \
+                 numeric datatypes; got {other:?}"
+            )));
+        }
+    };
+    Ok(payload)
+}
+
+fn read_sample_count(cur: &mut &[u8], multi: bool) -> Result<usize, OsfError> {
+    if !multi {
+        return Ok(1);
+    }
+    let n = cur
+        .read_u32::<LittleEndian>()
+        .map_err(|e| invalid_block(format!("multi-sample N: {e}")))?;
+    Ok(n as usize)
+}
+
+fn read_gps_location(cur: &mut &[u8]) -> Result<GpsLocation, OsfError> {
+    let latitude = cur
+        .read_f64::<LittleEndian>()
+        .map_err(|e| invalid_block(format!("gps latitude: {e}")))?;
+    let longitude = cur
+        .read_f64::<LittleEndian>()
+        .map_err(|e| invalid_block(format!("gps longitude: {e}")))?;
+    let altitude = cur
+        .read_f64::<LittleEndian>()
+        .map_err(|e| invalid_block(format!("gps altitude: {e}")))?;
+    Ok(GpsLocation {
+        latitude,
+        longitude,
+        altitude,
+    })
+}
+
+fn invalid_block(msg: String) -> OsfError {
+    OsfError::InvalidBlock(msg)
 }
 
 #[cfg(test)]
@@ -630,6 +994,246 @@ mod tests {
             }
             other => panic!("expected Skipped, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parses_single_sample_abs_timestamp_int64() {
+        // Layout for the actual osf5_scalar_int64.osf first block:
+        // [u16 0][u16 17][u8 0x08][i64 ts][i64 0]
+        let meta = make_meta(vec![channel(0, DataType::Int64, 2)]);
+        let mut bytes = vec![0u8, 0, 17, 0, 0x08];
+        bytes.extend_from_slice(&0x18AC_BBA9_5F76_EC57i64.to_le_bytes());
+        bytes.extend_from_slice(&0i64.to_le_bytes());
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::AbsTimestampData {
+                samples: TimestampedPayload::Int64(v),
+            } => {
+                assert_eq!(v.len(), 1);
+                assert_eq!(v[0].0, 0x18AC_BBA9_5F76_EC57);
+                assert_eq!(v[0].1, 0);
+            }
+            other => panic!("expected AbsTimestampData/Int64, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_multi_sample_abs_timestamp_double() {
+        // [u16 0][u16 N=2 → length=29][u8 0x88 (multi)][u32 N=2]
+        // [i64 ts][f64][i64 ts][f64]
+        let meta = make_meta(vec![channel(0, DataType::Double, 2)]);
+        let payload_len = 1 + 4 + 2 * (8 + 8); // 1 ctl + 4 N + 2 × (ts + value)
+        let mut bytes = vec![0u8, 0];
+        bytes.extend_from_slice(&u16::try_from(payload_len).unwrap().to_le_bytes());
+        bytes.push(0x88);
+        bytes.extend_from_slice(&2u32.to_le_bytes());
+        bytes.extend_from_slice(&100i64.to_le_bytes());
+        bytes.extend_from_slice(&1.5f64.to_le_bytes());
+        bytes.extend_from_slice(&200i64.to_le_bytes());
+        bytes.extend_from_slice(&2.5f64.to_le_bytes());
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::AbsTimestampData {
+                samples: TimestampedPayload::Double(v),
+            } => {
+                assert_eq!(v, vec![(100, 1.5), (200, 2.5)]);
+            }
+            other => panic!("expected AbsTimestampData/Double, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_start_data_single_sample_double() {
+        // [u16 0][u16 length=17][u8 0x06][i64 ts][f64 rate][f64 value]
+        // length = 1 ctl + 8 ts + 8 rate + 8 value = 25
+        let meta = make_meta(vec![channel(0, DataType::Double, 2)]);
+        let mut bytes = vec![0u8, 0, 25, 0, 0x06];
+        bytes.extend_from_slice(&1_000_000i64.to_le_bytes());
+        bytes.extend_from_slice(&1000.0f64.to_le_bytes());
+        bytes.extend_from_slice(&2.5f64.to_le_bytes());
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::StartData {
+                start_timestamp_ns,
+                sample_rate_hz,
+                samples: NumericPayload::Double(v),
+            } => {
+                assert_eq!(start_timestamp_ns, 1_000_000);
+                assert!((sample_rate_hz - 1000.0).abs() < 1e-9);
+                assert_eq!(v, vec![2.5]);
+            }
+            other => panic!("expected StartData/Double, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_start_data_multi_sample_float_n10() {
+        // [u16 0][u16 length][u8 0x86][i64 ts][f64 rate][u32 N=10][10×f32]
+        let meta = make_meta(vec![channel(0, DataType::Float, 2)]);
+        let n: u32 = 10;
+        let payload_len = 1 + 8 + 8 + 4 + (n as usize) * 4;
+        let mut bytes = vec![0u8, 0];
+        bytes.extend_from_slice(&u16::try_from(payload_len).unwrap().to_le_bytes());
+        bytes.push(0x86);
+        bytes.extend_from_slice(&7i64.to_le_bytes());
+        bytes.extend_from_slice(&500.0f64.to_le_bytes());
+        bytes.extend_from_slice(&n.to_le_bytes());
+        for i in 0..n {
+            bytes.extend_from_slice(&(i as f32).to_le_bytes());
+        }
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::StartData {
+                samples: NumericPayload::Float(v),
+                ..
+            } => {
+                assert_eq!(v.len(), 10);
+                assert_eq!(v[3], 3.0);
+            }
+            other => panic!("expected StartData/Float, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_continued_data_int16_multi() {
+        // [u16 0][u16 length][u8 0x85][u32 N=4][4×i16]
+        let meta = make_meta(vec![channel(0, DataType::Int16, 2)]);
+        let n: u32 = 4;
+        let payload_len = 1 + 4 + (n as usize) * 2;
+        let mut bytes = vec![0u8, 0];
+        bytes.extend_from_slice(&u16::try_from(payload_len).unwrap().to_le_bytes());
+        bytes.push(0x85);
+        bytes.extend_from_slice(&n.to_le_bytes());
+        for i in 0..n as i16 {
+            bytes.extend_from_slice(&(10 * i).to_le_bytes());
+        }
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::ContinuedData {
+                samples: NumericPayload::Int16(v),
+            } => {
+                assert_eq!(v, vec![0, 10, 20, 30]);
+            }
+            other => panic!("expected ContinuedData/Int16, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_abs_timestamp_string_with_null_strip() {
+        // [u16 0][u32 length][u8 0x88][u32 N=1][i64 ts][b"hi" + 0x00]
+        let meta = make_meta(vec![channel(0, DataType::String, 4)]);
+        let body_string = b"hi\x00";
+        let payload_len = 1 + 4 + 8 + body_string.len();
+        let mut bytes = vec![0u8, 0];
+        bytes.extend_from_slice(&u32::try_from(payload_len).unwrap().to_le_bytes());
+        bytes.push(0x88);
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&42i64.to_le_bytes());
+        bytes.extend_from_slice(body_string);
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::AbsTimestampData {
+                samples: TimestampedPayload::String(v),
+            } => {
+                assert_eq!(v, vec![(42, "hi".to_string())]);
+            }
+            other => panic!("expected AbsTimestampData/String, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_abs_timestamp_binary_jpeg_magic() {
+        let meta = make_meta(vec![channel(0, DataType::Binary, 4)]);
+        let body = [0xFFu8, 0xD8, 0xFF, 0xE0, 0x00]; // JPEG magic + null
+        let payload_len = 1 + 4 + 8 + body.len();
+        let mut bytes = vec![0u8, 0];
+        bytes.extend_from_slice(&u32::try_from(payload_len).unwrap().to_le_bytes());
+        bytes.push(0x88);
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&123i64.to_le_bytes());
+        bytes.extend_from_slice(&body);
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::AbsTimestampData {
+                samples: TimestampedPayload::Binary(v),
+            } => {
+                assert_eq!(v, vec![(123, vec![0xFF, 0xD8, 0xFF, 0xE0])]);
+            }
+            other => panic!("expected AbsTimestampData/Binary, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_abs_timestamp_gpslocation() {
+        let meta = make_meta(vec![channel(0, DataType::GpsLocation, 2)]);
+        let payload_len = 1 + 8 + 24;
+        let mut bytes = vec![0u8, 0];
+        bytes.extend_from_slice(&u16::try_from(payload_len).unwrap().to_le_bytes());
+        bytes.push(0x08);
+        bytes.extend_from_slice(&999i64.to_le_bytes());
+        bytes.extend_from_slice(&48.1374f64.to_le_bytes());
+        bytes.extend_from_slice(&11.5755f64.to_le_bytes());
+        bytes.extend_from_slice(&519.0f64.to_le_bytes());
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::AbsTimestampData {
+                samples: TimestampedPayload::GpsLocation(v),
+            } => {
+                assert_eq!(v.len(), 1);
+                assert_eq!(v[0].0, 999);
+                assert!((v[0].1.latitude - 48.1374).abs() < 1e-9);
+                assert!((v[0].1.longitude - 11.5755).abs() < 1e-9);
+                assert!((v[0].1.altitude - 519.0).abs() < 1e-9);
+            }
+            other => panic!("expected GpsLocation, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_continued_rel_stamp_data_int16() {
+        // OSF4-only block type. [u16 0][u16 length][u8 0x87][u32 N=2]
+        // [u32 dt][i16 v][u32 dt][i16 v]
+        let meta = make_meta(vec![channel(0, DataType::Int16, 2)]);
+        let payload_len = 1 + 4 + 2 * (4 + 2);
+        let mut bytes = vec![0u8, 0];
+        bytes.extend_from_slice(&u16::try_from(payload_len).unwrap().to_le_bytes());
+        bytes.push(0x87);
+        bytes.extend_from_slice(&2u32.to_le_bytes());
+        bytes.extend_from_slice(&100u32.to_le_bytes());
+        bytes.extend_from_slice(&7i16.to_le_bytes());
+        bytes.extend_from_slice(&200u32.to_le_bytes());
+        bytes.extend_from_slice(&8i16.to_le_bytes());
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::ContinuedRelStampData {
+                samples: RelTimestampedPayload::Int16(v),
+            } => {
+                assert_eq!(v, vec![(100, 7), (200, 8)]);
+            }
+            other => panic!("expected ContinuedRelStampData/Int16, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn equidistant_block_with_string_data_type_is_invalid_block() {
+        let meta = make_meta(vec![channel(0, DataType::String, 4)]);
+        // bcContinuedData (5) on a string channel — not allowed.
+        let mut bytes = vec![0u8, 0];
+        bytes.extend_from_slice(&5u32.to_le_bytes()); // length=5 (u32)
+        bytes.push(0x05);
+        bytes.extend_from_slice(&[1, 2, 3, 4]);
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let err = r.next().unwrap().unwrap_err();
+        assert!(matches!(err, OsfError::InvalidBlock(_)), "got {err:?}");
     }
 
     #[test]
