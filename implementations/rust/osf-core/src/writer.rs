@@ -893,6 +893,136 @@ fn write_timestamped_numeric_run<W: Write>(
 }
 
 // -----------------------------------------------------------
+// Convenience: write_to_file / write_to from a DataManager.
+// -----------------------------------------------------------
+
+/// Write the contents of a [`crate::DataManager`] to `path` as an
+/// OSF5 file. Always emits OSF5 even if the source was OSF4
+/// (DECISIONS §6).
+///
+/// # Errors
+///
+/// Forwards errors from [`WriterBuilder::from_manager`] and
+/// [`WriterBuilder::write_to_file`].
+pub fn write_to_file(
+    manager: &crate::DataManager,
+    path: impl AsRef<Path>,
+) -> Result<(), OsfError> {
+    WriterBuilder::from_manager(manager)?.write_to_file(path)
+}
+
+/// Stream the contents of a [`crate::DataManager`] to any `Write`
+/// sink as an OSF5 file.
+///
+/// # Errors
+///
+/// Forwards errors from [`WriterBuilder::from_manager`] and
+/// [`WriterBuilder::write_to`].
+pub fn write_to<W: Write>(manager: &crate::DataManager, writer: W) -> Result<(), OsfError> {
+    WriterBuilder::from_manager(manager)?.write_to(writer)
+}
+
+/// Build a [`ChannelDef`] from a manager-side typed [`crate::Channel`].
+fn channel_def_from_manager_channel(chan: &crate::Channel) -> ChannelDef {
+    let def = chan.channel_def();
+    let mime_type = match chan {
+        crate::Channel::Variable(v) => v.mime_type.clone(),
+        _ => None,
+    };
+    ChannelDef {
+        name: chan.name().to_string(),
+        data_type: chan.data_type(),
+        channel_type: def.channel_type.clone(),
+        size_of_length_value: def.size_of_length_value,
+        physical_unit: chan.physical_unit().map(str::to_string),
+        physical_dimension: def.physical_dimension.clone(),
+        display_name: chan.display_name().map(str::to_string),
+        mime_type,
+        spectrum_type: def.spectrum_type,
+        reference: def.reference.clone(),
+        comment: def.comment.clone(),
+        time_increment_ns: def.time_increment_ns,
+    }
+}
+
+/// Copy every sample from a manager-side channel into the builder's
+/// matching target channel.
+fn copy_channel_data(
+    b: &mut WriterBuilder,
+    chan: &crate::Channel,
+    target_index: u16,
+) -> Result<(), OsfError> {
+    match chan {
+        crate::Channel::Equidistant(eq) => {
+            for segment in eq.segments() {
+                copy_equidistant_segment(b, target_index, segment, eq.values())?;
+            }
+        }
+        crate::Channel::Timestamped(ts) => {
+            copy_timestamped(b, target_index, ts.timestamps_ns(), ts.values())?;
+        }
+        crate::Channel::Variable(var) => {
+            if let Ok(strings) = var.as_strings() {
+                b.add_string_samples(target_index, var.timestamps_ns(), strings)?;
+            } else if let Ok(binaries) = var.as_binaries() {
+                b.add_binary_samples(target_index, var.timestamps_ns(), binaries)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn copy_equidistant_segment(
+    b: &mut WriterBuilder,
+    channel: u16,
+    segment: &crate::Segment,
+    values: &NumericValues,
+) -> Result<(), OsfError> {
+    let start = segment.start_index;
+    let end = start + segment.sample_count;
+    match values {
+        NumericValues::Float(v) => b.add_equidistant_segment_f32(
+            channel,
+            segment.start_timestamp_ns,
+            segment.sample_rate_hz,
+            &v[start..end],
+        ),
+        NumericValues::Double(v) => b.add_equidistant_segment_f64(
+            channel,
+            segment.start_timestamp_ns,
+            segment.sample_rate_hz,
+            &v[start..end],
+        ),
+        other => Err(OsfError::InvalidBlock(format!(
+            "channel {channel}: equidistant data type {:?} is not float or double",
+            other.data_type()
+        ))),
+    }
+}
+
+fn copy_timestamped(
+    b: &mut WriterBuilder,
+    channel: u16,
+    timestamps: &[i64],
+    values: &NumericValues,
+) -> Result<(), OsfError> {
+    match values {
+        NumericValues::Bool(v) => b.add_timestamped_samples_bool(channel, timestamps, v),
+        NumericValues::Int8(v) => b.add_timestamped_samples_i8(channel, timestamps, v),
+        NumericValues::Int16(v) => b.add_timestamped_samples_i16(channel, timestamps, v),
+        NumericValues::Int32(v) => b.add_timestamped_samples_i32(channel, timestamps, v),
+        NumericValues::Int64(v) => b.add_timestamped_samples_i64(channel, timestamps, v),
+        NumericValues::UInt8(v) => b.add_timestamped_samples_u8(channel, timestamps, v),
+        NumericValues::UInt16(v) => b.add_timestamped_samples_u16(channel, timestamps, v),
+        NumericValues::UInt32(v) => b.add_timestamped_samples_u32(channel, timestamps, v),
+        NumericValues::UInt64(v) => b.add_timestamped_samples_u64(channel, timestamps, v),
+        NumericValues::Float(v) => b.add_timestamped_samples_f32(channel, timestamps, v),
+        NumericValues::Double(v) => b.add_timestamped_samples_f64(channel, timestamps, v),
+        NumericValues::GpsLocation(v) => b.add_timestamped_gps_samples(channel, timestamps, v),
+    }
+}
+
+// -----------------------------------------------------------
 // Metablock JSON serialisation.
 // -----------------------------------------------------------
 
@@ -1448,6 +1578,41 @@ impl WriterBuilder {
             }
         }
         Ok(())
+    }
+
+    /// Build a [`WriterBuilder`] from a fully-loaded [`DataManager`].
+    ///
+    /// The intended use case is "round-trip" / "copy" workflows: load
+    /// an OSF file via `DataManager::load_from_file`, possibly inspect
+    /// or filter the channels, and write the result back as an OSF5
+    /// file. File-level metadata is copied verbatim except `created_utc`,
+    /// which is reset at write time.
+    ///
+    /// # Errors
+    ///
+    /// Forwards any per-channel error from [`Self::add_channel`] /
+    /// `add_*_samples` — primarily when the source manager contains
+    /// `DataType::Unsupported` channels (which the builder rejects;
+    /// the manager would normally have dropped them at load time).
+    pub fn from_manager(mgr: &crate::DataManager) -> Result<Self, OsfError> {
+        let mut b = WriterBuilder::new();
+
+        // Copy file-info verbatim except created_utc.
+        b.file_info.creator = mgr.meta.file_info.creator.clone();
+        b.file_info.tag = mgr.meta.file_info.tag.clone();
+        b.file_info.reason = mgr.meta.file_info.reason.clone();
+        b.file_info.created_at_latitude = mgr.meta.file_info.created_at_latitude;
+        b.file_info.created_at_longitude = mgr.meta.file_info.created_at_longitude;
+        b.file_info.created_at_altitude = mgr.meta.file_info.created_at_altitude;
+        b.file_info.namespace_sep = mgr.meta.file_info.namespace_sep.clone();
+        b.file_info.comment = mgr.meta.file_info.comment.clone();
+
+        for chan in mgr.channels() {
+            let def = channel_def_from_manager_channel(chan);
+            let target_index = b.add_channel(def)?;
+            copy_channel_data(&mut b, chan, target_index)?;
+        }
+        Ok(b)
     }
 
     fn append_variable(
