@@ -232,7 +232,7 @@ Typische Parameter:
 
 * **name** – Name der Information
 * **value** – Wert (als String oder typisiert)
-* **datatype** – Typ des Wertes (`string`, `int32`, `float`, `bytearray` etc.)
+* **datatype** – Typ des Wertes (`string`, `int32`, `float`, `binary`, `gpslocation` etc.)
 * **physicalunit** – Optional, physikalische Einheit des Wertes
 
 Metadaten sind frei definierbar und eignen sich für:
@@ -537,13 +537,13 @@ Das Steuerbyte wird als 8-Bit-Wert interpretiert. Die unteren 7 Bits definiere
 
 #### Übersicht der Blocktypen
 
-| Wert (0–6) | Enum                | Bedeutung                                                                                  | Datenblock-Inhalt |
+| Wert (0–8) | Enum                | Bedeutung                                                                                  | Datenblock-Inhalt |
 |------------|--------------------|-------------------------------------------------------------------------------------------|-------------------|
 | **0**      | `bcReserved`       | Reserviert für zukünftige Nutzung. Ursprünglich *bcMetaData*, bisher nicht genutzt.        | Variabel, interne Sonderfunktionen |
 | **1**      | `bcTrustedTimestamp` | `Entfällt` Ursprünglich für konstante Werte mit „gültig bis“-Zeitstempel gedacht. Empfehlung: Stützstellen durch die Anwendung setzen. | `int64`: Absoluter Zeitstempel (ns since Epoch) |
 | **2**      | `bcTimebaseRealign` | `Entfällt`Anpassung der Zeitachse. Kann bei Bedarf durch Schreiben eines neuen Blocks mit absolutem Startzeitpunkt ersetzt werden. | `int64`: Absoluter Zeitstempel<br/>`int64`: Zeitverschiebung (ns) |
 | **3**      | `bcStatusEvent`    | `Entfällt` Diente zur Mitführung von Statusinformationen pro Kanal. Wird nicht mehr genutzt. | `int64`: Absoluter Zeitstempel<br/>`uint32`: Status-Wort |
-| **4**      | `bcMessageEvent`   | `Entfällt` Kann vollständig durch `bcAbsTimeStampData` mit `datatype=string` ersetzt werden. | `int64`: Absoluter Zeitstempel<br/>`string`: Text ohne 0-Terminierung |
+| **4**      | `bcMessageEvent`   | `Entfällt` Kann vollständig durch `bcAbsTimeStampData` mit `datatype=string` ersetzt werden. | `int64`: Absoluter Zeitstempel<br/>`string`: Text |
 | **5**      | `bcContinuedData`  | Daten mit fester Abtastrate fortsetzen. Bei gesetztem Bit 7 mehrere Werte im Block.        | `[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × Datenwerte |
 | **6**      | `bcStartData`      | Erster Datenblock mit fester Abtastrate; trägt zusätzlich die ab diesem Block gültige Abtastrate (z. B. bei Trigger). Enthält immer einen absoluten Startzeitstempel. | `int64`: Absoluter Zeitstempel<br/>`double`: Abtastrate (Hz)<br/>`[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × Datenwerte |
 | **7**      | `bcContinuedRelStampData` | `Entfällt`, `In OSF5 beim Lesen unterstützt` Ursprünglich zur Einsparung von 4 Byte pro Sample mit relativen Zeitstempeln. | `[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × (`uint32` Relativzeit + Datenwert) |
