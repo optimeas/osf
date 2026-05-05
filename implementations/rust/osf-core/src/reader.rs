@@ -49,11 +49,13 @@ use crate::block::{
 };
 use crate::error::OsfError;
 use crate::meta::MetaBlock;
+use crate::stats::{ChannelStats, ReaderStats};
 use crate::types::{ChannelType, DataType};
 use byteorder::{LittleEndian, ReadBytesExt};
 use log::{debug, warn};
 use std::collections::HashMap;
 use std::io::Read;
+use std::time::Instant;
 
 /// Special channel index that introduces the optional info-data block
 /// at the end of an OSF4 file. OSF5 no longer writes it but readers
@@ -65,9 +67,9 @@ const TRAILER_CHANNEL_INDEX: u16 = 0xFFFF;
 const MAGIC_TRAILER_LEN: usize = 40;
 
 /// Per-channel metadata the reader needs to decode a block: the
-/// channel and data types so we know how to route the payload, and
+/// channel and data types so we know how to route the payload, plus
 /// `size_of_length_value` so we know how wide the length prefix is on
-/// the wire.
+/// the wire. Channel name is recorded in [`ChannelStats`] only.
 #[derive(Debug, Clone)]
 struct ChannelInfo {
     channel_type: ChannelType,
@@ -95,9 +97,8 @@ pub struct BlockReader<R: Read> {
     channels: HashMap<u16, ChannelInfo>,
     finished: bool,
     capture_skipped: bool,
-    file_size_bytes: Option<u64>,
-    blocks_truncated: u64,
-    trailer_seen: bool,
+    started: Instant,
+    stats: ReaderStats,
 }
 
 impl<R: Read> BlockReader<R> {
@@ -105,10 +106,20 @@ impl<R: Read> BlockReader<R> {
     ///
     /// The metablock is consumed only for its channel definitions; the
     /// reader keeps a `HashMap<u16, ChannelInfo>` indexed by channel
-    /// index for fast lookup during iteration.
+    /// index for fast lookup during iteration. Per-channel stats are
+    /// pre-seeded with the channel name and zero counters.
     pub fn new(inner: R, meta: &MetaBlock) -> Self {
         let mut channels = HashMap::with_capacity(meta.channels.len());
+        let mut stats = ReaderStats {
+            channels_total: meta.channels.len(),
+            ..ReaderStats::default()
+        };
         for chan in &meta.channels {
+            let unsupported = matches!(chan.data_type, DataType::Unsupported(_))
+                || matches!(chan.channel_type, ChannelType::Unsupported(_));
+            if unsupported {
+                stats.channels_unsupported += 1;
+            }
             channels.insert(
                 chan.index,
                 ChannelInfo {
@@ -117,15 +128,21 @@ impl<R: Read> BlockReader<R> {
                     size_of_length_value: chan.size_of_length_value,
                 },
             );
+            stats.per_channel.insert(
+                chan.index,
+                ChannelStats {
+                    name: chan.name.clone(),
+                    ..ChannelStats::default()
+                },
+            );
         }
         Self {
             inner,
             channels,
             finished: false,
             capture_skipped: false,
-            file_size_bytes: None,
-            blocks_truncated: 0,
-            trailer_seen: false,
+            started: Instant::now(),
+            stats,
         }
     }
 
@@ -137,36 +154,52 @@ impl<R: Read> BlockReader<R> {
         self
     }
 
-    /// Record the file size that produced this stream so consumers (e.g.
-    /// the stats reporter) can show it. The reader does not use the
-    /// value internally.
+    /// Record the file size that produced this stream so consumers
+    /// (e.g. the `stats` example) can show it. The reader does not use
+    /// the value internally.
     #[must_use]
     pub fn with_file_size(mut self, file_size_bytes: u64) -> Self {
-        self.file_size_bytes = Some(file_size_bytes);
+        self.stats.file_size_bytes = Some(file_size_bytes);
         self
     }
 
-    /// Number of blocks the reader could not finish reading because
-    /// the underlying stream ended mid-block. Capped at 1 by
-    /// construction.
+    /// Read-only view of the running [`ReaderStats`]. The `elapsed`
+    /// field is refreshed on each call.
+    #[must_use]
+    pub fn stats(&self) -> ReaderStats {
+        let mut s = self.stats.clone();
+        s.elapsed = self.started.elapsed();
+        s.blocks_total = s.blocks_read
+            + s.blocks_skipped_unsupported
+            + s.blocks_skipped_deprecated_type
+            + s.blocks_skipped_reserved_type;
+        s.channels_with_data = s
+            .per_channel
+            .values()
+            .filter(|c| c.blocks_read + c.blocks_skipped > 0)
+            .count();
+        s
+    }
+
+    /// Number of blocks the reader could not finish before the stream
+    /// ended. Capped at 1 by construction.
     #[must_use]
     pub fn blocks_truncated(&self) -> u64 {
-        self.blocks_truncated
+        self.stats.blocks_truncated
     }
 
     /// `true` if the reader has consumed the optional `0xFFFF`
-    /// info-data block. OSF5 writers no longer produce it; OSF4
-    /// writers may.
+    /// info-data block.
     #[must_use]
     pub fn trailer_seen(&self) -> bool {
-        self.trailer_seen
+        self.stats.trailer_seen
     }
 
     /// File size that was supplied via [`Self::with_file_size`], if
     /// any.
     #[must_use]
     pub fn file_size_bytes(&self) -> Option<u64> {
-        self.file_size_bytes
+        self.stats.file_size_bytes
     }
 
     /// Read the per-channel length prefix (2 or 4 bytes, little-endian)
@@ -221,13 +254,15 @@ impl<R: Read> BlockReader<R> {
     fn consume_trailer(&mut self) -> Result<(), OsfError> {
         // Per spec: [u32 length][u8 control = bcReserved][N bytes payload].
         // The length is always u32 here, NOT the per-channel
-        // sizeoflengthvalue.
+        // sizeoflengthvalue. The 2-byte channel index that introduced
+        // the trailer was already counted by the caller.
+        self.stats.data_section_size_bytes += 4;
         let length = match self.inner.read_u32::<LittleEndian>() {
             Ok(v) => v,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                self.blocks_truncated = self.blocks_truncated.max(1);
+                self.stats.blocks_truncated = self.stats.blocks_truncated.max(1);
                 self.finished = true;
-                self.trailer_seen = true;
+                self.stats.trailer_seen = true;
                 return Ok(());
             }
             Err(e) => return Err(e.into()),
@@ -235,7 +270,9 @@ impl<R: Read> BlockReader<R> {
 
         // Drain the payload (control byte + info-block bytes).
         if !self.drain(u64::from(length))? {
-            self.blocks_truncated = self.blocks_truncated.max(1);
+            self.stats.blocks_truncated = self.stats.blocks_truncated.max(1);
+        } else {
+            self.stats.data_section_size_bytes += u64::from(length);
         }
 
         // Best-effort: try to consume the magic trailer if present.
@@ -243,6 +280,7 @@ impl<R: Read> BlockReader<R> {
         // we simply stop without error.
         let mut tail = [0u8; MAGIC_TRAILER_LEN];
         if let Ok(()) = self.inner.read_exact(&mut tail) {
+            self.stats.data_section_size_bytes += MAGIC_TRAILER_LEN as u64;
             if !tail.starts_with(b"OSF_STREAM_END") {
                 debug!(
                     "OSF trailer: 40-byte tail did not start with \
@@ -252,7 +290,7 @@ impl<R: Read> BlockReader<R> {
             }
         }
 
-        self.trailer_seen = true;
+        self.stats.trailer_seen = true;
         self.finished = true;
         Ok(())
     }
@@ -279,6 +317,7 @@ impl<R: Read> Iterator for BlockReader<R> {
                 return Some(Err(e.into()));
             }
         };
+        self.stats.data_section_size_bytes += 2;
 
         // Step 2: trailer block (OSF4-only writers, OSF5 readers must
         // tolerate it). Consume and stop without yielding.
@@ -305,7 +344,7 @@ impl<R: Read> Iterator for BlockReader<R> {
         let length = match self.read_length_field(info.size_of_length_value) {
             Ok(Some(v)) => v,
             Ok(None) => {
-                self.blocks_truncated = self.blocks_truncated.max(1);
+                self.stats.blocks_truncated = self.stats.blocks_truncated.max(1);
                 self.finished = true;
                 return None;
             }
@@ -314,11 +353,17 @@ impl<R: Read> Iterator for BlockReader<R> {
                 return Some(Err(e));
             }
         };
+        self.stats.data_section_size_bytes += u64::from(info.size_of_length_value);
 
         if length == 0 {
             warn!(
                 "channel {channel_index} produced a zero-length block; \
                  skipping (likely writer bug)"
+            );
+            self.record_skip(
+                channel_index,
+                0,
+                &SkipReason::ReservedBlockType(0),
             );
             return Some(Ok(Block {
                 channel_index,
@@ -345,7 +390,7 @@ impl<R: Read> Iterator for BlockReader<R> {
         let payload = match self.read_payload(length_usize) {
             Ok(Some(v)) => v,
             Ok(None) => {
-                self.blocks_truncated = self.blocks_truncated.max(1);
+                self.stats.blocks_truncated = self.stats.blocks_truncated.max(1);
                 self.finished = true;
                 return None;
             }
@@ -354,6 +399,7 @@ impl<R: Read> Iterator for BlockReader<R> {
                 return Some(Err(e));
             }
         };
+        self.stats.data_section_size_bytes += u64::from(length);
 
         // Step 7: decode the control byte and route to the typed
         // parser for the four supported block types. Reserved /
@@ -373,46 +419,108 @@ impl<R: Read> Iterator for BlockReader<R> {
         };
 
         let block_kind = match control.kind {
-            ControlKind::Reserved | ControlKind::TimebaseRealign => BlockKind::Skipped {
-                reason: SkipReason::ReservedBlockType(control_byte & 0x7F),
-                bytes_skipped,
-                payload: payload_field,
-            },
+            ControlKind::Reserved | ControlKind::TimebaseRealign => {
+                let reason = SkipReason::ReservedBlockType(control_byte & 0x7F);
+                self.record_skip(channel_index, length, &reason);
+                BlockKind::Skipped {
+                    reason,
+                    bytes_skipped,
+                    payload: payload_field,
+                }
+            }
             ControlKind::TrustedTimestamp
             | ControlKind::StatusEvent
-            | ControlKind::MessageEvent => BlockKind::Skipped {
-                reason: SkipReason::DeprecatedBlockType(control_byte & 0x7F),
-                bytes_skipped,
-                payload: payload_field,
-            },
-            ControlKind::Unknown(raw) => BlockKind::Skipped {
-                reason: SkipReason::ReservedBlockType(raw),
-                bytes_skipped,
-                payload: payload_field,
-            },
-            ControlKind::StartData => match parse_start_data(body, &info.data_type, control.multi_sample) {
-                Ok((ts, rate, samples)) => BlockKind::StartData {
-                    start_timestamp_ns: ts,
-                    sample_rate_hz: rate,
-                    samples,
-                },
-                Err(e) => return Some(Err(e)),
-            },
+            | ControlKind::MessageEvent => {
+                let reason = SkipReason::DeprecatedBlockType(control_byte & 0x7F);
+                self.record_skip(channel_index, length, &reason);
+                BlockKind::Skipped {
+                    reason,
+                    bytes_skipped,
+                    payload: payload_field,
+                }
+            }
+            ControlKind::Unknown(raw) => {
+                let reason = SkipReason::ReservedBlockType(raw);
+                self.record_skip(channel_index, length, &reason);
+                BlockKind::Skipped {
+                    reason,
+                    bytes_skipped,
+                    payload: payload_field,
+                }
+            }
+            ControlKind::StartData => {
+                match parse_start_data(body, &info.data_type, control.multi_sample) {
+                    Ok((ts, rate, samples)) => {
+                        let n = samples.len() as u64;
+                        let chan_stats =
+                            self.stats.per_channel.entry(channel_index).or_default();
+                        chan_stats.blocks_read += 1;
+                        chan_stats.bytes_payload += u64::from(length);
+                        chan_stats.samples_total += n;
+                        chan_stats.segments += 1;
+                        chan_stats.observe_timestamp(ts);
+                        if n > 0 && rate > 0.0 {
+                            // Last sample timestamp = ts + (n-1) / rate × 1e9 ns.
+                            let last = ts.saturating_add(
+                                (((n - 1) as f64 / rate) * 1.0e9) as i64,
+                            );
+                            chan_stats.observe_timestamp(last);
+                        }
+                        self.stats.blocks_read += 1;
+                        BlockKind::StartData {
+                            start_timestamp_ns: ts,
+                            sample_rate_hz: rate,
+                            samples,
+                        }
+                    }
+                    Err(e) => return Some(Err(e)),
+                }
+            }
             ControlKind::ContinuedData => {
                 match parse_continued_data(body, &info.data_type, control.multi_sample) {
-                    Ok(samples) => BlockKind::ContinuedData { samples },
+                    Ok(samples) => {
+                        let n = samples.len() as u64;
+                        let chan_stats =
+                            self.stats.per_channel.entry(channel_index).or_default();
+                        chan_stats.blocks_read += 1;
+                        chan_stats.bytes_payload += u64::from(length);
+                        chan_stats.samples_total += n;
+                        self.stats.blocks_read += 1;
+                        BlockKind::ContinuedData { samples }
+                    }
                     Err(e) => return Some(Err(e)),
                 }
             }
             ControlKind::AbsTimeStampData => {
                 match parse_abs_timestamp_data(body, &info.data_type, control.multi_sample) {
-                    Ok(samples) => BlockKind::AbsTimestampData { samples },
+                    Ok(samples) => {
+                        let chan_stats =
+                            self.stats.per_channel.entry(channel_index).or_default();
+                        chan_stats.blocks_read += 1;
+                        chan_stats.bytes_payload += u64::from(length);
+                        chan_stats.samples_total += samples.len() as u64;
+                        if let Some((first, last)) = abs_timestamp_range(&samples) {
+                            chan_stats.observe_timestamp(first);
+                            chan_stats.observe_timestamp(last);
+                        }
+                        self.stats.blocks_read += 1;
+                        BlockKind::AbsTimestampData { samples }
+                    }
                     Err(e) => return Some(Err(e)),
                 }
             }
             ControlKind::ContinuedRelStampData => {
                 match parse_continued_rel_stamp_data(body, &info.data_type, control.multi_sample) {
-                    Ok(samples) => BlockKind::ContinuedRelStampData { samples },
+                    Ok(samples) => {
+                        let n = samples.len() as u64;
+                        let chan_stats =
+                            self.stats.per_channel.entry(channel_index).or_default();
+                        chan_stats.blocks_read += 1;
+                        chan_stats.bytes_payload += u64::from(length);
+                        chan_stats.samples_total += n;
+                        self.stats.blocks_read += 1;
+                        BlockKind::ContinuedRelStampData { samples }
+                    }
                     Err(e) => return Some(Err(e)),
                 }
             }
@@ -437,16 +545,20 @@ impl<R: Read> BlockReader<R> {
     ) -> Result<Block, OsfError> {
         if self.capture_skipped {
             match self.read_payload(length)? {
-                Some(buf) => Ok(Block {
-                    channel_index,
-                    kind: BlockKind::Skipped {
-                        reason,
-                        bytes_skipped: length as u64,
-                        payload: Some(buf),
-                    },
-                }),
+                Some(buf) => {
+                    self.stats.data_section_size_bytes += length as u64;
+                    self.record_skip(channel_index, length as u32, &reason);
+                    Ok(Block {
+                        channel_index,
+                        kind: BlockKind::Skipped {
+                            reason,
+                            bytes_skipped: length as u64,
+                            payload: Some(buf),
+                        },
+                    })
+                }
                 None => {
-                    self.blocks_truncated = self.blocks_truncated.max(1);
+                    self.stats.blocks_truncated = self.stats.blocks_truncated.max(1);
                     self.finished = true;
                     Err(OsfError::Io(std::io::Error::new(
                         std::io::ErrorKind::UnexpectedEof,
@@ -456,13 +568,15 @@ impl<R: Read> BlockReader<R> {
             }
         } else {
             if !self.drain(length as u64)? {
-                self.blocks_truncated = self.blocks_truncated.max(1);
+                self.stats.blocks_truncated = self.stats.blocks_truncated.max(1);
                 self.finished = true;
                 return Err(OsfError::Io(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
                     "stream truncated mid-skip-payload",
                 )));
             }
+            self.stats.data_section_size_bytes += length as u64;
+            self.record_skip(channel_index, length as u32, &reason);
             Ok(Block {
                 channel_index,
                 kind: BlockKind::Skipped {
@@ -472,6 +586,57 @@ impl<R: Read> BlockReader<R> {
                 },
             })
         }
+    }
+
+    /// Centralised counter bump for every skip path. Updates the
+    /// reason-specific top-level counter as well as the per-channel
+    /// `blocks_skipped` and `bytes_payload` totals.
+    fn record_skip(&mut self, channel_index: u16, length: u32, reason: &SkipReason) {
+        match reason {
+            SkipReason::UnsupportedDataType | SkipReason::UnsupportedChannelType => {
+                self.stats.blocks_skipped_unsupported += 1;
+            }
+            SkipReason::DeprecatedBlockType(_) => {
+                self.stats.blocks_skipped_deprecated_type += 1;
+            }
+            SkipReason::ReservedBlockType(_) => {
+                self.stats.blocks_skipped_reserved_type += 1;
+            }
+        }
+        let entry = self.stats.per_channel.entry(channel_index).or_default();
+        entry.blocks_skipped += 1;
+        entry.bytes_payload += u64::from(length);
+    }
+}
+
+/// Extract `(first_timestamp, last_timestamp)` from a typed AbsTs
+/// payload by inspecting the first and last sample of every variant.
+fn abs_timestamp_range(payload: &TimestampedPayload) -> Option<(i64, i64)> {
+    macro_rules! range_of {
+        ($v:expr) => {{
+            let v = $v;
+            if v.is_empty() {
+                None
+            } else {
+                Some((v.first().unwrap().0, v.last().unwrap().0))
+            }
+        }};
+    }
+    match payload {
+        TimestampedPayload::Bool(v) => range_of!(v),
+        TimestampedPayload::Int8(v) => range_of!(v),
+        TimestampedPayload::Int16(v) => range_of!(v),
+        TimestampedPayload::Int32(v) => range_of!(v),
+        TimestampedPayload::Int64(v) => range_of!(v),
+        TimestampedPayload::UInt8(v) => range_of!(v),
+        TimestampedPayload::UInt16(v) => range_of!(v),
+        TimestampedPayload::UInt32(v) => range_of!(v),
+        TimestampedPayload::UInt64(v) => range_of!(v),
+        TimestampedPayload::Float(v) => range_of!(v),
+        TimestampedPayload::Double(v) => range_of!(v),
+        TimestampedPayload::String(v) => range_of!(v),
+        TimestampedPayload::Binary(v) => range_of!(v),
+        TimestampedPayload::GpsLocation(v) => range_of!(v),
     }
 }
 

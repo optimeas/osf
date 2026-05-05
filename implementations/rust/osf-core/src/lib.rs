@@ -34,6 +34,7 @@ pub mod meta;
 pub mod meta_json;
 pub mod meta_xml;
 pub mod reader;
+pub mod stats;
 pub mod types;
 
 pub use block::{
@@ -48,7 +49,68 @@ pub use meta::{
 pub use meta_json::parse_metablock_json;
 pub use meta_xml::parse_metablock_xml;
 pub use reader::BlockReader;
+pub use stats::{ChannelStats, ReaderStats};
 pub use types::{BlockContent, ChannelType, DataType};
+
+/// Convenience entry point: open `path`, parse the magic header and
+/// metablock, and stream the data section through a [`BlockReader`].
+/// Returns the parsed [`MetaBlock`], the materialised list of blocks,
+/// and the final [`ReaderStats`].
+///
+/// This collects every block into memory; for very large files prefer
+/// driving the [`BlockReader`] iterator yourself.
+///
+/// # Errors
+///
+/// Forwards errors from the magic-header parser, the metablock parser,
+/// and the block reader.
+pub fn read_file(
+    path: &std::path::Path,
+) -> Result<(MetaBlock, Vec<Block>, ReaderStats), OsfError> {
+    use std::fs::File;
+    use std::io::{BufReader, Read};
+
+    let file_size = std::fs::metadata(path)?.len();
+
+    /// Tiny `Read` adapter that counts bytes consumed so we can report
+    /// `header_size_bytes` and `metablock_size_bytes` without
+    /// requiring `Seek` on the inner reader.
+    struct CountingRead<R: Read> {
+        inner: R,
+        bytes_read: u64,
+    }
+    impl<R: Read> Read for CountingRead<R> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let n = self.inner.read(buf)?;
+            self.bytes_read += n as u64;
+            Ok(n)
+        }
+    }
+
+    let mut counted = CountingRead {
+        inner: BufReader::new(File::open(path)?),
+        bytes_read: 0,
+    };
+
+    let header = parse_magic_header(&mut counted)?;
+    let header_size_bytes = counted.bytes_read;
+
+    let mut body = vec![0u8; header.metablock_len as usize];
+    counted.read_exact(&mut body)?;
+    let metablock_size_bytes = header.metablock_len;
+    let meta = parse_metablock(header.version, &body)?;
+
+    let mut block_reader = BlockReader::new(counted, &meta).with_file_size(file_size);
+    let mut blocks = Vec::new();
+    for blk in &mut block_reader {
+        blocks.push(blk?);
+    }
+
+    let mut stats = block_reader.stats();
+    stats.header_size_bytes = header_size_bytes;
+    stats.metablock_size_bytes = metablock_size_bytes;
+    Ok((meta, blocks, stats))
+}
 
 /// Parse the metablock body for the given OSF version.
 ///
