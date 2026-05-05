@@ -43,7 +43,7 @@ Unabhängig von Version 4 oder Version 5 folgt jede OSF-Datei demselben Grun
 
 1. **Magic Header**
 
-   * Kennung des Formats (OSF4, OSF5, OCEAN\_STREAMING\_FORMAT4)
+   * Kennung des Formats (OSF4, OSF5, OCEAN\_STREAM\_FORMAT4, OCEAN\_STREAMING\_FORMAT4)
    * Angabe der Länge des folgenden Metablocks
 
 2. **Metablock (XML oder JSON)**
@@ -106,7 +106,8 @@ OSF5 84512\n
 Aus Gründen der Kompatibilität erkennen OSF-Implementierungen mehrere Header:
 
 * **OSF4** – klassische OSF4-Datei
-* **OCEAN\_STREAM\_FORMAT4** – historische Kennung für OSF4-Dateien
+* **OCEAN\_STREAM\_FORMAT4** – Legacy-Kennung für OSF4-Dateien, die in ausgelieferten Geräten weiterhin geschrieben wird; muss von Lesern unterstützt werden
+* **OCEAN\_STREAMING\_FORMAT4** – ältere historische Schreibweise; ebenfalls als OSF4 zu interpretieren
 * **OSF5** – OSF5-Datei
 
 ### Erkennung des Metablock-Formats
@@ -121,7 +122,7 @@ Ob der folgende Metablock **XML** oder **JSON** ist, wird anhand des ersten Zeic
 
 * **Schneller Start:** Leser können den Metablock sofort extrahieren und dem richtigen Parser übergeben.
 * **Streamingfähig:** Keine Kenntnis der Gesamtdateigröße nötig.
-* **Abwärtskompatibel:** OSF5 verarbeitet OSF4-Dateien (inkl. OCEAN\_STREAM\_FORMAT4).
+* **Abwärtskompatibel:** OSF5 verarbeitet OSF4-Dateien (inkl. OCEAN\_STREAM\_FORMAT4 und OCEAN\_STREAMING\_FORMAT4).
 * **Einfache Implementierung:** Eine Zeile reicht, um Version und Parser zu bestimmen.
 
 

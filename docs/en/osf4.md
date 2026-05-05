@@ -27,7 +27,8 @@ OSF4 is the classic version of the format. It uses **XML** exclusively for the m
 
 - **Allowed identifiers:**  
   - `OSF4`  
-  - `OCEAN_STREAM_FORMAT4` (historical identifier)
+  - `OCEAN_STREAM_FORMAT4` — legacy identifier, still emitted by deployed devices  
+  - `OCEAN_STREAMING_FORMAT4` — older historical spelling
 
 - **Format:**  
   ```

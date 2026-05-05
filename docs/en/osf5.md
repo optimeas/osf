@@ -29,7 +29,8 @@ At the same time, OSF5 remains fully **backward-compatible** with OSF4.
 - **Allowed identifiers:**  
   - `OSF5`  
   - `OSF4` (for backward compatibility)  
-  - `OCEAN_STREAMING_FORMAT4` (historical)
+  - `OCEAN_STREAM_FORMAT4` (legacy identifier, still emitted by deployed devices)  
+  - `OCEAN_STREAMING_FORMAT4` (older historical spelling)
 
 - **Format:**  
   ```

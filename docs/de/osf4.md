@@ -27,7 +27,8 @@ OSF4 ist die klassische Version des Formats. Sie nutzt ausschließlich **XML** f
 
 - **Erlaubte Kennungen:**  
   - `OSF4`  
-  - `OCEAN_STREAM_FORMAT4` (historische Kennung)
+  - `OCEAN_STREAM_FORMAT4` — Legacy-Kennung, weiterhin von ausgelieferten Geräten geschrieben  
+  - `OCEAN_STREAMING_FORMAT4` — ältere historische Schreibweise
 
 - **Format:**  
   ```

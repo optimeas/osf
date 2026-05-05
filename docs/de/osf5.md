@@ -29,7 +29,8 @@ Gleichzeitig bleibt OSF5 vollständig **abwärtskompatibel** zu OSF4.
 - **Erlaubte Kennungen:**  
   - `OSF5`  
   - `OSF4` (für Abwärtskompatibilität)  
-  - `OCEAN_STREAMING_FORMAT4` (historisch)
+  - `OCEAN_STREAM_FORMAT4` (Legacy-Kennung, weiterhin von ausgelieferten Geräten geschrieben)  
+  - `OCEAN_STREAMING_FORMAT4` (ältere historische Schreibweise)
 
 - **Format:**  
   ```

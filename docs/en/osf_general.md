@@ -43,7 +43,7 @@ Regardless of version 4 or version 5, every OSF file follows the same basic sche
 
 1. **Magic header**
 
-   * Format identifier (OSF4, OSF5, OCEAN\_STREAMING\_FORMAT4)
+   * Format identifier (OSF4, OSF5, OCEAN\_STREAM\_FORMAT4, OCEAN\_STREAMING\_FORMAT4)
    * Length of the following metablock
 
 2. **Metablock (XML or JSON)**
@@ -106,7 +106,8 @@ OSF5 84512\n
 For compatibility, OSF implementations recognize multiple headers:
 
 * **OSF4** — classic OSF4 file
-* **OCEAN\_STREAM\_FORMAT4** — historical identifier for OSF4 files
+* **OCEAN\_STREAM\_FORMAT4** — legacy identifier for OSF4 files; still emitted by deployed devices and therefore must be accepted by readers
+* **OCEAN\_STREAMING\_FORMAT4** — older historical spelling; also to be interpreted as OSF4
 * **OSF5** — OSF5 file
 
 ### Detection of the metablock format
@@ -121,7 +122,7 @@ Whether the following metablock is **XML** or **JSON** is determined by the firs
 
 * **Fast start:** Readers can immediately extract the metablock and pass it to the appropriate parser.
 * **Streaming-capable:** No knowledge of the total file size is required.
-* **Backward-compatible:** OSF5 processes OSF4 files (including OCEAN\_STREAM\_FORMAT4).
+* **Backward-compatible:** OSF5 processes OSF4 files (including OCEAN\_STREAM\_FORMAT4 and OCEAN\_STREAMING\_FORMAT4).
 * **Simple implementation:** A single line is sufficient to determine version and parser.
 
 
