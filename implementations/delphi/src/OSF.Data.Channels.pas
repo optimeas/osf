@@ -1,10 +1,10 @@
-// Copyright 2026 Optimeas GmbH
+﻿// Copyright 2026 Optimeas GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -34,9 +34,9 @@ type
   // Values list of the channel grows linearly across segments — Segments
   // describe how it splits up in time.
   TOSFChannelSegment = record
-    StartTimestampNs: Int64;    // absolute start time of the first sample (ns since epoch)
-    StartIndex      : Integer;  // index of the first sample in the channel's flat Values list
-    SampleCount     : Integer;  // number of samples that belong to this segment
+    StartTimestampNs: Int64; // absolute start time of the first sample (ns since epoch)
+    StartIndex: Integer; // index of the first sample in the channel's flat Values list
+    SampleCount: Integer; // number of samples that belong to this segment
   end;
 
   // ── Abstract base ───────────────────────────────────────────────────────────
@@ -44,21 +44,21 @@ type
   // Common interface for every typed data channel held by TOSFDataManager.
   // Concrete subclasses pick one timing strategy (timestamped or equidistant)
   // and one value type (Double, Int32, String, ...).
-  TOSFDataChannel = class abstract (TPersistent)
+  TOSFDataChannel = class abstract(TPersistent)
   private
     FChannelDef: TOSFChannelDef;
-    function GetName             : string;
-    function GetPhysicalUnit     : string;
-    function GetComment          : string;
-    function GetMimeType         : string;
-    function GetIsEquidistant    : Boolean;
-    function GetOriginalDataType : TOSFDataType;
-    function GetStartTimeUtc     : TDateTime;
-    function GetEndTimeUtc       : TDateTime;
+    function GetName: string;
+    function GetPhysicalUnit: string;
+    function GetComment: string;
+    function GetMimeType: string;
+    function GetIsEquidistant: Boolean;
+    function GetOriginalDataType: TOSFDataType;
+    function GetStartTimeUtc: TDateTime;
+    function GetEndTimeUtc: TDateTime;
   protected
     FStartTimestampNs: Int64;
-    FEndTimestampNs  : Int64;
-    FStartAssigned   : Boolean;
+    FEndTimestampNs: Int64;
+    FStartAssigned: Boolean;
     function GetSampleCount: Integer; virtual; abstract;
     // Updates Start/EndTimestampNs based on a newly added sample.
     procedure UpdateTimeRange(TimestampNs: Int64);
@@ -66,7 +66,7 @@ type
     constructor Create(ADef: TOSFChannelDef); virtual;
 
     // Timestamp access — works for both equidistant and timestamped.
-    function TimestampNsAt (Index: Integer): Int64;     virtual; abstract;
+    function TimestampNsAt(Index: Integer): Int64; virtual; abstract;
     function TimestampUtcAt(Index: Integer): TDateTime;
 
     // Value access for charting and calculations.
@@ -88,32 +88,32 @@ type
     // only; the data channel does not own it. The setter is exposed so a
     // higher-level container (e.g. TOSFDataManager) can rebind a cloned
     // channel to its own private def copy without rebuilding the data.
-    property ChannelDef       : TOSFChannelDef read FChannelDef write FChannelDef;
-    property Name             : string         read GetName;
-    property PhysicalUnit     : string         read GetPhysicalUnit;
-    property Comment          : string         read GetComment;
-    property OriginalDataType : TOSFDataType   read GetOriginalDataType;
-    property IsEquidistant    : Boolean        read GetIsEquidistant;
-    property MimeType         : string         read GetMimeType;
+    property ChannelDef: TOSFChannelDef read FChannelDef write FChannelDef;
+    property Name: string read GetName;
+    property PhysicalUnit: string read GetPhysicalUnit;
+    property Comment: string read GetComment;
+    property OriginalDataType: TOSFDataType read GetOriginalDataType;
+    property IsEquidistant: Boolean read GetIsEquidistant;
+    property MimeType: string read GetMimeType;
 
     // Timing.
-    property StartTimestampNs : Int64          read FStartTimestampNs;
-    property EndTimestampNs   : Int64          read FEndTimestampNs;
-    property StartTimeUtc     : TDateTime      read GetStartTimeUtc;
-    property EndTimeUtc       : TDateTime      read GetEndTimeUtc;
-    property SampleCount      : Integer        read GetSampleCount;
+    property StartTimestampNs: Int64 read FStartTimestampNs;
+    property EndTimestampNs: Int64 read FEndTimestampNs;
+    property StartTimeUtc: TDateTime read GetStartTimeUtc;
+    property EndTimeUtc: TDateTime read GetEndTimeUtc;
+    property SampleCount: Integer read GetSampleCount;
   end;
 
   // ── Timing-strategy bases ───────────────────────────────────────────────────
 
   // Stores one timestamp per sample. Used for irregularly sampled data.
-  TOSFTimestampedDataChannel = class abstract (TOSFDataChannel)
+  TOSFTimestampedDataChannel = class abstract(TOSFDataChannel)
   protected
     FTimestamps: TList<Int64>;
     procedure CopyTimingTo(Other: TOSFTimestampedDataChannel);
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function TimestampNsAt(Index: Integer): Int64; override;
     property Timestamps: TList<Int64> read FTimestamps;
   end;
@@ -125,14 +125,14 @@ type
   // gaps — each bcStartData block opens a new segment, bcContinuedData blocks
   // append to the most recent one. The Segments list describes how the flat
   // Values list maps onto absolute time.
-  TOSFEquidistantDataChannel = class abstract (TOSFDataChannel)
+  TOSFEquidistantDataChannel = class abstract(TOSFDataChannel)
   protected
     FTimeIncrementNs: Int64;
-    FSegments       : TList<TOSFChannelSegment>;
+    FSegments: TList<TOSFChannelSegment>;
     procedure CopyTimingTo(Other: TOSFEquidistantDataChannel);
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function TimestampNsAt(Index: Integer): Int64; override;
 
     // Opens a new segment starting at StartTimestampNs. The segment's
@@ -157,7 +157,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -172,7 +172,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -189,7 +189,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -204,7 +204,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -221,7 +221,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -236,7 +236,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -253,7 +253,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function HasDoublePrecisionLoss: Boolean; override;
@@ -269,7 +269,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function HasDoublePrecisionLoss: Boolean; override;
@@ -287,7 +287,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function HasDoublePrecisionLoss: Boolean; override;
@@ -303,7 +303,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function HasDoublePrecisionLoss: Boolean; override;
@@ -321,7 +321,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -336,7 +336,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -353,7 +353,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -368,7 +368,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -385,7 +385,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -400,7 +400,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -417,7 +417,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -432,7 +432,7 @@ type
     function GetSampleCount: Integer; override;
   public
     constructor Create(ADef: TOSFChannelDef); override;
-    destructor  Destroy; override;
+    destructor Destroy; override;
     function ValueAsDouble(Index: Integer): Double; override;
     function ValueAsString(Index: Integer): string; override;
     function Clone: TOSFDataChannel; override;
@@ -440,19 +440,19 @@ type
     property Values: TList<TOSFGpsLocation> read FValues;
   end;
 
-// Picks the right concrete subclass based on Def.DataType and Def.IsEquidistant.
-// The returned channel keeps a non-owning reference to Def — the caller (typically
-// TOSFDataManager) is responsible for keeping the def alive at least as long as
-// the channel.
+  // Picks the right concrete subclass based on Def.DataType and Def.IsEquidistant.
+  // The returned channel keeps a non-owning reference to Def — the caller (typically
+  // TOSFDataManager) is responsible for keeping the def alive at least as long as
+  // the channel.
 function CreateOSFDataChannel(Def: TOSFChannelDef): TOSFDataChannel;
 
 implementation
 
 const
-  UNIX_EPOCH_DATETIME : TDateTime = 25569.0;       // 1970-01-01 as TDateTime
-  NS_PER_DAY          : Double    = 86400.0 * 1.0e9;
+  UNIX_EPOCH_DATETIME: TDateTime = 25569.0; // 1970-01-01 as TDateTime
+  NS_PER_DAY: Double = 86400.0 * 1.0E9;
 
-// ── Local helpers ────────────────────────────────────────────────────────────
+  // ── Local helpers ────────────────────────────────────────────────────────────
 
 function NsToUtcDateTime(Ns: Int64): TDateTime;
 begin
@@ -490,7 +490,7 @@ end;
 // source width (Int8, Int16, Int32).
 function DecodeAsInt32(const RawBytes: TBytes; OrigType: TOSFDataType): Int32;
 var
-  V8 : Int8;
+  V8: Int8;
   V16: Int16;
   V32: Int32;
 begin
@@ -519,7 +519,7 @@ end;
 
 function DecodeAsUInt32(const RawBytes: TBytes; OrigType: TOSFDataType): UInt32;
 var
-  V8 : UInt8;
+  V8: UInt8;
   V16: UInt16;
   V32: UInt32;
 begin
@@ -591,30 +591,42 @@ end;
 constructor TOSFDataChannel.Create(ADef: TOSFChannelDef);
 begin
   inherited Create;
-  FChannelDef       := ADef;
+  FChannelDef := ADef;
   FStartTimestampNs := 0;
-  FEndTimestampNs   := 0;
-  FStartAssigned    := False;
+  FEndTimestampNs := 0;
+  FStartAssigned := False;
 end;
 
 function TOSFDataChannel.GetName: string;
 begin
-  if Assigned(FChannelDef) then Result := FChannelDef.Name else Result := '';
+  if Assigned(FChannelDef) then
+    Result := FChannelDef.Name
+  else
+    Result := '';
 end;
 
 function TOSFDataChannel.GetPhysicalUnit: string;
 begin
-  if Assigned(FChannelDef) then Result := FChannelDef.PhysicalUnit else Result := '';
+  if Assigned(FChannelDef) then
+    Result := FChannelDef.PhysicalUnit
+  else
+    Result := '';
 end;
 
 function TOSFDataChannel.GetComment: string;
 begin
-  if Assigned(FChannelDef) then Result := FChannelDef.Comment else Result := '';
+  if Assigned(FChannelDef) then
+    Result := FChannelDef.Comment
+  else
+    Result := '';
 end;
 
 function TOSFDataChannel.GetMimeType: string;
 begin
-  if Assigned(FChannelDef) then Result := FChannelDef.MimeType else Result := '';
+  if Assigned(FChannelDef) then
+    Result := FChannelDef.MimeType
+  else
+    Result := '';
 end;
 
 function TOSFDataChannel.GetIsEquidistant: Boolean;
@@ -655,7 +667,7 @@ begin
   if not FStartAssigned then
   begin
     FStartTimestampNs := TimestampNs;
-    FStartAssigned    := True;
+    FStartAssigned := True;
   end;
   FEndTimestampNs := TimestampNs;
 end;
@@ -683,8 +695,8 @@ procedure TOSFTimestampedDataChannel.CopyTimingTo(Other: TOSFTimestampedDataChan
 begin
   Other.FTimestamps.AddRange(Self.FTimestamps);
   Other.FStartTimestampNs := Self.FStartTimestampNs;
-  Other.FEndTimestampNs   := Self.FEndTimestampNs;
-  Other.FStartAssigned    := Self.FStartAssigned;
+  Other.FEndTimestampNs := Self.FEndTimestampNs;
+  Other.FStartAssigned := Self.FStartAssigned;
 end;
 
 // ── TOSFEquidistantDataChannel ───────────────────────────────────────────────
@@ -703,8 +715,8 @@ begin
   if Assigned(ADef) and (ADef.StartTimestampNs > 0) then
   begin
     FStartTimestampNs := ADef.StartTimestampNs;
-    FEndTimestampNs   := ADef.StartTimestampNs;
-    FStartAssigned    := True;
+    FEndTimestampNs := ADef.StartTimestampNs;
+    FStartAssigned := True;
   end;
 end;
 
@@ -724,8 +736,8 @@ var
   Seg: TOSFChannelSegment;
 begin
   Seg.StartTimestampNs := StartTimestampNs;
-  Seg.StartIndex       := GetSampleCount;
-  Seg.SampleCount      := 0;
+  Seg.StartIndex := GetSampleCount;
+  Seg.SampleCount := 0;
   FSegments.Add(Seg);
 end;
 
@@ -734,7 +746,8 @@ var
   Seg: TOSFChannelSegment;
   Idx: Integer;
 begin
-  if FSegments.Count = 0 then Exit;
+  if FSegments.Count = 0 then
+    Exit;
   Idx := FSegments.Count - 1;
   Seg := FSegments[Idx];
   Inc(Seg.SampleCount, Count);
@@ -746,9 +759,9 @@ var
   I: Integer;
 begin
   Other.FStartTimestampNs := Self.FStartTimestampNs;
-  Other.FEndTimestampNs   := Self.FEndTimestampNs;
-  Other.FStartAssigned    := Self.FStartAssigned;
-  Other.FTimeIncrementNs  := Self.FTimeIncrementNs;
+  Other.FEndTimestampNs := Self.FEndTimestampNs;
+  Other.FStartAssigned := Self.FStartAssigned;
+  Other.FTimeIncrementNs := Self.FTimeIncrementNs;
   Other.FSegments.Clear;
   Other.FSegments.Capacity := Self.FSegments.Count;
   for I := 0 to Self.FSegments.Count - 1 do
@@ -1248,12 +1261,18 @@ end;
 
 function TOSFTimestampedBoolChannel.ValueAsDouble(Index: Integer): Double;
 begin
-  if FValues[Index] then Result := 1.0 else Result := 0.0;
+  if FValues[Index] then
+    Result := 1.0
+  else
+    Result := 0.0;
 end;
 
 function TOSFTimestampedBoolChannel.ValueAsString(Index: Integer): string;
 begin
-  if FValues[Index] then Result := 'True' else Result := 'False';
+  if FValues[Index] then
+    Result := 'True'
+  else
+    Result := 'False';
 end;
 
 procedure TOSFTimestampedBoolChannel.AddRawSample(TimestampNs: Int64; const RawBytes: TBytes);
@@ -1292,12 +1311,18 @@ end;
 
 function TOSFEquidistantBoolChannel.ValueAsDouble(Index: Integer): Double;
 begin
-  if FValues[Index] then Result := 1.0 else Result := 0.0;
+  if FValues[Index] then
+    Result := 1.0
+  else
+    Result := 0.0;
 end;
 
 function TOSFEquidistantBoolChannel.ValueAsString(Index: Integer): string;
 begin
-  if FValues[Index] then Result := 'True' else Result := 'False';
+  if FValues[Index] then
+    Result := 'True'
+  else
+    Result := 'False';
 end;
 
 procedure TOSFEquidistantBoolChannel.AddRawSample(TimestampNs: Int64; const RawBytes: TBytes);
@@ -1532,10 +1557,8 @@ var
   G: TOSFGpsLocation;
 begin
   G := FValues[Index];
-  Result := Format('lat=%s lon=%s alt=%s',
-                   [FormatDoubleInvariant(G.Latitude),
-                    FormatDoubleInvariant(G.Longitude),
-                    FormatDoubleInvariant(G.Altitude)]);
+  Result := Format('lat=%s lon=%s alt=%s', [FormatDoubleInvariant(G.Latitude), FormatDoubleInvariant(G.Longitude),
+    FormatDoubleInvariant(G.Altitude)]);
 end;
 
 procedure TOSFTimestampedGpsChannel.AddRawSample(TimestampNs: Int64; const RawBytes: TBytes);
@@ -1582,10 +1605,8 @@ var
   G: TOSFGpsLocation;
 begin
   G := FValues[Index];
-  Result := Format('lat=%s lon=%s alt=%s',
-                   [FormatDoubleInvariant(G.Latitude),
-                    FormatDoubleInvariant(G.Longitude),
-                    FormatDoubleInvariant(G.Altitude)]);
+  Result := Format('lat=%s lon=%s alt=%s', [FormatDoubleInvariant(G.Latitude), FormatDoubleInvariant(G.Longitude),
+    FormatDoubleInvariant(G.Altitude)]);
 end;
 
 procedure TOSFEquidistantGpsChannel.AddRawSample(TimestampNs: Int64; const RawBytes: TBytes);
@@ -1611,15 +1632,24 @@ begin
   if Def.IsEquidistant then
   begin
     case Def.DataType of
-      dtDouble, dtFloat:                    Result := TOSFEquidistantDoubleChannel.Create(Def);
-      dtInt8,  dtInt16, dtInt32:            Result := TOSFEquidistantInt32Channel.Create(Def);
-      dtUInt8, dtUInt16, dtUInt32:          Result := TOSFEquidistantUInt32Channel.Create(Def);
-      dtInt64:                              Result := TOSFEquidistantInt64Channel.Create(Def);
-      dtUInt64:                             Result := TOSFEquidistantUInt64Channel.Create(Def);
-      dtBool:                               Result := TOSFEquidistantBoolChannel.Create(Def);
-      dtString:                             Result := TOSFEquidistantStringChannel.Create(Def);
-      dtBinary:                             Result := TOSFEquidistantBinaryChannel.Create(Def);
-      dtGpsLocation:                            Result := TOSFEquidistantGpsChannel.Create(Def);
+      dtDouble, dtFloat:
+        Result := TOSFEquidistantDoubleChannel.Create(Def);
+      dtInt8, dtInt16, dtInt32:
+        Result := TOSFEquidistantInt32Channel.Create(Def);
+      dtUInt8, dtUInt16, dtUInt32:
+        Result := TOSFEquidistantUInt32Channel.Create(Def);
+      dtInt64:
+        Result := TOSFEquidistantInt64Channel.Create(Def);
+      dtUInt64:
+        Result := TOSFEquidistantUInt64Channel.Create(Def);
+      dtBool:
+        Result := TOSFEquidistantBoolChannel.Create(Def);
+      dtString:
+        Result := TOSFEquidistantStringChannel.Create(Def);
+      dtBinary:
+        Result := TOSFEquidistantBinaryChannel.Create(Def);
+      dtGpsLocation:
+        Result := TOSFEquidistantGpsChannel.Create(Def);
     else
       Result := TOSFEquidistantDoubleChannel.Create(Def);
     end;
@@ -1627,15 +1657,24 @@ begin
   else
   begin
     case Def.DataType of
-      dtDouble, dtFloat:                    Result := TOSFTimestampedDoubleChannel.Create(Def);
-      dtInt8,  dtInt16, dtInt32:            Result := TOSFTimestampedInt32Channel.Create(Def);
-      dtUInt8, dtUInt16, dtUInt32:          Result := TOSFTimestampedUInt32Channel.Create(Def);
-      dtInt64:                              Result := TOSFTimestampedInt64Channel.Create(Def);
-      dtUInt64:                             Result := TOSFTimestampedUInt64Channel.Create(Def);
-      dtBool:                               Result := TOSFTimestampedBoolChannel.Create(Def);
-      dtString:                             Result := TOSFTimestampedStringChannel.Create(Def);
-      dtBinary:                             Result := TOSFTimestampedBinaryChannel.Create(Def);
-      dtGpsLocation:                            Result := TOSFTimestampedGpsChannel.Create(Def);
+      dtDouble, dtFloat:
+        Result := TOSFTimestampedDoubleChannel.Create(Def);
+      dtInt8, dtInt16, dtInt32:
+        Result := TOSFTimestampedInt32Channel.Create(Def);
+      dtUInt8, dtUInt16, dtUInt32:
+        Result := TOSFTimestampedUInt32Channel.Create(Def);
+      dtInt64:
+        Result := TOSFTimestampedInt64Channel.Create(Def);
+      dtUInt64:
+        Result := TOSFTimestampedUInt64Channel.Create(Def);
+      dtBool:
+        Result := TOSFTimestampedBoolChannel.Create(Def);
+      dtString:
+        Result := TOSFTimestampedStringChannel.Create(Def);
+      dtBinary:
+        Result := TOSFTimestampedBinaryChannel.Create(Def);
+      dtGpsLocation:
+        Result := TOSFTimestampedGpsChannel.Create(Def);
     else
       Result := TOSFTimestampedDoubleChannel.Create(Def);
     end;

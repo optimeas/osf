@@ -1,10 +1,10 @@
-// Copyright 2026 Optimeas GmbH
+﻿// Copyright 2026 Optimeas GmbH
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,17 +32,16 @@ type
   // Provides Log() and the OnLog / DebugEnabled properties.
   TOSFLoggable = class
   private
-    FOnLog        : TOSFLogEvent;
-    FDebugEnabled : Boolean;
+    FOnLog: TOSFLogEvent;
+    FDebugEnabled: Boolean;
   protected
     procedure Log(Level: TOSFLogLevel; const Msg: string); overload;
-    procedure Log(Level: TOSFLogLevel; const Fmt: string;
-                   const Args: array of const); overload;
+    procedure Log(Level: TOSFLogLevel; const Fmt: string; const Args: array of const); overload;
   public
     // DebugEnabled controls whether llDebug messages are forwarded to OnLog.
     // Default: False. Set to True to enable verbose block-level logging.
-    property DebugEnabled : Boolean      read FDebugEnabled write FDebugEnabled;
-    property OnLog        : TOSFLogEvent read FOnLog        write FOnLog;
+    property DebugEnabled: Boolean read FDebugEnabled write FDebugEnabled;
+    property OnLog: TOSFLogEvent read FOnLog write FOnLog;
   end;
 
 implementation
@@ -52,8 +51,10 @@ uses
 
 procedure TOSFLoggable.Log(Level: TOSFLogLevel; const Msg: string);
 begin
-  if not Assigned(FOnLog) then Exit;
-  if (Level = llDebug) and (not FDebugEnabled) then Exit;
+  if not Assigned(FOnLog) then
+    Exit;
+  if (Level = llDebug) and (not FDebugEnabled) then
+    Exit;
   try
     FOnLog(Level, Msg);
   except
@@ -61,11 +62,12 @@ begin
   end;
 end;
 
-procedure TOSFLoggable.Log(Level: TOSFLogLevel; const Fmt: string;
-                            const Args: array of const);
+procedure TOSFLoggable.Log(Level: TOSFLogLevel; const Fmt: string; const Args: array of const);
 begin
-  if not Assigned(FOnLog) then Exit;
-  if (Level = llDebug) and (not FDebugEnabled) then Exit;
+  if not Assigned(FOnLog) then
+    Exit;
+  if (Level = llDebug) and (not FDebugEnabled) then
+    Exit;
   try
     FOnLog(Level, Format(Fmt, Args));
   except

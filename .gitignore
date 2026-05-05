@@ -11,6 +11,7 @@
 *.identcache
 *.tvsconfig
 *.dsv
+*.dsk
 *.~*
 __history/
 __recovery/
