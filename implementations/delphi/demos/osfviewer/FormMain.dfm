@@ -16,6 +16,7 @@ object FormOSFViewer: TFormOSFViewer
   Position = poScreenCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
+  OnShow = FormShow
   TextHeight = 13
   object splVert: TSplitter
     Left = 280
@@ -34,7 +35,6 @@ object FormOSFViewer: TFormOSFViewer
     Padding.Top = 4
     Padding.Right = 4
     TabOrder = 0
-    ExplicitHeight = 592
     object lblChannels: TLabel
       AlignWithMargins = True
       Left = 4
@@ -66,7 +66,6 @@ object FormOSFViewer: TFormOSFViewer
       TabOrder = 0
       OnClick = lbChannelsClick
       OnDrawItem = lbChannelsDrawItem
-      ExplicitHeight = 571
     end
   end
   object pnlRight: TPanel
@@ -77,8 +76,6 @@ object FormOSFViewer: TFormOSFViewer
     Align = alClient
     BevelOuter = bvNone
     TabOrder = 1
-    ExplicitLeft = 282
-    ExplicitHeight = 814
     DesignSize = (
       717
       753)
@@ -95,8 +92,8 @@ object FormOSFViewer: TFormOSFViewer
     object lblNoChart: TLabel
       Left = 0
       Top = 0
-      Width = 303
-      Height = 174
+      Width = 301
+      Height = 21
       Alignment = taCenter
       Anchors = [akLeft, akTop, akRight, akBottom]
       Caption = 'Channel type cannot be displayed as a chart'
@@ -108,7 +105,7 @@ object FormOSFViewer: TFormOSFViewer
       ParentFont = False
       Layout = tlCenter
       Visible = False
-      ExplicitHeight = 21
+      ExplicitWidth = 303
     end
     object chtData: TChart
       Left = 0
@@ -138,9 +135,6 @@ object FormOSFViewer: TFormOSFViewer
       Align = alClient
       BevelOuter = bvNone
       TabOrder = 1
-      ExplicitTop = 492
-      ExplicitWidth = 715
-      ExplicitHeight = 100
       object memLog: TMemo
         AlignWithMargins = True
         Left = 8
@@ -162,10 +156,6 @@ object FormOSFViewer: TFormOSFViewer
         ScrollBars = ssBoth
         TabOrder = 0
         WordWrap = False
-        ExplicitLeft = 6
-        ExplicitTop = -24
-        ExplicitWidth = 717
-        ExplicitHeight = 100
       end
     end
     object Panel1: TPanel
@@ -176,9 +166,6 @@ object FormOSFViewer: TFormOSFViewer
       Align = alTop
       BevelOuter = bvNone
       TabOrder = 2
-      ExplicitLeft = 23
-      ExplicitTop = 580
-      ExplicitWidth = 185
       object cbDebug: TCheckBox
         Left = 19
         Top = 12
