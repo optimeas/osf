@@ -13,9 +13,10 @@ One codebase, two audiences.
 
 ## Status
 
-**In progress.** Magic header detection, metablock parsing for both OSF4
-and OSF5, and the full block-stream reader are in place. Writing follows
-in subsequent sessions.
+**In progress.** The two reading layers are complete: the streaming
+`BlockReader` for raw block-by-block access, and the higher-level
+`DataManager` that aggregates blocks into typed channels with segment
+metadata. Writing follows in subsequent sessions.
 
 | Capability                                                          | State   |
 |---------------------------------------------------------------------|---------|
@@ -29,8 +30,10 @@ in subsequent sessions.
 | ReaderStats with per-channel detail                                 | ✅      |
 | Best-effort truncation handling                                     | ✅      |
 | Skipped-payload capture (opt-in)                                    | ✅      |
+| In-memory data manager with typed channels                          | ✅      |
+| Channel access by name and by index (DECISIONS §10)                 | ✅      |
+| Equidistant segments (multi-`bcStartData`)                          | ✅      |
 | OSFZ (zlib) transparent decompression                               | Pending |
-| Typed in-memory channels (segments + sample arrays)                 | Pending |
 | Block writer (OSF5)                                                 | Pending |
 | PyO3 bindings (`implementations/python/`)                           | Pending |
 
@@ -42,23 +45,27 @@ implementations/rust/
 └── osf-core/
     ├── Cargo.toml
     ├── src/
-    │   ├── lib.rs       — re-exports + read_file convenience
-    │   ├── error.rs     — OsfError (thiserror)
-    │   ├── header.rs    — parse_magic_header + unit tests
-    │   ├── types.rs     — DataType, ChannelType, BlockContent
-    │   ├── meta.rs      — MetaBlock model + datatype/channel-type validation
-    │   ├── meta_json.rs — OSF5 JSON metablock parser
-    │   ├── meta_xml.rs  — OSF4 XML metablock parser
-    │   ├── block.rs     — Block, BlockKind, payload enums, control-byte decoder
-    │   ├── reader.rs    — BlockReader<R: Read> iterator + payload parsers
-    │   └── stats.rs     — ReaderStats, ChannelStats, Display impls
+    │   ├── lib.rs           — re-exports + read_file convenience
+    │   ├── error.rs         — OsfError (thiserror)
+    │   ├── header.rs        — parse_magic_header + unit tests
+    │   ├── types.rs         — DataType, ChannelType, BlockContent
+    │   ├── meta.rs          — MetaBlock model + datatype/channel-type validation
+    │   ├── meta_json.rs     — OSF5 JSON metablock parser
+    │   ├── meta_xml.rs      — OSF4 XML metablock parser
+    │   ├── block.rs         — Block, BlockKind, payload enums, control-byte decoder
+    │   ├── reader.rs        — BlockReader<R: Read> iterator + payload parsers
+    │   ├── stats.rs         — ReaderStats, ChannelStats, Display impls
+    │   ├── data_channel.rs  — typed Channel enum, Segment, samples_with_time
+    │   └── manager.rs       — DataManager + private build_channels logic
     ├── examples/
-    │   ├── inspect.rs   — CLI: print header + metadata + channel list
-    │   └── stats.rs     — CLI: full read + ReaderStats + top-N channels
+    │   ├── inspect.rs       — header + metadata + channel list (no block reading)
+    │   ├── stats.rs         — full read + ReaderStats + top-N raw channels
+    │   └── dump.rs          — manager-driven per-channel summary + first-channel detail
     └── tests/
         ├── header_test.rs    — every shipped .osf parses its magic header
         ├── metablock_test.rs — every shipped .osf parses its metablock
-        └── block_test.rs     — every shipped .osf streams blocks cleanly
+        ├── block_test.rs     — every shipped .osf streams blocks cleanly
+        └── manager_test.rs   — every shipped .osf assembles into a DataManager
 ```
 
 ## Build
@@ -71,18 +78,24 @@ cargo test
 cargo clippy
 ```
 
-Three integration suites walk `../../examples/` and
+Four integration suites walk `../../examples/` and
 `../../examples/generated/`:
 
-- `header_test.rs` asserts that every shipped `.osf` parses its magic
-  header.
-- `metablock_test.rs` asserts that every shipped `.osf` parses its
-  metablock and contains channels with consistent fields.
-- `block_test.rs` drives the `BlockReader` over every file and checks
-  that no file produces a reader error.
+- `header_test.rs` — every shipped `.osf` parses its magic header.
+- `metablock_test.rs` — every shipped `.osf` parses its metablock.
+- `block_test.rs` — `BlockReader` streams every shipped `.osf`.
+- `manager_test.rs` — `DataManager::load_from_file` succeeds on every
+  shipped `.osf` and channels are reachable both by name and by index.
 
-Updating the reference set (e.g. by re-running `OSFGenerator`) is
-therefore exercised end-to-end.
+`manager_test.rs` also has a `#[ignore]`-gated performance smoke
+(`steam_loco_load_time_within_budget`) that asserts the brief's
+budget (≤ 100 ms in release, ≤ 200 ms in debug). Run it manually:
+
+```bash
+cargo test --release -- --ignored
+```
+
+Local measurement: ~3 ms in release, well under budget.
 
 ## Inspect a file
 
@@ -92,76 +105,99 @@ cargo run --example inspect -- ../../examples/generated/osf5_mixed.osf
 ```
 
 `inspect` is fast (header + metablock only). For a full read with
-counters, use the `stats` example.
+counters use `stats`; for a typed-channel summary use `dump`.
 
-## Stats
+## Manager API
 
-```bash
-cargo run --example stats -- ../../examples/steam_loco.osf
-cargo run --example stats -- ../../examples/motorbike.osf 20
+```rust
+use osf_core::DataManager;
+
+let mgr = DataManager::load_from_file("examples/steam_loco.osf")?;
+println!("Channels: {}", mgr.channels().len());
+
+// Channel access by name (mandatory per DECISIONS §10)
+let temp = mgr.channel("Sensor/Temperature").expect("not found");
+
+// Iterate over samples — segment timestamps are reconstructed lazily
+for sample in temp.samples_with_time() {
+    println!("{} ns: {:?}", sample.timestamp_ns, sample.value);
+}
+
+// Or dump everything as f64s in stream order (segments transparently
+// joined, equidistant channels stitched)
+if let Channel::Equidistant(eq) = temp {
+    let values: Vec<f64> = eq.as_doubles_flat()?;
+}
+
+// Equidistant segments are first-class — every bcStartData opens one
+if let Channel::Equidistant(eq) = temp {
+    for segment in eq.segments() {
+        println!(
+            "seg start={}, samples={}, rate={}",
+            segment.start_timestamp_ns,
+            segment.sample_count,
+            segment.sample_rate_hz,
+        );
+    }
+}
 ```
 
-Pass an optional second argument to choose `top_n`. Output for an OSF4
-field file with `RUST_LOG=error` to silence per-channel deprecation
-warnings:
+`DataManager::load_from_file` is the convenience entry. For streaming
+sources, `load_from_reader(impl Read)` does the same starting from a
+caller-supplied reader.
+
+The lower-level `BlockReader` iterator is still available for callers
+that want raw blocks; the manager sits on top of it.
+
+### Sample iteration: `NumericValueRef` and `VariableValueRef`
+
+`samples_with_time()` returns `Sample<NumericValueRef<'_>>` for
+numeric / GPS channels and `Sample<VariableValueRef<'_>>` for
+string / binary channels. `NumericValueRef` passes the eleven Copy
+scalars by value and borrows only `GpsLocation` (24 bytes); the
+lifetime parameter exists for that single variant. `VariableValueRef`
+borrows in both variants because the values are heap-allocated.
+
+```rust
+match sample.value {
+    NumericValueRef::Double(v)    => println!("{v}"),
+    NumericValueRef::GpsLocation(g) => println!("{}, {}", g.latitude, g.longitude),
+    other => println!("{other:?}"),
+}
+```
+
+## Stats and dump
+
+```bash
+# Raw-block telemetry; faster, no channel aggregation.
+cargo run --example stats -- ../../examples/steam_loco.osf
+
+# Manager-driven summary; slower but with typed channels.
+cargo run --example dump -- ../../examples/motorbike.osf
+```
+
+`dump` output for an OSF4 field file with `RUST_LOG=error`:
 
 ```text
 File:            ../../examples/steam_loco.osf
-File size:       2.53 MB
-Header:          27 B
-Metablock:       25.66 KB
-Data section:    2.50 MB
-Read in:         15 ms
-
-Channels total:        123
-With data:             123
-Unsupported:           0
-
-Blocks total:          123
-Read:                  123
-Skipped (unsupp.):     0
-Skipped (deprec.):     0
-Skipped (reserved):    0
-Truncated:             0
+Channels:        123 (123 with data, 0 unsupported)
+Load time:       21 ms
 
 Top 10 channels by sample count:
-   index  name                                         samples      bytes  segments  time range (ns)
-   -----  ----------------------------------------  ----------  ---------  --------  --------------------
-      32  R_9                                            19507  304.80 KB         0  1692093763655739001..1692098578509456266
+   index  name                                      type            samples  segments  unit
+   -----  ----------------------------------------  -----------  ----------  --------  ----
+      32  R_9                                       timestamped       19507         0  Ohm
       ...
+
+First channel detail:
+   name:           GPS.PosFixMode
+   data type:      Double
+   sample count:   109
+   first 5 samples:
+     0:  ts=1692093763318471742  value=3
+     1:  ts=1692093779317336374  value=3
+     ...
 ```
-
-## Reader API
-
-```rust
-use osf_core::{read_file, BlockReader, parse_magic_header, parse_metablock};
-use std::fs::File;
-use std::io::{BufReader, Read};
-
-// 1. Convenience: collect everything in memory and get the stats.
-let (meta, blocks, stats) = read_file(path)?;
-println!("{stats}");
-
-// 2. Iterator-driven: stream blocks one at a time.
-let mut reader = BufReader::new(File::open(path)?);
-let header = parse_magic_header(&mut reader)?;
-let mut body = vec![0u8; header.metablock_len as usize];
-reader.read_exact(&mut body)?;
-let meta = parse_metablock(header.version, &body)?;
-
-let mut block_reader = BlockReader::new(reader, &meta)
-    .with_capture_skipped_payload(false)  // default; flip to true to keep skip bytes
-    .with_file_size(file_size);           // optional, threaded through to stats
-
-for block in &mut block_reader {
-    let block = block?;
-    // …
-}
-let stats = block_reader.stats();
-```
-
-`BlockReader` is the iterator API; `read_file` is a convenience for
-callers that want the whole file in memory plus stats.
 
 ## Spec revision tracked
 
@@ -177,18 +213,15 @@ a `log::warn!` because real field files (`examples/steam_loco.osf`,
 `examples/motorbike.osf`) still carry them on every channel — failing
 on them would make the parser unusable on existing data.
 
-The block reader skips deprecated control bytes (`bcTrustedTimestamp`,
-`bcStatusEvent`, `bcMessageEvent`) and reserved values, surfacing them
-through `BlockKind::Skipped` so applications still see the block. The
-`motorbike.osf` field sample reaches the reader with 169 such skipped
-blocks alongside 13 898 typed blocks; the reader processes the file end
-to end in ~30 ms.
-
-Forward-compatibility variants `DataType::Unsupported(String)` and
-`ChannelType::Unsupported(String)` carry the on-disk spelling so a file
-that uses a future-spec datatype still parses channel-by-channel; the
-block reader emits `Skipped { reason: UnsupportedDataType }` for blocks
-of such channels and re-aligns to the next one.
+The manager layer adds spec-level consistency checks per channel:
+mixing `bcStartData` and `bcAbsTimeStampData` blocks on one channel
+fails with `OsfError::ChannelMixedBlockTypes`; orphan
+`bcContinuedData` (no preceding `bcStartData`) fails with
+`OsfError::ContinuedDataWithoutStart`; `bcContinuedRelStampData`
+without a prior absolute timestamp fails with
+`OsfError::RelStampWithoutAnchor`. Forward-compat `Unsupported`
+channels are silently dropped from the manager's channel list so
+applications can iterate without filtering.
 
 ## Dependencies
 
@@ -198,22 +231,22 @@ of such channels and re-aligns to the next one.
 | `serde_json`         | OSF5 metablock parser                                  |
 | `quick-xml`          | OSF4 metablock parser                                  |
 | `byteorder`          | Little-endian binary block reader                      |
-| `log`                | Standard logging facade (parser diagnostics)           |
+| `log`                | Standard logging facade (parser + manager diagnostics) |
 | `serde`              | Derive support for upcoming structures                 |
 | `env_logger` (dev)   | Test-time + example-time logger backend                |
 
 ## Next steps
 
-1. **Session 4** — OSFZ transparent decompression (zlib wrapper around
-   any `R: Read` that detects an OSFZ-compressed `.osf` and delegates
-   to the existing reader). Small isolated change.
-2. **Session 5** — typed in-memory channels (mirror of
-   `OSF.Data.Channels` from the Delphi reference), including the
-   per-channel `Segments` list for equidistant data and the aggregated
-   sample arrays per channel.
-3. **Session 6** — block writer for OSF5.
-4. **Session 7** — PyO3 wrapper crate at `implementations/python/`,
-   exposing the reader and writer to Python with NumPy interop.
+1. **Session 5** — block writer for OSF5 (block-mode only per
+   DECISIONS §7). Will mirror the typed-channel structures from this
+   session into a writer that produces `bcStartData` and
+   `bcAbsTimeStampData` blocks. Embedded streaming-write is a separate,
+   later language target.
+2. **Session 6** — OSFZ transparent decompression (zlib wrapper). Small
+   isolated change.
+3. **Session 7** — PyO3 wrapper crate at `implementations/python/`,
+   exposing the reader, manager, and writer to Python with NumPy
+   interop on flat numeric channels.
 
 ## License
 
