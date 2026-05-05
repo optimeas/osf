@@ -76,7 +76,7 @@ osf/
 │   │   ├── demos/osfcsvexport/      — OSF → CSV export demo
 │   │   └── OSFCompileCheck.dpr      — compile-only smoke test
 │   ├── rust/                        — Cargo workspace; foundation for Python (DECISIONS §18)
-│   │   └── osf-core/                — header + metablock + block reader + DataManager landed; writer + OSFZ pending
+│   │   └── osf-core/                — read + write complete for OSF5; OSFZ + PyO3 pending
 │   └── (c, cpp, csharp, python, …)/ — README placeholders only
 ├── integrations/(arrow, pytorch, tensorflow, mcp, langchain)/  — placeholders
 ├── examples/
@@ -144,6 +144,8 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
 | `stats` | `ReaderStats` with file/section sizes, elapsed, channels and per-reason block counters, plus `per_channel: HashMap<u16, ChannelStats>` (segments, samples_total, time_range_ns); `Display` impls for both |
 | `data_channel` | `Channel` enum (`Equidistant` / `Timestamped` / `Variable`), per-variant typed structs, `Segment`, `ChannelMeta`, `NumericValues`; `samples_with_time()` iterators yielding `Sample<NumericValueRef<'_>>` / `Sample<VariableValueRef<'_>>`; `as_doubles_flat` etc. helpers |
 | `manager` | `DataManager` — `load_from_file(path)` / `load_from_reader(R)` build the typed channel list, expose `channel(name)` (mandatory per DECISIONS §10) and `channel_by_index(u16)` (optional). Internal `build_channels` runs the per-channel builder state machine (Pending → Equidistant or Timestamped on first typed block; Variable upfront for string/binary). |
+| `binary_write` | Crate-private little-endian write helpers (symmetric to `byteorder::ReadBytesExt`); `write_string_with_terminator` / `write_binary_with_terminator` append the spec-mandated `0x00` |
+| `writer` | `WriterBuilder` — accumulator with `add_channel`, 2 equidistant + 12 timestamped + 2 variable `add_*` methods. `write_to_file(path)` / `write_to(W)` emit OSF5; `from_manager(&DataManager)` builds a builder from a loaded manager. Module-level `writer::write_to_file(&DataManager, path)` is the round-trip convenience |
 | `lib` | top-level `parse_metablock(version, &[u8])` dispatcher and `read_file(path) -> (MetaBlock, Vec<Block>, ReaderStats)` convenience |
 
 **Spec rev 2026-05-04 enforcement:**
@@ -221,24 +223,56 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
   `OsfError::DataTypeAccessMismatch` when the requested type does
   not match the stored datatype.
 
-**Tests:** 83 unit tests across `header.rs`, `meta.rs`, `meta_json.rs`,
+**Writer behaviour (Session 5):**
+
+- OSF5 only (DECISIONS §6); always emits OSF5 even when the source
+  manager came from an OSF4 file.
+- Block mode only (DECISIONS §7); the builder accumulates samples in
+  memory and emits at the end. Streaming write is reserved for
+  embedded language targets.
+- No OSFZ output (DECISIONS §12); compression is downstream concern.
+- No trailer / no magic trailer — OSF5 dropped both.
+- Equidistant blocks: numeric only (`f32` and `f64` per spec rev
+  2026-05-04). The builder rejects other types up front. Each
+  segment opens with `bcStartData`; long segments split into
+  `bcContinuedData` blocks so payloads always fit the channel's
+  `sizeoflengthvalue`. Reader merges them back transparently.
+- Timestamped numeric blocks: `bcAbsTimeStampData` with the
+  multi-sample bit set; chunked by `sizeoflengthvalue`.
+- Variable (string / binary) blocks: one sample per block per spec.
+  `sizeoflengthvalue` auto-bumps from 2 → 4 when a single sample
+  would overflow the u16 length field; logged at debug level.
+- File metadata defaults from DECISIONS §13: `created_utc` set to
+  current UTC time at write (Howard Hinnant date math, no chrono
+  dependency); `creator` defaults to `osf-core/<crate-version>`;
+  `tag` defaults to `default`; `reason` and GPS fields omitted when
+  unset (not written as null).
+- Channel index is **not** preserved across round-trip — the writer
+  assigns sequential 0..N indices. Names, datatypes, sample counts,
+  segment boundaries, and bitwise sample values are preserved exactly.
+
+**Tests:** 116 unit tests across `header.rs`, `meta.rs`, `meta_json.rs`,
 `meta_xml.rs`, `block.rs`, `reader.rs`, `stats.rs`, `data_channel.rs`,
-`manager.rs`. Four integration suites:
+`manager.rs`, `binary_write.rs`, `writer.rs`. Five integration suites:
 
 - `tests/header_test.rs` — every shipped `.osf` parses its magic header.
 - `tests/metablock_test.rs` — every shipped `.osf` parses its metablock.
 - `tests/block_test.rs` — every shipped `.osf` streams blocks cleanly
   via `BlockReader`.
 - `tests/manager_test.rs` — every shipped `.osf` assembles into a
-  `DataManager`; channel-by-name lookup verified on `steam_loco.osf`
-  (`GPS.PosFixMode`). Plus a `#[ignore]`-gated performance smoke
-  (`steam_loco_load_time_within_budget`) that asserts ≤ 100 ms in
-  release / ≤ 200 ms in debug. Manual run with `cargo test --release
-  -- --ignored` measures ~3 ms locally.
+  `DataManager`; channel-by-name lookup verified on `steam_loco.osf`.
+- `tests/roundtrip_test.rs` — every shipped `.osf` survives load +
+  write + reload with bitwise sample comparison; OSF4-source files
+  are confirmed to produce OSF5 output.
+
+`manager_test.rs` and `roundtrip_test.rs` each carry an `#[ignore]`-
+gated performance smoke. Manual run via `cargo test --release --
+--ignored` measures `steam_loco.osf` at ~3 ms read and ~3 ms write
+locally — both well under the brief budgets (100 ms read, 100 ms
+write).
 
 `cargo build`, `cargo test`, and `cargo clippy --all-targets` all run
-clean. Manager-layer smoke (debug build, `dump` example): `steam_loco`
-123 channels in 21 ms.
+clean.
 
 **Examples:**
 
@@ -249,14 +283,17 @@ clean. Manager-layer smoke (debug build, `dump` example): `steam_loco`
 - `cargo run --example dump -- <path> [top_n]` — manager-driven typed
   channel summary plus first-channel detail with reconstructed
   per-sample timestamps.
+- `cargo run --example copy -- <input> <output>` — load via
+  `DataManager`, write OSF5 via `writer::write_to_file`, verify by
+  reload (writer demo).
 
 Diagnostics flow through `env_logger`; default `RUST_LOG=warn`, override
 with `debug` for full alias / unknown-field tracing or `error` for
 clean output on files that flood deprecated-field warnings.
 
-**Next steps:** OSF5 block writer (Session 5; block-mode only per
-DECISIONS §7), then OSFZ transparent decompression (Session 6), then
-PyO3 wrapper for Python (Session 7).
+**Next steps:** OSFZ transparent decompression on the read side
+(Session 6), then PyO3 wrapper for Python (Session 7) with NumPy
+interop on flat numeric channels.
 
 ---
 
@@ -283,9 +320,9 @@ PyO3 wrapper for Python (Session 7).
 - **DUnitX test suite** for the Delphi implementation — not started; only
   `OSFCompileCheck.dpr` exists today. Brief F3 from the spec-revision task
   was deferred; would be its own scaffolding effort.
-- **Rust** — magic-header + OSF4/OSF5 metablock parsers + block-stream
-  reader landed; OSFZ transparent decompression, typed in-memory
-  channels, and writer are pending (see Rust section above).
+- **Rust** — read path complete (header + metablock + block reader +
+  DataManager); OSF5 writer landed with full round-trip validation.
+  OSFZ decompression and PyO3 bindings remain pending.
 - **Python bindings** — directory not yet started; will sit on `osf-core`
   via PyO3 once the Rust block reader/writer are in place.
 - **Other language implementations** (C, C++, C#, …) — README
