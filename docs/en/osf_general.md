@@ -38,7 +38,7 @@ The **Open Streaming Format (OSF)** is a binary, block-oriented data format for 
 
 Regardless of version 4 or version 5, every OSF file follows the same basic schema:
 
-![OSF file structure.](../media/dfa207f25f79c84ec79e2e2f6c2c42cc.jpg)
+![OSF file structure.](media/dfa207f25f79c84ec79e2e2f6c2c42cc.jpg)
 
 
 1. **Magic header**
@@ -810,7 +810,7 @@ For a complete implementation or deeper integration, the following further topic
   - Details of the respective header formats (XML vs. JSON)  
   - Differences in the control byte and the trailer  
   - Backward compatibility and implementation notes
-  - Continue with [OSF4](osf4.md) or [OSF5](osf5.md)
+  - Continue with [OSF4](references/osf4.md) or [OSF5](references/osf5.md)
 
 - **Vectors and matrices:**  
   - Extended channel types for multi-dimensional data  

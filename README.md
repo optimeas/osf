@@ -79,9 +79,11 @@ Full examples and sample `.osf` files are provided in [`examples/`](examples/).
 
 The specification is maintained in English under [`docs/en/`](docs/en/) and mirrored in German under [`docs/de/`](docs/de/).
 
+- [Format introduction](docs/en/index.md) ([🇩🇪 Deutsch](docs/de/index.md))
 - [General OSF concepts](docs/en/osf_general.md) ([🇩🇪 Deutsch](docs/de/osf_general.md))
-- [OSF4 specification](docs/en/osf4.md) ([🇩🇪 Deutsch](docs/de/osf4.md))
-- [OSF5 specification](docs/en/osf5.md) ([🇩🇪 Deutsch](docs/de/osf5.md))
+- [OSF4 specification](docs/en/references/osf4.md) ([🇩🇪 Deutsch](docs/de/references/osf4.md))
+- [OSF5 specification](docs/en/references/osf5.md) ([🇩🇪 Deutsch](docs/de/references/osf5.md))
+- [Vector & matrix channels](docs/en/references/osf_vector_matrix.md) ([🇩🇪 Deutsch](docs/de/references/osf_vector_matrix.md))
 
 ---
 

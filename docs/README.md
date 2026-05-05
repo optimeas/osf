@@ -8,13 +8,17 @@ languages. English is the default; the German version is kept in sync.
 | English (default) | [`en/`](en/) |
 | German            | [`de/`](de/) |
 
-Each language directory contains the same three documents:
+Each language directory follows the same layout:
 
-| Document | Description |
-|----------|-------------|
+| Path | Description |
+|------|-------------|
+| `index.md` | Format introduction and design overview |
 | `osf_general.md` | Concepts common to all OSF versions: channel types, data block structure, time models, and design rationale |
-| `osf4.md`        | OSF4 specification — XML metadata header, control byte layout, trailer structure |
-| `osf5.md`        | OSF5 specification — JSON metadata header, simplified control byte, no trailer, backward compatibility with OSF4 |
+| `examples/` | Example files and usage walkthroughs |
+| `references/osf4.md` | OSF4 specification — XML metadata header, control byte layout, trailer structure |
+| `references/osf5.md` | OSF5 specification — JSON metadata header, simplified control byte, no trailer, backward compatibility with OSF4 |
+| `references/osf_vector_matrix.md` | Vector and matrix channel types (OSF5) |
+| `media/` | Shared images for the documents in this language |
 
 ---
 
