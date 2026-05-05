@@ -146,15 +146,7 @@ begin
     Result.StartTimestampNs   := Src.StartTimestampNs;
     Result.LengthFieldSize    := Src.LengthFieldSize;
     Result.PhysicalUnit       := Src.PhysicalUnit;
-    Result.PhysicalUnit1      := Src.PhysicalUnit1;
-    Result.PhysicalUnit2      := Src.PhysicalUnit2;
-    Result.PhysicalUnit3      := Src.PhysicalUnit3;
     Result.PhysicalDimension  := Src.PhysicalDimension;
-    Result.PhysicalDimension1 := Src.PhysicalDimension1;
-    Result.PhysicalDimension2 := Src.PhysicalDimension2;
-    Result.PhysicalDimension3 := Src.PhysicalDimension3;
-    Result.Scale              := Src.Scale;
-    Result.Offset             := Src.Offset;
     Result.MimeType           := Src.MimeType;
     Result.SpectrumType       := Src.SpectrumType;
   except
