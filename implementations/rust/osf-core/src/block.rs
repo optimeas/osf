@@ -301,6 +301,71 @@ impl RelTimestampedPayload {
     }
 }
 
+/// Decoded form of the 1-byte control byte that follows the length
+/// field in every OSF block.
+///
+/// Bit 7 carries the multi-sample flag; bits 0–6 select the block
+/// type. Spec rev 2026-05-04 defines values 0 through 8; anything else
+/// is reserved and produces [`ControlKind::Unknown`].
+#[allow(dead_code)] // consumed by BlockReader in the next commit
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ControlByte {
+    pub(crate) kind: ControlKind,
+    /// Bit 7 of the control byte. When set, the payload begins with a
+    /// `uint32` sample count `N`; when clear, exactly one sample
+    /// follows (with one exception: `bcAbsTimeStampData` for `string`
+    /// and `binary` always sets bit 7 per spec).
+    pub(crate) multi_sample: bool,
+}
+
+/// Block-type discriminator extracted from the lower 7 bits of the
+/// control byte.
+#[allow(dead_code)] // consumed by BlockReader in the next commit
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ControlKind {
+    /// 0 — `bcReserved`. Originally `bcMetaData`, never used.
+    Reserved,
+    /// 1 — `bcTrustedTimestamp`. Deprecated; readers skip.
+    TrustedTimestamp,
+    /// 2 — `bcTimebaseRealign`. Deprecated; readers skip.
+    TimebaseRealign,
+    /// 3 — `bcStatusEvent`. Deprecated; readers skip.
+    StatusEvent,
+    /// 4 — `bcMessageEvent`. Deprecated; readers skip.
+    MessageEvent,
+    /// 5 — `bcContinuedData`. Equidistant continuation block.
+    ContinuedData,
+    /// 6 — `bcStartData`. Equidistant start block with sample rate.
+    StartData,
+    /// 7 — `bcContinuedRelStampData`. OSF4-only on read.
+    ContinuedRelStampData,
+    /// 8 — `bcAbsTimeStampData`. Per-sample absolute timestamps.
+    AbsTimeStampData,
+    /// Anything else (currently bits 0–6 ≥ 9). Carries the raw value
+    /// so the reader can emit it in [`SkipReason::ReservedBlockType`]
+    /// for diagnostics.
+    Unknown(u8),
+}
+
+/// Decode the 1-byte control byte that follows the length field.
+#[allow(dead_code)] // consumed by BlockReader in the next commit
+pub(crate) fn decode_control_byte(byte: u8) -> ControlByte {
+    let multi_sample = byte & 0x80 != 0;
+    let kind = match byte & 0x7F {
+        0 => ControlKind::Reserved,
+        1 => ControlKind::TrustedTimestamp,
+        2 => ControlKind::TimebaseRealign,
+        3 => ControlKind::StatusEvent,
+        4 => ControlKind::MessageEvent,
+        5 => ControlKind::ContinuedData,
+        6 => ControlKind::StartData,
+        7 => ControlKind::ContinuedRelStampData,
+        8 => ControlKind::AbsTimeStampData,
+        other => ControlKind::Unknown(other),
+    };
+    ControlByte { kind, multi_sample }
+}
+
 /// On-disk `gpslocation` payload (24 bytes: three little-endian
 /// `double`s in the order `latitude`, `longitude`, `altitude` per spec
 /// revision 2026-05-04).
@@ -345,6 +410,46 @@ mod tests {
             2
         );
         assert!(RelTimestampedPayload::Bool(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn control_byte_decodes_all_documented_values() {
+        let cases = [
+            (0x00, ControlKind::Reserved, false),
+            (0x01, ControlKind::TrustedTimestamp, false),
+            (0x02, ControlKind::TimebaseRealign, false),
+            (0x03, ControlKind::StatusEvent, false),
+            (0x04, ControlKind::MessageEvent, false),
+            (0x05, ControlKind::ContinuedData, false),
+            (0x06, ControlKind::StartData, false),
+            (0x07, ControlKind::ContinuedRelStampData, false),
+            (0x08, ControlKind::AbsTimeStampData, false),
+        ];
+        for (byte, kind, multi) in cases {
+            let cb = decode_control_byte(byte);
+            assert_eq!(cb.kind, kind, "byte 0x{byte:02x}");
+            assert_eq!(cb.multi_sample, multi, "byte 0x{byte:02x}");
+        }
+    }
+
+    #[test]
+    fn control_byte_recognises_multi_sample_bit() {
+        for low in 0u8..=8 {
+            let cb = decode_control_byte(low | 0x80);
+            assert!(cb.multi_sample, "byte 0x{:02x} should be multi", low | 0x80);
+        }
+    }
+
+    #[test]
+    fn control_byte_passes_unknown_values_through() {
+        let cb = decode_control_byte(0x09);
+        assert_eq!(cb.kind, ControlKind::Unknown(9));
+        let cb = decode_control_byte(0x7F);
+        assert_eq!(cb.kind, ControlKind::Unknown(0x7F));
+        // High bit must not contaminate the kind.
+        let cb = decode_control_byte(0x89);
+        assert_eq!(cb.kind, ControlKind::Unknown(9));
+        assert!(cb.multi_sample);
     }
 
     #[test]
