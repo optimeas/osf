@@ -31,6 +31,7 @@ pub mod block;
 pub mod data_channel;
 pub mod error;
 pub mod header;
+pub mod manager;
 pub mod meta;
 pub mod meta_json;
 pub mod meta_xml;
