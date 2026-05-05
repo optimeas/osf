@@ -240,7 +240,21 @@ Integrations (Arrow, PyTorch, TensorFlow, MCP, LangChain) follow after the Pytho
 
 ---
 
-## 16. AI-Assisted Development
+## 16. Specification Revision 2026-05-04
+
+- Removed: `scale`, `offset`, `physicalunit1`, `physicalunit2`, datatypes `pair`, `triple`, `candata`.
+- Renamed: datatype `gpsdata` → `gpslocation`. Field order fixed to `latitude`, `longitude`, `altitude`.
+- Added: unsigned integer datatypes `uint8`–`uint64`.
+- Clarified: `string` and `binary` in `bcAbsTimeStampData` are null-terminated for both OSF4 and OSF5. Readers must strip the trailing null byte. This matches existing device behavior and is therefore non-negotiable.
+- Added: `bytearray` as alias for `binary` (read-side).
+- Added: `bcStartData` carries sample rate as `double` and may appear multiple times per channel (OSF4 + OSF5).
+- Documentation split into `docs/en/` (default) and `docs/de/`. Structure prepared for future spec documents (e.g. `vector_matrix.md`).
+
+The data-type table in section 9 above predates this revision and lists `candata`, `gpsdata`, `pair`, and `triple` as still required. They are removed; `gpslocation` replaces `gpsdata`. New unsigned-integer types are required across all implementations.
+
+---
+
+## 17. AI-Assisted Development
 
 This project uses Claude (Anthropic) for code generation and documentation. Each implementation is
 developed in a separate chat session. To maintain context across sessions, every new session should
