@@ -272,6 +272,10 @@ Der Parameter `datatype` legt das Datenformat der Werte eines Kanals fest. Jeder
 | `int16`   | 2             | Ganzzahl mit Vorzeichen                                                                                                                              |
 | `int32`   | 4             | Ganzzahl mit Vorzeichen                                                                                                                              |
 | `int64`   | 8             | Ganzzahl mit Vorzeichen                                                                                                                              |
+| `uint8`   | 1             | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 255                                                                                                       |
+| `uint16`  | 2             | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 65 535                                                                                                    |
+| `uint32`  | 4             | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 4 294 967 295                                                                                             |
+| `uint64`  | 8             | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 18 446 744 073 709 551 615                                                                                |
 | `float`   | 4             | IEEE 754 Single Precision                                                                                                                            |
 | `double`  | 8             | IEEE 754 Double Precision                                                                                                                            |
 | `string`  | variabel      | UTF-8 kodiert, Länge durch Blockgröße definiert. Endet mit abschließender Nullbyte (`0x00`) – siehe Hinweisblock unten. |
@@ -279,7 +283,7 @@ Der Parameter `datatype` legt das Datenformat der Werte eines Kanals fest. Jeder
 | `candata` | 16            | Struktur für CAN-Frames (siehe unten)                                                                                                                |
 | `gpsdata` | 24            | Struktur für GPS-Positionen (siehe unten)                                                                                                            |
 
-> **Hinweis zu Integer-Typen:** Integer-Werte (`int8`, `int16`, `int32`, `int64`) werden in OSF-Dateien typischerweise für **Zustände, Statusinformationen oder Zählerwerte** verwendet, nicht als skalierte Rohwerte einer physikalischen Größe. Aus diesem Grund kennt OSF bewusst **keine** `scale`/`offset`-Parameter zur Umrechnung in physikalische Werte – physikalische Größen werden direkt als `float` oder `double` gespeichert.
+> **Hinweis zu Integer-Typen:** Integer-Werte (`int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) werden in OSF-Dateien typischerweise für **Zustände, Statusinformationen oder Zählerwerte** verwendet, nicht als skalierte Rohwerte einer physikalischen Größe. Aus diesem Grund kennt OSF bewusst **keine** `scale`/`offset`-Parameter zur Umrechnung in physikalische Werte – physikalische Größen werden direkt als `float` oder `double` gespeichert.
 
 <a name="hinweis-zur-nullterminierung-von-string-und-binary"></a>
 > **Hinweis zur Nullterminierung von `string` und `binary`:**

@@ -108,6 +108,10 @@ OSF5 unterstützt dieselben Datentypen wie OSF4.
 | `int16`    | 2 Byte   | Ganzzahl mit Vorzeichen |
 | `int32`    | 4 Byte   | Ganzzahl mit Vorzeichen |
 | `int64`    | 8 Byte   | Ganzzahl mit Vorzeichen |
+| `uint8`    | 1 Byte   | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 255 |
+| `uint16`   | 2 Byte   | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 65 535 |
+| `uint32`   | 4 Byte   | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 4 294 967 295 |
+| `uint64`   | 8 Byte   | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 18 446 744 073 709 551 615 |
 | `float`    | 4 Byte   | IEEE 754 Single Precision |
 | `double`   | 8 Byte   | IEEE 754 Double Precision |
 | `string`   | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert. Endet mit abschließender Nullbyte (`0x00`) – siehe [`osf_general.md`](osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
