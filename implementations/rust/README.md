@@ -35,7 +35,7 @@ PyO3 bindings remain.
 | Equidistant segments (multi-`bcStartData`)                          | ✅      |
 | Block writer (OSF5)                                                 | ✅      |
 | Roundtrip validation                                                | ✅      |
-| OSFZ (zlib) transparent decompression                               | Pending |
+| OSFZ transparent decompression (gzip + zlib)                        | ✅      |
 | PyO3 bindings (`implementations/python/`)                           | Pending |
 
 ## Layout
@@ -58,6 +58,7 @@ implementations/rust/
     │   ├── stats.rs         — ReaderStats, ChannelStats, Display impls
     │   ├── data_channel.rs  — typed Channel enum, Segment, samples_with_time
     │   ├── manager.rs       — DataManager + private build_channels logic
+    │   ├── compression.rs   — transparent OSFZ detection (gzip + zlib)
     │   ├── binary_write.rs  — little-endian write helpers (private)
     │   └── writer.rs        — WriterBuilder + write_to_file convenience
     ├── examples/
@@ -70,7 +71,8 @@ implementations/rust/
         ├── metablock_test.rs — every shipped .osf parses its metablock
         ├── block_test.rs     — every shipped .osf streams blocks cleanly
         ├── manager_test.rs   — every shipped .osf assembles into a DataManager
-        └── roundtrip_test.rs — every shipped .osf survives load + write + reload
+        ├── roundtrip_test.rs — every shipped .osf survives load + write + reload
+        └── osfz_test.rs      — weather_station.osfz field sample + synthetic OSFZ
 ```
 
 ## Build
@@ -83,7 +85,7 @@ cargo test
 cargo clippy
 ```
 
-Five integration suites walk `../../examples/` and
+Six integration suites walk `../../examples/` and
 `../../examples/generated/`:
 
 - `header_test.rs` — every shipped `.osf` parses its magic header.
@@ -94,6 +96,10 @@ Five integration suites walk `../../examples/` and
 - `roundtrip_test.rs` — load + write + reload, with bitwise sample
   comparison, on every shipped `.osf` (including OSF4-source →
   OSF5-target conversion).
+- `osfz_test.rs` — gzip-OSFZ field sample (`weather_station.osfz`)
+  loads cleanly with `stats.compressed = true`; synthetic gzip and
+  zlib re-wraps of `steam_loco.osf` produce identical channel sets
+  to the plain source.
 
 `manager_test.rs` and `roundtrip_test.rs` each have a `#[ignore]`-gated
 performance smoke. Run them manually:
@@ -256,21 +262,49 @@ manager's channel list so applications can iterate without filtering.
 
 ## Dependencies
 
-| Crate                | Purpose                                                |
-|----------------------|--------------------------------------------------------|
-| `thiserror`          | Ergonomic error enum (`OsfError`)                      |
-| `serde_json`         | OSF5 metablock parser + writer                         |
-| `quick-xml`          | OSF4 metablock parser                                  |
-| `byteorder`          | Little-endian binary reader and writer                 |
-| `log`                | Standard logging facade                                |
-| `serde`              | Derive support for upcoming structures                 |
-| `env_logger` (dev)   | Test-time + example-time logger backend                |
+| Crate                   | Purpose                                             |
+|-------------------------|-----------------------------------------------------|
+| `thiserror`             | Ergonomic error enum (`OsfError`)                   |
+| `serde_json`            | OSF5 metablock parser + writer                      |
+| `quick-xml`             | OSF4 metablock parser                               |
+| `byteorder`             | Little-endian binary reader and writer              |
+| `log`                   | Standard logging facade                             |
+| `serde`                 | Derive support for upcoming structures              |
+| `flate2` (rust_backend) | Transparent OSFZ decompression (gzip + zlib)        |
+| `env_logger` (dev)      | Test-time + example-time logger backend             |
+
+## OSFZ — compressed OSF files
+
+The reader detects OSFZ (compressed OSF) transparently: if the first
+two bytes match gzip (`0x1F 0x8B`) or zlib (`0x78 0x01 / 0x5E / 0x9C
+/ 0xDA`), the stream is wrapped in the matching `flate2` decoder
+before the magic-header parser sees it. Both
+`DataManager::load_from_file` / `load_from_reader` and the lib-level
+`read_file` convenience pick up the detection automatically. The
+writer never produces OSFZ output (DECISIONS §12).
+
+`ReaderStats` exposes `compressed: bool` and `compression_format:
+CompressionFormat` (`None` / `Zlib` / `Gzip`) so callers can render
+the compression status. The `inspect` and `stats` examples already
+do.
+
+```bash
+cargo run --example inspect -- ../../examples/weather_station.osfz
+# path:           ../../examples/weather_station.osfz
+# compressed:     yes (gzip)
+# version:        Osf4
+# ...
+```
+
+The current Optimeas device output (`weather_station.osfz`) uses
+gzip; older tooling may use zlib. Both are valid OSFZ — see
+[DECISIONS §12](../../DECISIONS.md#12-osfz-compression) and the
+specification documents in [docs/en](../../docs/en/osf_general.md) /
+[docs/de](../../docs/de/osf_general.md) for details.
 
 ## Next steps
 
-1. **Session 6** — OSFZ transparent decompression on the read side
-   (zlib wrapper). Small isolated change.
-2. **Session 7** — PyO3 wrapper crate at `implementations/python/`,
+1. **Session 7** — PyO3 wrapper crate at `implementations/python/`,
    exposing the reader, manager, and writer to Python with NumPy
    interop on flat numeric channels.
 
