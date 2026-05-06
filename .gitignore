@@ -23,3 +23,12 @@ Release/
 # Rust build output
 implementations/rust/target/
 implementations/*/rust/target/
+
+# Python build output
+implementations/python/target/
+implementations/python/.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/

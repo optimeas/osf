@@ -1,0 +1,23 @@
+[package]
+name = "osf-python"
+version = "0.1.0"
+edition = "2021"
+authors = ["Optimeas GmbH"]
+license = "Apache-2.0"
+description = "PyO3 bindings for the Open Streaming Format (OSF)"
+
+[lib]
+# The Python extension module is loaded as `osf._osf`. The Cargo crate
+# name (`osf-python`) is the internal Rust artefact; the Python-side
+# distribution name is `osfdata` (see pyproject.toml).
+name = "osf"
+crate-type = ["cdylib"]
+
+[dependencies]
+osf-core = { path = "../rust/osf-core" }
+
+# PyO3 + numpy must agree on their major version. As of late
+# 2025 / early 2026 the matched pair is 0.22 / 0.22; bumping one
+# requires bumping the other in the same release of rust-numpy.
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py39"] }
+numpy = "0.22"
