@@ -5,15 +5,33 @@ The split follows the established Python convention (``scikit-learn``
 imports as ``sklearn``, ``PyYAML`` imports as ``yaml``,
 ``beautifulsoup4`` imports as ``bs4``).
 
-This is the scaffold-only release — only ``__version__`` and the
-``OsfError`` exception are exposed yet. ``DataManager``, ``Channel``,
-``WriterBuilder``, and the ``load`` / ``save`` convenience functions
-arrive in subsequent commits of session 7a.
+Quick start::
+
+    import osf
+
+    mgr = osf.load("examples/steam_loco.osf")
+    print(f"Channels: {len(mgr)}")
+    temp = mgr.channel("Sensor/Temperature")
+    arr = temp.samples()      # NumPy array
+    ts = temp.timestamps_ns() # NumPy int64 array
 """
 
-from osf._osf import OsfError, __version__
+from osf._osf import (
+    Channel,
+    DataManager,
+    OsfError,
+    ReaderStats,
+    Segment,
+    __version__,
+    load,
+)
 
 __all__ = [
+    "Channel",
+    "DataManager",
     "OsfError",
+    "ReaderStats",
+    "Segment",
     "__version__",
+    "load",
 ]

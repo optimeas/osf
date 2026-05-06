@@ -17,22 +17,26 @@
 //! The native module is loaded as `osf._osf`; `python/osf/__init__.py`
 //! re-exports the public surface. The PyPI distribution name is
 //! `osfdata`, but the Python import name stays `osf`.
-//!
-//! Subsequent commits in this session add the `DataManager`, `Channel`,
-//! `WriterBuilder`, and `load` / `save` bindings. This commit is the
-//! scaffold only: pymodule entry plus error type plus version constant,
-//! so reviewers can confirm `maturin develop` produces an importable
-//! extension before any per-binding work lands.
 
 use pyo3::prelude::*;
 
+mod channel;
 mod error;
+mod manager;
+mod numpy_convert;
 
+use channel::{PyChannel, PySegment, PyStats};
 use error::OsfError;
+use manager::{PyDataManager, py_load};
 
 #[pymodule]
 fn _osf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("OsfError", m.py().get_type_bound::<OsfError>())?;
+    m.add_class::<PyDataManager>()?;
+    m.add_class::<PyChannel>()?;
+    m.add_class::<PySegment>()?;
+    m.add_class::<PyStats>()?;
+    m.add_function(wrap_pyfunction!(py_load, m)?)?;
     Ok(())
 }
