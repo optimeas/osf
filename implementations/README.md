@@ -8,7 +8,7 @@ This directory contains standalone OSF reader and writer implementations in vari
 | [C](c/) | Embedded systems and desktop | Planned | Reference implementation; target for low-level and resource-constrained environments |
 | [C++](cpp/) | Industrial measurement, Qt ecosystem | Planned | High-performance desktop and server use; Qt integration |
 | [C#](csharp/) | Windows desktop, industrial automation | Planned | .NET ecosystem; Windows tooling and HMI applications |
-| [Python](python/) | Data analytics, scientific computing | Planned | NumPy and pandas integration; primary language for data exploration |
+| [Python](python/) | Data analytics, scientific computing | In Progress | PyO3 bindings on osf-core (DECISIONS §18); PyPI distribution `osfdata`, import as `osf`; reader, writer, OSFZ all live |
 | [MicroPython](micropython/) | Embedded only — ESP32, RP2040 | Planned | Minimal footprint; writer-focused for sensor nodes |
 | [Java](java/) | Enterprise systems, Android | Planned | JVM ecosystem; Android mobile data logging |
 | [Rust](rust/) | Systems programming, embedded | In Progress | Foundation for Python bindings (see [DECISIONS §18](../DECISIONS.md#18-rust-as-foundation-for-python)); magic-header parser landed |
