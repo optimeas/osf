@@ -801,6 +801,52 @@ OSF_STREAM_END 321316454==============
 
 <br/>
 
+## OSFZ — Komprimierte OSF-Dateien
+
+OSF-Dateien können zur Speicherung oder Übertragung komprimiert
+werden. Komprimierte Dateien tragen üblicherweise die Endung
+`.osfz` und enthalten eine vollständige OSF-Datei (OSF4 oder OSF5)
+als komprimierten Payload. Es gibt keinen eigenen OSFZ-Magic-Header
+— die Erkennung erfolgt anhand der Kompressions-Magic-Bytes am
+Dateianfang.
+
+### Unterstützte Kompressionsformate
+
+Leser müssen beide gängigen Kompressionsformate transparent erkennen
+und dekomprimieren:
+
+| Format | Magic-Bytes                                        | Spezifikation |
+|--------|----------------------------------------------------|---------------|
+| gzip   | `0x1F 0x8B`                                        | RFC 1952      |
+| zlib   | `0x78 0x01`, `0x78 0x5E`, `0x78 0x9C`, `0x78 0xDA` | RFC 1950      |
+
+Beide Formate sind in der Praxis gültig: Optimeas-Geräte schreiben
+derzeit gzip-komprimierte OSFZ-Dateien; ältere Werkzeuge und
+Storage-Pipelines verwenden zlib. Eine Implementierung, die nur
+eines der beiden Formate unterstützt, würde reale Field-Dateien
+nicht lesen können.
+
+### Erkennung
+
+Die Erkennung erfolgt über die ersten zwei Bytes der Datei:
+
+* `0x1F 0x8B` → gzip-Dekompression
+* `0x78 0x01 / 0x5E / 0x9C / 0xDA` → zlib-Dekompression
+* sonst → unkomprimiert, Datei direkt als OSF lesen
+
+Nach der Dekompression beginnt die Datei mit einem regulären
+OSF-Magic-Header (`OSF4`, `OSF5`, `OCEAN_STREAM_FORMAT4` oder
+`OCEAN_STREAMING_FORMAT4`).
+
+### Schreiben
+
+Schreiber erzeugen niemals OSFZ-Dateien. Kompression ist Aufgabe
+der nachgelagerten Storage- oder Transportschicht (Dateisystem,
+Übertragungsprotokoll). Damit bleiben die OSF-Schreibroutinen —
+insbesondere auf Embedded-Systemen — schlank und vorhersehbar.
+
+<br/>
+
 ## Nächste Schritte
 
 Das bisherige Kapitel beschreibt den allgemeinen Aufbau des **Open Streaming Formats (OSF)** und alle Komponenten, die für **OSF4 und OSF5 gleichermaßen** gelten.  
