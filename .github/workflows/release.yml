@@ -1,0 +1,124 @@
+# Release workflow for the osfdata Python package.
+#
+# Triggered by a v*-tag push (e.g. `v0.1.0`). Builds the same five-
+# platform wheel matrix plus an sdist, then publishes to TestPyPI
+# via Trusted Publishing (OIDC, no API tokens).
+#
+# PHASE A vs PHASE B
+# ------------------
+# As of this commit the publish-testpypi job is gated by an explicit
+# `if: false` so the workflow can land safely while CI proves stable.
+# Activation procedure:
+#
+#   1. Watch ci.yml succeed on 2-3 main pushes.
+#   2. Configure the TestPyPI Pending Publisher (see RELEASE.md).
+#   3. Flip `if: false` to the documented condition in this file
+#      and push.
+#   4. Tag v0.1.0 and push the tag — that triggers this workflow.
+#
+# Until then this workflow only builds and uploads artefacts to
+# the run; nothing leaves GitHub.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-wheels:
+    name: Build wheel (${{ matrix.os }} / ${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64
+          - os: ubuntu-latest
+            target: aarch64
+          - os: macos-13
+            target: x86_64
+          - os: macos-14
+            target: aarch64
+          - os: windows-latest
+            target: x64
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: implementations/python
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: implementations/python
+          command: build
+          args: --release --out dist
+          target: ${{ matrix.target }}
+          manylinux: auto
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheel-${{ matrix.os }}-${{ matrix.target }}
+          path: implementations/python/dist/*.whl
+          if-no-files-found: error
+
+  build-sdist:
+    name: Source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: implementations/python
+          command: sdist
+          args: --out dist
+      - name: Upload sdist artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: implementations/python/dist/*.tar.gz
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: [build-wheels, build-sdist]
+    runs-on: ubuntu-latest
+    # PHASE A guard: this job stays disabled until CI has proven
+    # stable on 2-3 main pushes AND the TestPyPI Pending Publisher
+    # has been configured (see RELEASE.md). To activate, replace
+    # the line below with:
+    #     if: startsWith(github.ref, 'refs/tags/v')
+    if: false
+    permissions:
+      id-token: write
+    steps:
+      - name: Download all wheel + sdist artefacts
+        uses: actions/download-artifact@v7
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist
