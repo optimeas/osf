@@ -38,3 +38,6 @@ implementations/python/.venv/
 implementations/python/python/osf/_osf*.pyd
 implementations/python/python/osf/_osf*.so
 implementations/python/python/osf/*.pdb
+
+# maturin build produces wheels here.
+implementations/python/dist/
