@@ -199,6 +199,25 @@ Implementations must document clearly that the convenience layer may lose precis
 
 **Why:** OSFZ is simply a zlib-compressed OSF file with no special magic header. Compression is the responsibility of downstream infrastructure (storage layer, transfer pipeline), not the OSF writer. Keeping writers simple maximizes their suitability for embedded use.
 
+### Update 2026-05-06: Real-world OSFZ encoding
+
+The original wording "OSFZ is simply a zlib-compressed OSF file"
+reflects the formal spec, but field analysis of real Optimeas device
+output (`examples/weather_station.osfz`) shows that deployed devices
+emit **gzip-wrapped** OSF data, not raw zlib (RFC 1950).
+
+**Reader requirement (revised):** Implementations must transparently
+detect and decompress both:
+
+- zlib (RFC 1950) — magic bytes `0x78 0x01 / 0x5E / 0x9C / 0xDA`
+- gzip (RFC 1952) — magic bytes `0x1F 0x8B`
+
+Both are valid OSFZ. Detection is by leading magic bytes; the
+behaviour is identical after decompression.
+
+**Writer requirement (unchanged):** Implementations never produce OSFZ
+output — compression remains a downstream concern.
+
 ---
 
 ## 13. File Metadata
