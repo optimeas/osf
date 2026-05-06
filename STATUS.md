@@ -6,7 +6,7 @@ when deeper context is needed.
 
 | Field | Value |
 |---|---|
-| Repo | https://github.com/burkhard154/osf |
+| Repo | https://github.com/optimeas/osf |
 | Working dir | `V:\github\osf` (Windows) |
 | Latest tag | **v0.2.0** (2026-05-05) |
 | Branch | `main` |
@@ -389,8 +389,57 @@ enough that the Arc-Channel optimisation is not needed yet.
 - Pure-Rust dependency graph (no system zlib, no MSVC linker
   surprises).
 
-**Pending:** pandas `DataFrame` convenience (Session 7b); CI matrix
-plus wheel building plus PyPI / TestPyPI publishing (Session 8).
+**Pending:** pandas `DataFrame` convenience (Session 7b).
+
+---
+
+## CI / release pipeline (Session 8)
+
+GitHub Actions workflows live in `.github/workflows/`:
+
+- `ci.yml` — runs on every push to `main`, every PR, and on
+  `workflow_dispatch`. Three job groups: `test-rust` (cargo test +
+  clippy), `build-wheels` (5-platform matrix via maturin-action +
+  per-wheel pytest run), `build-sdist`. A `summary` job aggregates
+  results for branch-protection gating.
+- `release.yml` — triggered by `v*`-tag pushes. Same wheel + sdist
+  matrix; the `publish-testpypi` job is currently gated by
+  `if: false` (Phase A guard).
+
+**Wheel matrix (5 (os, target) pairs, abi3-py39 → one wheel per
+platform covers Python 3.9–3.13):**
+
+| OS              | Target  | Notes                              |
+|-----------------|---------|------------------------------------|
+| ubuntu-latest   | x86_64  | native                             |
+| ubuntu-latest   | aarch64 | QEMU emulation via maturin-action  |
+| macos-13        | x86_64  | last GitHub-hosted Intel runner    |
+| macos-14        | aarch64 | Apple Silicon                      |
+| windows-latest  | x64     | native                             |
+
+**Action versions (current major tags as of Session 8):**
+
+`actions/checkout@v6`, `actions/setup-python@v6`,
+`actions/upload-artifact@v7`, `actions/download-artifact@v7`,
+`PyO3/maturin-action@v1`, `pypa/gh-action-pypi-publish@release/v1`,
+`dtolnay/rust-toolchain@stable`, `Swatinem/rust-cache@v2`.
+
+**Phase status:**
+
+- **Phase A (CI green on every push):** active. The two workflow
+  files are committed and run on every push to `main` and on PRs.
+- **Phase B (Trusted Publishing scharf):** waiting. Activation
+  procedure documented in
+  `implementations/python/RELEASE.md`. Preconditions: ci.yml green
+  on 2–3 successive `main` pushes, plus the TestPyPI Pending
+  Publisher manually configured under the optiMEAS account
+  (project: `osfdata`, owner: `optimeas`, repo: `osf`, workflow:
+  `release.yml`).
+
+**Test-PyPI Trusted Publisher target:**
+PyPI project name `osfdata`, distributed from `optimeas/osf` →
+`.github/workflows/release.yml` → `publish-testpypi` job (currently
+disabled).
 
 ---
 
@@ -422,7 +471,12 @@ plus wheel building plus PyPI / TestPyPI publishing (Session 8).
   round-trip validation.
 - **Python** — PyO3 bindings live for read + write + OSFZ via the
   `osfdata` distribution (import as `osf`); 13 pytest cases pass
-  locally. pandas convenience and CI / PyPI publishing pending.
+  locally; CI builds wheels for 5 platforms on every push (Session
+  8 Phase A). Trusted Publishing to TestPyPI configured but gated
+  off (Session 8 Phase B); pandas convenience pending (Session 7b).
+- **`optimeas/python-osf` deprecation header** — once `osfdata`
+  appears on TestPyPI, add a "deprecated in favor of osfdata"
+  notice to that repo's README. Mini follow-up session.
 - **Python bindings** — directory not yet started; will sit on `osf-core`
   via PyO3 once the Rust block reader/writer are in place.
 - **Other language implementations** (C, C++, C#, …) — README
