@@ -801,6 +801,50 @@ OSF_STREAM_END 321316454==============
 
 <br/>
 
+## OSFZ — Compressed OSF files
+
+OSF files may be compressed for storage or transport. Compressed
+files typically use the `.osfz` extension and contain a complete
+OSF file (OSF4 or OSF5) as the compressed payload. There is no
+dedicated OSFZ magic header — detection is based on the compression
+magic bytes at the start of the file.
+
+### Supported compression formats
+
+Readers must transparently detect and decompress both common
+compression formats:
+
+| Format | Magic bytes                                        | Specification |
+|--------|----------------------------------------------------|---------------|
+| gzip   | `0x1F 0x8B`                                        | RFC 1952      |
+| zlib   | `0x78 0x01`, `0x78 0x5E`, `0x78 0x9C`, `0x78 0xDA` | RFC 1950      |
+
+Both formats occur in practice: current Optimeas devices write
+gzip-compressed OSFZ files; older tooling and storage pipelines
+use zlib. An implementation supporting only one of the two would
+fail on real field data.
+
+### Detection
+
+Detection is based on the first two bytes of the file:
+
+* `0x1F 0x8B` → gzip decompression
+* `0x78 0x01 / 0x5E / 0x9C / 0xDA` → zlib decompression
+* otherwise → uncompressed, read the file as OSF directly
+
+After decompression, the file begins with a regular OSF magic
+header (`OSF4`, `OSF5`, `OCEAN_STREAM_FORMAT4`, or
+`OCEAN_STREAMING_FORMAT4`).
+
+### Writing
+
+Writers never produce OSFZ files. Compression is the responsibility
+of the downstream storage or transport layer (file system,
+transmission protocol). This keeps the OSF write routines —
+particularly on embedded systems — simple and predictable.
+
+<br/>
+
 ## Next steps
 
 The chapter so far describes the general layout of the **Open Streaming Format (OSF)** and all components that apply to **OSF4 and OSF5 alike**.  
