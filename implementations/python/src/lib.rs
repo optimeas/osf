@@ -24,10 +24,12 @@ mod channel;
 mod error;
 mod manager;
 mod numpy_convert;
+mod writer;
 
 use channel::{PyChannel, PySegment, PyStats};
 use error::OsfError;
 use manager::{PyDataManager, py_load};
+use writer::{PyWriterBuilder, py_save};
 
 #[pymodule]
 fn _osf(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -37,6 +39,8 @@ fn _osf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyChannel>()?;
     m.add_class::<PySegment>()?;
     m.add_class::<PyStats>()?;
+    m.add_class::<PyWriterBuilder>()?;
     m.add_function(wrap_pyfunction!(py_load, m)?)?;
+    m.add_function(wrap_pyfunction!(py_save, m)?)?;
     Ok(())
 }

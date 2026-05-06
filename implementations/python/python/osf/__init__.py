@@ -22,8 +22,10 @@ from osf._osf import (
     OsfError,
     ReaderStats,
     Segment,
+    WriterBuilder,
     __version__,
     load,
+    save,
 )
 
 __all__ = [
@@ -32,6 +34,8 @@ __all__ = [
     "OsfError",
     "ReaderStats",
     "Segment",
+    "WriterBuilder",
     "__version__",
     "load",
+    "save",
 ]
