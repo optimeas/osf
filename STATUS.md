@@ -76,8 +76,9 @@ osf/
 │   │   ├── demos/osfcsvexport/      — OSF → CSV export demo
 │   │   └── OSFCompileCheck.dpr      — compile-only smoke test
 │   ├── rust/                        — Cargo workspace; foundation for Python (DECISIONS §18)
-│   │   └── osf-core/                — read + write + transparent OSFZ landed; PyO3 pending
-│   └── (c, cpp, csharp, python, …)/ — README placeholders only
+│   │   └── osf-core/                — read + write + transparent OSFZ complete
+│   ├── python/                      — PyO3 bindings (PyPI: osfdata, import: osf); 7a landed
+│   └── (c, cpp, csharp, …)/         — README placeholders only
 ├── integrations/(arrow, pytorch, tensorflow, mcp, langchain)/  — placeholders
 ├── examples/
 │   ├── motorbike.osf                — real field sample
@@ -317,8 +318,79 @@ Diagnostics flow through `env_logger`; default `RUST_LOG=warn`, override
 with `debug` for full alias / unknown-field tracing or `error` for
 clean output on files that flood deprecated-field warnings.
 
-**Next steps:** PyO3 wrapper for Python (Session 7) with NumPy
-interop on flat numeric channels.
+**Next steps:** Python bindings via PyO3 + maturin (Session 7a
+landed; pandas convenience in 7b; CI + wheel matrix in 8).
+
+---
+
+## Python implementation — current state
+
+Session 7a (this session): the PyO3 binding crate at
+`implementations/python/` is functional. Distribution name on PyPI
+is `osfdata`; Python import name is `osf` (the established split
+mirroring sklearn / yaml / bs4).
+
+**Crate at `implementations/python/`:**
+
+| Module | Public surface |
+|---|---|
+| `_osf` | `__version__`, `OsfError`; classes `DataManager`, `Channel`, `Segment`, `ReaderStats`, `WriterBuilder`; functions `load(path)`, `save(mgr, path)` |
+| `osf` | Re-exports the above; ships `_osf.pyi` type stubs and `py.typed` marker |
+
+**Build & install (Windows / `uv` venv shown; bash equivalent on macOS / Linux):**
+
+```bash
+cd implementations/python
+uv venv
+.venv/Scripts/Activate.ps1
+uv pip install maturin pytest
+maturin develop --release
+pytest tests/
+```
+
+`maturin develop` produces an editable install — Python-side
+changes are immediate, Rust-side changes need a rebuild.
+
+**Key bindings:**
+
+- `osf.load(path)` — opens an OSF or OSFZ file, drops the GIL
+  during I/O, returns a `DataManager`.
+- `osf.save(mgr, path)` — writes the manager back as OSF5
+  (DECISIONS §6).
+- `Channel.samples()` returns a NumPy array for numeric / GPS
+  channels (`(N,)` for scalars, `(N, 3)` for `gpslocation`),
+  `list[str]` / `list[bytes]` for variable channels.
+- `Channel.timestamps_ns()` returns an int64 NumPy array;
+  equidistant timestamps are reconstructed from segments on demand.
+- `WriterBuilder` has chainable file-info setters and `add_*`
+  methods that dispatch over the input NumPy array's dtype.
+- Transparent OSFZ (gzip + zlib) is inherited automatically from
+  `osf-core`; `mgr.stats.compressed` and `compression_format`
+  surface the result.
+
+**Tests:** 13 pytest cases under `implementations/python/tests/`
+exercise the reader, writer, manager-by-name lookup, NumPy dtype
+assertions, segment access, OSFZ detection, and a builder
+roundtrip. Local run: 13/13 in 0.35 s.
+
+**Performance:** `osf.load("examples/steam_loco.osf")` measures
+~3 ms in release builds (matched pair of 5 runs locally), same
+order as the underlying Rust read. Channel access plus NumPy
+conversion adds ~0.3 ms per channel. The clone-pfad
+(`mgr.channel(name).samples()` clones the `Vec<T>` once) is fast
+enough that the Arc-Channel optimisation is not needed yet.
+
+**Constraints:**
+
+- abi3-py39 — one wheel per platform covers Python 3.9 through
+  3.13.
+- PyO3 0.22 + numpy 0.22 (matched pair per the rust-numpy README;
+  bumping one requires bumping the other).
+- Pure-Rust dependency graph (no system zlib, no MSVC linker
+  surprises).
+
+**Pending:** pandas `DataFrame` convenience (Session 7b); CI matrix
+plus wheel building plus PyPI / TestPyPI publishing (Session 8).
 
 ---
 
@@ -347,7 +419,10 @@ interop on flat numeric channels.
   was deferred; would be its own scaffolding effort.
 - **Rust** — read path complete (header + metablock + block reader +
   DataManager + transparent OSFZ); OSF5 writer landed with full
-  round-trip validation. PyO3 bindings remain pending.
+  round-trip validation.
+- **Python** — PyO3 bindings live for read + write + OSFZ via the
+  `osfdata` distribution (import as `osf`); 13 pytest cases pass
+  locally. pandas convenience and CI / PyPI publishing pending.
 - **Python bindings** — directory not yet started; will sit on `osf-core`
   via PyO3 once the Rust block reader/writer are in place.
 - **Other language implementations** (C, C++, C#, …) — README
