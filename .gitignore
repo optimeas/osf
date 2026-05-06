@@ -32,3 +32,9 @@ implementations/python/.venv/
 *.pyo
 *.egg-info/
 .pytest_cache/
+
+# maturin develop drops the compiled extension and PDBs into the
+# python source tree for editable installs — never commit these.
+implementations/python/python/osf/_osf*.pyd
+implementations/python/python/osf/_osf*.so
+implementations/python/python/osf/*.pdb
