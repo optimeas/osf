@@ -105,6 +105,9 @@ impl DataManager {
         mut stream: MaybeCompressed<R>,
         file_size: Option<u64>,
     ) -> Result<Self, OsfError> {
+        let compression_format = stream.detected_format().into();
+        let was_compressed = stream.is_compressed();
+
         let header = parse_magic_header(&mut stream)?;
         let metablock_size_bytes = header.metablock_len;
         let mut body = vec![0u8; header.metablock_len as usize];
@@ -123,6 +126,8 @@ impl DataManager {
         // streaming entry point therefore reports it as 0. Metablock
         // size is exact.
         stats.metablock_size_bytes = metablock_size_bytes;
+        stats.compressed = was_compressed;
+        stats.compression_format = compression_format;
 
         Ok(Self {
             meta,

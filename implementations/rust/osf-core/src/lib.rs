@@ -60,7 +60,7 @@ pub use meta::{
 pub use meta_json::parse_metablock_json;
 pub use meta_xml::parse_metablock_xml;
 pub use reader::BlockReader;
-pub use stats::{ChannelStats, ReaderStats};
+pub use stats::{ChannelStats, CompressionFormat, ReaderStats};
 pub use types::{BlockContent, ChannelType, DataType};
 
 /// Convenience entry point: open `path`, parse the magic header and
@@ -88,6 +88,8 @@ pub fn read_file(
     // decoder. For uncompressed files this is effectively a no-op
     // BufReader pass-through.
     let stream = compression::detect_and_wrap(file)?;
+    let compression_format: stats::CompressionFormat = stream.detected_format().into();
+    let was_compressed = stream.is_compressed();
 
     /// Tiny `Read` adapter that counts decompressed bytes consumed so
     /// we can report `header_size_bytes` and `metablock_size_bytes`
@@ -126,6 +128,8 @@ pub fn read_file(
     let mut stats = block_reader.stats();
     stats.header_size_bytes = header_size_bytes;
     stats.metablock_size_bytes = metablock_size_bytes;
+    stats.compressed = was_compressed;
+    stats.compression_format = compression_format;
     Ok((meta, blocks, stats))
 }
 

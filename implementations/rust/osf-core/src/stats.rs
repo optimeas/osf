@@ -91,8 +91,51 @@ pub struct ReaderStats {
     /// Whether the optional `0xFFFF` info-data block was encountered.
     pub trailer_seen: bool,
 
+    /// Whether the source stream was OSFZ-compressed (gzip or zlib)
+    /// and therefore went through transparent decompression on read.
+    /// `false` for plain OSF files.
+    pub compressed: bool,
+
+    /// Detected compression format on the source stream.
+    pub compression_format: CompressionFormat,
+
     /// Per-channel detail keyed by channel index.
     pub per_channel: HashMap<u16, ChannelStats>,
+}
+
+/// Compression format detected on the input stream — mirrors
+/// [`crate::compression::CompressionFormat`] in the public stats API
+/// so callers do not need to import the lower-level type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CompressionFormat {
+    /// No compression — stream was a regular OSF file.
+    #[default]
+    None,
+    /// zlib stream (RFC 1950).
+    Zlib,
+    /// gzip stream (RFC 1952). Optimeas devices' current OSFZ wire
+    /// format.
+    Gzip,
+}
+
+impl From<crate::compression::CompressionFormat> for CompressionFormat {
+    fn from(value: crate::compression::CompressionFormat) -> Self {
+        match value {
+            crate::compression::CompressionFormat::None => Self::None,
+            crate::compression::CompressionFormat::Zlib => Self::Zlib,
+            crate::compression::CompressionFormat::Gzip => Self::Gzip,
+        }
+    }
+}
+
+impl std::fmt::Display for CompressionFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => f.write_str("none"),
+            Self::Zlib => f.write_str("zlib"),
+            Self::Gzip => f.write_str("gzip"),
+        }
+    }
 }
 
 /// Per-channel reader telemetry.
@@ -207,6 +250,9 @@ impl fmt::Display for ReaderStats {
         writeln!(f, "Truncated:             {}", self.blocks_truncated)?;
         if self.trailer_seen {
             writeln!(f, "Trailer block:         present")?;
+        }
+        if self.compressed {
+            writeln!(f, "Compressed:            yes ({})", self.compression_format)?;
         }
         Ok(())
     }
