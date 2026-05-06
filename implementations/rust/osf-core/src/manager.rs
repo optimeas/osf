@@ -28,6 +28,7 @@
 use crate::block::{
     Block, BlockKind, NumericPayload, RelTimestampedPayload, TimestampedPayload,
 };
+use crate::compression::{self, MaybeCompressed};
 use crate::data_channel::{
     Channel, ChannelMeta, EquidistantChannel, NumericValues, Segment, TimestampedChannel,
     VariableChannel,
@@ -41,7 +42,7 @@ use crate::types::{ChannelType, DataType};
 use log::warn;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::Read;
 use std::path::Path;
 
 // -----------------------------------------------------------
@@ -82,33 +83,35 @@ impl DataManager {
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, OsfError> {
         let file = File::open(path.as_ref())?;
         let file_size = file.metadata().ok().map(|m| m.len());
-        let reader = BufReader::new(file);
-        Self::load_from_buffered_with_size(reader, file_size)
+        let stream = compression::detect_and_wrap(file)?;
+        Self::load_from_stream_with_size(stream, file_size)
     }
 
-    /// Construct from any `Read`. The reader is wrapped in a
-    /// `BufReader` internally for efficient line-level magic-header
-    /// reading.
+    /// Construct from any `Read`. The reader is fed through the OSFZ
+    /// detection layer, so callers can hand over a compressed stream
+    /// (e.g. from a network socket) just as well as an uncompressed
+    /// one and the manager will Decompress transparently.
     ///
     /// # Errors
     ///
     /// Forwards errors from the magic-header parser, the metablock
     /// parser, the block reader, and the manager-layer builder.
     pub fn load_from_reader<R: Read>(reader: R) -> Result<Self, OsfError> {
-        Self::load_from_buffered_with_size(BufReader::new(reader), None)
+        let stream = compression::detect_and_wrap(reader)?;
+        Self::load_from_stream_with_size(stream, None)
     }
 
-    fn load_from_buffered_with_size<R: BufRead>(
-        mut reader: R,
+    fn load_from_stream_with_size<R: Read>(
+        mut stream: MaybeCompressed<R>,
         file_size: Option<u64>,
     ) -> Result<Self, OsfError> {
-        let header = parse_magic_header(&mut reader)?;
+        let header = parse_magic_header(&mut stream)?;
         let metablock_size_bytes = header.metablock_len;
         let mut body = vec![0u8; header.metablock_len as usize];
-        reader.read_exact(&mut body)?;
+        stream.read_exact(&mut body)?;
         let meta = crate::parse_metablock(header.version, &body)?;
 
-        let mut block_reader = BlockReader::new(reader, &meta);
+        let mut block_reader = BlockReader::new(stream, &meta);
         if let Some(size) = file_size {
             block_reader = block_reader.with_file_size(size);
         }

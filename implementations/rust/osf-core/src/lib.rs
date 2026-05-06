@@ -79,13 +79,19 @@ pub fn read_file(
     path: &std::path::Path,
 ) -> Result<(MetaBlock, Vec<Block>, ReaderStats), OsfError> {
     use std::fs::File;
-    use std::io::{BufReader, Read};
+    use std::io::Read;
 
     let file_size = std::fs::metadata(path)?.len();
+    let file = File::open(path)?;
 
-    /// Tiny `Read` adapter that counts bytes consumed so we can report
-    /// `header_size_bytes` and `metablock_size_bytes` without
-    /// requiring `Seek` on the inner reader.
+    // Detect OSFZ wrapping (gzip / zlib) and dispatch to the right
+    // decoder. For uncompressed files this is effectively a no-op
+    // BufReader pass-through.
+    let stream = compression::detect_and_wrap(file)?;
+
+    /// Tiny `Read` adapter that counts decompressed bytes consumed so
+    /// we can report `header_size_bytes` and `metablock_size_bytes`
+    /// without requiring `Seek` on the inner reader.
     struct CountingRead<R: Read> {
         inner: R,
         bytes_read: u64,
@@ -99,7 +105,7 @@ pub fn read_file(
     }
 
     let mut counted = CountingRead {
-        inner: BufReader::new(File::open(path)?),
+        inner: stream,
         bytes_read: 0,
     };
 
