@@ -1,6 +1,7 @@
 # OSF — Python Implementation
 
 ![Status](https://img.shields.io/badge/status-in%20progress-orange.svg)
+[![CI](https://github.com/optimeas/osf/actions/workflows/ci.yml/badge.svg)](https://github.com/optimeas/osf/actions/workflows/ci.yml)
 
 ## Target Platform
 
@@ -45,14 +46,19 @@ imports as `sklearn`, PyYAML imports as `yaml`, beautifulsoup4 imports
 as `bs4`). The PyPI name `osf` is registered to an unrelated 2015
 package; `osfdata` is the Optimeas distribution.
 
-## Local build
+## Installation
 
-Requires [maturin](https://maturin.rs/) (build backend) and any Python
-3.9+ interpreter. [`uv`](https://github.com/astral-sh/uv) is the
-recommended environment manager but `python -m venv` works too.
+Three installation paths, in increasing order of stability:
+
+### Development build (current state)
+
+Build the native extension from a source checkout. Required while the
+package is not yet on PyPI / TestPyPI; also the right path for any
+local Rust-side hacking.
 
 ```bash
-cd implementations/python
+git clone https://github.com/optimeas/osf
+cd osf/implementations/python
 
 # Create a virtual environment.
 uv venv
@@ -72,6 +78,28 @@ pytest tests/
 `maturin develop` produces an editable install — code changes to
 `python/osf/*.py` and `python/osf/*.pyi` are picked up immediately;
 Rust changes need another `maturin develop`.
+
+### TestPyPI (after first release)
+
+```bash
+pip install --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ \
+            osfdata
+```
+
+The `--extra-index-url` is required because TestPyPI does not host
+the runtime dependencies (`numpy` etc.); the extra index lets pip
+pull those from production PyPI.
+
+### PyPI (production, future)
+
+```bash
+pip install osfdata
+```
+
+Both forms install the same package. The PyPI distribution name is
+`osfdata` (the short name `osf` is taken by an unrelated 2015
+package); the Python import name is `osf` for brevity.
 
 ## Quick start
 
