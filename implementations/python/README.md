@@ -79,6 +79,12 @@ pytest tests/
 `python/osf/*.py` and `python/osf/*.pyi` are picked up immediately;
 Rust changes need another `maturin develop`.
 
+For a complete walkthrough of the toolchain, build process, and
+release pipeline, see [BUILD.md](BUILD.md). It explains the PyO3 +
+maturin stack from local setup through TestPyPI publishing in
+detail, intended for developers new to Python's packaging
+conventions.
+
 ### TestPyPI (after first release)
 
 ```bash
