@@ -76,12 +76,13 @@ osf/
 │   │   ├── demos/osfcsvexport/      — OSF → CSV export demo
 │   │   └── OSFCompileCheck.dpr      — compile-only smoke test
 │   ├── rust/                        — Cargo workspace; foundation for Python (DECISIONS §18)
-│   │   └── osf-core/                — read + write complete for OSF5; OSFZ + PyO3 pending
+│   │   └── osf-core/                — read + write + transparent OSFZ landed; PyO3 pending
 │   └── (c, cpp, csharp, python, …)/ — README placeholders only
 ├── integrations/(arrow, pytorch, tensorflow, mcp, langchain)/  — placeholders
 ├── examples/
 │   ├── motorbike.osf                — real field sample
 │   ├── steam_loco.osf + .csv        — real field sample
+│   ├── weather_station.osfz         — real gzip-OSFZ field sample
 │   └── generated/                   — 17 reference files (from OSFGenerator)
 ├── CHANGELOG.md, DECISIONS.md, CONTRIBUTING.md, README.md, LICENSE
 └── STATUS.md                         — this file
@@ -146,6 +147,7 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
 | `manager` | `DataManager` — `load_from_file(path)` / `load_from_reader(R)` build the typed channel list, expose `channel(name)` (mandatory per DECISIONS §10) and `channel_by_index(u16)` (optional). Internal `build_channels` runs the per-channel builder state machine (Pending → Equidistant or Timestamped on first typed block; Variable upfront for string/binary). |
 | `binary_write` | Crate-private little-endian write helpers (symmetric to `byteorder::ReadBytesExt`); `write_string_with_terminator` / `write_binary_with_terminator` append the spec-mandated `0x00` |
 | `writer` | `WriterBuilder` — accumulator with `add_channel`, 2 equidistant + 12 timestamped + 2 variable `add_*` methods. `write_to_file(path)` / `write_to(W)` emit OSF5; `from_manager(&DataManager)` builds a builder from a loaded manager. Module-level `writer::write_to_file(&DataManager, path)` is the round-trip convenience |
+| `compression` | `MaybeCompressed<R>` enum (Plain / Zlib / Gzip) + `detect_and_wrap<R>(reader)`; transparent OSFZ detection by leading two bytes (gzip `0x1F 0x8B` or zlib `0x78 0x01/5E/9C/DA`). Pure-Rust via `flate2 + miniz_oxide` |
 | `lib` | top-level `parse_metablock(version, &[u8])` dispatcher and `read_file(path) -> (MetaBlock, Vec<Block>, ReaderStats)` convenience |
 
 **Spec rev 2026-05-04 enforcement:**
@@ -251,9 +253,29 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
   assigns sequential 0..N indices. Names, datatypes, sample counts,
   segment boundaries, and bitwise sample values are preserved exactly.
 
-**Tests:** 116 unit tests across `header.rs`, `meta.rs`, `meta_json.rs`,
+**OSFZ behaviour (Session 6):**
+
+- DECISIONS §12 was revised on 2026-05-06: deployed Optimeas devices
+  emit gzip-wrapped OSF, not raw zlib as the original wording
+  implied. Readers now detect both formats by leading magic bytes
+  (gzip `0x1F 0x8B` or zlib `0x78 0x01/5E/9C/DA`) and wrap the
+  stream in the matching `flate2` decoder transparently.
+- `DataManager::load_from_file` / `load_from_reader` and the
+  lib-level `read_file` convenience pick up the detection
+  automatically. `BlockReader<R>` itself stays unchanged — the
+  compression layer sits in front of it.
+- `flate2 = { default-features = false, features = ["rust_backend"] }`
+  pulls only pure-Rust crates (miniz_oxide, crc32fast, adler2).
+  No system zlib, no MSVC linker complications.
+- `ReaderStats` exposes `compressed: bool` and `compression_format:
+  CompressionFormat` (None / Zlib / Gzip). `Display` adds a
+  `Compressed: yes (gzip)` line when applicable.
+- Writer side: never produces OSFZ output (DECISIONS §12 unchanged).
+
+**Tests:** 123 unit tests across `header.rs`, `meta.rs`, `meta_json.rs`,
 `meta_xml.rs`, `block.rs`, `reader.rs`, `stats.rs`, `data_channel.rs`,
-`manager.rs`, `binary_write.rs`, `writer.rs`. Five integration suites:
+`manager.rs`, `binary_write.rs`, `writer.rs`, `compression.rs`. Six
+integration suites:
 
 - `tests/header_test.rs` — every shipped `.osf` parses its magic header.
 - `tests/metablock_test.rs` — every shipped `.osf` parses its metablock.
@@ -264,6 +286,10 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
 - `tests/roundtrip_test.rs` — every shipped `.osf` survives load +
   write + reload with bitwise sample comparison; OSF4-source files
   are confirmed to produce OSF5 output.
+- `tests/osfz_test.rs` — `weather_station.osfz` field sample
+  (gzip-OSFZ) plus synthetic gzip and zlib re-wraps of
+  `steam_loco.osf` produce identical channel sets to the plain
+  source.
 
 `manager_test.rs` and `roundtrip_test.rs` each carry an `#[ignore]`-
 gated performance smoke. Manual run via `cargo test --release --
@@ -291,8 +317,7 @@ Diagnostics flow through `env_logger`; default `RUST_LOG=warn`, override
 with `debug` for full alias / unknown-field tracing or `error` for
 clean output on files that flood deprecated-field warnings.
 
-**Next steps:** OSFZ transparent decompression on the read side
-(Session 6), then PyO3 wrapper for Python (Session 7) with NumPy
+**Next steps:** PyO3 wrapper for Python (Session 7) with NumPy
 interop on flat numeric channels.
 
 ---
@@ -321,8 +346,8 @@ interop on flat numeric channels.
   `OSFCompileCheck.dpr` exists today. Brief F3 from the spec-revision task
   was deferred; would be its own scaffolding effort.
 - **Rust** — read path complete (header + metablock + block reader +
-  DataManager); OSF5 writer landed with full round-trip validation.
-  OSFZ decompression and PyO3 bindings remain pending.
+  DataManager + transparent OSFZ); OSF5 writer landed with full
+  round-trip validation. PyO3 bindings remain pending.
 - **Python bindings** — directory not yet started; will sit on `osf-core`
   via PyO3 once the Rust block reader/writer are in place.
 - **Other language implementations** (C, C++, C#, …) — README
