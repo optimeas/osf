@@ -210,6 +210,23 @@ rust-numpy README; bumping one requires bumping the other.
    Windows × Python 3.9–3.13, TestPyPI upload, automated release on
    tag.
 
+## Relationship to `python-osf`
+
+`osfdata` is the modern successor to the existing
+[python-osf](https://github.com/optimeas/python-osf) package. While
+`python-osf` is a pure-Python implementation supporting OSF4 reading
+only, `osfdata` provides:
+
+- Full OSF4 and OSF5 support (read and write)
+- Significantly higher performance via a Rust foundation
+- Complete data type coverage including `binary`, `gpslocation`, and
+  unsigned integers
+- Compatibility with the current spec revision (2026-05-04)
+- Transparent OSFZ decompression (zlib + gzip)
+
+`python-osf` will be deprecated in favor of `osfdata` once feature
+parity for all production use cases is verified.
+
 ## License
 
 Apache 2.0. © 2026 Optimeas GmbH.
