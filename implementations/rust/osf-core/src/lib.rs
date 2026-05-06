@@ -29,6 +29,7 @@
 
 pub(crate) mod binary_write;
 pub mod block;
+pub mod compression;
 pub mod data_channel;
 pub mod error;
 pub mod header;
