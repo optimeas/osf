@@ -29,11 +29,12 @@
 //! unknown attributes.
 
 use osf_core::{
-    ChannelType, DataType, MetaBlock, MetaChannel, parse_magic_header, parse_metablock,
+    ChannelType, DataType, MetaBlock, MetaChannel, compression, parse_magic_header,
+    parse_metablock,
 };
 use std::env;
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::Read;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -55,8 +56,19 @@ fn main() -> ExitCode {
         }
     };
 
-    let mut reader = BufReader::new(file);
-    let header = match parse_magic_header(&mut reader) {
+    // OSFZ-aware: detect gzip / zlib wrappers transparently. Plain
+    // OSF files come through as MaybeCompressed::Plain and continue
+    // unchanged.
+    let mut stream = match compression::detect_and_wrap(file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{path}: cannot detect compression: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let compression_format = stream.detected_format();
+
+    let header = match parse_magic_header(&mut stream) {
         Ok(h) => h,
         Err(e) => {
             eprintln!("{path}: {e}");
@@ -65,7 +77,7 @@ fn main() -> ExitCode {
     };
 
     let mut body = vec![0u8; header.metablock_len as usize];
-    if let Err(e) = reader.read_exact(&mut body) {
+    if let Err(e) = stream.read_exact(&mut body) {
         eprintln!("{path}: cannot read metablock: {e}");
         return ExitCode::FAILURE;
     }
@@ -78,12 +90,24 @@ fn main() -> ExitCode {
         }
     };
 
-    print_summary(&path, &header, &metablock);
+    print_summary(&path, &header, &metablock, compression_format);
     ExitCode::SUCCESS
 }
 
-fn print_summary(path: &str, header: &osf_core::MagicHeader, mb: &MetaBlock) {
+fn print_summary(
+    path: &str,
+    header: &osf_core::MagicHeader,
+    mb: &MetaBlock,
+    compression_format: compression::CompressionFormat,
+) {
+    use compression::CompressionFormat::{Gzip, None as Plain, Zlib};
     println!("path:           {path}");
+    let compressed_label = match compression_format {
+        Plain => "no",
+        Zlib => "yes (zlib)",
+        Gzip => "yes (gzip)",
+    };
+    println!("compressed:     {compressed_label}");
     println!("version:        {:?}", header.version);
     println!("metablock_len:  {} bytes", header.metablock_len);
     println!(
