@@ -61,6 +61,14 @@ jobs:
             target: x86_64
           - os: ubuntu-latest
             target: aarch64
+            # QEMU-emulated build: the wheel is aarch64, but the
+            # runner host is x86_64, so it cannot pip-install its own
+            # output. The build itself is the meaningful signal here;
+            # the wheel-install + pytest step is skipped below. The
+            # macos-14 / aarch64 entry exercises the same data path
+            # natively on a real ARM kernel, so we still have ARM test
+            # coverage in the matrix.
+            cross: true
           - os: macos-13          # last GitHub-hosted Intel macOS runner
             target: x86_64
           - os: macos-14          # Apple Silicon
@@ -92,6 +100,10 @@ jobs:
           manylinux: auto
 
       - name: Install wheel + pytest
+        # Cross-built wheels (aarch64 on x86_64 runner) cannot be
+        # installed onto the host's Python; skip the install + test
+        # step there. The wheel still uploads as an artefact.
+        if: ${{ !matrix.cross }}
         shell: bash
         working-directory: implementations/python
         run: |
