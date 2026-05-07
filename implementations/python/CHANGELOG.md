@@ -1,0 +1,42 @@
+# Changelog
+
+All notable changes to the `osfdata` package will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0] - 2026-05-07
+
+Initial release on TestPyPI.
+
+### Added
+
+- Reading OSF4 and OSF5 files (`osf.load`).
+- Writing OSF5 files (`osf.save`, `osf.WriterBuilder`).
+- Transparent OSFZ decompression for both zlib (RFC 1950) and gzip (RFC 1952) formats.
+- NumPy integration: numeric channels are returned as `numpy.ndarray` with matching
+  dtypes, without intermediate copies.
+- Channel access by name (mandatory) and by index (optional).
+- Support for all current spec data types: `bool`, `int8`/`int16`/`int32`/`int64`,
+  `uint8`/`uint16`/`uint32`/`uint64`, `float`, `double`, `string`, `binary`,
+  `gpslocation`.
+- Equidistant channels with multi-segment support (multiple `bcStartData` blocks
+  per channel are explicitly supported).
+- Timestamped channels for numeric, string, and binary data.
+- `ReaderStats` exposing diagnostic information about the most recent load
+  operation (file size, compression status, channel and block counts, elapsed time).
+- Type stubs (`*.pyi`) for IDE support.
+- abi3 wheels for Python 3.9 through 3.13 on Linux x86_64, Linux aarch64,
+  macOS arm64, and Windows x86_64.
+
+### Notes
+
+- Intel-macOS wheels are not built; install from the source distribution if needed
+  (requires a local Rust toolchain). See [DECISIONS.md §19](https://github.com/optimeas/osf/blob/main/DECISIONS.md).
+- This is a pre-release on TestPyPI for stabilization. Production PyPI release
+  follows after sufficient field testing.
+
+[Unreleased]: https://github.com/optimeas/osf/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/optimeas/osf/releases/tag/v0.1.0
