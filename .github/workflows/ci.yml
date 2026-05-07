@@ -3,11 +3,15 @@
 # Three groups of jobs:
 #   1. test-rust: cargo test + clippy on Linux. Fast — fail-fast for
 #      everything else if this is red.
-#   2. build-wheels: maturin-action across the five supported
+#   2. build-wheels: maturin-action across the four supported
 #      (os, target) combinations. Each wheel is pip-installed into
 #      a fresh venv and the pytest suite is run against it.
 #   3. build-sdist: maturin sdist on Linux.
 #   4. summary: aggregator job for branch protection rules.
+#
+# macOS is arm64-only by design — Intel-macOS runners (macos-13) are
+# at end-of-life with deteriorating availability; Intel-macOS users
+# install from the sdist. See DECISIONS.md §19.
 #
 # Trusted Publishing to TestPyPI lives in release.yml (this file
 # never publishes anything).
@@ -69,9 +73,7 @@ jobs:
             # natively on a real ARM kernel, so we still have ARM test
             # coverage in the matrix.
             cross: true
-          - os: macos-13          # last GitHub-hosted Intel macOS runner
-            target: x86_64
-          - os: macos-14          # Apple Silicon
+          - os: macos-14          # Apple Silicon (macOS arm64-only — see DECISIONS.md §19)
             target: aarch64
           - os: windows-latest
             target: x64
