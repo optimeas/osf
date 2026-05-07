@@ -26,9 +26,11 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/burkhard154/osf"
-Repository = "https://github.com/burkhard154/osf"
-Documentation = "https://github.com/burkhard154/osf/tree/main/implementations/python"
+Homepage = "https://github.com/optimeas/osf"
+Repository = "https://github.com/optimeas/osf"
+Documentation = "https://github.com/optimeas/osf/tree/main/docs"
+Changelog = "https://github.com/optimeas/osf/blob/main/implementations/python/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/optimeas/osf/issues"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
