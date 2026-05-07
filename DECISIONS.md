@@ -320,3 +320,18 @@ developed together. Rust is implicitly complete once the Python bindings
 ship. The list in §15 still describes the order in which language ecosystems
 become available to end users; it no longer implies that Rust waits for C,
 C++, and C#.
+
+## 19. macOS Wheel Matrix
+
+**Decision:** We build only macOS arm64 wheels for the Python bindings,
+not Intel x86_64.
+
+**Why:** macOS-13 (the last GitHub-hosted Intel-macOS runner) is
+approaching end-of-life with deteriorating runner availability — in
+practice, jobs queue for hours without ever being assigned a runner.
+Apple Silicon has dominated the macOS market since 2023. Intel-macOS
+users can still install via the source distribution if they have a
+Rust toolchain.
+
+The same reasoning will apply to other language implementations
+producing macOS binaries: arm64 only, Intel via source.
