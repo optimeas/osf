@@ -166,11 +166,11 @@ they must not silently fall back to the closest current type.
 
 **Decision:** Access by channel name is mandatory. Access by channel index is optional.
 
-**Why:** In practice, applications know the channel name (e.g. `"Sensor/Temperature"`) but not the numeric index, which depends on the order channels were defined in the file. Name-based access is safer and more readable.
+**Why:** In practice, applications know the channel name (e.g. `"Sensor.Temperature"`) but not the numeric index, which depends on the order channels were defined in the file. Name-based access is safer and more readable.
 
 ```python
 # Mandatory
-channel = reader.channel("Sensor/Temperature")
+channel = reader.channel("Sensor.Temperature")
 
 # Optional
 channel = reader.channel(0)

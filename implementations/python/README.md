@@ -136,7 +136,7 @@ osf.save(mgr, "out.osf")
 # Writer: builder path — construct from scratch
 b = osf.WriterBuilder().creator("my-app").tag("preview")
 idx = b.add_channel(
-    name="Sensor/Temp",
+    name="Sensor.Temp",
     data_type="double",
     channel_type="scalar",
     physical_unit="°C",

@@ -132,7 +132,7 @@ let mgr = DataManager::load_from_file("examples/steam_loco.osf")?;
 println!("Channels: {}", mgr.channels().len());
 
 // Channel access by name (mandatory per DECISIONS §10)
-let temp = mgr.channel("Sensor/Temperature").expect("not found");
+let temp = mgr.channel("Sensor.Temperature").expect("not found");
 
 // Iterate over samples — segment timestamps are reconstructed lazily
 for sample in temp.samples_with_time() {
@@ -187,7 +187,7 @@ let mut builder = WriterBuilder::new()
     .reason("BOOT");
 
 let temp_idx = builder.add_channel(ChannelDef {
-    name: "Sensor/Temperature".into(),
+    name: "Sensor.Temperature".into(),
     data_type: DataType::Double,
     channel_type: ChannelType::Scalar,
     physical_unit: Some("°C".into()),

@@ -165,7 +165,7 @@ Die Parameter werden nachfolgend beschrieben
 * **index**
   Eindeutiger Kanalindex innerhalb der Datei (beginnend bei 0).
 * **name**
-  Kanalname, optional mit hierarchischem Pfad (z. B. `Motor/Temperatur`).
+  Kanalname, optional mit hierarchischem Pfad (z. B. `Motor.Temperatur`).
 * **reference**
   Optionale eindeutige Referenz oder UUID zur Identifikation des Datenursprungs.
 
@@ -334,7 +334,7 @@ OSF kennt drei grundlegende Kanaltypen:
   ```xml
   <channel 
       index="0"
-      name="Sensor/Temperature"
+      name="Sensor.Temperature"
       channeltype="scalar"
       datatype="double"
       physicalunit="°C"/>
@@ -345,7 +345,7 @@ OSF kennt drei grundlegende Kanaltypen:
   ```json
   {
     "index": 0,
-    "name": "Sensor/Temperature",
+    "name": "Sensor.Temperature",
     "channeltype": "scalar",
     "datatype": "double",
     "physicalunit": "°C"
@@ -372,7 +372,7 @@ OSF kennt drei grundlegende Kanaltypen:
   ```xml
   <channel 
       index="2"
-      name="FFT/Magnitude"
+      name="FFT.Magnitude"
       channeltype="vector"
       datatype="float"
       physicalunit="dB"/>
@@ -383,7 +383,7 @@ OSF kennt drei grundlegende Kanaltypen:
   ```json
   {
     "index": 2,
-    "name": "FFT/Magnitude",
+    "name": "FFT.Magnitude",
     "channeltype": "vector",
     "datatype": "float",
     "physicalunit": "dB"
@@ -409,7 +409,7 @@ OSF kennt drei grundlegende Kanaltypen:
   ```xml
   <channel 
       index="5"
-      name="Rainflow/Matrix"
+      name="Rainflow.Matrix"
       channeltype="matrix"
       datatype="int32"
       physicalunit="counts"/>
@@ -420,7 +420,7 @@ OSF kennt drei grundlegende Kanaltypen:
   ```json
   {
     "index": 5,
-    "name": "Rainflow/Matrix",
+    "name": "Rainflow.Matrix",
     "channeltype": "matrix",
     "datatype": "int32",
     "physicalunit": "counts"

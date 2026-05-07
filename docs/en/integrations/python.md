@@ -99,7 +99,7 @@ import osf
 mgr = osf.load("measurement.osf")
 print(f"File contains {len(mgr)} channels")
 
-temp = mgr.channel("Sensor/Temperature")
+temp = mgr.channel("Sensor.Temperature")
 samples = temp.samples()      # NumPy array, dtype matches the OSF data type
 timestamps = temp.timestamps_ns()
 ```
@@ -135,7 +135,7 @@ A single channel with metadata and values. Three flavors — equidistant, timest
 
 | Attribute / method | Description |
 |---|---|
-| `ch.name` | Channel name (often hierarchical, e.g. `"Motor/RPM"`). |
+| `ch.name` | Channel name (often hierarchical, e.g. `"Motor.RPM"`). |
 | `ch.index` | Numeric channel index in the file. |
 | `ch.data_type` | Data type as a string (`"double"`, `"int32"`, `"string"`, …). |
 | `ch.channel_type` | `"equidistant"`, `"timestamped"`, or `"variable"`. |
@@ -177,7 +177,7 @@ Builds OSF5 files from channel definitions and sample data. The builder accepts 
 b = osf.WriterBuilder().creator("measurement-system-v1").tag("pretest")
 
 idx = b.add_channel(
-    name="Sensor/Pressure",
+    name="Sensor.Pressure",
     data_type="double",
     channel_type="scalar",
     physical_unit="bar",

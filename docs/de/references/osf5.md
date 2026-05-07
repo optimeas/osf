@@ -63,7 +63,7 @@ Die Struktur entspricht funktional der XML-Variante aus OSF4, ist jedoch leichte
     "channels": [
       {
         "index": 0,
-        "name": "Sensor/Temperature",
+        "name": "Sensor.Temperature",
         "channeltype": "scalar",
         "datatype": "double",
         "timeincrement": 1000000,
@@ -186,21 +186,21 @@ OSF5 2048
     "channels": [
       {
         "index": 0,
-        "name": "Sensor/Temperature",
+        "name": "Sensor.Temperature",
         "channeltype": "scalar",
         "datatype": "double",
         "timeincrement": 1000000
       },
       {
         "index": 1,
-        "name": "Sensor/Force",
+        "name": "Sensor.Force",
         "channeltype": "scalar",
         "datatype": "double",
         "physicalunit": "N"
       },
       {
         "index": 2,
-        "name": "Sensor/Path",
+        "name": "Sensor.Path",
         "channeltype": "scalar",
         "datatype": "double",
         "physicalunit": "mm"

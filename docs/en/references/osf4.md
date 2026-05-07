@@ -92,7 +92,7 @@ Contains all channels of the file.
 ```xml
 <channels count="8">
     <channel index="0"
-             name="Sensor/Temperature"
+             name="Sensor.Temperature"
              channeltype="scalar"
              datatype="double"
              timeincrement="1000000"
@@ -209,8 +209,8 @@ OSF4 30269
 <?xml version="1.0" encoding="UTF-8"?>
 <osf version="4" created_utc="2019-08-12T12:23:01+02:00" creator="smartdevice:14001000021">
   <channels count="2">
-    <channel index="0" name="Sensor/Temperature" channeltype="scalar" datatype="double" timeincrement="1000000"/>
-    <channel index="1" name="Sensor/Pressure" channeltype="scalar" datatype="double" timeincrement="1000000"/>
+    <channel index="0" name="Sensor.Temperature" channeltype="scalar" datatype="double" timeincrement="1000000"/>
+    <channel index="1" name="Sensor.Pressure" channeltype="scalar" datatype="double" timeincrement="1000000"/>
   </channels>
 </osf>
 [BEGIN OF BINARY DATA]
