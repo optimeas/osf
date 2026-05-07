@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.0] — 2026-05-07
+
+### Added
+
+- First Python implementation (`osfdata` package), pre-released on TestPyPI as v0.1.0.
+- GitHub Actions CI pipeline building wheels for four platforms (Linux x86_64 and aarch64, macOS arm64, Windows x86_64).
+- Trusted Publishing configured for TestPyPI uploads.
+- BUILD.md documenting the toolchain and release process for the Python package.
+- Python integration page in docs/de/integrations/ and docs/en/integrations/.
+- Per-package changelog file at `implementations/python/CHANGELOG.md`.
+
+### Changed
+
+- Repository transferred from `burkhard154/osf` to `optimeas/osf`.
+- OSFZ encoding clarified in DECISIONS.md §12: real-world devices write gzip (RFC 1952), not only zlib (RFC 1950); both formats now accepted on read.
+
+### Notes
+
+- Per-package release notes for `osfdata` are in [`implementations/python/CHANGELOG.md`](implementations/python/CHANGELOG.md). Future language implementations will follow the same pattern.
+
+---
+
 ## [0.2.0] — 2026-05-05
 
 ### Changed
