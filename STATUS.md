@@ -399,23 +399,25 @@ GitHub Actions workflows live in `.github/workflows/`:
 
 - `ci.yml` — runs on every push to `main`, every PR, and on
   `workflow_dispatch`. Three job groups: `test-rust` (cargo test +
-  clippy), `build-wheels` (5-platform matrix via maturin-action +
+  clippy), `build-wheels` (4-platform matrix via maturin-action +
   per-wheel pytest run), `build-sdist`. A `summary` job aggregates
   results for branch-protection gating.
 - `release.yml` — triggered by `v*`-tag pushes. Same wheel + sdist
-  matrix; the `publish-testpypi` job is currently gated by
-  `if: false` (Phase A guard).
+  matrix; the `publish-testpypi` job uploads to TestPyPI via
+  Trusted Publishing (OIDC, no API tokens).
 
-**Wheel matrix (5 (os, target) pairs, abi3-py39 → one wheel per
+**Wheel matrix (4 (os, target) pairs, abi3-py39 → one wheel per
 platform covers Python 3.9–3.13):**
 
-| OS              | Target  | Notes                              |
-|-----------------|---------|------------------------------------|
-| ubuntu-latest   | x86_64  | native                             |
-| ubuntu-latest   | aarch64 | QEMU emulation via maturin-action  |
-| macos-13        | x86_64  | last GitHub-hosted Intel runner    |
-| macos-14        | aarch64 | Apple Silicon                      |
-| windows-latest  | x64     | native                             |
+| OS              | Target  | Notes                                       |
+|-----------------|---------|---------------------------------------------|
+| ubuntu-latest   | x86_64  | native                                      |
+| ubuntu-latest   | aarch64 | QEMU emulation via maturin-action           |
+| macos-14        | aarch64 | Apple Silicon (arm64-only — DECISIONS §19)  |
+| windows-latest  | x64     | native                                      |
+
+Intel-macOS is intentionally not in the matrix; users install from
+the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 **Action versions (current major tags as of Session 8):**
 
@@ -424,22 +426,37 @@ platform covers Python 3.9–3.13):**
 `PyO3/maturin-action@v1`, `pypa/gh-action-pypi-publish@release/v1`,
 `dtolnay/rust-toolchain@stable`, `Swatinem/rust-cache@v2`.
 
-**Phase status:**
+### Session 8 — Phase A (CI stabilization)
 
-- **Phase A (CI green on every push):** active. The two workflow
-  files are committed and run on every push to `main` and on PRs.
-- **Phase B (Trusted Publishing scharf):** waiting. Activation
-  procedure documented in
-  `implementations/python/RELEASE.md`. Preconditions: ci.yml green
-  on 2–3 successive `main` pushes, plus the TestPyPI Pending
-  Publisher manually configured under the optiMEAS account
-  (project: `osfdata`, owner: `optimeas`, repo: `osf`, workflow:
+- 2026-05-06/07: GitHub Actions wheel-build pipeline established.
+  After several Concurrency-Group cancellations and a macos-13
+  runner-availability dead-end, the matrix was tightened to four
+  arm64+x86_64 platforms and the workflow proven stable across
+  multiple consecutive `main` pushes (~3:30 per run).
+
+### Session 8 — Phase B (TestPyPI release)
+
+- 2026-05-07: `osfdata 0.1.0` released on TestPyPI via Trusted
+  Publishing — first successful end-to-end release pipeline run.
+  Tag `v0.1.0` triggered `release.yml`, which built four wheels
+  plus the sdist and published them via OIDC.
+- Live: <https://test.pypi.org/project/osfdata/>
+- Trusted Publisher on TestPyPI active (account: optiMEAS,
+  project: `osfdata`, owner: `optimeas`, repo: `osf`, workflow:
   `release.yml`).
+- Verification install in fresh venv passed:
+  `cp39-abi3-win_amd64` wheel installed, `osf.__version__ == "0.1.0"`,
+  numpy 2.4.4 pulled in as dependency.
 
-**Test-PyPI Trusted Publisher target:**
-PyPI project name `osfdata`, distributed from `optimeas/osf` →
-`.github/workflows/release.yml` → `publish-testpypi` job (currently
-disabled).
+### Open / known follow-ups (Session 8)
+
+- Production PyPI release: requires a separate Trusted Publisher
+  configured on `pypi.org` (TestPyPI and production are independent
+  accounts).
+- Pandas convenience layer (Session 7b): build a DataFrame from a
+  `DataManager`, one column per channel, optional time alignment.
+- Other language implementations (C, C++, C#, MicroPython, …) will
+  reuse the same per-package CHANGELOG + Trusted Publishing pattern.
 
 ---
 
