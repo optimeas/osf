@@ -6,20 +6,10 @@
 #
 # macOS is arm64-only by design — see DECISIONS.md §19.
 #
-# PHASE A vs PHASE B
-# ------------------
-# As of this commit the publish-testpypi job is gated by an explicit
-# `if: false` so the workflow can land safely while CI proves stable.
-# Activation procedure:
-#
-#   1. Watch ci.yml succeed on 2-3 main pushes.
-#   2. Configure the TestPyPI Pending Publisher (see RELEASE.md).
-#   3. Flip `if: false` to the documented condition in this file
-#      and push.
-#   4. Tag v0.1.0 and push the tag — that triggers this workflow.
-#
-# Until then this workflow only builds and uploads artefacts to
-# the run; nothing leaves GitHub.
+# Trusted Publishing on TestPyPI is configured for project `osfdata`
+# (owner: optimeas, repo: osf, workflow: release.yml). Pushing a v*
+# tag triggers a full wheel + sdist build followed by an OIDC-
+# authenticated upload — no API tokens involved.
 name: Release
 
 on:
@@ -102,12 +92,11 @@ jobs:
     name: Publish to TestPyPI
     needs: [build-wheels, build-sdist]
     runs-on: ubuntu-latest
-    # PHASE A guard: this job stays disabled until CI has proven
-    # stable on 2-3 main pushes AND the TestPyPI Pending Publisher
-    # has been configured (see RELEASE.md). To activate, replace
-    # the line below with:
-    #     if: startsWith(github.ref, 'refs/tags/v')
-    if: false
+    # Tag-only: this job runs only when a v* tag is pushed. The
+    # workflow itself is also tag-triggered, but the explicit
+    # condition documents intent and protects against accidental
+    # invocation via workflow_dispatch on a non-tag ref.
+    if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       id-token: write
     steps:
