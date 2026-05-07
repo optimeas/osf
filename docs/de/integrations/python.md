@@ -54,11 +54,10 @@ Das Paket richtet sich an Datenanalysten, Ingenieure und Wissenschaftler, die OS
 |---|---|---|
 | Linux | x86_64 | 3.9 – 3.13 |
 | Linux | aarch64 (ARM 64-Bit) | 3.9 – 3.13 |
-| macOS | x86_64 (Intel) | 3.9 – 3.13 |
 | macOS | arm64 (Apple Silicon) | 3.9 – 3.13 |
 | Windows | x86_64 | 3.9 – 3.13 |
 
-Auf allen unterstützten Plattformen läuft die Installation ohne Compiler oder weitere Werkzeuge. Auf exotischen Plattformen (FreeBSD, Windows-on-ARM, ältere Linux-Distributionen ohne manylinux-Kompatibilität) ist eine Installation aus der Source-Distribution möglich, erfordert dort aber eine lokale Rust-Toolchain.
+Auf allen unterstützten Plattformen läuft die Installation ohne Compiler oder weitere Werkzeuge. Intel-macOS wird nicht als Wheel ausgeliefert; eine Installation aus der Source-Distribution ist möglich, erfordert dort aber eine lokale Rust-Toolchain. Dasselbe gilt für andere exotische Plattformen (FreeBSD, Windows-on-ARM, ältere Linux-Distributionen ohne manylinux-Kompatibilität).
 
 ## Installation
 

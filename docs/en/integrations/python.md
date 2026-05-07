@@ -54,11 +54,10 @@ The package is aimed at data analysts, engineers, and scientists who want to int
 |---|---|---|
 | Linux | x86_64 | 3.9 – 3.13 |
 | Linux | aarch64 (ARM 64-bit) | 3.9 – 3.13 |
-| macOS | x86_64 (Intel) | 3.9 – 3.13 |
 | macOS | arm64 (Apple Silicon) | 3.9 – 3.13 |
 | Windows | x86_64 | 3.9 – 3.13 |
 
-On all supported platforms, installation runs without a compiler or other tools. On exotic platforms (FreeBSD, Windows-on-ARM, older Linux distributions without manylinux compatibility), installation from the source distribution is possible but requires a local Rust toolchain.
+On all supported platforms, installation runs without a compiler or other tools. Intel-macOS is not shipped as a wheel; installation from the source distribution is possible but requires a local Rust toolchain. The same applies to other exotic platforms (FreeBSD, Windows-on-ARM, older Linux distributions without manylinux compatibility).
 
 ## Installation
 
