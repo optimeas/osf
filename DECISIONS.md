@@ -335,3 +335,176 @@ Rust toolchain.
 
 The same reasoning will apply to other language implementations
 producing macOS binaries: arm64 only, Intel via source.
+
+## 20. C++ Implementation Architecture
+
+**Decision:** The C++ implementation in `implementations/cpp/` is a
+standalone, platform-independent library targeting C++17. It does not
+depend on the Rust core or on a yet-to-be-written C library; it is a
+parallel implementation of the OSF specification, written idiomatically
+in modern C++.
+
+**Why:** C++ is a first-class target ecosystem for industrial
+measurement and Qt-based tooling. Wrapping the Rust core through a C
+ABI would force C++ consumers through an unnecessary FFI boundary and
+prevent native idioms (RAII, templates, STL containers). Parallel
+implementations also serve as cross-validation against the
+specification.
+
+### Relationship to §15 (Implementation Priority Order)
+
+§15 originally listed C as the foundation for the C++ port. This entry
+revises that order: C++ is built directly from the specification, not
+ported from C. The original C implementation remains planned for
+embedded targets and as a reference for resource-constrained
+environments, but it is no longer a prerequisite for C++. The two
+implementations are independent.
+
+### C++ Standard
+
+**C++17 is the fixed baseline.** No CMake option to select a higher
+standard. Migration to C++20 or later is a deliberate library upgrade,
+not a build switch. This keeps the codebase coherent and avoids
+maintaining two stylistic dialects in parallel.
+
+### API Style: Two-Layer Result/Exception Design
+
+The library exposes two API surfaces, mirroring the timestamp two-layer
+design in §11.
+
+**Core API — `Result<T>` pattern.** All fallible operations return
+`osf::Result<T>`, an alias for `tl::expected<T, osf::Error>`. This is
+the foundation: exception-free, usable in `-fno-exceptions` builds,
+explicit at the call site.
+
+```cpp
+auto result = osf::DataManager::load("data.osf");
+if (!result) {
+    log_error(result.error().message());
+    return;
+}
+auto& manager = *result;
+```
+
+**Convenience API — exception-throwing wrappers.** A separate header
+`osf/throwing.hpp` exposes the same operations as throwing functions
+for consumers who prefer RAII-style error propagation. Including this
+header is opt-in; consumers who never include it never link against
+any exception machinery beyond what the standard library already pulls
+in.
+
+```cpp
+#include <osf/throwing.hpp>
+try {
+    auto manager = osf::throwing::load("data.osf");
+} catch (osf::Exception const& e) { /* ... */ }
+```
+
+When `std::expected` is broadly available (C++23 maturity across
+target compilers), the `tl::expected` typedef is swapped without API
+changes for consumers.
+
+### Build System: CMake (>= 3.20)
+
+**Targets:**
+
+| Target | Type | Purpose |
+|---|---|---|
+| `osf::osf` | static (default) | Core library |
+| `osf::headers` | interface | Header-only access for special cases |
+
+**Options:**
+
+| Option | Default | Purpose |
+|---|---|---|
+| `BUILD_SHARED_LIBS` | `OFF` | Static library by default; shared on demand |
+| `OSF_BUILD_TESTS` | `ON` | GoogleTest-based unit and integration tests |
+| `OSF_BUILD_EXAMPLES` | `ON` | Example executables (inspect, stats, dump, copy) |
+| `OSF_BUILD_C_API` | `OFF` | C ABI wrapper as separate shared library; disabled until Phase 2 |
+| `OSF_USE_SYSTEM_ZLIB` | `OFF` | Prefer system zlib over `FetchContent` build |
+
+Static linkage is the default to avoid C++ ABI stability issues across
+compiler versions and to simplify consumer integration. The future C
+API target (separate DECISIONS entry) will be built as a shared
+library; that is its purpose.
+
+### Third-Party Dependencies
+
+All third-party libraries are header-only or built from source via
+`FetchContent`. No system C++ dependencies beyond the standard library.
+
+| Library | Purpose | Distribution |
+|---|---|---|
+| `tl::expected` | `Result<T>` implementation for C++17 | Vendored under `third_party/` |
+| `nlohmann/json` | OSF5 metablock parsing | Vendored (single-header) |
+| `pugixml` | OSF4 metablock parsing | Vendored |
+| `zlib` | OSFZ decompression (gzip + zlib) | System on Linux/macOS, FetchContent on Windows |
+| GoogleTest | Test framework | FetchContent (build-time only) |
+
+No Boost dependency. The C++17 standard library plus the four vendored
+header-only libraries above cover all needs.
+
+### Test Framework: GoogleTest
+
+Industry standard, native VS Code Test Explorer integration, mature
+fixture model. Integrated via `FetchContent` so that the test build is
+self-contained and reproducible across environments.
+
+### Qt Integration
+
+Out of scope for the core library. The library is Qt-neutral: it does
+not depend on Qt, does not use Qt types in its API, and does not link
+against Qt. A separate Qt integration module (e.g. as part of
+`integrations/`) may follow once the core is stable; it would consume
+`osf::osf` like any other client.
+
+### Directory Layout
+
+```
+implementations/cpp/
+├── CMakeLists.txt
+├── README.md
+├── BUILD.md
+├── CHANGELOG.md
+├── cmake/
+├── include/osf/        - public API headers
+├── src/                - implementation
+├── tests/
+├── examples/
+└── third_party/        - vendored deps
+```
+
+Public headers under `include/osf/` define the API consumers see.
+Implementation details live in `src/` and are not exposed.
+
+### C ABI Phase (Deferred)
+
+A C-compatible API for cross-language consumption (Windows DLL,
+ActiveX/OCX, future bindings) is planned but not part of the initial
+implementation. It will be added as a separate target `osf-c` after
+the core C++ library reaches roundtrip validation against the existing
+reference files in `examples/`. Designing the C API while the core is
+still in flux would force ABI constraints onto the natural C++ form.
+
+The C ABI will get its own DECISIONS entry covering handle patterns,
+error codes, string ownership, and ABI stability guarantees.
+
+### Implementation Order
+
+Each phase corresponds to a focused work session against an existing
+reference file:
+
+1. CMake skeleton, vendored dependencies, `osf::Error` and `osf::Result<T>`
+2. Magic header parser
+3. OSF5 JSON metablock parser
+4. OSF4 XML metablock parser
+5. Block reader (iterator API)
+6. `DataManager` and channel-by-name access
+7. OSF5 writer
+8. Transparent OSFZ decompression
+9. Throwing convenience layer
+10. CI integration (GitHub Actions, Linux/macOS/Windows)
+11. C ABI phase
+
+Each phase produces a green build with passing tests against the
+reference files before the next phase begins.
