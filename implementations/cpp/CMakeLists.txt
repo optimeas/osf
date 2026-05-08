@@ -45,4 +45,41 @@ configure_file(
     @ONLY
 )
 
-# Library targets and tests are added in subsequent commits.
+# ---------------------------------------------------------------------------
+# Library targets
+# ---------------------------------------------------------------------------
+
+# osf::headers — interface target carrying the public include paths.
+# Header-only consumers can link this directly. Library targets and
+# tests inherit from it.
+add_library(osf_headers INTERFACE)
+add_library(osf::headers ALIAS osf_headers)
+
+target_include_directories(osf_headers INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated"
+)
+
+# Vendored tl::expected — attached SYSTEM so its warnings are
+# suppressed regardless of the consumer's warning level.
+target_include_directories(osf_headers SYSTEM INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/tl-expected"
+)
+
+# osf::osf — core library. Static by default, shared if BUILD_SHARED_LIBS=ON.
+# The internal target name is osf_core (consistent with osf_headers); the
+# OUTPUT_NAME property keeps the produced file as libosf.a / osf.lib.
+add_library(osf_core
+    src/error.cpp
+)
+add_library(osf::osf ALIAS osf_core)
+
+set_target_properties(osf_core PROPERTIES
+    OUTPUT_NAME osf
+)
+
+target_link_libraries(osf_core PUBLIC osf::headers)
+
+osf_set_warnings(osf_core)
+
+# Tests are wired up in commit 4.
