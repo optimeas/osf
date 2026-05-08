@@ -1,7 +1,8 @@
 # Open Streaming Format (OSF)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-active%20development-orange.svg)]()
+[![CI](https://github.com/optimeas/osf/actions/workflows/ci.yml/badge.svg)](https://github.com/optimeas/osf/actions/workflows/ci.yml)
+[![osfdata on TestPyPI](https://img.shields.io/badge/osfdata-TestPyPI%20v0.1.0-blue)](https://test.pypi.org/project/osfdata/)
 
 OSF is an open, lightweight streaming format for time-series measurement and process data. It is designed to be written efficiently by embedded devices and read at high speed by desktop, server, and AI workloads — without lossy conversion through CSV or Parquet intermediates.
 
@@ -33,45 +34,75 @@ See [`docs/en/`](docs/en/) for the full specification. German version available 
 
 ## Implementations
 
+The Rust foundation and the Python bindings are usable today. Other language implementations follow the same architecture and are in various states of planning.
+
 | Language | Platform | Status |
 |----------|----------|--------|
-| [Delphi](implementations/delphi/) | Windows desktop, industrial | In Progress |
-| [C](implementations/c/) | Embedded + desktop, reference | Planned |
-| [C++](implementations/cpp/) | Industrial measurement, Qt | Planned |
-| [C#](implementations/csharp/) | Windows desktop, automation | Planned |
-| [Python](implementations/python/) | Analytics, NumPy + pandas | Planned |
-| [MicroPython](implementations/micropython/) | ESP32, RP2040 | Planned |
-| [Java](implementations/java/) | Enterprise + Android | Planned |
-| [Rust](implementations/rust/) | Systems, embedded | Planned |
-| [MATLAB](implementations/matlab/) | Engineering analysis (reader) | Planned |
-| [JavaScript](implementations/javascript/) | Browser + Node.js | Planned |
+| [Delphi](implementations/delphi/) | Windows desktop, industrial | ✅ Reference implementation; generates the test files in [`examples/generated/`](examples/generated/). |
+| [Rust](implementations/rust/) | Systems, embedded, foundation for bindings | ✅ Read + write + OSFZ decompression; full OSF4/OSF5 support. |
+| [Python](implementations/python/) (`osfdata`) | Analytics, NumPy integration | ✅ Pre-release v0.1.0 on [TestPyPI](https://test.pypi.org/project/osfdata/). Built on the Rust foundation via PyO3. |
+| [C](implementations/c/) | Embedded + desktop | 📋 Planned. |
+| [C++](implementations/cpp/) | Industrial measurement, Qt | 📋 Planned. |
+| [C#](implementations/csharp/) | Windows desktop, automation | 📋 Planned. |
+| [MicroPython](implementations/micropython/) | ESP32, RP2040 | 📋 Planned. |
+| [Java](implementations/java/) | Enterprise + Android | 📋 Planned. |
+| [Swift](implementations/swift/) | iOS / macOS / iPadOS / watchOS | 📋 Planned. |
+| [MATLAB](implementations/matlab/) | Engineering analysis (reader) | 📋 Planned. |
+| [JavaScript](implementations/javascript/) | Browser + Node.js | 📋 Planned. |
+
+See [`DECISIONS.md`](DECISIONS.md) for the architectural rationale and implementation priority order.
 
 ## Integrations
 
-| Integration | Ecosystem |
-|-------------|-----------|
-| [Apache Arrow](integrations/arrow/) | Parquet, DuckDB, Polars, HuggingFace |
-| [PyTorch](integrations/pytorch/) | Training pipelines |
-| [TensorFlow](integrations/tensorflow/) | tf.data connectors |
-| [MCP](integrations/mcp/) | LLM tool use (Claude, etc.) |
-| [LangChain](integrations/langchain/) | RAG pipelines |
+| Integration | Ecosystem | Status |
+|-------------|-----------|--------|
+| [Apache Arrow](integrations/arrow/) | Parquet, DuckDB, Polars, HuggingFace | 📋 Planned. |
+| [PyTorch](integrations/pytorch/) | Training pipelines | 📋 Planned. |
+| [TensorFlow](integrations/tensorflow/) | tf.data connectors | 📋 Planned. |
+| [MCP](integrations/mcp/) | LLM tool use (Claude, etc.) | 📋 Planned. |
+| [LangChain](integrations/langchain/) | RAG pipelines | 📋 Planned. |
 
 ---
 
-## Quick Start
+## Quick Start (Python)
 
-OSF files begin with a metadata header (XML for OSF4, JSON for OSF5) followed by a stream of data blocks. A minimal OSF5 header looks like this:
+The fastest way to read and analyze OSF data today is via the Python package `osfdata` on TestPyPI:
 
-```json
-{
-  "osf_version": 5,
-  "channels": [
-    { "id": 1, "name": "temperature", "unit": "°C", "type": "float32", "rate_hz": 100 }
-  ]
-}
+```bash
+pip install --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ \
+            osfdata
 ```
 
-Full examples and sample `.osf` files are provided in [`examples/`](examples/).
+Then in Python:
+
+```python
+import osf
+
+mgr = osf.load("motorbike.osf")
+print(f"{len(mgr)} channels in this file")
+
+speed = mgr.channel("v_hinterrad")
+print(f"{speed.sample_count:,} speed samples in {speed.physical_unit}")
+
+values = speed.samples()           # NumPy array, dtype matches channel
+timestamps = speed.timestamps_ns() # int64 nanoseconds since epoch
+```
+
+For more comprehensive examples — channel inventories, statistical analysis, writing OSF5 files — see the runnable scripts in [`implementations/python/examples/`](implementations/python/examples/).
+
+The full Python documentation is at [`docs/en/integrations/python.md`](docs/en/integrations/python.md) and [`docs/de/integrations/python.md`](docs/de/integrations/python.md). For the build and release process, see [`implementations/python/BUILD.md`](implementations/python/BUILD.md).
+
+---
+
+## Sample Data
+
+The [`examples/`](examples/) directory contains real and synthetic OSF files for testing and learning:
+
+- `motorbike.osf` — 81 channels of real motorbike telemetry (speeds, temperatures, GPS, system status).
+- `steam_loco.osf` — 123 channels from a steam locomotive recording (OSF4 format).
+- `weather_station.osfz` — 28 channels, gzip-compressed OSFZ.
+- [`generated/`](examples/generated/) — synthetic files covering all data types, produced by the Delphi reference implementation.
 
 ---
 
@@ -84,6 +115,9 @@ The specification is maintained in English under [`docs/en/`](docs/en/) and mirr
 - [OSF4 specification](docs/en/references/osf4.md) ([🇩🇪 Deutsch](docs/de/references/osf4.md))
 - [OSF5 specification](docs/en/references/osf5.md) ([🇩🇪 Deutsch](docs/de/references/osf5.md))
 - [Vector & matrix channels](docs/en/references/osf_vector_matrix.md) ([🇩🇪 Deutsch](docs/de/references/osf_vector_matrix.md))
+- [Python integration](docs/en/integrations/python.md) ([🇩🇪 Deutsch](docs/de/integrations/python.md))
+
+Project-wide architectural decisions are in [`DECISIONS.md`](DECISIONS.md). Release history per package is in the respective `CHANGELOG.md` files (per-package) plus the project-wide [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
