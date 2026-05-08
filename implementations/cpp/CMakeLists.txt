@@ -82,4 +82,11 @@ target_link_libraries(osf_core PUBLIC osf::headers)
 
 osf_set_warnings(osf_core)
 
-# Tests are wired up in commit 4.
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+if(OSF_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
