@@ -20,8 +20,18 @@ name: CI
 on:
   push:
     branches: [main]
+    paths:
+      - 'implementations/python/**'
+      - 'implementations/rust/**'
+      - 'examples/**'
+      - '.github/workflows/**'
   pull_request:
     branches: [main]
+    paths:
+      - 'implementations/python/**'
+      - 'implementations/rust/**'
+      - 'examples/**'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 # Cancel superseded runs on the same ref to save CI minutes.
