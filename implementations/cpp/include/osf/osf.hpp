@@ -9,4 +9,5 @@
 #pragma once
 
 #include <osf/error.hpp>
+#include <osf/header.hpp>
 #include <osf/version.hpp>
