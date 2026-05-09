@@ -1,27 +1,27 @@
-# OSF — C++ Implementation
+# OSF — C++ implementation
 
-![Status](https://img.shields.io/badge/status-planned-lightgrey.svg)
+![Phase](https://img.shields.io/badge/phase-1%3A%20skeleton-orange)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](../../LICENSE)
+![C++](https://img.shields.io/badge/C%2B%2B-17-blue)
 
-## Target Platform
+A standalone C++17 implementation of the [Open Streaming Format](../../README.md) specification. Reads and writes `.osf` and `.osfz` files natively — no FFI, no Rust dependency, idiomatic modern C++. This directory currently holds the Phase 1 skeleton: CMake build system, vendored `tl::expected`, foundation `osf::Error` and `osf::Result<T>` types, and a GoogleTest smoke test.
 
-Industrial measurement systems, high-performance desktop and server applications, and Qt-based tooling. Targets C++17 and later.
+## Build quickstart
 
-## What This Implementation Will Provide
+```bash
+cmake -B build
+cmake --build build
+ctest --test-dir build
+```
 
-- **Writer**: high-throughput streaming writer for OSF4 and OSF5
-- **Reader**: full random-access and sequential reader
-- Qt integration: `QIODevice`-compatible streams, signal/slot hooks for streaming data
-- Optional: `std::span` and `std::ranges`-compatible channel data access
+For platform-specific instructions, CMake options, and FAQ, see [`BUILD.md`](BUILD.md). For the architectural rationale, see [`DECISIONS.md` §20](../../DECISIONS.md).
 
-## Status
+## Roadmap
 
-**Planned.** Implementation has not started.
+The Phase 1 skeleton lands the build system and the foundation API types. Subsequent phases bring the real OSF functionality in focused sessions (see [DECISIONS.md §20](../../DECISIONS.md) for the full eleven-phase plan):
 
-## Dependencies
+- Magic header parser, OSF5 JSON metablock, OSF4 XML metablock, block reader, `DataManager`, OSF5 writer, transparent OSFZ decompression, throwing convenience layer.
+- CI integration on Linux/macOS/Windows.
+- C ABI shared library as a separate target for cross-language consumption (own DECISIONS entry to follow).
 
-- C++17 standard library
-- Optional: Qt 6 for Qt-integrated builds
-
-## Notes
-
-The C++ implementation is the primary target for desktop measurement software in the industrial automation and test equipment space.
+Qt integration is intentionally **not** part of the core library (see DECISIONS.md §20). A separate Qt-aware module may follow once the core is stable.
