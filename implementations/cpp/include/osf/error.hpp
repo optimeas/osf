@@ -23,6 +23,9 @@ struct Error {
         IoError,
         ParseError,
         NotFound,
+        InvalidMagicHeader,
+        UnsupportedVersion,
+        MagicHeaderTooLong,
     };
 
     Code code = Code::Unknown;
