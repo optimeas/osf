@@ -57,3 +57,27 @@ target_link_libraries(test_header PRIVATE
 osf_set_warnings(test_header)
 
 gtest_discover_tests(test_header)
+
+# ---------------------------------------------------------------------------
+# test_header_examples — magic-header tests against reference files.
+# ---------------------------------------------------------------------------
+
+# Resolve examples/ via TO_CMAKE_PATH to enforce forward slashes;
+# raw CMAKE_SOURCE_DIR can leak backslashes into the string literal.
+file(TO_CMAKE_PATH "${CMAKE_SOURCE_DIR}/../../examples" OSF_EXAMPLES_DIR_PATH)
+
+add_executable(test_header_examples
+    integration/test_header_examples.cpp
+)
+
+target_link_libraries(test_header_examples PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_compile_definitions(test_header_examples PRIVATE
+    OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+
+osf_set_warnings(test_header_examples)
+
+gtest_discover_tests(test_header_examples)
