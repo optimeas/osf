@@ -395,8 +395,8 @@ enough that the Arc-Channel optimisation is not needed yet.
 
 ## C++ implementation — current state
 
-Phase 1 (skeleton) completed 2026-05-08 per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
-Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. The foundation API is in place; OSF parsing arrives in Phase 2.
+Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10. Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
+Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. The foundation API and the magic-header surface are in place; OSF metablock parsing arrives in Phase 3.
 
 **Library targets:**
 
@@ -410,13 +410,17 @@ Standalone C++17 implementation, parallel to the Rust core — not a port from C
 | `CMakeLists.txt` | Top-level config: project, C++17 hard-pin, five build options, both library targets, `add_subdirectory(tests)` gated by `OSF_BUILD_TESTS` |
 | `cmake/CompilerWarnings.cmake` | `osf_set_warnings(target)` — MSVC `/W4 /permissive- /wd4100`; GCC/Clang `-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion` |
 | `cmake/version.hpp.in` | Template; `configure_file` emits `${BINARY_DIR}/generated/osf/version.hpp` with `OSF_VERSION_MAJOR/MINOR/PATCH` and `osf::version()` |
-| `include/osf/osf.hpp` | Umbrella header (re-exports `error.hpp` + `version.hpp`) |
-| `include/osf/error.hpp` | `osf::Error` (`Code` enum: Unknown / InvalidArgument / IoError / ParseError / NotFound; plus `std::string message`); `osf::Result<T>` as `tl::expected<T, Error>`; `error_category_name(Code)` declaration |
+| `include/osf/osf.hpp` | Umbrella header (re-exports `error.hpp` + `header.hpp` + `version.hpp`) |
+| `include/osf/error.hpp` | `osf::Error` (`Code` enum: Unknown / InvalidArgument / IoError / ParseError / NotFound / InvalidMagicHeader / UnsupportedVersion / MagicHeaderTooLong; plus `std::string message`); `osf::Result<T>` as `tl::expected<T, Error>`; `error_category_name(Code)` declaration |
+| `include/osf/header.hpp` | Magic-header API: `osf::OsfVersion` (Osf4/Osf5 enum), `osf::MagicHeader` struct (version + metablock_len, friend equality), three `parse_magic_header` overloads (`std::istream&`, `std::uint8_t const*` + size, `std::filesystem::path`), `osf::MAX_MAGIC_HEADER_LEN = 128` |
 | `src/error.cpp` | `error_category_name` implementation; the single TU that keeps `osf::osf` from being header-only |
-| `tests/CMakeLists.txt` | GoogleTest via `FetchContent`; pinned to v1.15.2 by tarball URL + SHA256; `gtest_force_shared_crt=ON` for /MD parity; `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE` for CMP0135 NEW behaviour |
+| `src/header.cpp` | Magic-header parser implementation. Byte-by-byte read via `istream::get()`, anonymous-namespace helpers for line read / identifier mapping / `from_chars`-based length parse, CRLF tolerance |
+| `tests/CMakeLists.txt` | GoogleTest via `FetchContent`; pinned to v1.15.2 by tarball URL + SHA256; `gtest_force_shared_crt=ON` for /MD parity; `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE` for CMP0135 NEW behaviour; `OSF_EXAMPLES_DIR` define for integration tests |
+| `tests/integration/test_header_examples.cpp` | Four integration tests against `examples/`: `motorbike.osf` and `steam_loco.osf` parse as Osf4; `weather_station.osfz` rejects until Phase 8; the 17 generated files in `examples/generated/` all parse with version per filename prefix |
 | `tests/unit/test_error.cpp` | Five smoke tests covering Error, Result-with-value, Result-with-error, `osf::version()`, and `error_category_name` |
+| `tests/unit/test_header.cpp` | 16 unit tests against synthetic byte sequences: identifier spellings, error codes, CRLF tolerance, lone-CR rejection, stream-position invariant, buffer↔istream equivalence, path overload (success + missing-file), `MagicHeader` equality |
 | `third_party/tl-expected/` | Vendored TartanLlama/expected v1.3.1 (`tl/expected.hpp` + `LICENSE`, CC0 1.0) |
-| `README.md`, `BUILD.md`, `CHANGELOG.md` | Phase-1 documentation |
+| `README.md`, `BUILD.md`, `CHANGELOG.md` | Per-package documentation |
 
 **Build options (DECISIONS §20):**
 
@@ -431,12 +435,12 @@ cmake --build build
 ctest --test-dir build
 ```
 
-**Build verification (local, 2026-05-08):**
+**Build verification (local, 2026-05-10):**
 
 - Toolchain: MSVC 19.50.35730, Visual Studio 18 generator, CMake 4.2.3.
 - `cmake -B build` configures with **0 CMake warnings** (CMP0135 set to NEW explicitly via `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE`).
-- `cmake --build` produces `osf.lib` and `test_error.exe` with **0 compile warnings** under `/W4 /permissive-`.
-- `ctest` reports **5/5 passed in 0.18 s**.
+- `cmake --build` produces `osf.lib`, `test_error.exe`, `test_header.exe`, and `test_header_examples.exe` with **0 compile warnings** under `/W4 /permissive-`.
+- `ctest` reports **25/25 passed in 0.83 s** (5 Phase-1 smoke + 16 header-unit + 4 header-integration; the integration suite internally exercises 17 generated reference files).
 
 **Constraints:**
 
@@ -445,7 +449,7 @@ ctest --test-dir build
 
 **Pending:**
 
-Phase 2: magic-header parser. Then sequentially per §20 Implementation Order: OSF5 JSON metablock, OSF4 XML metablock, block reader, `DataManager`, OSF5 writer, transparent OSFZ decompression, throwing convenience layer.
+Phase 3: OSF5 JSON metablock parser. Then sequentially per §20 Implementation Order: OSF4 XML metablock, block reader, `DataManager`, OSF5 writer, transparent OSFZ decompression, throwing convenience layer.
 
 The C ABI shared-library wrapper (Phase 11) is the deferred deliverable for cross-language consumption — Windows DLL / ActiveX/OCX, future bindings. It will land after the core C++ library reaches roundtrip validation and gets its own DECISIONS entry covering handle patterns, error codes, string ownership, and ABI stability guarantees.
 
