@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.0] — 2026-05-08
+
+### Added
+
+- C++ implementation: Phase 1 skeleton landed. CMake build (C++17 hard-pinned, two targets `osf::osf` static and `osf::headers` interface), vendored `tl::expected` v1.3.1 for `Result<T>` foundation type, `osf::Error` and `osf::Result<T>` as the public error-handling API, GoogleTest integration via `FetchContent` (v1.15.2, SHA256-pinned), five-test smoke suite covering Error, Result, version, and `error_category_name`. Phase 1 documentation: `implementations/cpp/README.md`, `BUILD.md` (per-platform + FAQ), `CHANGELOG.md`. See [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
+- DECISIONS §20: C++ implementation architecture documented (standalone C++17, parallel to the Rust core; revises §15 priority order; eleven-phase implementation roadmap; C ABI deferred to its own future DECISIONS entry).
+
+### Notes
+
+- Per-package release notes for the C++ library are in [`implementations/cpp/CHANGELOG.md`](implementations/cpp/CHANGELOG.md). Repo and per-package version lines remain explicitly decoupled: repo at 0.4.0, cpp library at 0.0.1.
+
+---
+
 ## [0.3.0] — 2026-05-07
 
 ### Added
