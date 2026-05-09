@@ -40,3 +40,20 @@ osf_set_warnings(test_error)
 
 include(GoogleTest)
 gtest_discover_tests(test_error)
+
+# ---------------------------------------------------------------------------
+# test_header — magic-header parser unit tests (Phase 2b).
+# ---------------------------------------------------------------------------
+
+add_executable(test_header
+    unit/test_header.cpp
+)
+
+target_link_libraries(test_header PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_header)
+
+gtest_discover_tests(test_header)
