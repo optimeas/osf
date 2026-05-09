@@ -43,6 +43,11 @@ namespace osf {
 /// + 20 digits of `std::uint64_t::max()` + `\n` = 45 bytes. 128
 /// leaves comfortable headroom for unforeseen identifiers without
 /// letting a corrupt or non-OSF file run away.
+///
+/// Soft limit semantics: the parser tolerates up to and including
+/// MAX_MAGIC_HEADER_LEN bytes before the terminating newline; only
+/// strictly more triggers `Error::Code::MagicHeaderTooLong`. Matches
+/// the behaviour of the Rust reference implementation.
 inline constexpr std::size_t MAX_MAGIC_HEADER_LEN = 128;
 
 /// On-disk OSF format version, derived from the magic header.

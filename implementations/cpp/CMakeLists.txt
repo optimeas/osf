@@ -71,6 +71,7 @@ target_include_directories(osf_headers SYSTEM INTERFACE
 # OUTPUT_NAME property keeps the produced file as libosf.a / osf.lib.
 add_library(osf_core
     src/error.cpp
+    src/header.cpp
 )
 add_library(osf::osf ALIAS osf_core)
 
