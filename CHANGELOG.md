@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.5.0] — 2026-05-10
+
+### Added
+
+- C++ implementation: Phase 2 magic-header parser landed. Public API: `osf::OsfVersion`, `osf::MagicHeader`, three `parse_magic_header` overloads (`std::istream&`, `std::uint8_t const*` + size, `std::filesystem::path`), `osf::MAX_MAGIC_HEADER_LEN` constant. Implementation in `src/header.cpp` follows the Rust reference (`implementations/rust/osf-core/src/header.rs`) idiomatically: byte-by-byte stream reading, `std::from_chars` for the length parse, CRLF tolerance, accepts the four identifier spellings (`OSF4`, `OSF5`, `OCEAN_STREAM_FORMAT4`, `OCEAN_STREAMING_FORMAT4`). Three new `Error::Code` values: `InvalidMagicHeader`, `UnsupportedVersion`, `MagicHeaderTooLong`. Test suite extended from 5 to 25 cases: 16 unit tests against synthetic byte sequences, 4 integration tests against the reference files in `examples/` (the last one internally iterates over 17 generated files in `examples/generated/`).
+
+### Notes
+
+- Per-package release notes for the C++ library are in [`implementations/cpp/CHANGELOG.md`](implementations/cpp/CHANGELOG.md). Repo and per-package version lines remain explicitly decoupled: repo at 0.5.0, cpp library at 0.0.2.
+
+---
+
 ## [0.4.0] — 2026-05-08
 
 ### Added
