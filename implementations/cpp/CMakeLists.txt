@@ -79,6 +79,8 @@ target_include_directories(osf_headers SYSTEM INTERFACE
 add_library(osf_core
     src/error.cpp
     src/header.cpp
+    src/metablock.cpp
+    src/types.cpp
 )
 add_library(osf::osf ALIAS osf_core)
 
