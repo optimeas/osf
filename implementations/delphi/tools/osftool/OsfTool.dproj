@@ -7,15 +7,34 @@
         <Base>True</Base>
         <Config Condition="'$(Config)'==''">Debug</Config>
         <Platform Condition="'$(Platform)'==''">Win64</Platform>
-        <TargetedPlatforms>2</TargetedPlatforms>
+        <!-- Bitmask: Win64=2 + Linux64=256 + OSX64=1024 + OSXARM64=4096 = 5378.
+             RAD Studio normalises this when the project is opened in the IDE
+             and adds the platforms it actually finds installed. -->
+        <TargetedPlatforms>5378</TargetedPlatforms>
         <AppType>Console</AppType>
         <ProjectName Condition="'$(ProjectName)'==''">OsfTool</ProjectName>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Config)'=='Base' or '$(Base)'!=''">
         <Base>true</Base>
     </PropertyGroup>
+    <!-- ===== Per-platform Base PropertyGroups ===== -->
     <PropertyGroup Condition="('$(Platform)'=='Win64' and '$(Base)'=='true') or '$(Base_Win64)'!=''">
         <Base_Win64>true</Base_Win64>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='OSX64' and '$(Base)'=='true') or '$(Base_OSX64)'!=''">
+        <Base_OSX64>true</Base_OSX64>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='OSXARM64' and '$(Base)'=='true') or '$(Base_OSXARM64)'!=''">
+        <Base_OSXARM64>true</Base_OSXARM64>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Linux64' and '$(Base)'=='true') or '$(Base_Linux64)'!=''">
+        <Base_Linux64>true</Base_Linux64>
         <CfgParent>Base</CfgParent>
         <Base>true</Base>
     </PropertyGroup>
@@ -24,8 +43,27 @@
         <CfgParent>Base</CfgParent>
         <Base>true</Base>
     </PropertyGroup>
+    <!-- ===== Per-platform Debug PropertyGroups ===== -->
     <PropertyGroup Condition="('$(Platform)'=='Win64' and '$(Cfg_1)'=='true') or '$(Cfg_1_Win64)'!=''">
         <Cfg_1_Win64>true</Cfg_1_Win64>
+        <CfgParent>Cfg_1</CfgParent>
+        <Cfg_1>true</Cfg_1>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='OSX64' and '$(Cfg_1)'=='true') or '$(Cfg_1_OSX64)'!=''">
+        <Cfg_1_OSX64>true</Cfg_1_OSX64>
+        <CfgParent>Cfg_1</CfgParent>
+        <Cfg_1>true</Cfg_1>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='OSXARM64' and '$(Cfg_1)'=='true') or '$(Cfg_1_OSXARM64)'!=''">
+        <Cfg_1_OSXARM64>true</Cfg_1_OSXARM64>
+        <CfgParent>Cfg_1</CfgParent>
+        <Cfg_1>true</Cfg_1>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Linux64' and '$(Cfg_1)'=='true') or '$(Cfg_1_Linux64)'!=''">
+        <Cfg_1_Linux64>true</Cfg_1_Linux64>
         <CfgParent>Cfg_1</CfgParent>
         <Cfg_1>true</Cfg_1>
         <Base>true</Base>
@@ -37,7 +75,10 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base)'!=''">
         <DCC_DcuOutput>.\$(Platform)\$(Config)</DCC_DcuOutput>
-        <DCC_ExeOutput>.</DCC_ExeOutput>
+        <!-- Per-platform exe output so Win64\Release\osftool.exe,
+             OSXARM64\Release\osftool, Linux64\Release\osftool etc.
+             never collide when built from the same source tree. -->
+        <DCC_ExeOutput>.\$(Platform)\$(Config)</DCC_ExeOutput>
         <DCC_E>false</DCC_E>
         <DCC_F>false</DCC_F>
         <DCC_K>false</DCC_K>
@@ -46,11 +87,26 @@
         <UsingDelphiRTL>true</UsingDelphiRTL>
         <SanitizedProjectName>OsfTool</SanitizedProjectName>
         <DCC_UnitSearchPath>..\..\src;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <!-- System.Win and Data.Win namespaces are Windows-only; on macOS
+             and Linux the compiler simply will not find their units, so
+             including them in the search namespace on non-Win platforms
+             is harmless. We keep the same value across platforms to
+             preserve the single-namespace-list pattern used by every
+             other Delphi project here. -->
         <DCC_Namespace>Winapi;System.Win;Data.Win;System;Xml;Data;$(DCC_Namespace)</DCC_Namespace>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
         <Manifest_File>None</Manifest_File>
         <VerInfo_Locale>1031</VerInfo_Locale>
+        <DCC_UsePackage>rtl;dbrtl;$(DCC_UsePackage)</DCC_UsePackage>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base_OSX64)'!=''">
+        <DCC_UsePackage>rtl;dbrtl;$(DCC_UsePackage)</DCC_UsePackage>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base_OSXARM64)'!=''">
+        <DCC_UsePackage>rtl;dbrtl;$(DCC_UsePackage)</DCC_UsePackage>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base_Linux64)'!=''">
         <DCC_UsePackage>rtl;dbrtl;$(DCC_UsePackage)</DCC_UsePackage>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
@@ -115,6 +171,9 @@
             <Platforms>
                 <Platform value="Win32">False</Platform>
                 <Platform value="Win64">True</Platform>
+                <Platform value="OSX64">True</Platform>
+                <Platform value="OSXARM64">True</Platform>
+                <Platform value="Linux64">True</Platform>
             </Platforms>
         </BorlandProject>
         <ProjectFileVersion>12</ProjectFileVersion>

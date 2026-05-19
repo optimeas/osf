@@ -34,6 +34,18 @@ type
     function RunReset: Integer;
     function RunInstallPath: Integer;
     function RunUninstallPath: Integer;
+{$IFDEF MSWINDOWS}
+    // Windows-only implementation helpers. Kept private so the Posix
+    // branch never references them.
+    function DoInstallPathWindows(const AExeDir: string): Integer;
+    function DoUninstallPathWindows(const AExeDir: string): Integer;
+{$ELSE}
+    // Posix branch of both install-path / uninstall-path: prints the
+    // shell snippet the user should add (or remove) by hand. Picks a
+    // .zshrc vs .bashrc hint based on the build target.
+    procedure PrintShellInstallInstructions(const AExeDir: string);
+    procedure PrintShellUninstallInstructions(const AExeDir: string);
+{$ENDIF}
   public
     function Name: string; override;
     function ShortDescription: string; override;
@@ -253,15 +265,46 @@ end;
 
 {$ENDIF}
 
-function TOsfConfigCommand.RunInstallPath: Integer;
+{$IFNDEF MSWINDOWS}
+
+procedure TOsfConfigCommand.PrintShellInstallInstructions(const AExeDir: string);
+begin
+  Print('osftool cannot modify PATH automatically on this platform.');
+  Print('');
+  Print('Add the following line to your shell configuration file');
+  Print('(~/.zshrc on macOS, ~/.bashrc on Linux, or equivalent):');
+  Print('');
+  Printf('  export PATH="$PATH:%s"', [AExeDir]);
+  Print('');
+  Print('Then reload your shell:');
+{$IFDEF MACOS}
+  Print('  source ~/.zshrc');
+{$ELSE}
+  Print('  source ~/.bashrc');
+{$ENDIF}
+end;
+
+procedure TOsfConfigCommand.PrintShellUninstallInstructions(const AExeDir: string);
+begin
+  Print('osftool cannot modify PATH automatically on this platform.');
+  Print('');
+  Print('Remove the following line from your shell configuration file');
+  Print('(~/.zshrc on macOS, ~/.bashrc on Linux, or equivalent):');
+  Print('');
+  Printf('  export PATH="$PATH:%s"', [AExeDir]);
+end;
+
+{$ENDIF}
+
 {$IFDEF MSWINDOWS}
+
+function TOsfConfigCommand.DoInstallPathWindows(const AExeDir: string): Integer;
 var
-  ExeDir, CurrentPath, NormalizedDir, NewPath: string;
+  CurrentPath, NormalizedDir, NewPath: string;
   Existing: string;
 begin
-  ExeDir := GetExeDir;
   CurrentPath := ReadUserPath;
-  NormalizedDir := NormalizeForCompare(ExeDir);
+  NormalizedDir := NormalizeForCompare(AExeDir);
 
   // Already-present check. Walking the current PATH entry-by-entry
   // avoids false positives that a plain InStr would produce for a
@@ -269,15 +312,15 @@ begin
   for Existing in CurrentPath.Split([';']) do
     if (Existing <> '') and (NormalizeForCompare(Existing) = NormalizedDir) then
     begin
-      Printf('osftool is already in PATH: %s', [ExeDir]);
+      Printf('osftool is already in PATH: %s', [AExeDir]);
       Print('No changes made.');
       Exit(EXIT_OK);
     end;
 
   if CurrentPath = '' then
-    NewPath := ExeDir
+    NewPath := AExeDir
   else
-    NewPath := CurrentPath + ';' + ExeDir;
+    NewPath := CurrentPath + ';' + AExeDir;
 
   if Length(NewPath) > C_WIN_ENV_MAX_LEN then
   begin
@@ -301,36 +344,20 @@ begin
   end;
 
   BroadcastEnvChange;
-  Printf('Added to PATH: %s', [ExeDir]);
+  Printf('Added to PATH: %s', [AExeDir]);
   Print('Restart your terminal for the change to take effect.');
   Result := EXIT_OK;
 end;
-{$ELSE}
-begin
-  Print('osftool cannot modify PATH automatically on this platform.');
-  Print('');
-  Print('Add the following line to your shell configuration file');
-  Print('(~/.bashrc, ~/.zshrc, or equivalent):');
-  Print('');
-  Printf('  export PATH="$PATH:%s"', [GetExeDir]);
-  Print('');
-  Print('Then reload your shell:');
-  Print('  source ~/.bashrc');
-  Result := EXIT_OK;
-end;
-{$ENDIF}
 
-function TOsfConfigCommand.RunUninstallPath: Integer;
-{$IFDEF MSWINDOWS}
+function TOsfConfigCommand.DoUninstallPathWindows(const AExeDir: string): Integer;
 var
-  ExeDir, CurrentPath, NormalizedDir, NewPath: string;
+  CurrentPath, NormalizedDir, NewPath: string;
   Existing: string;
   Kept: TList<string>;
   RemovedCount: Integer;
 begin
-  ExeDir := GetExeDir;
   CurrentPath := ReadUserPath;
-  NormalizedDir := NormalizeForCompare(ExeDir);
+  NormalizedDir := NormalizeForCompare(AExeDir);
 
   RemovedCount := 0;
   Kept := TList<string>.Create;
@@ -367,19 +394,38 @@ begin
   end;
 
   BroadcastEnvChange;
-  Printf('Removed from PATH: %s', [ExeDir]);
+  Printf('Removed from PATH: %s', [AExeDir]);
   Print('Restart your terminal for the change to take effect.');
   Result := EXIT_OK;
 end;
-{$ELSE}
-begin
-  Print('osftool cannot modify PATH automatically on this platform.');
-  Print('');
-  Print('Remove the osftool directory from PATH manually in your shell');
-  Print('configuration file (~/.bashrc, ~/.zshrc, or equivalent).');
-  Result := EXIT_OK;
-end;
+
 {$ENDIF}
+
+function TOsfConfigCommand.RunInstallPath: Integer;
+var
+  ExeDir: string;
+begin
+  ExeDir := GetExeDir;
+{$IFDEF MSWINDOWS}
+  Result := DoInstallPathWindows(ExeDir);
+{$ELSE}
+  PrintShellInstallInstructions(ExeDir);
+  Result := EXIT_OK;
+{$ENDIF}
+end;
+
+function TOsfConfigCommand.RunUninstallPath: Integer;
+var
+  ExeDir: string;
+begin
+  ExeDir := GetExeDir;
+{$IFDEF MSWINDOWS}
+  Result := DoUninstallPathWindows(ExeDir);
+{$ELSE}
+  PrintShellUninstallInstructions(ExeDir);
+  Result := EXIT_OK;
+{$ENDIF}
+end;
 
 function TOsfConfigCommand.DoExecute: Integer;
 var

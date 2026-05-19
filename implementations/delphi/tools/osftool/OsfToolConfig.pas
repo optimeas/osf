@@ -132,15 +132,23 @@ begin
 end;
 
 class function TOsfToolConfig.ConfigFilePath: string;
-var
-  Dir: string;
 begin
-  {$IFDEF MSWINDOWS}
-  Dir := TPath.Combine(GetEnvironmentVariable('APPDATA'), 'osftool');
-  {$ELSE}
-  Dir := TPath.Combine(TPath.GetHomePath, '.config' + PathDelim + 'osftool');
-  {$ENDIF}
-  Result := TPath.Combine(Dir, 'config.json');
+  // Windows: C:\Users\<user>\AppData\Roaming\osftool\config.json
+  // POSIX:   ~/.config/osftool/config.json     (XDG convention)
+  //
+  // Built entirely through TPath.Combine so the separator stays native
+  // on each platform without us hand-mixing PathDelim values.
+{$IFDEF MSWINDOWS}
+  Result := TPath.Combine(
+    TPath.Combine(GetEnvironmentVariable('APPDATA'), 'osftool'),
+    'config.json');
+{$ELSE}
+  Result := TPath.Combine(
+    TPath.Combine(
+      TPath.Combine(TPath.GetHomePath, '.config'),
+      'osftool'),
+    'config.json');
+{$ENDIF}
 end;
 
 function TOsfToolConfig.Get(const AKey: string): string;
