@@ -50,9 +50,15 @@ type
 
   TOsfStatCommand = class(TBaseCommand)
   strict private
-    function CollectStats(AMgr: TOSFDataManager): TArray<TChannelStat>;
-    procedure EmitHuman(const AStats: TArray<TChannelStat>);
-    procedure EmitJson(const AStats: TArray<TChannelStat>);
+    // Time-bounded statistics. Zero on either side means "no bound on
+    // that side"; passing both zero matches the unfiltered (whole-file)
+    // case. Bounds are inclusive on both ends.
+    function CollectStats(AMgr: TOSFDataManager;
+      AStartNs, AEndNs: Int64): TArray<TChannelStat>;
+    procedure EmitHuman(const AStats: TArray<TChannelStat>;
+      AStartUtc, AEndUtc: TDateTime);
+    procedure EmitJson(const AStats: TArray<TChannelStat>;
+      AStartUtc, AEndUtc: TDateTime);
   public
     function Name: string; override;
     function ShortDescription: string; override;
@@ -64,6 +70,51 @@ implementation
 
 uses
   System.StrUtils;
+
+const
+  C_NS_PER_DAY = 86400.0 * 1.0E9;
+  C_ISO_FMT    = 'yyyy-mm-dd"T"hh:nn:ss';
+
+// ── ISO 8601 + Unix-ns helpers ───────────────────────────────────────────────
+//
+// Local copies of the same helpers used in Cmd.Merge.pas. Kept private so
+// this command stays self-contained — no inter-command dependency.
+
+function ParseIso8601(const AStr: string; out ADT: TDateTime): Boolean;
+var
+  Y, M, D, H, N, S: Word;
+begin
+  Result := False;
+  ADT := 0;
+  if Length(AStr) < 19 then
+    Exit;
+  try
+    Y := StrToInt(Copy(AStr, 1, 4));
+    M := StrToInt(Copy(AStr, 6, 2));
+    D := StrToInt(Copy(AStr, 9, 2));
+    H := StrToInt(Copy(AStr, 12, 2));
+    N := StrToInt(Copy(AStr, 15, 2));
+    S := StrToInt(Copy(AStr, 18, 2));
+    ADT := EncodeDateTime(Y, M, D, H, N, S, 0);
+    Result := True;
+  except
+    Result := False;
+  end;
+end;
+
+function UtcDateTimeToUnixNs(ADT: TDateTime): Int64;
+begin
+  if ADT = 0 then
+    Exit(0);
+  Result := Round((ADT - EncodeDate(1970, 1, 1)) * C_NS_PER_DAY);
+end;
+
+function FormatIntervalBound(ADT: TDateTime): string;
+begin
+  if ADT = 0 then
+    Exit('-');
+  Result := FormatDateTime(C_ISO_FMT, ADT);
+end;
 
 // ── Welford ──────────────────────────────────────────────────────────────────
 
@@ -152,13 +203,19 @@ begin
   Print('      Double for statistical calculations.');
 end;
 
-function TOsfStatCommand.CollectStats(AMgr: TOSFDataManager): TArray<TChannelStat>;
+function TOsfStatCommand.CollectStats(AMgr: TOSFDataManager;
+  AStartNs, AEndNs: Int64): TArray<TChannelStat>;
 var
   I, J: Integer;
   Ch: TOSFDataChannel;
   W: TWelford;
   Rec: TChannelStat;
+  Ts: Int64;
+  HasLower, HasUpper, Keep: Boolean;
 begin
+  HasLower := AStartNs > 0;
+  HasUpper := AEndNs > 0;
+
   SetLength(Result, AMgr.ChannelCount);
   for I := 0 to AMgr.ChannelCount - 1 do
   begin
@@ -172,24 +229,38 @@ begin
       Rec.DataType := dtBinary;
     Rec.IsNumeric := IsNumericType(Rec.DataType);
     Rec.PrecisionLossRisk := IsInt64Type(Rec.DataType);
-    Rec.SampleCount := Ch.SampleCount;
 
     if Rec.IsNumeric and (Ch.SampleCount > 0) then
     begin
       W := Default(TWelford);
       for J := 0 to Ch.SampleCount - 1 do
-        W.Add(Ch.ValueAsDouble(J));
+      begin
+        Ts := Ch.TimestampNsAt(J);
+        Keep := True;
+        if HasLower and (Ts < AStartNs) then Keep := False;
+        if HasUpper and (Ts > AEndNs)   then Keep := False;
+        if Keep then
+          W.Add(Ch.ValueAsDouble(J));
+      end;
+      // Report the in-range sample count, not the channel's total.
+      // For an unfiltered run (no bounds) this equals Ch.SampleCount.
+      Rec.SampleCount := W.Count;
       Rec.Min := W.MinV;
       Rec.Max := W.MaxV;
       Rec.Mean := W.Mean;
       Rec.StdDev := W.StdDev;
-    end;
+    end
+    else
+      // Non-numeric channels still report total samples — there is no
+      // per-value timestamp filter to apply because no statistics run.
+      Rec.SampleCount := Ch.SampleCount;
 
     Result[I] := Rec;
   end;
 end;
 
-procedure TOsfStatCommand.EmitHuman(const AStats: TArray<TChannelStat>);
+procedure TOsfStatCommand.EmitHuman(const AStats: TArray<TChannelStat>;
+  AStartUtc, AEndUtc: TDateTime);
 const
   C_HEADER = '%-30s %-8s %-8s %10s %12s %12s %12s %12s';
   C_NUMERIC = '%-30s %-8s %-8s %10d %12.4f %12.4f %12.4f %12.4f';
@@ -198,6 +269,12 @@ var
   Rec: TChannelStat;
   AnyPrecisionLoss: Boolean;
 begin
+  if (AStartUtc <> 0) or (AEndUtc <> 0) then
+  begin
+    Printf('Interval: %s .. %s',
+      [FormatIntervalBound(AStartUtc), FormatIntervalBound(AEndUtc)]);
+    Print('');
+  end;
   Print(Format(C_HEADER, ['Channel', 'Type', 'Unit', 'Samples', 'Min', 'Max', 'Mean', 'StdDev']));
   Print(StringOfChar('-', 30 + 8 + 8 + 10 + 12 + 12 + 12 + 12 + 7));
   AnyPrecisionLoss := False;
@@ -221,12 +298,16 @@ begin
   end;
 end;
 
-procedure TOsfStatCommand.EmitJson(const AStats: TArray<TChannelStat>);
+procedure TOsfStatCommand.EmitJson(const AStats: TArray<TChannelStat>;
+  AStartUtc, AEndUtc: TDateTime);
 var
   Arr: TJSONArray;
   Obj: TJSONObject;
   Rec: TChannelStat;
+  HasFilter: Boolean;
+  Root: TJSONObject;
 begin
+  HasFilter := (AStartUtc <> 0) or (AEndUtc <> 0);
   Arr := TJSONArray.Create;
   try
     for Rec in AStats do
@@ -249,7 +330,28 @@ begin
       if Rec.PrecisionLossRisk then
         Obj.AddPair('precision_loss_risk', TJSONBool.Create(True));
     end;
-    PrintJson(Arr.Format(2));
+    if not HasFilter then
+    begin
+      // Unfiltered run keeps the historical bare-array shape so
+      // consumers parsing it do not need to change.
+      PrintJson(Arr.Format(2));
+      Arr := nil; // ownership transferred via PrintJson's no-op copy
+    end
+    else
+    begin
+      Root := TJSONObject.Create;
+      try
+        if AStartUtc <> 0 then
+          Root.AddPair('interval_start_utc', FormatIntervalBound(AStartUtc));
+        if AEndUtc <> 0 then
+          Root.AddPair('interval_end_utc',   FormatIntervalBound(AEndUtc));
+        Root.AddPair('channels', Arr);
+        Arr := nil; // now owned by Root
+        PrintJson(Root.Format(2));
+      finally
+        Root.Free;
+      end;
+    end;
   finally
     Arr.Free;
   end;
@@ -263,6 +365,9 @@ var
   Mgr: TOSFDataManager;
   Stats: TArray<TChannelStat>;
   I: Integer;
+  StartStr, EndStr: string;
+  StartUtc, EndUtc: TDateTime;
+  StartNs, EndNs: Int64;
 begin
   Positionals := PositionalArgs(['--start', '--end']);
   if Length(Positionals) < 1 then
@@ -282,6 +387,39 @@ begin
   for I := 1 to High(Positionals) do
     Channels[I - 1] := Positionals[I];
 
+  // --start / --end: each is optional; the Welford loop filters per
+  // sample on TimestampNsAt. Zero on either side means "no bound on
+  // that side"; both zero = unfiltered whole-file run.
+  StartUtc := 0;
+  EndUtc := 0;
+  StartNs := 0;
+  EndNs := 0;
+  StartStr := FlagValue('--start', '');
+  EndStr := FlagValue('--end', '');
+  if StartStr <> '' then
+  begin
+    if not ParseIso8601(StartStr, StartUtc) then
+    begin
+      PrintErrf('osftool stat: invalid --start: %s', [StartStr]);
+      Exit(EXIT_BAD_ARGS);
+    end;
+    StartNs := UtcDateTimeToUnixNs(StartUtc);
+  end;
+  if EndStr <> '' then
+  begin
+    if not ParseIso8601(EndStr, EndUtc) then
+    begin
+      PrintErrf('osftool stat: invalid --end: %s', [EndStr]);
+      Exit(EXIT_BAD_ARGS);
+    end;
+    EndNs := UtcDateTimeToUnixNs(EndUtc);
+  end;
+  if (StartNs > 0) and (EndNs > 0) and (EndNs < StartNs) then
+  begin
+    PrintErr('osftool stat: --end is earlier than --start');
+    Exit(EXIT_BAD_ARGS);
+  end;
+
   Mgr := TOSFDataManager.Create;
   try
     Mgr.OnLog := HandleLog;
@@ -297,17 +435,11 @@ begin
       end;
     end;
 
-    // --start / --end: post-load timestamp filtering is not yet wired
-    // in this build; the manager has no interval filter and the merger
-    // path is overkill for a single-file scan. Document and ignore.
-    if HasFlag('--start') or HasFlag('--end') then
-      PrintErr('osftool stat: --start / --end are accepted but not yet honoured in this build');
-
-    Stats := CollectStats(Mgr);
+    Stats := CollectStats(Mgr, StartNs, EndNs);
     if FJson then
-      EmitJson(Stats)
+      EmitJson(Stats, StartUtc, EndUtc)
     else
-      EmitHuman(Stats);
+      EmitHuman(Stats, StartUtc, EndUtc);
   finally
     Mgr.Free;
   end;
