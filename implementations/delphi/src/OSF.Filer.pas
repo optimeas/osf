@@ -22,6 +22,7 @@ uses
   System.DateUtils,
   System.Generics.Collections,
   System.JSON,
+  System.ZLib,
   Xml.XMLIntf,
   Xml.XMLDoc,
   OSF.Types,
@@ -70,6 +71,12 @@ type
   private
     FStream: TStream;
     FOwnsStream: Boolean;
+    // When the source file is OSFZ (gzip-wrapped), FStream is a
+    // TZDecompressionStream and FUnderlyingStream is the raw TFileStream
+    // underneath it. Both must be freed by Close (decompressor first).
+    // FUnderlyingStream is nil for plain OSF files and for the raw-stream
+    // OpenForRead overload (where the caller owns the source).
+    FUnderlyingStream: TStream;
     FMode: TOSFFileMode;
     FVersion: TOSFVersion;
     FMetaFormat: TOSFMetaFormat;
@@ -77,6 +84,13 @@ type
     FMetadata: TOSFFileMetadata;
     FInfoItems: TList<TOSFMetaItem>;
     FHeaderWritten: Boolean;
+
+    // Optional channel name filter. When non-empty, ReadNextBlock silently
+    // skips data blocks whose channel name (looked up in the parsed
+    // metablock) is not in the list. Info blocks (channel index $FFFF) are
+    // always delivered regardless. Names are compared case-insensitively.
+    FChannelFilter: TArray<string>;
+    FChannelIncluded: TDictionary<Word, Boolean>;
 
     // Logging — copied verbatim from TOSFLoggable because TOSFFile already
     // has an inheritance constraint and cannot subclass TOSFLoggable.
@@ -118,6 +132,10 @@ type
     function ReadInfoBlock(var Block: TOSFDataBlock): Boolean;
     function ReadDataBlock(ChannelIndex: Word; var Block: TOSFDataBlock): Boolean;
     function DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): Boolean;
+    // Reads block headers, skipping any whose channel is excluded by the
+    // active ChannelFilter, until a deliverable block is found.
+    // Returns False on clean EOF or on a truncation that cannot be recovered.
+    function SkipExcludedBlocksUntilIncluded(out ChannelIndex: Word; out StartOffset: Int64): Boolean;
 
     // Shared low-level write — emits channel index, length field, and payload.
     procedure WriteDataBlock(Channel: TOSFChannelDef; const Payload: TBytes);
@@ -134,6 +152,12 @@ type
 
     function GetChannelCount: Integer;
     function GetInfoItemCount: Integer;
+
+    // Channel filter helpers.
+    procedure SetChannelFilter(const Value: TArray<string>);
+    procedure RebuildChannelFilterMap;
+    function IsChannelExcluded(ChannelIndex: Word): Boolean;
+    procedure SkipExcludedBlock(Channel: TOSFChannelDef);
   public
     constructor Create;
     destructor Destroy; override;
@@ -223,10 +247,29 @@ type
     // Looks up a channel by its Index attribute; returns nil if not found.
     function ChannelByIndex(Index: Integer): TOSFChannelDef;
 
+    // Returns True if the channel (by metablock index) is currently
+    // included by the active filter, or if no filter is set. The filter
+    // map is built when OpenForRead completes; before OpenForRead has been
+    // called, the function returns True for every index.
+    function IsChannelIncluded(ChannelIndex: Integer): Boolean;
+
     // Logging hook — emit human-readable progress / diagnostic messages.
     // Default: unassigned (silent). DebugEnabled gates llDebug messages.
     property DebugEnabled: Boolean read FDebugEnabled write FDebugEnabled;
     property OnLog: TOSFLogEvent read FOnLog write FOnLog;
+
+    // Optional channel name filter for reads. When empty (the default), every
+    // data block is delivered to ReadNextBlock callers — existing behaviour.
+    // When populated, ReadNextBlock silently skips data blocks whose channel
+    // name is not in the list; skipped bytes are still consumed from the
+    // stream so block alignment is preserved. Info blocks (channel index
+    // $FFFF) are always delivered. Names are matched case-insensitively.
+    // The metablock itself is unaffected — Channels[] always contains every
+    // channel definition from the on-disk metablock, filter or not.
+    // The filter map is (re)built whenever ChannelFilter is set or
+    // OpenForRead completes; callers may set the filter either before or
+    // after OpenForRead.
+    property ChannelFilter: TArray<string> read FChannelFilter write SetChannelFilter;
   end;
 
 resourcestring
@@ -281,6 +324,8 @@ resourcestring
   SOSFLogWriteEquidistant = 'WriteEquidistant: channel=%d  samples=%d';
   SOSFLogWriteTimestamped = 'WriteTimestamped: channel=%d  samples=%d';
   SOSFLogFileClosed = 'File closed: %s  total bytes=%d';
+  SOSFLogChannelFilterSkip = 'Channel filter: skipping block for "%s" (%d bytes)';
+  SOSFLogOSFZDetected = 'OSFZ container detected, decompressing on the fly: %s';
 
 implementation
 
@@ -601,6 +646,81 @@ begin
   end;
 end;
 
+// ── TOSFFile — channel filter ────────────────────────────────────────────────
+
+procedure TOSFFile.SetChannelFilter(const Value: TArray<string>);
+begin
+  FChannelFilter := Value;
+  RebuildChannelFilterMap;
+end;
+
+procedure TOSFFile.RebuildChannelFilterMap;
+var
+  AllowedSet: TDictionary<string, Boolean>;
+  I: Integer;
+  Ch: TOSFChannelDef;
+  LowerName: string;
+begin
+  FChannelIncluded.Clear;
+  if Length(FChannelFilter) = 0 then
+    Exit;
+  // Build a case-insensitive set of allowed names once, then map every known
+  // channel index to True (included) or False (excluded). Lookup at read
+  // time becomes a single TryGetValue.
+  AllowedSet := TDictionary<string, Boolean>.Create;
+  try
+    for I := 0 to High(FChannelFilter) do
+      AllowedSet.AddOrSetValue(LowerCase(FChannelFilter[I]), True);
+    for I := 0 to FChannels.Count - 1 do
+    begin
+      Ch := FChannels[I];
+      LowerName := LowerCase(Ch.Name);
+      FChannelIncluded.AddOrSetValue(Word(Ch.Index), AllowedSet.ContainsKey(LowerName));
+    end;
+  finally
+    AllowedSet.Free;
+  end;
+end;
+
+function TOSFFile.IsChannelExcluded(ChannelIndex: Word): Boolean;
+var
+  Included: Boolean;
+begin
+  // Info blocks (channel index $FFFF) bypass the filter — they carry global
+  // metadata, not channel data.
+  if ChannelIndex = OSF_INFO_CHANNEL_INDEX then
+    Exit(False);
+  if Length(FChannelFilter) = 0 then
+    Exit(False);
+  if not FChannelIncluded.TryGetValue(ChannelIndex, Included) then
+    // Unknown channel — leave decision to the caller. Existing logic logs
+    // and stops the scan; the filter does not pre-empt that.
+    Exit(False);
+  Result := not Included;
+end;
+
+procedure TOSFFile.SkipExcludedBlock(Channel: TOSFChannelDef);
+var
+  LenField: UInt32;
+  Sink: TBytes;
+begin
+  // Channel must be known here — IsChannelExcluded only returns True for
+  // indices present in the metablock, so we have a valid LengthFieldSize.
+  case Channel.LengthFieldSize of
+    lfs2:
+      LenField := ReadUInt16;
+    lfs4:
+      LenField := ReadUInt32;
+  else
+    LenField := 0;
+  end;
+  if LenField = 0 then
+    Exit;
+  SetLength(Sink, LenField);
+  FStream.ReadBuffer(Sink[0], LenField);
+  Log(llDebug, SOSFLogChannelFilterSkip, [Channel.Name, LenField]);
+end;
+
 // ── TOSFFile — construction / lifecycle ───────────────────────────────────────
 
 constructor TOSFFile.Create;
@@ -608,6 +728,7 @@ begin
   inherited Create;
   FChannels := TObjectList<TOSFChannelDef>.Create(True);
   FInfoItems := TList<TOSFMetaItem>.Create;
+  FChannelIncluded := TDictionary<Word, Boolean>.Create;
   FMode := fmClosed;
   FVersion := osvUnknown;
   FHeaderWritten := False;
@@ -616,6 +737,7 @@ end;
 destructor TOSFFile.Destroy;
 begin
   Close;
+  FChannelIncluded.Free;
   FInfoItems.Free;
   FChannels.Free;
   inherited;
@@ -640,6 +762,11 @@ begin
       FreeAndNil(FStream)
     else
       FStream := nil;
+    // Free the underlying file stream after the decompressor that reads
+    // from it. Always owned by us when set (only the file overload of
+    // OpenForRead populates this field for OSFZ inputs).
+    if Assigned(FUnderlyingStream) then
+      FreeAndNil(FUnderlyingStream);
   finally
     FMode := fmClosed;
   end;
@@ -716,11 +843,40 @@ end;
 procedure TOSFFile.OpenForRead(const FileName: string);
 var
   FS: TFileStream;
+  Magic: array[0..1] of Byte;
+  IsGzip: Boolean;
 begin
   FS := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
-  FSourceName := FileName;
-  Log(llInfo, SOSFLogOpeningFile, [FileName, FS.Size]);
-  OpenForRead(FS, True);
+  try
+    FSourceName := FileName;
+    Log(llInfo, SOSFLogOpeningFile, [FileName, FS.Size]);
+
+    // gzip files start with 0x1F 0x8B (RFC 1952). Peek and rewind so the
+    // decompressor sees a complete container; non-gzip files fall through
+    // to the existing plain-stream path.
+    IsGzip := False;
+    if FS.Size >= 2 then
+    begin
+      FS.ReadBuffer(Magic, 2);
+      FS.Position := 0;
+      IsGzip := (Magic[0] = $1F) and (Magic[1] = $8B);
+    end;
+  except
+    FS.Free;
+    raise;
+  end;
+
+  if IsGzip then
+  begin
+    Log(llInfo, SOSFLogOSFZDetected, [FileName]);
+    // TZDecompressionStream with WindowBits = 15 + 32 auto-detects both
+    // zlib and gzip containers. We own the file stream underneath; the
+    // decompressor is constructed by the AStream overload below.
+    FUnderlyingStream := FS;
+    OpenForRead(TZDecompressionStream.Create(FS, 15 + 32), True);
+  end
+  else
+    OpenForRead(FS, True);
 end;
 
 procedure TOSFFile.OpenForRead(AStream: TStream; AOwnsStream: Boolean);
@@ -736,6 +892,10 @@ begin
   FChannels.Clear;
   FInfoItems.Clear;
   ReadMagicAndMeta;
+  // Channel names only become available after the metablock is parsed.
+  // Re-resolve any pre-set ChannelFilter against the freshly populated
+  // channel list so ReadNextBlock filtering kicks in immediately.
+  RebuildChannelFilterMap;
 
   Log(llInfo, SOSFLogDetectedVersion, [VersionToLogString(FVersion), MetaFormatToLogString(FMetaFormat)]);
   Log(llInfo, SOSFLogChannelsDefined, [FChannels.Count]);
@@ -957,6 +1117,33 @@ end;
 
 // ── Reading: data blocks ─────────────────────────────────────────────────────
 
+function TOSFFile.SkipExcludedBlocksUntilIncluded(out ChannelIndex: Word; out StartOffset: Int64): Boolean;
+var
+  ExcludedChannel: TOSFChannelDef;
+begin
+  repeat
+    StartOffset := 0;
+    if Assigned(FStream) then
+      StartOffset := FStream.Position;
+
+    if not TryReadChannelIndex(ChannelIndex) then
+      Exit(False);
+
+    if not IsChannelExcluded(ChannelIndex) then
+      Exit(True);
+
+    ExcludedChannel := FindChannel(ChannelIndex);
+    if not Assigned(ExcludedChannel) then
+      Exit(False); // excluded but unknown — no LengthFieldSize to skip with
+    try
+      SkipExcludedBlock(ExcludedChannel);
+    except
+      on EReadError do
+        Exit(False); // truncated mid-block while skipping
+    end;
+  until False;
+end;
+
 function TOSFFile.ReadNextBlock(out Block: TOSFDataBlock): Boolean;
 var
   ChannelIndex: Word;
@@ -965,12 +1152,7 @@ begin
   // Default() initialises managed fields (TBytes) without corrupting refcounts.
   Block := Default (TOSFDataBlock);
 
-  // Record the offset at the start of the block so warnings can pinpoint it.
-  StartOffset := 0;
-  if Assigned(FStream) then
-    StartOffset := FStream.Position;
-
-  if not TryReadChannelIndex(ChannelIndex) then
+  if not SkipExcludedBlocksUntilIncluded(ChannelIndex, StartOffset) then
     Exit(False);
   Block.ChannelIndex := ChannelIndex;
 
@@ -1536,6 +1718,21 @@ end;
 function TOSFFile.ChannelByIndex(Index: Integer): TOSFChannelDef;
 begin
   Result := FindChannel(Index);
+end;
+
+function TOSFFile.IsChannelIncluded(ChannelIndex: Integer): Boolean;
+var
+  Included: Boolean;
+begin
+  if Length(FChannelFilter) = 0 then
+    Exit(True);
+  if FChannelIncluded.TryGetValue(Word(ChannelIndex), Included) then
+    Result := Included
+  else
+    // No metablock entry for this index — by convention treat as included so
+    // that any downstream block-read warning still fires through the normal
+    // path rather than being suppressed by the filter.
+    Result := True;
 end;
 
 end.

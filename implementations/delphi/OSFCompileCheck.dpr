@@ -10,7 +10,9 @@ uses
   OSF.Data.Channels in 'src\OSF.Data.Channels.pas',
   OSF.Data.Manager  in 'src\OSF.Data.Manager.pas',
   OSF.Export        in 'src\OSF.Export.pas',
-  OSF.Export.CSV    in 'src\OSF.Export.CSV.pas';
+  OSF.Export.CSV    in 'src\OSF.Export.CSV.pas',
+  OSF.Meta.Cache    in 'src\OSF.Meta.Cache.pas',
+  OSF.Merger        in 'src\OSF.Merger.pas';
 
 begin
 end.

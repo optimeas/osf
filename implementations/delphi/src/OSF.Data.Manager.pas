@@ -54,6 +54,12 @@ type
     // required base class so the manager cannot inherit from TOSFLoggable.
     FOnLog: TOSFLogEvent;
     FDebugEnabled: Boolean;
+
+    // Pass-through channel filter. Set before LoadFromFile / LoadFromStream
+    // to cause the internal TOSFFile to skip blocks for channels not in the
+    // list. The manager itself has no filter logic; it never sees blocks for
+    // skipped channels and therefore creates no TOSFDataChannel for them.
+    FChannelFilter: TArray<string>;
     procedure Log(Level: TOSFLogLevel; const Msg: string); overload;
     procedure Log(Level: TOSFLogLevel; const Fmt: string; const Args: array of const); overload;
 
@@ -113,6 +119,14 @@ type
     // through the same handler.
     property DebugEnabled: Boolean read FDebugEnabled write FDebugEnabled;
     property OnLog: TOSFLogEvent read FOnLog write FOnLog;
+
+    // Pass-through channel filter. When non-empty, the next LoadFromFile or
+    // LoadFromStream call forwards it to the internal TOSFFile, which skips
+    // blocks for channels whose name is not in the list. Names are matched
+    // case-insensitively; the metablock is always parsed in full, so
+    // unrelated channels still appear in TOSFFile.Channels but are absent
+    // from TOSFDataManager.Channels because no blocks for them were loaded.
+    property ChannelFilter: TArray<string> read FChannelFilter write FChannelFilter;
   end;
 
 resourcestring
@@ -522,6 +536,9 @@ begin
   Filer := TOSFFile.Create;
   try
     Filer.DebugEnabled := FDebugEnabled;
+    // Forward our channel filter to the filer so excluded blocks are skipped
+    // at the stream level before they ever reach the manager.
+    Filer.ChannelFilter := FChannelFilter;
     // Forward filer log events to the user's handler. The wrapper also watches
     // for the filer's truncation warning so we can emit a summary at the end.
     Filer.OnLog := procedure(Level: TOSFLogLevel; const Msg: string)
@@ -582,16 +599,25 @@ end;
 procedure TOSFDataManager.CreateChannelsFromFiler(AFiler: TOSFFile);
 var
   I: Integer;
+  SrcDef: TOSFChannelDef;
   OwnedDef: TOSFChannelDef;
   DataChan: TOSFDataChannel;
 begin
   for I := 0 to AFiler.Channels.Count - 1 do
   begin
-    // Take an independent copy so the manager outlives the filer.
-    OwnedDef := CloneChannelDef(AFiler.Channels[I]);
-    FOwnedChannelDefs.Add(OwnedDef);
-    DataChan := CreateOSFDataChannel(OwnedDef);
-    FChannels.Add(DataChan);
+    SrcDef := AFiler.Channels[I];
+    // Skip excluded channels entirely — no def clone, no TOSFDataChannel.
+    // The filer is already skipping their blocks at the stream level, so
+    // creating an empty data channel here would only confuse downstream
+    // consumers iterating Channels[].
+    if AFiler.IsChannelIncluded(SrcDef.Index) then
+    begin
+      // Take an independent copy so the manager outlives the filer.
+      OwnedDef := CloneChannelDef(SrcDef);
+      FOwnedChannelDefs.Add(OwnedDef);
+      DataChan := CreateOSFDataChannel(OwnedDef);
+      FChannels.Add(DataChan);
+    end;
   end;
 end;
 
