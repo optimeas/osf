@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 //
 // osf::Error and osf::Result<T> — the foundation error type used by
 // every fallible operation in the OSF C++ library.

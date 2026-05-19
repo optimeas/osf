@@ -24,7 +24,7 @@ Thank you for your interest in contributing to the Open Streaming Format project
 ### Checklist for a new implementation PR
 
 - [ ] `implementations/<language>/README.md` is present and complete
-- [ ] All source files have the Apache 2.0 license header
+- [ ] All source files have the MIT license header
 - [ ] Code and comments are in English
 - [ ] At least one example demonstrating read or write works against the files in `examples/`
 - [ ] `implementations/README.md` status table is updated
@@ -57,4 +57,4 @@ Each language implementation should follow the idiomatic style of that language.
 
 ## License
 
-By contributing to this repository you agree that your contributions will be licensed under the Apache License, Version 2.0.
+By contributing to this repository you agree that your contributions will be licensed under the MIT License.

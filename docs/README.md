@@ -22,5 +22,5 @@ Each language directory follows the same layout:
 
 ---
 
-Specification documents are maintained by Optimeas GmbH and are licensed under Apache 2.0.
+Specification documents are maintained by Optimeas GmbH and are licensed under the MIT License.
 To propose a change to the specification, open an issue on GitHub with the label `specification`.

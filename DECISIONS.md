@@ -12,7 +12,7 @@ clean, well-documented, open source implementations in as many relevant programm
 ecosystems as possible.
 
 The format itself is developed and maintained by **Optimeas GmbH**. The implementations are intentionally
-open and free — anyone may use, modify, and distribute them under the Apache 2.0 license.
+open and free — anyone may use, modify, and distribute them under the MIT license.
 
 > **Vision:** OSF should become the format that carries measurement data seamlessly from sensor to
 > AI training — without conversion losses through CSV or Parquet intermediates.
@@ -21,7 +21,7 @@ open and free — anyone may use, modify, and distribute them under the Apache 2
 
 ## 2. License
 
-**Apache 2.0**, copyright 2026 Optimeas GmbH.
+**MIT**, copyright 2026 Optimeas GmbH.
 
 Chosen because:
 - It allows anyone to use the code commercially without restrictions.

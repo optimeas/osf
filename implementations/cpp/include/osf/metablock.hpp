@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 
 /// \file metablock.hpp
 /// Common OSF metablock data model and OSF5 JSON parser.

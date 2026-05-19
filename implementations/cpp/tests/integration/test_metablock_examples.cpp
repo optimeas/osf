@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 //
 // Integration tests for parse_metablock_json against the OSF5 reference
 // files under examples/generated/. These exercise the parser on real

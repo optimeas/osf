@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 //
 // Unit tests for the OSF type-string parsers
 // (parse_data_type, parse_channel_type, parse_spectrum_type).

@@ -310,4 +310,4 @@ specification documents in [docs/en](../../docs/en/osf_general.md) /
 
 ## License
 
-Apache 2.0. © 2026 Optimeas GmbH.
+MIT. © 2026 Optimeas GmbH.

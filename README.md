@@ -1,6 +1,6 @@
 # Open Streaming Format (OSF)
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/optimeas/osf/actions/workflows/ci.yml/badge.svg)](https://github.com/optimeas/osf/actions/workflows/ci.yml)
 [![osfdata on TestPyPI](https://img.shields.io/badge/osfdata-TestPyPI%20v0.1.0-blue)](https://test.pypi.org/project/osfdata/)
 
@@ -131,4 +131,4 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before
 
 Copyright 2026 Optimeas GmbH
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for the full text.
+Licensed under the MIT License. See [LICENSE](LICENSE) for the full text.

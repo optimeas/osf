@@ -1,7 +1,7 @@
 # OSF — C++ implementation
 
 ![Phase](https://img.shields.io/badge/phase-1%3A%20skeleton-orange)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](../../LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue)](../../LICENSE)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-blue)
 
 A standalone C++17 implementation of the [Open Streaming Format](../../README.md) specification. Reads and writes `.osf` and `.osfz` files natively — no FFI, no Rust dependency, idiomatic modern C++. This directory currently holds the Phase 1 skeleton: CMake build system, vendored `tl::expected`, foundation `osf::Error` and `osf::Result<T>` types, and a GoogleTest smoke test.

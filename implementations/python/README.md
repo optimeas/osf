@@ -235,4 +235,4 @@ parity for all production use cases is verified.
 
 ## License
 
-Apache 2.0. © 2026 Optimeas GmbH.
+MIT. © 2026 Optimeas GmbH.

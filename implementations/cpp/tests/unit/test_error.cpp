@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 //
 // Smoke test for the foundation API: osf::Error, osf::Result<T>,
 // osf::version(). Designed to fail loudly if the basics break;

@@ -19,7 +19,7 @@ when deeper context is needed.
 Open Streaming Format — a binary, block-oriented file format for time-series
 measurement and process data. Designed for embedded streaming write and fast
 block-wise read on servers/desktops/AI pipelines. Maintained by Optimeas GmbH;
-implementations are Apache 2.0.
+implementations are MIT-licensed.
 
 Two on-disk versions: **OSF4** (XML metablock, classic) and **OSF5** (JSON
 metablock, simplified control byte, no trailer). Backward-compatible.

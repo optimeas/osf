@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.7.0] — 2026-05-20
+
+### Changed
+
+- Relicensed the entire project from the Apache License 2.0 to the MIT License. The `LICENSE` file, every source-file header (Delphi, Rust, C++), package metadata (`Cargo.toml`, `pyproject.toml`), and documentation were updated accordingly. Vendored third-party code under `implementations/cpp/third_party/` keeps its own upstream licenses (`tl::expected` CC0-1.0, `nlohmann/json` MIT). The `[0.1.0]` entry below is left intact as a historical record — that release did ship under Apache 2.0.
+
+---
+
 ## [0.6.0] — 2026-05-19
 
 ### Added

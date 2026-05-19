@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 //
 // osf.hpp — Umbrella header for the OSF C++ library.
 //

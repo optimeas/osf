@@ -1,5 +1,5 @@
-# Copyright 2026 Optimeas GmbH
-# Licensed under the Apache License, Version 2.0
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Optimeas GmbH
 #
 # Type stubs for the native osf._osf extension module. These are
 # hand-written rather than auto-generated so the public surface is
