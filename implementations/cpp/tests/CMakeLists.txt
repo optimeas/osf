@@ -59,6 +59,40 @@ osf_set_warnings(test_header)
 gtest_discover_tests(test_header)
 
 # ---------------------------------------------------------------------------
+# test_types — type-string parser unit tests (Phase 3b).
+# ---------------------------------------------------------------------------
+
+add_executable(test_types
+    unit/test_types.cpp
+)
+
+target_link_libraries(test_types PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_types)
+
+gtest_discover_tests(test_types)
+
+# ---------------------------------------------------------------------------
+# test_metablock — OSF5 JSON metablock parser unit tests (Phase 3b).
+# ---------------------------------------------------------------------------
+
+add_executable(test_metablock
+    unit/test_metablock.cpp
+)
+
+target_link_libraries(test_metablock PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_metablock)
+
+gtest_discover_tests(test_metablock)
+
+# ---------------------------------------------------------------------------
 # test_header_examples — magic-header tests against reference files.
 # ---------------------------------------------------------------------------
 
