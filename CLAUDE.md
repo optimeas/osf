@@ -1,6 +1,6 @@
 # Claude Code Session State
 
-Last updated: 2026-05-10 (after Phase 2b cleanup).
+Last updated: 2026-05-19 (after Phase 3 cleanup).
 
 This file is a hand-off document for the next Claude Code session. Read
 [DECISIONS.md](DECISIONS.md) §20 and [STATUS.md](STATUS.md) for the
@@ -19,36 +19,71 @@ phase plan in DECISIONS.md §20.
 | 1 | Skeleton (CMake, foundation Error/Result, GoogleTest) | `08d5b7e` |
 | 2a | Magic-header API design (header.hpp with OsfVersion, MagicHeader, 3 overload declarations) | `d14cb54` |
 | 2b | Magic-header implementation + 16 unit + 4 integration tests | `7926e9a` |
+| 3 | OSF5 JSON metablock parser: nlohmann/json vendored, types.hpp + metablock.hpp + src/types.cpp + src/metablock.cpp, 9 type-parser unit + 20 metablock-parser unit + 3 metablock-integration tests | `152d1ba` |
 
 Cleanup-mini commits:
 
 - Phase 1: `0be729b` STATUS, `64a6a26` CHANGELOG `[0.4.0]`.
 - Phase 2b: `eb889a8` STATUS, `5826b5b` CHANGELOG `[0.5.0]` + cpp `[0.0.2]`.
+- Phase 3: `36b96a2` STATUS, `11210f8` CHANGELOG `[0.6.0]` + cpp `[0.0.3]`.
 
 ### Test status
 
-25/25 ctest cases passing locally on Windows (MSVC 19.50, VS 18 generator,
-CMake 4.2.3). 0 CMake-configure warnings, 0 compile warnings under `/W4
-/permissive-`. Last verified 2026-05-10 against commit `7926e9a`.
+57/57 ctest cases passing locally on Windows (MSVC 19.50.35717, VS 18
+generator, CMake 4.2.3). 0 CMake-configure warnings, 0 compile warnings
+under `/W4 /permissive-`. Last verified 2026-05-19 against commit
+`152d1ba`.
+
+### Network caveat (local environment)
+
+CMake `FetchContent` over HTTPS fails on this Windows host with
+`CRYPT_E_NO_REVOCATION_CHECK` (cannot reach the CRL endpoint).
+Workaround used during Phase 3:
+
+```powershell
+# one-shot, idempotent — keep the extracted dir around between runs
+Invoke-WebRequest `
+  -Uri "https://github.com/google/googletest/archive/refs/tags/v1.15.2.tar.gz" `
+  -OutFile "$env:TEMP\googletest-v1.15.2.tar.gz" -UseBasicParsing
+Push-Location $env:TEMP; New-Item -ItemType Directory -Force gtest-extract |
+  Out-Null; Set-Location gtest-extract
+& "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" `
+  -E tar xzf "$env:TEMP\googletest-v1.15.2.tar.gz"; Pop-Location
+```
+
+Then configure with:
+
+```powershell
+cmake -B implementations\cpp\build -S implementations\cpp `
+  -D FETCHCONTENT_SOURCE_DIR_GOOGLETEST="$env:TEMP\gtest-extract\googletest-1.15.2"
+```
+
+`Invoke-WebRequest` uses the Windows certificate store and succeeds where
+both `curl` and CMake's downloader fail. The same workaround will be
+needed for any future `FetchContent` integration on this host.
 
 ### Pending
 
-**Phase 3 — OSF5 JSON metablock parser** is the immediate next step.
+**Phase 4 — OSF4 XML metablock parser** is the immediate next step.
 
-- Vendor `nlohmann/json` (single-header, MIT licence) under
-  `implementations/cpp/third_party/nlohmann-json/` following the
+- Vendor `pugixml` (single-pair `pugixml.hpp` + `pugixml.cpp` + `pugiconfig.hpp`,
+  MIT licence) under `implementations/cpp/third_party/pugixml/` following the
   established Phase-1 vendoring pattern (LICENSE prefixed with two
-  provenance lines, version-pinned via tag, single header in a
-  subdirectory mirroring the upstream layout).
-- Implement metablock structs and parser per spec rev 2026-05-04.
-  See DECISIONS §16 for the data-type set: `pair`/`triple`/`candata`
-  removed, `gpsdata` → `gpslocation` (with field-order correction),
-  unsigned-int datatypes (`uint8`/`uint16`/`uint32`/`uint64`) added.
-- Rust reference: `implementations/rust/osf-core/src/meta_json.rs` —
-  uses `serde_json::Value` with manual field picking (no derive,
-  forward-compat). Translate the form idiomatically.
-- Likely commit shape (similar to Phase 2): vendor → API design →
-  implementation → unit tests → integration tests → cleanup-mini.
+  provenance lines, version-pinned via tag, sources in a subdirectory
+  mirroring the upstream layout). Note that pugixml has one .cpp file
+  unlike the prior two header-only vendors, so it needs to compile into
+  `osf_core` directly — not via `osf::headers` SYSTEM include.
+- Implement `osf::parse_metablock_xml(uint8_t const*, size_t)` overload
+  pair against the existing `MetaBlock` data model from Phase 3 — both
+  parsers now share `include/osf/metablock.hpp`. Symmetric population
+  with the JSON parser is the success criterion (every field one
+  populates, the other populates).
+- Rust reference: `implementations/rust/osf-core/src/meta_xml.rs`.
+- Likely commit shape (similar to Phase 2 / Phase 3): vendor → API
+  surface (declaration only, adds one overload to the existing header)
+  → implementation → unit tests → integration tests against
+  `examples/generated/osf4_*.osf` plus `examples/motorbike.osf` and
+  `examples/steam_loco.osf` → cleanup-mini.
 
 ## Toolchain notes (Windows)
 
