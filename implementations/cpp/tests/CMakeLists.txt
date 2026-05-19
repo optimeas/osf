@@ -115,3 +115,24 @@ target_compile_definitions(test_header_examples PRIVATE
 osf_set_warnings(test_header_examples)
 
 gtest_discover_tests(test_header_examples)
+
+# ---------------------------------------------------------------------------
+# test_metablock_examples — OSF5 metablock parser tests against
+# reference files in examples/generated/ (Phase 3b).
+# ---------------------------------------------------------------------------
+
+add_executable(test_metablock_examples
+    integration/test_metablock_examples.cpp
+)
+
+target_link_libraries(test_metablock_examples PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_compile_definitions(test_metablock_examples PRIVATE
+    OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+
+osf_set_warnings(test_metablock_examples)
+
+gtest_discover_tests(test_metablock_examples)
