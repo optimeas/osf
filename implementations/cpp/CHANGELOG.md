@@ -6,6 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-05-19
+
+### Added
+
+- OSF5 JSON metablock parser (`osf::parse_metablock_json`) in two
+  overloads: `std::uint8_t const*` + size and `std::string_view`.
+- `osf::DataType`, `osf::ChannelType`, `osf::SpectrumType` enums
+  mirroring the spec rev 2026-05-04 datatype set (`pair`, `triple`,
+  `candata` removed; `gpsdata` renamed to `gpslocation`; unsigned-int
+  datatypes `uint8`..`uint64` added).
+- `osf::FileInfo`, `osf::Channel`, `osf::Info`, `osf::MetaBlock`
+  structs as the shared metablock data model (used by both the OSF5
+  parser landing in this release and the OSF4 parser arriving in
+  Phase 4). `std::optional<T>` everywhere the Rust reference has
+  `Option<T>`; default member initialisers throughout.
+- `osf::parse_data_type`, `osf::parse_channel_type`,
+  `osf::parse_spectrum_type` wire-string-to-enum helpers.
+  `parse_data_type` rejects datatypes removed in spec rev
+  2026-05-04 with `Error::Code::RemovedInSpec` and a replacement-hint
+  message; unknown spellings fall through to `Unsupported`.
+- Three new `osf::Error::Code` values: `InvalidMetablock`,
+  `RemovedInSpec`, `JsonParseError`.
+- Vendored `nlohmann/json` v3.11.3 (single-header, MIT) under
+  `third_party/nlohmann-json/`; followed the same pattern as
+  `tl-expected`: byte-identical drop, SHA-256 of `json.hpp` matches
+  the upstream release asset, LICENSE prefixed with two provenance
+  lines.
+- `tests/unit/test_types.cpp` — 9 unit tests for the type-string
+  parsers (all current datatype spellings, `bytearray` alias,
+  removed-in-spec rejection, unknown-spelling fallback, channel-type
+  and spectrum-type spellings).
+- `tests/unit/test_metablock.cpp` — 20 unit tests for
+  `parse_metablock_json` covering happy-path field round-trip,
+  forward-compatibility (unknown top-level + deprecated channel
+  fields tolerated), every required-field-missing case, invalid
+  `sizeoflengthvalue`, malformed JSON, non-object root, non-array
+  channels/infos, channel-index out-of-u16-range, overload agreement,
+  null-pointer edge cases.
+- `tests/integration/test_metablock_examples.cpp` — 3 integration
+  tests against the OSF5 reference files in `examples/generated/`:
+  snapshot check on `osf5_equidistant.osf`; every `osf5_*.osf`
+  parses with non-empty channels and valid `sizeoflengthvalue`;
+  `osf5_gpslocation.osf` declares a `GpsLocation` channel.
+
+### Changed
+
+- `include/osf/osf.hpp` umbrella now also re-exports `metablock.hpp`
+  and `types.hpp`.
+- `osf_core` library target gains two translation units
+  (`src/metablock.cpp`, `src/types.cpp`).
+- `osf::headers` interface target gains the second SYSTEM include
+  path (`third_party/nlohmann-json/`).
+
 ## [0.0.2] - 2026-05-10
 
 ### Added

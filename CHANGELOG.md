@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.6.0] — 2026-05-19
+
+### Added
+
+- C++ implementation: Phase 3 OSF5 JSON metablock parser landed. Public API: `osf::DataType` / `osf::ChannelType` / `osf::SpectrumType` enums (spec rev 2026-05-04 datatype set: `pair` / `triple` / `candata` removed, `gpsdata` → `gpslocation`, unsigned-int datatypes added), `osf::FileInfo` / `osf::Channel` / `osf::Info` / `osf::MetaBlock` structs, `osf::parse_metablock_json` in two overloads (`std::uint8_t const*` + size, `std::string_view`), plus `osf::parse_data_type` / `osf::parse_channel_type` / `osf::parse_spectrum_type` type-string helpers. Implementation in `src/metablock.cpp` translates the Rust reference (`implementations/rust/osf-core/src/meta_json.rs` + `meta.rs`) idiomatically: `nlohmann::json::parse(..., allow_exceptions=false)` keeps the core API exception-free, deprecated channel fields are tolerated silently, the OSFGenerator-style short geolocation spelling (`latitude=` without `created_at_`) is accepted on read. Three new `Error::Code` values: `InvalidMetablock`, `RemovedInSpec`, `JsonParseError`. Vendored `nlohmann/json` v3.11.3 (single-header form, MIT) under `third_party/nlohmann-json/`. Test suite extended from 25 to 57 cases: 9 type-parser unit tests, 20 metablock-parser unit tests, 3 integration tests against the OSF5 reference files in `examples/generated/`.
+
+### Notes
+
+- Per-package release notes for the C++ library are in [`implementations/cpp/CHANGELOG.md`](implementations/cpp/CHANGELOG.md). Repo and per-package version lines remain explicitly decoupled: repo at 0.6.0, cpp library at 0.0.3.
+
+---
+
 ## [0.5.0] — 2026-05-10
 
 ### Added
