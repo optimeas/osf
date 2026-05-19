@@ -66,6 +66,13 @@ target_include_directories(osf_headers SYSTEM INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/tl-expected"
 )
 
+# Vendored nlohmann/json (single-header, MIT). Used by the OSF5
+# metablock parser. Attached SYSTEM to suppress upstream warnings
+# under our /W4 /permissive- and -Wall -Wextra -Werror profiles.
+target_include_directories(osf_headers SYSTEM INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann-json"
+)
+
 # osf::osf — core library. Static by default, shared if BUILD_SHARED_LIBS=ON.
 # The internal target name is osf_core (consistent with osf_headers); the
 # OUTPUT_NAME property keeps the produced file as libosf.a / osf.lib.
