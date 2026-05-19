@@ -29,7 +29,9 @@ uses
   OSF.Types,
   OSF.Log,
   OSF.Data.Manager,
+  OSF.Export,
   OSF.Export.CSV,
+  OSF.Export.CSV.Unified,
   OSF.Merger,
   OsfToolConfig;
 
@@ -94,35 +96,40 @@ begin
   Print('  channel      Optional channel names (omit for all)');
   Print('');
   Print('Options:');
-  Print('  --format <fmt>        Output format: csv (default; only csv supported today)');
-  Print('  --start <time>        Only export samples from this UTC time (ISO 8601)');
-  Print('  --end <time>          Only export samples up to this UTC time (ISO 8601)');
-  Print('  --decimal-sep <c>     CSV decimal separator: comma (default) or dot');
-  Print('  --encoding <enc>      iso-8859-1 (default) or utf-8');
-  Print('  --exclude-empty       Skip channels with 0 samples');
-  Print('  --json                Result summary as JSON');
+  Print('  --format <fmt>            Output format: csv (default), unified-csv');
+  Print('  --timestamp-format <fmt>  Timestamp format for unified-csv:');
+  Print('                              datetime (default), seconds, iso8601, nanoseconds');
+  Print('  --start <time>            Only export samples from this UTC time (ISO 8601)');
+  Print('  --end <time>              Only export samples up to this UTC time (ISO 8601)');
+  Print('  --decimal-sep <c>         Decimal separator: comma (default) or dot');
+  Print('  --encoding <enc>          iso-8859-1 (default) or utf-8');
+  Print('  --exclude-empty           Skip channels with 0 samples');
+  Print('  --json                    Result summary as JSON');
   Print('  --quiet / --verbose');
 end;
 
 function TOsfExportCommand.DoExecute: Integer;
 var
   Positionals: TArray<string>;
-  InputFile, OutputFile, FmtName, DecStr, EncName: string;
+  InputFile, OutputFile, FmtName, DecStr, EncName, TsFmtStr: string;
   StartStr, EndStr: string;
   StartUtc, EndUtc: TDateTime;
-  HasInterval: Boolean;
+  HasInterval, UseUtf8: Boolean;
   Channels: TArray<string>;
   Mgr, OwnedMgr: TOSFDataManager;
   Merger: TOSFMerger;
-  Exporter: TOSFCSVExporter;
+  Exporter: TOSFExporter;
   Cfg: TOsfToolConfig;
   DecSep: Char;
+  TsFmt: TUnifiedCSVTimestampFormat;
   I: Integer;
   OutSize: Int64;
   SummaryObj: TJSONObject;
 begin
   Positionals := PositionalArgs([
-    '--format', '--start', '--end', '--decimal-sep', '--encoding']);
+    '--format', '--timestamp-format',
+    '--start', '--end',
+    '--decimal-sep', '--encoding']);
   if Length(Positionals) < 2 then
   begin
     PrintErr('osftool export: expected <inputfile> <outputfile>');
@@ -132,9 +139,28 @@ begin
   OutputFile := Positionals[1];
 
   FmtName := LowerCase(FlagValue('--format', 'csv'));
-  if FmtName <> 'csv' then
+  if (FmtName <> 'csv') and (FmtName <> 'unified-csv') then
   begin
-    PrintErrf('osftool export: unsupported format "%s" (only csv supported)', [FmtName]);
+    PrintErrf('osftool export: unsupported format "%s" (expected csv or unified-csv)', [FmtName]);
+    Exit(EXIT_BAD_ARGS);
+  end;
+
+  // --timestamp-format only affects unified-csv. We still parse it
+  // unconditionally so an invalid value fails loudly rather than being
+  // silently dropped on a future format switch.
+  TsFmtStr := LowerCase(FlagValue('--timestamp-format', 'datetime'));
+  if TsFmtStr = 'datetime' then
+    TsFmt := tfDateTime
+  else if TsFmtStr = 'seconds' then
+    TsFmt := tfSeconds
+  else if (TsFmtStr = 'iso8601') or (TsFmtStr = 'iso-8601') then
+    TsFmt := tfISO8601
+  else if (TsFmtStr = 'nanoseconds') or (TsFmtStr = 'ns') then
+    TsFmt := tfNanoseconds
+  else
+  begin
+    PrintErrf('osftool export: unknown --timestamp-format "%s" (expected datetime / seconds / iso8601 / nanoseconds)',
+      [TsFmtStr]);
     Exit(EXIT_BAD_ARGS);
   end;
 
@@ -242,14 +268,32 @@ begin
       Mgr := OwnedMgr;
     end;
 
-    Exporter := TOSFCSVExporter.Create(Mgr);
+    UseUtf8 := SameText(EncName, 'utf-8') or SameText(EncName, 'utf8');
+    if FmtName = 'unified-csv' then
+      Exporter := TOSFUnifiedCSVExporter.Create(Mgr)
+    else
+      Exporter := TOSFCSVExporter.Create(Mgr);
     try
       Exporter.OnLog := HandleLog;
       Exporter.DebugEnabled := FVerbose;
-      Exporter.DecimalSeparator := DecSep;
       Exporter.ExcludeEmptyChannels := HasFlag('--exclude-empty');
-      if SameText(EncName, 'utf-8') or SameText(EncName, 'utf8') then
-        Exporter.Encoding := TEncoding.UTF8; // exporter does not free a user-provided encoding
+      // The two exporter classes do not share a property base so we
+      // type-dispatch here. Property semantics are identical in both:
+      // DecimalSeparator is a Char, Encoding is owned by the exporter
+      // only when the exporter constructed it itself.
+      if Exporter is TOSFUnifiedCSVExporter then
+      begin
+        TOSFUnifiedCSVExporter(Exporter).DecimalSeparator := DecSep;
+        TOSFUnifiedCSVExporter(Exporter).TimestampFormat := TsFmt;
+        if UseUtf8 then
+          TOSFUnifiedCSVExporter(Exporter).Encoding := TEncoding.UTF8;
+      end
+      else
+      begin
+        TOSFCSVExporter(Exporter).DecimalSeparator := DecSep;
+        if UseUtf8 then
+          TOSFCSVExporter(Exporter).Encoding := TEncoding.UTF8;
+      end;
       try
         Exporter.Export(OutputFile);
       except
