@@ -25,6 +25,11 @@ uses
   System.ZLib,
   Xml.XMLIntf,
   Xml.XMLDoc,
+  // OmniXML — pure-Pascal DOM. Pulling it in registers the vendor so we
+  // can route ParseXMLMeta away from MSXML; that keeps OSF4 reading
+  // working on hosts where MSXML / IE is missing or broken.
+  Xml.omnixmldom,
+  Xml.XMLDom,
   OSF.Types,
   OSF.Channel,
   OSF.Log;
@@ -843,51 +848,70 @@ end;
 procedure TOSFFile.OpenForRead(const FileName: string);
 var
   FS: TFileStream;
-  Magic: array[0..1] of Byte;
-  IsGzip: Boolean;
 begin
   FS := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
   try
     FSourceName := FileName;
     Log(llInfo, SOSFLogOpeningFile, [FileName, FS.Size]);
-
-    // gzip files start with 0x1F 0x8B (RFC 1952). Peek and rewind so the
-    // decompressor sees a complete container; non-gzip files fall through
-    // to the existing plain-stream path.
-    IsGzip := False;
-    if FS.Size >= 2 then
-    begin
-      FS.ReadBuffer(Magic, 2);
-      FS.Position := 0;
-      IsGzip := (Magic[0] = $1F) and (Magic[1] = $8B);
-    end;
   except
     FS.Free;
     raise;
   end;
-
-  if IsGzip then
-  begin
-    Log(llInfo, SOSFLogOSFZDetected, [FileName]);
-    // TZDecompressionStream with WindowBits = 15 + 32 auto-detects both
-    // zlib and gzip containers. We own the file stream underneath; the
-    // decompressor is constructed by the AStream overload below.
-    FUnderlyingStream := FS;
-    OpenForRead(TZDecompressionStream.Create(FS, 15 + 32), True);
-  end
-  else
-    OpenForRead(FS, True);
+  // The stream overload handles transparent OSFZ (gzip) detection now,
+  // so we just hand it the file stream and let it decide.
+  OpenForRead(FS, True);
 end;
 
 procedure TOSFFile.OpenForRead(AStream: TStream; AOwnsStream: Boolean);
 var
   I: Integer;
   Ch: TOSFChannelDef;
+  Magic: array[0..1] of Byte;
+  SavedPos: Int64;
+  IsGzip: Boolean;
 begin
   if FMode <> fmClosed then
     raise EOSFException.Create(SOSFFileAlreadyOpen);
-  FStream := AStream;
-  FOwnsStream := AOwnsStream;
+
+  // Detect gzip on any seekable stream so callers handing us a raw
+  // TFileStream (TOSFDataManager.LoadFromFile, the merger's per-file
+  // loader, …) still get transparent OSFZ support. Non-seekable streams
+  // (e.g. a network pipe) are trusted as-is.
+  IsGzip := False;
+  if (AStream <> nil) and (AStream.Size >= 2) then
+  begin
+    try
+      SavedPos := AStream.Position;
+      AStream.ReadBuffer(Magic, 2);
+      AStream.Position := SavedPos;
+      IsGzip := (Magic[0] = $1F) and (Magic[1] = $8B);
+    except
+      // Stream that doesn't support seek — fall through as plain OSF.
+      IsGzip := False;
+    end;
+  end;
+
+  if IsGzip then
+  begin
+    if FSourceName <> '' then
+      Log(llInfo, SOSFLogOSFZDetected, [FSourceName])
+    else
+      Log(llInfo, SOSFLogOSFZDetected, ['<stream>']);
+    // FUnderlyingStream adopts AStream only if the caller asked us to.
+    // The decompressor is always owned by us — it's our own construction.
+    if AOwnsStream then
+      FUnderlyingStream := AStream
+    else
+      FUnderlyingStream := nil;
+    FStream := TZDecompressionStream.Create(AStream, 15 + 32);
+    FOwnsStream := True;
+  end
+  else
+  begin
+    FStream := AStream;
+    FOwnsStream := AOwnsStream;
+  end;
+
   FMode := fmRead;
   FChannels.Clear;
   FInfoItems.Clear;
@@ -1035,11 +1059,19 @@ end;
 procedure TOSFFile.ParseXMLMeta(const Data: TBytes);
 var
   XMLDoc: IXMLDocument;
+  Doc: TXMLDocument;
   XMLText: string;
   RootNode: IXMLNode;
 begin
   XMLText := TEncoding.UTF8.GetString(Data);
-  XMLDoc := TXMLDocument.Create(nil);
+  Doc := TXMLDocument.Create(nil);
+  // Pin the DOM vendor to OmniXML (pure Pascal). The default on Windows
+  // is MSXML, which is unavailable on stripped-down hosts and raises
+  // EOleException 'Microsoft MSXML ist nicht installiert' before the
+  // first byte of XML is parsed. Routing through OmniXML keeps OSF4
+  // metablock reads working everywhere this binary deploys.
+  Doc.DOMVendor := GetDOMVendor(sOmniXmlVendor);
+  XMLDoc := Doc;
   XMLDoc.LoadFromXML(XMLText);
   XMLDoc.Active := True;
 
