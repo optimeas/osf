@@ -26,6 +26,20 @@ struct Error {
         InvalidMagicHeader,
         UnsupportedVersion,
         MagicHeaderTooLong,
+        /// Metablock body was structurally malformed: missing required
+        /// field, unparseable number, invalid `sizeoflengthvalue`, etc.
+        /// The metablock is the contract for the binary blocks that
+        /// follow, so a malformed metablock rejects the whole file.
+        InvalidMetablock,
+        /// Metablock referenced a string or datatype that was removed in
+        /// spec revision 2026-05-04 (`pair`, `triple`, `candata`,
+        /// `gpsdata`). The block decoder cannot reproduce the obsolete
+        /// payload layout from a current build, so this is rejected
+        /// rather than best-effort decoded.
+        RemovedInSpec,
+        /// JSON parser (nlohmann::json) could not tokenise the metablock
+        /// body. Carries the parser's diagnostic in `message`.
+        JsonParseError,
     };
 
     Code code = Code::Unknown;

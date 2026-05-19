@@ -14,6 +14,9 @@ std::string_view error_category_name(Error::Code code) noexcept {
         case Error::Code::InvalidMagicHeader: return "InvalidMagicHeader";
         case Error::Code::UnsupportedVersion: return "UnsupportedVersion";
         case Error::Code::MagicHeaderTooLong: return "MagicHeaderTooLong";
+        case Error::Code::InvalidMetablock:   return "InvalidMetablock";
+        case Error::Code::RemovedInSpec:      return "RemovedInSpec";
+        case Error::Code::JsonParseError:     return "JsonParseError";
     }
     // fallback for cast-from-int values outside the declared enumerators
     return "Unknown";

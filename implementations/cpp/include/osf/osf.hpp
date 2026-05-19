@@ -10,4 +10,6 @@
 
 #include <osf/error.hpp>
 #include <osf/header.hpp>
+#include <osf/metablock.hpp>
+#include <osf/types.hpp>
 #include <osf/version.hpp>
