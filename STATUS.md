@@ -74,6 +74,8 @@ osf/
 │   │   ├── demos/osfviewer/         — viewer (uses TeeChart)
 │   │   ├── demos/osfgenerator/      — writes the reference set
 │   │   ├── demos/osfcsvexport/      — OSF → CSV export demo
+│   │   ├── demos/osfmerger/         — VCL merger GUI (OsfMerger, Win64)
+│   │   ├── tools/osftool/           — osftool CLI (9 verbs, Win64)
 │   │   └── OSFCompileCheck.dpr      — compile-only smoke test
 │   ├── rust/                        — Cargo workspace; foundation for Python (DECISIONS §18)
 │   │   └── osf-core/                — read + write + transparent OSFZ complete
@@ -84,6 +86,7 @@ osf/
 │   ├── motorbike.osf                — real field sample
 │   ├── steam_loco.osf + .csv        — real field sample
 │   ├── weather_station.osfz         — real gzip-OSFZ field sample
+│   ├── Testdata Train OSFZ/         — one week of OSF4-OSFZ field recordings (346 files, daily dirs)
 │   └── generated/                   — 17 reference files (from OSFGenerator)
 ├── CHANGELOG.md, DECISIONS.md, CONTRIBUTING.md, README.md, LICENSE
 └── STATUS.md                         — this file
@@ -100,15 +103,19 @@ osf/
 | `OSF.Types` | `TOSFDataType` (only current types — pair/triple/candata/gpsdata are gone), `TOSFVersion`, `TOSFGpsLocation`, `TBlockContent`, helpers (`OSFDataTypeFromString`, `OSFNowAsUnixNs`, …) |
 | `OSF.Log` | `TOSFLogEvent`, `TOSFLogLevel`, `TOSFLoggable` |
 | `OSF.Channel` | `TOSFChannelDef` — has `SampleRate: Double`; no longer has `Scale`, `Offset`, `PhysicalUnit1..3`, `PhysicalDimension1..3` |
-| `OSF.Filer` | `TOSFFile` — streaming reader/writer for OSF4 and OSF5. `WriteEquidistantBlock(...)` requires `Channel.SampleRate > 0` and a non-zero `FirstTimestampNs` to start a new segment. `WriteTimestampedSample/Block/Doubles` for timestamped channels. Auto-appends/strips the `0x00` for `string`/`binary`. |
+| `OSF.Filer` | `TOSFFile` — streaming reader/writer for OSF4 and OSF5. `WriteEquidistantBlock(...)` requires `Channel.SampleRate > 0` and a non-zero `FirstTimestampNs` to start a new segment. `WriteTimestampedSample/Block/Doubles` for timestamped channels. Auto-appends/strips the `0x00` for `string`/`binary`. Adds an optional read-side `ChannelFilter: TArray<string>` (skips blocks of channels not in the list — info blocks always pass through). Transparent **OSFZ (gzip) decompression**: `OpenForRead` peeks the `1F 8B` magic and wraps the stream in `TZDecompressionStream`. OSF4 XML metablock is parsed via **OmniXML** (`GetDOMVendor(sOmniXmlVendor)`) so reads no longer need MSXML installed. |
 | `OSF.Data.Channels` | Typed in-memory channels. **`TOSFEquidistantDataChannel.Segments: TList<TOSFChannelSegment>`** maps the flat `Values` list onto absolute time — every `bcStartData` opens a new segment with `(StartTimestampNs, StartIndex, SampleCount)`. |
-| `OSF.Data.Manager` | `TOSFDataManager.LoadFromFile/Stream` — high-level read; populates typed channels |
+| `OSF.Data.Manager` | `TOSFDataManager.LoadFromFile/Stream` — high-level read; populates typed channels. Pass-through `ChannelFilter: TArray<string>` forwarded to the internal `TOSFFile`; excluded channels get no `TOSFDataChannel` at all. |
 | `OSF.Export` | `TOSFExporter` abstract base (`ExcludeEmptyChannels`, `AbsoluteTimestamps`) |
-| `OSF.Export.CSV` | `TOSFCSVExporter` — `(DecimalSeparator, ColumnSeparator, Encoding, TimestampFormat)` |
+| `OSF.Export.CSV` | `TOSFCSVExporter` — per-channel XY CSV; `(DecimalSeparator, ColumnSeparator, Encoding, TimestampFormat)` |
+| `OSF.Export.CSV.Unified` | `TOSFUnifiedCSVExporter` — single shared timeline: one timestamp column + one value column per channel, empty cell where a channel has no sample. `TUnifiedCSVTimestampFormat` (datetime / seconds / iso8601 / nanoseconds). O(N) cursor-walk over the merged, de-duplicated timeline. |
+| `OSF.Meta.Cache` | `TOSFMetaCache` — sidecar `.json` per OSF/OSFZ file (source size + mtime validity stamp, global and per-channel first/last timestamps and sample counts; `CachePathFor` maps `foo.osf`/`foo.osfz` → `foo.json`). `TOSFMetaCacheBuilder` scans a file via `TOSFFile` discarding sample payloads. |
+| `OSF.Merger` | `TOSFMerger` — scans a directory (or explicit `FileList`) for OSF/OSFZ files overlapping a UTC interval, merges selected channels into a single OSF4/OSF5 output. Cache-driven file selection, `osSkip`/`osOverwrite` overlap strategy, per-sample interval clipping. Output is emitted as `bcAbsTimeStampData` (equidistant inputs expanded to per-sample timestamps). |
 
 **`OSFCompileCheck.dpr`** at the implementation root is a no-form `uses`-only
-program; running `dcc32 -B OSFCompileCheck.dpr` from `implementations/delphi/`
-gives a clean compile signal after refactors.
+program covering every `OSF.*` unit (including `OSF.Meta.Cache` and
+`OSF.Merger`); running `dcc32 -B OSFCompileCheck.dpr` from
+`implementations/delphi/` gives a clean compile signal after refactors.
 
 ---
 
@@ -119,9 +126,43 @@ gives a clean compile signal after refactors.
 | `demos/osfviewer/` | Loads an OSF file, lists channels, renders selected channel as a TeeChart. Uses TeeChart units — only builds inside the IDE (search path defined in the .dproj). |
 | `demos/osfgenerator/` | Writes the 17-file reference set (8 OSF4 + 9 OSF5) into `examples/generated/`. Form has output-dir picker, OSF4/OSF5 toggles, samples-per-channel spinedit, log memo. |
 | `demos/osfcsvexport/` | Pipeline demo: `TOSFFile` → `TOSFDataManager` → `TOSFCSVExporter`. Exposes the four exporter options + a debug toggle. |
+| `demos/osfmerger/` | VCL front-end for `TOSFMerger` (`OsfMerger.exe`, Win64). PageControl with directory-scan / explicit-file-list tabs, channel-filter memo, overlap + output-format options, scan/merge/save actions, found-files and merge-result list views, debug toggle + log memo. |
 
-All three projects compile clean with `dcc32` (Delphi 12 / RAD Studio 23.0;
-`OSFViewer` only via IDE because of TeeChart).
+`osfviewer` / `osfgenerator` / `osfcsvexport` compile with `dcc32`
+(`OSFViewer` only via IDE because of TeeChart); `osfmerger` compiles
+Win64 with `dcc64`. Delphi 12 / RAD Studio 23.0.
+
+---
+
+## Delphi CLI — osftool
+
+`implementations/delphi/tools/osftool/` — a verb-based command-line tool,
+Win64-primary. `OsfTool.dproj` also carries `OSX64` / `OSXARM64` /
+`Linux64` build configurations; the source is conditional-compilation
+clean for those targets (`{$IFDEF MSWINDOWS}` guards around the registry
+and `Winapi` units), verified by inspection only — the build host has no
+macOS/Linux toolchain.
+
+Nine verbs, dispatched by `TOsfToolDispatcher`:
+
+| Verb | Purpose |
+|---|---|
+| `merge` | Merge OSF files from a directory over a time interval — wraps `TOSFMerger`; supersedes the standalone `OsfMerge.dpr` (removed) |
+| `export` | Export channels to CSV — `--format csv` (per-channel XY) or `unified-csv` (single timeline); `--timestamp-format`, `--decimal-sep`, `--encoding`, `--start/--end` |
+| `info` | File metadata + global time range (cache-backed when a valid sidecar exists) |
+| `channels` | List channels with optional `--filter` wildcard (`System.Masks`) |
+| `stat` | Per-channel min/max/mean/stddev via single-pass Welford; `--start/--end` interval filter |
+| `cache` | `build` / `rebuild` / `clean` / `status` of `.json` sidecars under a root dir |
+| `config` | `show` / `set` / `reset` settings; `install-path` / `uninstall-path` add/remove the exe dir from the user PATH (HKCU registry on Windows, shell-snippet print on POSIX) |
+| `convert` | OSF4 ↔ OSF5 round-trip via `TOSFMerger` |
+| `verify` | Block-level integrity check (channel-index coverage, timestamp monotonicity, truncation) |
+
+Shared infrastructure: `IOsfCommand` + `TBaseCommand` (argument parsing,
+stdout/stderr split, global `--json` / `--quiet` / `--verbose`).
+`TOsfToolConfig` persists settings at `%APPDATA%\osftool\config.json`
+(Windows) or `~/.config/osftool/config.json` (POSIX). Uniform exit codes:
+0 ok, 1 bad args, 2 not found, 3 io error, 4 format error. Compiles
+clean with `dcc64`.
 
 ---
 
@@ -457,7 +498,7 @@ ctest --test-dir build
 
 **Pending:**
 
-Phase 3: OSF5 JSON metablock parser. Then sequentially per §20 Implementation Order: OSF4 XML metablock, block reader, `DataManager`, OSF5 writer, transparent OSFZ decompression, throwing convenience layer.
+Phase 4: OSF4 XML metablock parser (vendor pugixml, add `parse_metablock_xml` against the shared `MetaBlock` model). Then sequentially per §20 Implementation Order: block reader, `DataManager`, OSF5 writer, transparent OSFZ decompression, throwing convenience layer.
 
 The C ABI shared-library wrapper (Phase 11) is the deferred deliverable for cross-language consumption — Windows DLL / ActiveX/OCX, future bindings. It will land after the core C++ library reaches roundtrip validation and gets its own DECISIONS entry covering handle patterns, error codes, string ownership, and ABI stability guarantees.
 
