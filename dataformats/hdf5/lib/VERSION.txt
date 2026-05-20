@@ -1,0 +1,4 @@
+HDF5 version : 1.14.4-3
+Source URL   : https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.4.3/hdf5-1.14.4-3-win-vs2022_cl.zip
+Installed UTC: 2026-05-20T11:10:12Z
+hdf5.dll SHA256: a019f0276d46676a6a1466747a24bbc5e26ae242e6ebcc718f10ab0dff9a9187

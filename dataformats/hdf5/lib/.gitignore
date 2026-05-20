@@ -1,0 +1,21 @@
+# Binary runtime libraries are fetched by install-hdf5.ps1 / .sh, never
+# committed. Keep the scaffolding files (scripts, version stamp, license).
+*.dll
+*.lib
+*.pdb
+*.so
+*.dylib
+!.gitkeep
+!.gitignore
+!VERSION.txt
+!LICENSE.txt
+
+# Re-include the per-platform runtime directories: the repo-root
+# .gitignore carries "Win64/" / "Win32/" rules for Delphi build output,
+# and on a case-insensitive filesystem those also swallow this data
+# directory. Negating here keeps win64/ tracked (its DLLs still match
+# the *.dll rule above and stay ignored; .gitkeep and the .sha256 stamp
+# are committed).
+!win64/
+!win32/
+!linux-x64/
