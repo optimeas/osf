@@ -31,6 +31,14 @@ uses
   Hdf5.Wrapper            in '..\..\src\hdf5\Hdf5.Wrapper.pas',
   OSF.Export.HDF5         in '..\..\src\OSF.Export.HDF5.pas',
   OSF.Meta.Cache          in '..\..\src\OSF.Meta.Cache.pas',
+  OSF.Progress            in '..\..\src\OSF.Progress.pas',
+  OSF.Progress.Console    in '..\..\src\OSF.Progress.Console.pas',
+  OSF.Progress.Quiet      in '..\..\src\OSF.Progress.Quiet.pas',
+  OSF.Progress.Verbose    in '..\..\src\OSF.Progress.Verbose.pas',
+  OSF.Progress.Json       in '..\..\src\OSF.Progress.Json.pas',
+  OSF.Progress.Fallback   in '..\..\src\OSF.Progress.Fallback.pas',
+  OSF.Progress.Live       in '..\..\src\OSF.Progress.Live.pas',
+  OSF.Progress.LogFile    in '..\..\src\OSF.Progress.LogFile.pas',
   OSF.Merger              in '..\..\src\OSF.Merger.pas';
 
 var
