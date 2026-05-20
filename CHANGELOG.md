@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.9.0] — 2026-05-20
+
+### Added
+
+- osftool `merge` — a live progress display. By default the verb now shows a per-phase header, the file currently being read and a redrawn progress bar instead of the per-channel log flood; error lines stay pinned permanently above the bar. New output flags select the presentation: `-q` / `--quiet` (errors only, on stderr; silent on success), `-v` / `--verbose` (the full classic log scroll, no live bar), `--json` (a machine-readable JSON-Lines event stream) and `--log <path>` (a complete diagnostic log of every level written to a file, orthogonal to the console mode). `--quiet`, `--verbose` and `--json` are mutually exclusive. When stdout is redirected to a pipe or file the live display falls back to periodic plain progress lines. The feature is built on a new reusable, OSF-agnostic `IProgressReporter` abstraction with six implementations (`OSF.Progress`, `OSF.Progress.{Console,Quiet,Verbose,Json,Fallback,Live,LogFile}`); `TOSFMerger` gained an optional `Reporter` hook that emits structured phase events while the merge algorithm itself is unchanged.
+- osftool `--version` / `-V` — prints the tool version and build timestamp; `--version --short` prints just the version number. The version is now a single source of truth in the new `OSF.Version` unit (osftool 1.1.0).
+
+### Changed
+
+- osftool sets the Windows console and the RTL text files to the UTF-8 code page at startup, so non-ASCII output (channel units, the merge progress bar's block glyphs) renders correctly regardless of the machine's legacy code page.
+
+### Fixed
+
+- osftool — replaced em-dash (U+2014) literals in user-facing strings (the banner, the `info` / `channels` / `config` output and the OSF library log/error messages) with ASCII hyphens. Compiled from a source file saved without a UTF-8 BOM these produced mojibake such as `osftool â?"` in the banner.
+
+---
+
 ## [0.8.0] — 2026-05-20
 
 ### Added

@@ -21,7 +21,7 @@ last_update:
 
 **osftool** ist ein verb-basiertes Kommandozeilen-Werkzeug für die Arbeit mit Dateien im Open Streaming Format. Es liest und schreibt OSF4 und OSF5, verarbeitet komprimierte OSFZ-Dateien transparent und bündelt die alltäglichen Aufgaben rund um OSF-Daten in einer einzigen ausführbaren Datei: Dateien über ein Zeitintervall zusammenführen, Kanäle nach CSV exportieren, Metadaten prüfen, Statistiken berechnen, zwischen Formatversionen konvertieren und die Dateiintegrität prüfen.
 
-osftool baut auf der Delphi-OSF-Bibliothek auf (`implementations/delphi/src/`). Primäres Build-Ziel ist Windows 64-Bit; das Projekt enthält zusätzlich Build-Konfigurationen für macOS (Intel und Apple Silicon) und Linux 64-Bit. Die aktuelle Version ist **1.0.0**.
+osftool baut auf der Delphi-OSF-Bibliothek auf (`implementations/delphi/src/`). Primäres Build-Ziel ist Windows 64-Bit; das Projekt enthält zusätzlich Build-Konfigurationen für macOS (Intel und Apple Silicon) und Linux 64-Bit. Die aktuelle Version ist **1.1.0**.
 
 ## Wozu osftool dient
 
@@ -64,7 +64,7 @@ osftool <befehl> [optionen] [argumente]
 osftool <befehl> --help
 ```
 
-`osftool` ohne Argumente oder `osftool --help` gibt die globale Hilfe mit der Befehlsliste aus. Wird `--help` an einen Befehl angehängt, gibt dieser seine ausführliche Hilfe aus, ohne eine Aktion auszuführen.
+`osftool` ohne Argumente oder `osftool --help` gibt die globale Hilfe mit der Befehlsliste aus. Wird `--help` an einen Befehl angehängt, gibt dieser seine ausführliche Hilfe aus, ohne eine Aktion auszuführen. `osftool --version` (oder `-V`) gibt Version und Build-Zeitstempel aus; mit `--short` nur die Versionsnummer.
 
 ### Befehle
 
@@ -131,6 +131,10 @@ osftool merge <rootdir> <outputfile> [kanal ...] [optionen]
 | `--osf4`       | OSF4-Ausgabe schreiben (Vorgabe: aus Konfiguration `output.format`) |
 | `--overwrite`  | Überlappende Zeitstempel überschreiben (Vorgabe: aus Konfiguration `output.overlap`) |
 | `--no-cache`   | Keine `.json`-Sidecar-Dateien lesen oder schreiben |
+| `-q`, `--quiet`   | Live-Anzeige unterdrücken; nur Fehler, auf stderr |
+| `-v`, `--verbose` | Jede Log-Zeile ausgeben (klassische Scroll-Ausgabe, keine Live-Leiste) |
+| `--json`          | Maschinenlesbaren JSON-Lines-Ereignisstrom auf stdout ausgeben |
+| `--log <pfad>`    | Vollständiges Diagnose-Log (alle Stufen) in eine Datei schreiben |
 
 `--start` und `--end` sind optional und unabhängig: Jede Grenze besitzt einen eigenen Vorgabewert, und eine angegebene Option überschreibt nur diese eine Grenze. Ohne beide Optionen deckt `merge` den gesamten verfügbaren Bereich ab.
 
@@ -142,6 +146,16 @@ osftool merge ./feld-daten zusammen.osf
 osftool merge ./feld-daten fenster.osf Sensor/Temperatur Sensor/Druck \
   --start 2026-05-05T10:00:00 --end 2026-05-05T12:00:00
 ```
+
+Standardmäßig zeigt `merge` eine **Live-Fortschrittsanzeige**: eine Überschrift je Phase, die gerade gelesene Datei und einen Fortschrittsbalken. Fehlerzeilen bleiben dauerhaft oberhalb des Balkens stehen, während die informativen und warnenden Meldungen je Kanal unterdrückt werden.
+
+```
+Reading files...
+  V:\feld-daten\20260517\20260517_192802.osfz
+  [████████████████████░░░░░░░░░░░░░░░░░░░░] 50% (173/346)
+```
+
+Die Ausgabe-Optionen ändern diese Darstellung und schließen sich gegenseitig aus: `-v` / `--verbose` gibt stattdessen das vollständige Scroll-Log aus; `-q` / `--quiet` gibt nur Fehler auf stderr aus und ist sonst still; `--json` liefert einen JSON-Lines-Ereignisstrom für Pipelines. `--log <pfad>` ist orthogonal — es schreibt in jedem Modus das vollständige Diagnose-Log in eine Datei. Wird stdout in eine Pipe oder Datei umgeleitet, ersetzt osftool die Live-Anzeige automatisch durch periodische einfache Fortschrittszeilen.
 
 ### export
 

@@ -119,6 +119,9 @@ osf/
 | `OSF.Merger` | `TOSFMerger` — scans a directory (or explicit `FileList`) for OSF/OSFZ files overlapping a UTC interval, merges selected channels into a single OSF4/OSF5 output. Cache-driven file selection, `osSkip`/`osOverwrite` overlap strategy, per-sample interval clipping. Output is emitted as `bcAbsTimeStampData` (equidistant inputs expanded to per-sample timestamps). |
 | `OSF.Export.HDF5` | `TOSFHDF5Exporter` — exports a `TOSFDataManager` as an HDF5 file: one chunked / shuffled / deflated 1-D dataset of `{int64 timestamp_ns; value}` compound records per channel, the channel name split on the namespace separator into HDF5 groups, file and channel metadata as root/dataset attributes. Covers `bool`, every signed/unsigned integer width, `float`, `double`, `gpslocation` (a lat/lon/alt sub-compound) and `string` (variable-length UTF-8); `binary` is skipped. Configurable `ChunkSize`, `DeflateLevel`, `UseShuffle`, `NamespaceSep`, `LibraryDir`. Windows-only. |
 
+| `OSF.Version` | osftool version single-source-of-truth: `OSFTOOL_VERSION` constant + `GetVersionString` / `GetFullVersionString` (build timestamp taken from the executable's own file date). |
+| `OSF.Progress` (+ `.Console` / `.Quiet` / `.Verbose` / `.Json` / `.Fallback` / `.Live` / `.LogFile`) | Reusable, OSF-agnostic `IProgressReporter` abstraction for long-running multi-file operations: structured phase events plus a `Log` catch-all, six reporter implementations (live ANSI progress bar, plain redirect-fallback, quiet, verbose, JSON-Lines) and a log-file decorator. Consumed by `osftool merge`. |
+
 **HDF5 DLL binding in `implementations/delphi/src/hdf5/`:** `Hdf5.Types`,
 `Hdf5.Api` and `Hdf5.Wrapper` form a reusable, OSF-agnostic Delphi binding
 to the HDF5 C library — `cdecl` function-pointer types, a six-stage
@@ -162,7 +165,7 @@ Nine verbs, dispatched by `TOsfToolDispatcher`:
 
 | Verb | Purpose |
 |---|---|
-| `merge` | Merge OSF files from a directory into one OSF — positionals `<rootdir> <outputfile> [channel ...]`; optional `--start`/`--end` ISO-8601 interval bounds (default `1970-01-01`..now), plus `--osf4`, `--overwrite`, `--no-cache`. Wraps `TOSFMerger`; supersedes the standalone `OsfMerge.dpr` (removed) |
+| `merge` | Merge OSF files from a directory into one OSF — positionals `<rootdir> <outputfile> [channel ...]`; `--start`/`--end` ISO-8601 interval bounds (default `1970-01-01`..now), `--osf4`, `--overwrite`, `--no-cache`; output-mode flags `-q`/`--quiet`, `-v`/`--verbose`, `--json` (JSON-Lines event stream), `--log <path>`. Default run shows a live progress bar via the `OSF.Progress.*` reporter subsystem. Wraps `TOSFMerger` |
 | `export` | Export channels — `--format csv` (per-channel XY), `unified-csv` (single shared timeline) or `hdf5` (Windows; one compound dataset per channel via `TOSFHDF5Exporter`); `--timestamp-format`, `--decimal-sep`, `--encoding`, `--start/--end`, plus the HDF5 options `--chunk-size`, `--deflate-level`, `--no-shuffle`, `--namespace-sep`, `--hdf5-lib-dir` |
 | `info` | File metadata + global time range (cache-backed when a valid sidecar exists) |
 | `channels` | List channels with optional `--filter` wildcard (`System.Masks`) |
@@ -178,6 +181,14 @@ stdout/stderr split, global `--json` / `--quiet` / `--verbose`).
 (Windows) or `~/.config/osftool/config.json` (POSIX). Uniform exit codes:
 0 ok, 1 bad args, 2 not found, 3 io error, 4 format error. Compiles
 clean with `dcc64`.
+
+The top-level dispatcher also handles `--version` / `-V` (plus `--short`),
+sourced from the `OSF.Version` unit (osftool 1.1.0). The `merge` verb
+renders progress through the `OSF.Progress.*` reporter subsystem — a live
+ANSI progress bar by default, the `--verbose` / `--json` / `--quiet` /
+`--log` alternatives, and an automatic plain-text fallback when stdout is
+redirected. On Windows the console is switched to the UTF-8 code page at
+startup so non-ASCII output renders correctly.
 
 ### osftool installer
 

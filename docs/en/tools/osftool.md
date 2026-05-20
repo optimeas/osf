@@ -21,7 +21,7 @@ last_update:
 
 **osftool** is a verb-based command-line tool for working with Open Streaming Format files. It reads and writes OSF4 and OSF5, transparently handles compressed OSFZ files, and bundles the everyday tasks around OSF data into a single executable: merging files over a time interval, exporting channels to CSV, inspecting metadata, computing statistics, converting between format versions, and checking file integrity.
 
-osftool is built on the Delphi OSF library (`implementations/delphi/src/`). The primary build target is Windows 64-bit; the project also carries macOS (Intel and Apple Silicon) and Linux 64-bit build configurations. The current version is **1.0.0**.
+osftool is built on the Delphi OSF library (`implementations/delphi/src/`). The primary build target is Windows 64-bit; the project also carries macOS (Intel and Apple Silicon) and Linux 64-bit build configurations. The current version is **1.1.0**.
 
 ## What osftool is for
 
@@ -64,7 +64,7 @@ osftool <command> [options] [arguments]
 osftool <command> --help
 ```
 
-Running `osftool` with no arguments, or `osftool --help`, prints the global help with the command list. Appending `--help` to any command prints that command's detailed help without doing any work.
+Running `osftool` with no arguments, or `osftool --help`, prints the global help with the command list. Appending `--help` to any command prints that command's detailed help without doing any work. `osftool --version` (or `-V`) prints the version and build timestamp; add `--short` for just the version number.
 
 ### Commands
 
@@ -131,6 +131,10 @@ osftool merge <rootdir> <outputfile> [channel ...] [options]
 | `--osf4`       | Write OSF4 output (default: from config `output.format`) |
 | `--overwrite`  | Overwrite overlapping timestamps (default: from config `output.overlap`) |
 | `--no-cache`   | Do not read or write `.json` sidecar files |
+| `-q`, `--quiet`   | Suppress the live display; print only errors, on stderr |
+| `-v`, `--verbose` | Print every log line (the classic scrolling output, no live bar) |
+| `--json`          | Emit a machine-readable JSON-Lines event stream on stdout |
+| `--log <path>`    | Write a full diagnostic log (every level) to a file |
 
 `--start` and `--end` are optional and independent: each defaults on its own, and a flag, when given, overrides only that bound. With neither flag, `merge` covers the full available range.
 
@@ -142,6 +146,16 @@ osftool merge ./field-data combined.osf
 osftool merge ./field-data window.osf Sensor/Temperature Sensor/Pressure \
   --start 2026-05-05T10:00:00 --end 2026-05-05T12:00:00
 ```
+
+By default `merge` shows a **live progress display**: a header for each phase, the file currently being read, and a progress bar. Error lines stay pinned permanently above the bar, while the per-channel informational and warning chatter is suppressed.
+
+```
+Reading files...
+  V:\field-data\20260517\20260517_192802.osfz
+  [████████████████████░░░░░░░░░░░░░░░░░░░░] 50% (173/346)
+```
+
+The output flags change this presentation and are mutually exclusive: `-v` / `--verbose` prints the full scrolling log instead; `-q` / `--quiet` prints only errors on stderr and is otherwise silent; `--json` emits a JSON-Lines event stream for pipelines. `--log <path>` is orthogonal — it writes the complete diagnostic log to a file in any mode. When stdout is redirected to a pipe or file the live display is automatically replaced by periodic plain progress lines.
 
 ### export
 
