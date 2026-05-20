@@ -71,16 +71,16 @@ end;
 
 procedure TOsfMergeCommand.PrintHelp;
 begin
-  Print('osftool merge <rootdir> <outputfile> <starttime> <endtime> [channel ...] [options]');
+  Print('osftool merge <rootdir> <outputfile> [channel ...] [options]');
   Print('');
   Print('Arguments:');
   Print('  rootdir      Root directory (recursive scan for .osf and .osfz)');
   Print('  outputfile   Output file path (.osf)');
-  Print('  starttime    Interval start, ISO 8601: 2024-01-15T10:00:00');
-  Print('  endtime      Interval end,   ISO 8601: 2024-01-15T12:00:00');
   Print('  channel      Optional channel names (omit for all)');
   Print('');
   Print('Options:');
+  Print('  --start <ts>   Interval start, ISO 8601 (default: 1970-01-01T00:00:00)');
+  Print('  --end <ts>     Interval end,   ISO 8601 (default: current date and time)');
   Print('  --osf4         Write OSF4 output (default: from config "output.format")');
   Print('  --overwrite    Overwrite overlapping timestamps (default: from config "output.overlap")');
   Print('  --no-cache     Do not read or write .json sidecar files');
@@ -101,27 +101,34 @@ var
   I: Integer;
   Result_: TJSONObject;
 begin
-  Positionals := PositionalArgs([]);
-  if Length(Positionals) < 4 then
+  Positionals := PositionalArgs(['--start', '--end']);
+  if Length(Positionals) < 2 then
   begin
-    PrintErr('osftool merge: expected <rootdir> <outputfile> <starttime> <endtime>');
+    PrintErr('osftool merge: expected <rootdir> <outputfile>');
     Exit(EXIT_BAD_ARGS);
   end;
   Root := Positionals[0];
   OutputFile := Positionals[1];
-  StartStr := Positionals[2];
-  EndStr := Positionals[3];
 
-  if not ParseIso8601(StartStr, StartUtc) then
+  // --start / --end are optional. When omitted the interval defaults to
+  // epoch (1970-01-01) .. now (UTC) — i.e. "merge everything". When a
+  // flag is present its ISO 8601 value overrides only that bound.
+  StartUtc := EncodeDate(1970, 1, 1);
+  StartStr := FlagValue('--start', '');
+  if (StartStr <> '') and not ParseIso8601(StartStr, StartUtc) then
   begin
-    PrintErrf('osftool merge: invalid starttime: %s', [StartStr]);
+    PrintErrf('osftool merge: invalid --start: %s', [StartStr]);
     Exit(EXIT_BAD_ARGS);
   end;
-  if not ParseIso8601(EndStr, EndUtc) then
+
+  EndUtc := TTimeZone.Local.ToUniversalTime(Now);
+  EndStr := FlagValue('--end', '');
+  if (EndStr <> '') and not ParseIso8601(EndStr, EndUtc) then
   begin
-    PrintErrf('osftool merge: invalid endtime: %s', [EndStr]);
+    PrintErrf('osftool merge: invalid --end: %s', [EndStr]);
     Exit(EXIT_BAD_ARGS);
   end;
+
   if not TDirectory.Exists(Root) then
   begin
     PrintErrf('osftool merge: rootdir not found: %s', [Root]);
@@ -129,9 +136,9 @@ begin
   end;
 
   // Remaining positionals are channel filter entries.
-  SetLength(Channels, Length(Positionals) - 4);
-  for I := 4 to High(Positionals) do
-    Channels[I - 4] := Positionals[I];
+  SetLength(Channels, Length(Positionals) - 2);
+  for I := 2 to High(Positionals) do
+    Channels[I - 2] := Positionals[I];
 
   Cfg := TOsfToolConfig.Create;
   Merger := TOSFMerger.Create;
