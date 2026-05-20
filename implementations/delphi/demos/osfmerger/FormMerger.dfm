@@ -14,6 +14,9 @@ object FormMerger: TFormMerger
   Position = poScreenCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
+  DesignSize = (
+    1100
+    720)
   TextHeight = 15
   object pcSource: TPageControl
     Left = 8
@@ -23,8 +26,12 @@ object FormMerger: TFormMerger
     ActivePage = tsDirectory
     Anchors = [akLeft, akTop, akRight]
     TabOrder = 0
+    ExplicitWidth = 698
     object tsDirectory: TTabSheet
       Caption = 'Directory scan'
+      DesignSize = (
+        692
+        240)
       object gbRoot: TGroupBox
         Left = 8
         Top = 4
@@ -33,10 +40,14 @@ object FormMerger: TFormMerger
         Anchors = [akLeft, akTop, akRight]
         Caption = 'Root directory'
         TabOrder = 0
+        ExplicitWidth = 674
+        DesignSize = (
+          676
+          60)
         object lblRoot: TLabel
           Left = 12
           Top = 24
-          Width = 16
+          Width = 15
           Height = 15
           Caption = 'Dir'
         end
@@ -47,6 +58,7 @@ object FormMerger: TFormMerger
           Height = 23
           Anchors = [akLeft, akTop, akRight]
           TabOrder = 0
+          ExplicitWidth = 538
         end
         object btBrowseRoot: TButton
           Left = 588
@@ -57,6 +69,7 @@ object FormMerger: TFormMerger
           Caption = 'Browse...'
           TabOrder = 1
           OnClick = btBrowseRootClick
+          ExplicitLeft = 586
         end
       end
       object gbInterval: TGroupBox
@@ -67,17 +80,18 @@ object FormMerger: TFormMerger
         Anchors = [akLeft, akTop, akRight]
         Caption = 'Time interval (UTC)'
         TabOrder = 1
+        ExplicitWidth = 674
         object lblStart: TLabel
           Left = 12
           Top = 24
-          Width = 26
+          Width = 28
           Height = 15
           Caption = 'From'
         end
         object lblTo: TLabel
           Left = 332
           Top = 24
-          Width = 12
+          Width = 11
           Height = 15
           Caption = 'to'
         end
@@ -86,8 +100,8 @@ object FormMerger: TFormMerger
           Top = 20
           Width = 130
           Height = 23
-          Date = 45413.0
-          Time = 0
+          Date = 45413.000000000000000000
+          Time = 45413.000000000000000000
           TabOrder = 0
         end
         object dtpStartTime: TDateTimePicker
@@ -95,8 +109,7 @@ object FormMerger: TFormMerger
           Top = 20
           Width = 130
           Height = 23
-          Date = 0
-          Time = 0
+          Time = 0.465858321760606500
           Kind = dtkTime
           TabOrder = 1
         end
@@ -105,8 +118,8 @@ object FormMerger: TFormMerger
           Top = 20
           Width = 130
           Height = 23
-          Date = 45413.0
-          Time = 0
+          Date = 45413.000000000000000000
+          Time = 45413.000000000000000000
           TabOrder = 2
         end
         object dtpEndTime: TDateTimePicker
@@ -114,8 +127,7 @@ object FormMerger: TFormMerger
           Top = 20
           Width = 130
           Height = 23
-          Date = 0
-          Time = 0.999988425925926
+          Time = 0.999988425925926000
           Kind = dtkTime
           TabOrder = 3
         end
@@ -128,6 +140,10 @@ object FormMerger: TFormMerger
         Anchors = [akLeft, akTop, akRight, akBottom]
         Caption = 'Found files'
         TabOrder = 2
+        ExplicitWidth = 674
+        DesignSize = (
+          676
+          100)
         object lvFiles: TListView
           Left = 8
           Top = 20
@@ -165,6 +181,9 @@ object FormMerger: TFormMerger
     object tsFileList: TTabSheet
       Caption = 'File list'
       ImageIndex = 1
+      DesignSize = (
+        692
+        240)
       object lbFiles: TListBox
         Left = 8
         Top = 8
@@ -221,12 +240,16 @@ object FormMerger: TFormMerger
     Anchors = [akTop, akRight]
     Caption = 'Channel filter'
     TabOrder = 1
+    ExplicitLeft = 714
+    DesignSize = (
+      376
+      130)
     object lblChannelFilter: TLabel
       Left = 12
       Top = 20
-      Width = 287
+      Width = 282
       Height = 15
-      Caption = 'One channel name per line — empty for all channels'
+      Caption = 'One channel name per line '#226#8364#8221' empty for all channels'
     end
     object mChannelFilter: TMemo
       Left = 12
@@ -246,17 +269,18 @@ object FormMerger: TFormMerger
     Anchors = [akTop, akRight]
     Caption = 'Options'
     TabOrder = 2
+    ExplicitLeft = 714
     object lblOverlap: TLabel
       Left = 12
       Top = 28
-      Width = 92
+      Width = 86
       Height = 15
       Caption = 'Overlap strategy'
     end
     object lblOutputFmt: TLabel
       Left = 12
       Top = 64
-      Width = 73
+      Width = 77
       Height = 15
       Caption = 'Output format'
     end
@@ -285,6 +309,7 @@ object FormMerger: TFormMerger
     Anchors = [akLeft, akTop, akRight]
     BevelOuter = bvNone
     TabOrder = 3
+    ExplicitWidth = 1082
     object btScan: TButton
       Left = 0
       Top = 6
@@ -321,6 +346,10 @@ object FormMerger: TFormMerger
     Anchors = [akLeft, akTop, akRight]
     Caption = 'Merge result'
     TabOrder = 4
+    ExplicitWidth = 1082
+    DesignSize = (
+      1084
+      180)
     object lvResult: TListView
       Left = 8
       Top = 20
@@ -366,6 +395,11 @@ object FormMerger: TFormMerger
     Anchors = [akLeft, akRight, akBottom]
     BevelOuter = bvNone
     TabOrder = 5
+    ExplicitTop = 508
+    ExplicitWidth = 1082
+    DesignSize = (
+      1084
+      180)
     object cbDebug: TCheckBox
       Left = 0
       Top = 4
@@ -391,6 +425,7 @@ object FormMerger: TFormMerger
       ScrollBars = ssBoth
       TabOrder = 1
       WordWrap = False
+      ExplicitWidth = 1082
     end
   end
   object sbStatus: TStatusBar
@@ -400,6 +435,8 @@ object FormMerger: TFormMerger
     Height = 19
     Panels = <>
     SimplePanel = True
+    ExplicitTop = 693
+    ExplicitWidth = 1098
   end
   object mmMain: TMainMenu
     Left = 16

@@ -1,5 +1,7 @@
 program OsfMerger;
 
+{$R *.res}
+
 uses
   Vcl.Forms,
   FormMerger       in 'FormMerger.pas' {FormMerger},
