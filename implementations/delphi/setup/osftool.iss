@@ -34,8 +34,9 @@
 ; ----------------------------------------------------------------------
 
 #define MyAppName "OsfTool"
-; osftool release version — adjust per release.
-#define MyAppVersion "0.7.0"
+; osftool release version. Keep this in lockstep with OSFTOOL_VERSION
+; in ..\src\OSF.Version.pas - both must always carry the same value.
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Optimeas GmbH"
 #define MyAppExeName "OsfTool.exe"
 

@@ -12,6 +12,7 @@ interface
 
 const
   // Bump this on every release. Semantic versioning: MAJOR.MINOR.PATCH.
+  // Also bump MyAppVersion in setup\osftool.iss to the same value.
   OSFTOOL_VERSION = '1.1.0';
 
 // The bare version number, e.g. "1.1.0".
