@@ -4,6 +4,9 @@ program OsfTool;
 {$R *.res}
 
 uses
+  {$IFDEF MSWINDOWS}
+  Winapi.Windows,
+  {$ENDIF}
   System.SysUtils,
   OsfTool.Dispatcher      in 'OsfTool.Dispatcher.pas',
   Cmd.Base                in 'Cmd.Base.pas',
@@ -20,6 +23,7 @@ uses
   OSF.Types               in '..\..\src\OSF.Types.pas',
   OSF.Channel             in '..\..\src\OSF.Channel.pas',
   OSF.Log                 in '..\..\src\OSF.Log.pas',
+  OSF.Version             in '..\..\src\OSF.Version.pas',
   OSF.Filer               in '..\..\src\OSF.Filer.pas',
   OSF.Data.Channels       in '..\..\src\OSF.Data.Channels.pas',
   OSF.Data.Manager        in '..\..\src\OSF.Data.Manager.pas',
@@ -41,12 +45,28 @@ uses
   OSF.Progress.LogFile    in '..\..\src\OSF.Progress.LogFile.pas',
   OSF.Merger              in '..\..\src\OSF.Merger.pas';
 
+{$IFDEF MSWINDOWS}
+// Switches the console and the RTL text files to UTF-8 so non-ASCII output
+// (units like 'degC', the live progress bar's block glyphs) renders
+// correctly regardless of the machine's legacy code page.
+procedure EnableUtf8Console;
+begin
+  SetConsoleOutputCP(CP_UTF8);
+  SetConsoleCP(CP_UTF8);
+  SetTextCodePage(Output, CP_UTF8);
+  SetTextCodePage(ErrOutput, CP_UTF8);
+end;
+{$ENDIF}
+
 var
   Dispatcher: TOsfToolDispatcher;
   Args: TArray<string>;
   I: Integer;
 
 begin
+  {$IFDEF MSWINDOWS}
+  EnableUtf8Console;
+  {$ENDIF}
   try
     SetLength(Args, ParamCount);
     for I := 1 to ParamCount do

@@ -14,10 +14,10 @@
 // per-sample timestamps before being written. This trades on-disk size
 // (timestamped blocks are larger than equidistant ones) for two things:
 //
-//   1. Correctness across heterogeneous inputs — different input files
+//   1. Correctness across heterogeneous inputs - different input files
 //      can carry different segment boundaries for the same channel name;
 //      a flat timestamped stream merges them deterministically.
-//   2. Implementation simplicity — TOSFFile.WriteEquidistantBlock is
+//   2. Implementation simplicity - TOSFFile.WriteEquidistantBlock is
 //      Double-only, so preserving equidistant for non-Double channels
 //      would need additional public writer surface on TOSFFile.
 unit OSF.Merger;
@@ -94,10 +94,10 @@ type
 
     // Writes the merged stream directly to AOutputFile. Internally calls
     // WriteMergedToStream on a TFileStream and skips the TOSFDataManager
-    // round-trip — handy for large merges that should not stay resident.
+    // round-trip - handy for large merges that should not stay resident.
     procedure SaveToFile(const AOutputFile: string);
 
-    // Scan + WriteMergedToStream in one call — combines configuration
+    // Scan + WriteMergedToStream in one call - combines configuration
     // checks (sanitising the interval, ensuring at least one input file)
     // with the write itself. Raises EOSFException if nothing to merge.
     procedure Execute(const AOutputFile: string);
@@ -110,14 +110,14 @@ type
     property IntervalStartNs: Int64 read FIntervalStartNs write FIntervalStartNs;
     property IntervalEndNs: Int64 read FIntervalEndNs write FIntervalEndNs;
 
-    // --- Channel selection — empty = all channels.  Case-insensitive ---
+    // --- Channel selection - empty = all channels.  Case-insensitive ---
     property ChannelFilter: TArray<string> read FChannelFilter write FChannelFilter;
 
     // --- Merge options ---
     property OverlapStrategy: TOverlapStrategy read FOverlapStrategy write FOverlapStrategy;
     property OutputVersion: TOSFVersion read FOutputVersion write FOutputVersion;
 
-    // When False, the merger never reads or writes JSON sidecar caches —
+    // When False, the merger never reads or writes JSON sidecar caches -
     // every Scan rebuilds them in memory. Default: True.
     property UseCache: Boolean read FUseCache write FUseCache;
 
@@ -141,7 +141,7 @@ resourcestring
   SOSFMergerLogScanOverlap      = 'Scan: %d files overlap interval %s .. %s';
   SOSFMergerLogScanBuildingCache = 'Scan: building cache for new file: %s';
   SOSFMergerLogMergingFile      = 'Merging file %d/%d: %s';
-  SOSFMergerLogChannelMismatch  = 'Channel "%s": type mismatch (%s vs %s) — skipping for this file';
+  SOSFMergerLogChannelMismatch  = 'Channel "%s": type mismatch (%s vs %s) - skipping for this file';
   SOSFMergerLogMergeComplete    = 'Merge complete: %d channels, %d total samples';
 
 implementation
@@ -280,7 +280,7 @@ end;
 
 // Encodes the value at SrcIdx of the source channel to the raw byte form
 // required by its DataType. Returns False for types this build cannot
-// re-encode (currently: none — every fixed type plus string / binary /
+// re-encode (currently: none - every fixed type plus string / binary /
 // gpslocation is covered through ValueAsString / TValueAsBytes paths).
 function EncodeSampleFromSource(ASrc: TOSFDataChannel; ASrcIdx: Integer; out ABytes: TBytes): Boolean;
 var
@@ -491,7 +491,7 @@ begin
     Exit;
   end;
 
-  // No (or invalid) sidecar — build one in memory and (optionally) save it.
+  // No (or invalid) sidecar - build one in memory and (optionally) save it.
   Log(llInfo, SOSFMergerLogScanBuildingCache, [ExtractFileName(AOsfFile)]);
   Builder := TOSFMetaCacheBuilder.Create;
   try
@@ -559,7 +559,7 @@ begin
     FReporter.ScanFinished(Length(Sources));
 
   // The sidecar phase is only surfaced when at least one cache has to be
-  // built — when every sidecar is already valid it stays invisible.
+  // built - when every sidecar is already valid it stays invisible.
   NeedBuild := 0;
   for I := 0 to High(Sources) do
     if not (FUseCache and TOSFMetaCache.IsValid(Sources[I])) then
@@ -573,7 +573,7 @@ begin
     begin
       // A single broken file (corrupt metablock, truncation the builder
       // cannot recover from) must not kill the whole scan. Drop it and
-      // carry on — as a structured file error when a reporter is set,
+      // carry on - as a structured file error when a reporter is set,
       // otherwise as a plain warning.
       Cache := nil;
       try
@@ -707,7 +707,7 @@ begin
             Key := LowerCase(SrcChan.Name);
             if not Accumulators.TryGetValue(Key, Merge) then
             begin
-              // First sighting — clone the def so the accumulator outlives
+              // First sighting - clone the def so the accumulator outlives
               // the per-file manager.
               ClonedDef := TOSFChannelDef.Create(
                 SrcChan.ChannelDef.Index, SrcChan.ChannelDef.Name,

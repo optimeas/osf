@@ -39,7 +39,7 @@ type
     // skip and precision-loss log messages along the way).
     function  CollectActive: TArray<TOSFDataChannel>;
 
-    // Row builders — one method per header row plus the data row.
+    // Row builders - one method per header row plus the data row.
     function  BuildHeaderRow_Name      (const Channels: TArray<TOSFDataChannel>): string;
     function  BuildHeaderRow_ChannelTyp(const Channels: TArray<TOSFDataChannel>): string;
     function  BuildHeaderRow_Comment   (const Channels: TArray<TOSFDataChannel>): string;
@@ -88,12 +88,12 @@ resourcestring
   SOSFLogCSVStarted      = 'CSV export started: %s  channels=%d';
   SOSFLogCSVFinished     = 'CSV export finished: %s  rows=%d  bytes=%d';
   SOSFLogCSVSkipEmpty    = 'Skipping empty channel: %s';
-  SOSFLogCSVPrecision    = 'Channel [%s] has Int64/UInt64 values — CSV output may lose precision';
+  SOSFLogCSVPrecision    = 'Channel [%s] has Int64/UInt64 values - CSV output may lose precision';
   SOSFLogCSVFailed       = 'CSV export failed: %s';
 
 implementation
 
-// Technical constants — codepage and line terminator are part of the file
+// Technical constants - codepage and line terminator are part of the file
 // format wire layout, not user-visible text, so they stay as const.
 const
   ISO_8859_1_CODEPAGE = 28591;
@@ -101,7 +101,7 @@ const
 
 // Returns True for OSF data types whose ValueAsString produces a single number
 // where '.' is the decimal point. Pair/Triple, Gps, Can produce composite
-// strings; String/Binary aren't numeric — none of those should have the
+// strings; String/Binary aren't numeric - none of those should have the
 // decimal-separator substitution applied.
 function IsSingleNumericType(DT: TOSFDataType): Boolean;
 begin
@@ -334,7 +334,7 @@ begin
   FS := TFileStream.Create(FileName, fmCreate);
   try
     try
-      // Header block — exactly 8 rows (row 7 is intentionally blank).
+      // Header block - exactly 8 rows (row 7 is intentionally blank).
       WriteLine(FS, BuildHeaderRow_Name      (Active)); Inc(RowsEmitted);
       WriteLine(FS, BuildHeaderRow_ChannelTyp(Active)); Inc(RowsEmitted);
       WriteLine(FS, BuildHeaderRow_Comment   (Active)); Inc(RowsEmitted);

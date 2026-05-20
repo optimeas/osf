@@ -5,7 +5,7 @@
 // used as the default-value source for every other command. Also
 // exposes install-path / uninstall-path subcommands that add or
 // remove the osftool executable's directory from the current user's
-// PATH — without requiring administrator privileges on Windows.
+// PATH - without requiring administrator privileges on Windows.
 unit Cmd.Config;
 
 interface
@@ -165,7 +165,7 @@ end;
 // ── PATH-installer helpers ──────────────────────────────────────────────────
 //
 // The directory of the running executable is the canonical "install
-// dir" — copying osftool.exe somewhere else and pointing PATH at the
+// dir" - copying osftool.exe somewhere else and pointing PATH at the
 // new location is the user's intent we honour.
 
 // Returns the directory containing the running executable, with a
@@ -313,7 +313,7 @@ begin
 
   if Length(NewPath) > C_WIN_ENV_MAX_LEN then
   begin
-    PrintErrf('osftool: refused to write PATH — resulting %d characters exceeds the Windows %d-char limit',
+    PrintErrf('osftool: refused to write PATH - resulting %d characters exceeds the Windows %d-char limit',
       [Length(NewPath), C_WIN_ENV_MAX_LEN]);
     Exit(EXIT_IO_ERROR);
   end;

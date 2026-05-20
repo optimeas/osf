@@ -57,7 +57,7 @@ end;
 function FormatTs(ANs: Int64): string;
 begin
   if ANs = 0 then
-    Exit('—');
+    Exit('-');
   Result := FormatDateTime(C_ISO_FMT, UnixNsToUtcDateTime(ANs));
 end;
 
@@ -262,7 +262,7 @@ begin
         end;
       except
         // A cache build that fails (corrupt input, etc.) is a soft
-        // failure for the channels command — we still list the metablock.
+        // failure for the channels command - we still list the metablock.
         FreeAndNil(Cache);
       end;
     end;

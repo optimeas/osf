@@ -14,7 +14,7 @@ uses
   System.ZLib,
   Xml.XMLIntf,
   Xml.XMLDoc,
-  // OmniXML — pure-Pascal DOM. Pulling it in registers the vendor so we
+  // OmniXML - pure-Pascal DOM. Pulling it in registers the vendor so we
   // can route ParseXMLMeta away from MSXML; that keeps OSF4 reading
   // working on hosts where MSXML / IE is missing or broken.
   Xml.omnixmldom,
@@ -43,11 +43,11 @@ type
   // Callers use the associated channel's DataType to interpret RawPayload.
   //
   // Layout of RawPayload by BlockType:
-  // bcStartData             — N contiguous encoded data values (timestamp in StartTimestampNs)
-  // bcContinuedData         — N contiguous encoded data values
-  // bcAbsTimeStampData      — N × [int64 timestamp, encoded value] interleaved
-  // bcContinuedRelStampData — N × [uint32 delta_ns, encoded value] interleaved (OSF4 only)
-  // info block ($FFFF)      — raw UTF-8 XML or JSON (IsInfoBlock = True)
+  // bcStartData             - N contiguous encoded data values (timestamp in StartTimestampNs)
+  // bcContinuedData         - N contiguous encoded data values
+  // bcAbsTimeStampData      - N × [int64 timestamp, encoded value] interleaved
+  // bcContinuedRelStampData - N × [uint32 delta_ns, encoded value] interleaved (OSF4 only)
+  // info block ($FFFF)      - raw UTF-8 XML or JSON (IsInfoBlock = True)
   TOSFDataBlock = record
     ChannelIndex: Word;
     BlockType: TBlockContent;
@@ -86,7 +86,7 @@ type
     FChannelFilter: TArray<string>;
     FChannelIncluded: TDictionary<Word, Boolean>;
 
-    // Logging — copied verbatim from TOSFLoggable because TOSFFile already
+    // Logging - copied verbatim from TOSFLoggable because TOSFFile already
     // has an inheritance constraint and cannot subclass TOSFLoggable.
     FOnLog: TOSFLogEvent;
     FDebugEnabled: Boolean;
@@ -100,7 +100,7 @@ type
     // Magic header line + meta block dispatcher.
     procedure ReadMagicAndMeta;
 
-    // JSON meta block — build / parse split into focused helpers.
+    // JSON meta block - build / parse split into focused helpers.
     function BuildJSONMeta: TBytes;
     procedure AppendJSONFileNode(Parent: TJSONObject);
     procedure AppendJSONChannels(Parent: TJSONObject);
@@ -110,7 +110,7 @@ type
     procedure ParseJSONChannels(OSFNode: TJSONObject);
     procedure ParseJSONInfo(OSFNode: TJSONObject);
 
-    // XML meta block — build / parse split into focused helpers.
+    // XML meta block - build / parse split into focused helpers.
     function BuildXMLMeta: TBytes;
     procedure AppendXMLOpenTag(B: TStringBuilder);
     procedure AppendXMLChannels(B: TStringBuilder);
@@ -120,7 +120,7 @@ type
     procedure ParseXMLChannels(RootNode: IXMLNode);
     procedure ParseXMLInfos(RootNode: IXMLNode);
 
-    // Block reading — split so each helper stays under 30 lines and the
+    // Block reading - split so each helper stays under 30 lines and the
     // truncation guards are at the top of their function.
     function TryReadChannelIndex(out ChannelIndex: Word): Boolean;
     function ReadInfoBlock(var Block: TOSFDataBlock): Boolean;
@@ -131,7 +131,7 @@ type
     // Returns False on clean EOF or on a truncation that cannot be recovered.
     function SkipExcludedBlocksUntilIncluded(out ChannelIndex: Word; out StartOffset: Int64): Boolean;
 
-    // Shared low-level write — emits channel index, length field, and payload.
+    // Shared low-level write - emits channel index, length field, and payload.
     procedure WriteDataBlock(Channel: TOSFChannelDef; const Payload: TBytes);
 
     // Channel lookup.
@@ -247,18 +247,18 @@ type
     // called, the function returns True for every index.
     function IsChannelIncluded(ChannelIndex: Integer): Boolean;
 
-    // Logging hook — emit human-readable progress / diagnostic messages.
+    // Logging hook - emit human-readable progress / diagnostic messages.
     // Default: unassigned (silent). DebugEnabled gates llDebug messages.
     property DebugEnabled: Boolean read FDebugEnabled write FDebugEnabled;
     property OnLog: TOSFLogEvent read FOnLog write FOnLog;
 
     // Optional channel name filter for reads. When empty (the default), every
-    // data block is delivered to ReadNextBlock callers — existing behaviour.
+    // data block is delivered to ReadNextBlock callers - existing behaviour.
     // When populated, ReadNextBlock silently skips data blocks whose channel
     // name is not in the list; skipped bytes are still consumed from the
     // stream so block alignment is preserved. Info blocks (channel index
     // $FFFF) are always delivered. Names are matched case-insensitively.
-    // The metablock itself is unaffected — Channels[] always contains every
+    // The metablock itself is unaffected - Channels[] always contains every
     // channel definition from the on-disk metablock, filter or not.
     // The filter map is (re)built whenever ChannelFilter is set or
     // OpenForRead completes; callers may set the filter either before or
@@ -304,16 +304,16 @@ resourcestring
   SOSFTSBlockLengthMismatch = 'WriteTimestampedBlock: Timestamps and Values lengths must match';
   SOSFTSDoublesLengthMismatch = 'WriteTimestampedDoubles: Timestamps and Values lengths must match';
 
-  // Log messages — informational, debug and warning text emitted via OnLog.
+  // Log messages - informational, debug and warning text emitted via OnLog.
   SOSFLogOpeningFile = 'Opening file for read: %s (%d bytes)';
   SOSFLogDetectedVersion = 'Detected version: %s, meta format: %s';
   SOSFLogChannelsDefined = 'Channels defined in meta block: %d';
   SOSFLogChannelEntry = '  [%d] %s  type=%s  equidistant=%s';
   SOSFLogBlockRead = 'Block: channel=%d  type=%s  samples=%d  bytes=%d';
-  SOSFLogTruncatedBlock = 'Truncated block at offset %d — stopping';
-  SOSFLogUnknownBlockTypeInfo = 'Unknown block type %d in info block — skipping';
-  SOSFLogUnknownChannelInBlock = 'Block references unknown channel index %d — skipping';
-  SOSFLogUnknownBlockType = 'Unknown block type %d at offset %d — skipping';
+  SOSFLogTruncatedBlock = 'Truncated block at offset %d - stopping';
+  SOSFLogUnknownBlockTypeInfo = 'Unknown block type %d in info block - skipping';
+  SOSFLogUnknownChannelInBlock = 'Block references unknown channel index %d - skipping';
+  SOSFLogUnknownBlockType = 'Unknown block type %d at offset %d - skipping';
   SOSFLogWritingHeader = 'Writing header: version=%s  channels=%d';
   SOSFLogWriteEquidistant = 'WriteEquidistant: channel=%d  samples=%d';
   SOSFLogWriteTimestamped = 'WriteTimestamped: channel=%d  samples=%d';
@@ -612,7 +612,7 @@ begin
   end;
 end;
 
-// ── TOSFFile — logging helpers (verbatim copy of TOSFLoggable.Log) ───────────
+// ── TOSFFile - logging helpers (verbatim copy of TOSFLoggable.Log) ───────────
 
 procedure TOSFFile.Log(Level: TOSFLogLevel; const Msg: string);
 begin
@@ -640,7 +640,7 @@ begin
   end;
 end;
 
-// ── TOSFFile — channel filter ────────────────────────────────────────────────
+// ── TOSFFile - channel filter ────────────────────────────────────────────────
 
 procedure TOSFFile.SetChannelFilter(const Value: TArray<string>);
 begin
@@ -680,14 +680,14 @@ function TOSFFile.IsChannelExcluded(ChannelIndex: Word): Boolean;
 var
   Included: Boolean;
 begin
-  // Info blocks (channel index $FFFF) bypass the filter — they carry global
+  // Info blocks (channel index $FFFF) bypass the filter - they carry global
   // metadata, not channel data.
   if ChannelIndex = OSF_INFO_CHANNEL_INDEX then
     Exit(False);
   if Length(FChannelFilter) = 0 then
     Exit(False);
   if not FChannelIncluded.TryGetValue(ChannelIndex, Included) then
-    // Unknown channel — leave decision to the caller. Existing logic logs
+    // Unknown channel - leave decision to the caller. Existing logic logs
     // and stops the scan; the filter does not pre-empt that.
     Exit(False);
   Result := not Included;
@@ -698,7 +698,7 @@ var
   LenField: UInt32;
   Sink: TBytes;
 begin
-  // Channel must be known here — IsChannelExcluded only returns True for
+  // Channel must be known here - IsChannelExcluded only returns True for
   // indices present in the metablock, so we have a valid LengthFieldSize.
   case Channel.LengthFieldSize of
     lfs2:
@@ -715,7 +715,7 @@ begin
   Log(llDebug, SOSFLogChannelFilterSkip, [Channel.Name, LenField]);
 end;
 
-// ── TOSFFile — construction / lifecycle ───────────────────────────────────────
+// ── TOSFFile - construction / lifecycle ───────────────────────────────────────
 
 constructor TOSFFile.Create;
 begin
@@ -764,7 +764,7 @@ begin
   finally
     FMode := fmClosed;
   end;
-  // Pre-format with Format() so we exercise the single-string Log overload —
+  // Pre-format with Format() so we exercise the single-string Log overload -
   // the array-of-const overload is exercised by every other call site.
   Log(llInfo, Format(SOSFLogFileClosed, [SourceStr, TotalBytes]));
 end;
@@ -875,7 +875,7 @@ begin
       AStream.Position := SavedPos;
       IsGzip := (Magic[0] = $1F) and (Magic[1] = $8B);
     except
-      // Stream that doesn't support seek — fall through as plain OSF.
+      // Stream that doesn't support seek - fall through as plain OSF.
       IsGzip := False;
     end;
   end;
@@ -887,7 +887,7 @@ begin
     else
       Log(llInfo, SOSFLogOSFZDetected, ['<stream>']);
     // FUnderlyingStream adopts AStream only if the caller asked us to.
-    // The decompressor is always owned by us — it's our own construction.
+    // The decompressor is always owned by us - it's our own construction.
     if AOwnsStream then
       FUnderlyingStream := AStream
     else
@@ -1075,7 +1075,7 @@ end;
 
 procedure TOSFFile.ParseXMLRootAttributes(RootNode: IXMLNode);
 begin
-  // Works for either <optimeas> (OSF4) or <osf> (synthetic) — only attributes.
+  // Works for either <optimeas> (OSF4) or <osf> (synthetic) - only attributes.
   if RootNode.HasAttribute('creator') then
     FMetadata.Creator := RootNode.Attributes['creator'];
   if RootNode.HasAttribute('tag') then
@@ -1155,7 +1155,7 @@ begin
 
     ExcludedChannel := FindChannel(ChannelIndex);
     if not Assigned(ExcludedChannel) then
-      Exit(False); // excluded but unknown — no LengthFieldSize to skip with
+      Exit(False); // excluded but unknown - no LengthFieldSize to skip with
     try
       SkipExcludedBlock(ExcludedChannel);
     except
@@ -1261,7 +1261,7 @@ begin
     FStream.ReadBuffer(Payload[0], LenField);
   except
     on EReadError do
-      Exit(False); // truncated mid-block — best-effort stop
+      Exit(False); // truncated mid-block - best-effort stop
   end;
 
   Result := DecodeBlockPayload(Channel, Payload, LenField, Block);
@@ -1642,7 +1642,7 @@ begin
 
   // A non-zero FirstTimestampNs always starts a new segment (bcStartData).
   // If no timestamp was passed but no segment has been opened yet, the caller
-  // forgot to seed the channel — fail loudly.
+  // forgot to seed the channel - fail loudly.
   IsStart := (FirstTimestampNs <> 0) or (not Channel.StartBlockWritten);
   if IsStart and (FirstTimestampNs = 0) then
     raise EOSFFormatError.Create(SOSFEquiNoFirstTimestamp);
@@ -1664,7 +1664,7 @@ end;
 
 procedure TOSFFile.WriteTimestampedSample(ChannelIndex: Integer; TimestampNs: Int64; const Value: TBytes);
 begin
-  // A single-sample call is just a one-element batch — same byte layout because
+  // A single-sample call is just a one-element batch - same byte layout because
   // the multi-value flag stays clear and no count field is written.
   WriteTimestampedBlock(ChannelIndex, [TimestampNs], [Value]);
 end;
@@ -1750,7 +1750,7 @@ begin
   if FChannelIncluded.TryGetValue(Word(ChannelIndex), Included) then
     Result := Included
   else
-    // No metablock entry for this index — by convention treat as included so
+    // No metablock entry for this index - by convention treat as included so
     // that any downstream block-read warning still fires through the normal
     // path rather than being suppressed by the filter.
     Result := True;

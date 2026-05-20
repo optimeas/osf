@@ -56,7 +56,7 @@ type
     mfJSON
   );
 
-  // Block content type — lower 7 bits of the control byte.
+  // Block content type - lower 7 bits of the control byte.
   // Values 1-4 and 7 are deprecated and not written by new implementations.
   // OSF5 readers must handle bcContinuedRelStampData for backward compatibility
   // with OSF4 files; all others can be silently skipped using the length field.
@@ -96,11 +96,11 @@ type
   // lfs2 is the default and sufficient for all scalar/vector channels.
   // lfs4 is required for binary channels carrying images or large payloads.
   TOSFLengthFieldSize = (
-    lfs2 = 2,  // uint16 — max 65 535 bytes per block
-    lfs4 = 4   // uint32 — max ~4 GB per block
+    lfs2 = 2,  // uint16 - max 65 535 bytes per block
+    lfs4 = 4   // uint32 - max ~4 GB per block
   );
 
-  // GPS position — 24 bytes. Field order is fixed by spec revision 2026-05-04
+  // GPS position - 24 bytes. Field order is fixed by spec revision 2026-05-04
   // to latitude, longitude, altitude.
   TOSFGpsLocation = packed record
     Latitude  : Double;
@@ -138,7 +138,7 @@ resourcestring
   SOSFUnknownChannelType     = 'Unknown OSF channel type: "%s"';
   SOSFUnhandledChannelType   = 'Unhandled TOSFChannelType value: %d';
   SOSFUnknownBlockTypeByte   = 'Unknown block type byte: %d';
-  SOSFInvalidLengthFieldSize = 'Invalid sizeoflengthvalue %d — must be 2 or 4';
+  SOSFInvalidLengthFieldSize = 'Invalid sizeoflengthvalue %d - must be 2 or 4';
 
 // Data type helpers.
 function OSFDataTypeFromString(const S: string): TOSFDataType;
@@ -194,7 +194,7 @@ begin
   else if Lower = 'bytearray'   then Exit(dtBinary)   // OSF4 legacy alias
   else if Lower = 'gpslocation' then Exit(dtGpsLocation);
 
-  // Datatypes removed in spec revision 2026-05-04 — fail loudly so callers
+  // Datatypes removed in spec revision 2026-05-04 - fail loudly so callers
   // see exactly which one tripped them up. 'gpsdata' is rejected here because
   // it was renamed to 'gpslocation' (no backward-compat: the old name was
   // never used in production).

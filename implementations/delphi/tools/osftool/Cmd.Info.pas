@@ -65,7 +65,7 @@ var
   H, M, S: Int64;
 begin
   if (AStartNs = 0) or (AEndNs = 0) or (AEndNs < AStartNs) then
-    Exit('—');
+    Exit('-');
   Total := (AEndNs - AStartNs) div 1000000000; // ns → s
   H := Total div 3600;
   M := (Total mod 3600) div 60;

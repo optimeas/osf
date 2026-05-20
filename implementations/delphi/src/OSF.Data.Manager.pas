@@ -39,7 +39,7 @@ type
     FLongitude: Double;
     FAltitude: Double;
 
-    // Logging — copied verbatim from TOSFLoggable. TPersistent is the
+    // Logging - copied verbatim from TOSFLoggable. TPersistent is the
     // required base class so the manager cannot inherit from TOSFLoggable.
     FOnLog: TOSFLogEvent;
     FDebugEnabled: Boolean;
@@ -74,7 +74,7 @@ type
     // independent data channels.
     function Clone: TOSFDataManager;
 
-    // Assign override — accepts another TOSFDataManager and performs a deep
+    // Assign override - accepts another TOSFDataManager and performs a deep
     // copy. Falls back to the inherited behaviour for unrelated source types.
     procedure Assign(Source: TPersistent); override;
 
@@ -84,7 +84,7 @@ type
     function TryGetChannel(const Name: string; out Channel: TOSFDataChannel): Boolean;
 
     // Loading. Both methods clear the manager first; existing data is discarded.
-    // Best-effort: never raise on truncated data — partial results are valid.
+    // Best-effort: never raise on truncated data - partial results are valid.
     procedure LoadFromFile(const FileName: string);
     procedure LoadFromStream(AStream: TStream);
 
@@ -102,7 +102,7 @@ type
     property Longitude: Double read FLongitude;
     property Altitude: Double read FAltitude;
 
-    // Logging hook — emits informational, warning and (optionally) debug
+    // Logging hook - emits informational, warning and (optionally) debug
     // messages during LoadFromFile/LoadFromStream. The manager forwards its
     // settings to the internal TOSFFile so log messages from both layers go
     // through the same handler.
@@ -123,8 +123,8 @@ resourcestring
   SOSFLogLoadingFile = 'Loading OSF file: %s';
   SOSFLogLoadedChannels = 'Loaded %d channels';
   SOSFLogChannelSummary = '  [%s]  %d samples  %s .. %s';
-  SOSFLogPrecisionLossInt64 = 'Channel [%s] uses Int64/UInt64 — ValueAsDouble may lose precision for values > 2^53';
-  SOSFLogTruncatedFilePartial = 'Truncated or partial file — %d complete blocks read';
+  SOSFLogPrecisionLossInt64 = 'Channel [%s] uses Int64/UInt64 - ValueAsDouble may lose precision for values > 2^53';
+  SOSFLogTruncatedFilePartial = 'Truncated or partial file - %d complete blocks read';
   SOSFLogChannelNotFoundName = 'Channel not found by name: "%s"';
   SOSFLogDataManagerCleared = 'DataManager cleared';
 
@@ -135,7 +135,7 @@ implementation
 // OSF.Channel.pas does not expose a Clone on TOSFChannelDef and we cannot
 // modify that unit, so we replicate every persisted field here. I/O state
 // (LastTimestampNs, SampleCount, StartBlockWritten) is intentionally not
-// copied — that's filer state, not channel definition.
+// copied - that's filer state, not channel definition.
 function CloneChannelDef(Src: TOSFChannelDef): TOSFChannelDef;
 begin
   Result := TOSFChannelDef.Create(Src.Index, Src.Name, Src.ChannelType, Src.DataType);
@@ -320,7 +320,7 @@ begin
   end;
 end;
 
-// ── TOSFDataManager — logging helpers (verbatim copy of TOSFLoggable.Log) ───
+// ── TOSFDataManager - logging helpers (verbatim copy of TOSFLoggable.Log) ───
 
 procedure TOSFDataManager.Log(Level: TOSFLogLevel; const Msg: string);
 begin
@@ -348,7 +348,7 @@ begin
   end;
 end;
 
-// ── TOSFDataManager — construction / lifecycle ──────────────────────────────
+// ── TOSFDataManager - construction / lifecycle ──────────────────────────────
 
 constructor TOSFDataManager.Create;
 begin
@@ -427,7 +427,7 @@ begin
     FOwnedChannelDefs.Add(CloneChannelDef(Source.FOwnedChannelDefs[I]));
 
   // Clone channels with their values; rebind ChannelDef to our def copy.
-  // FChannels[i] in source corresponds to FOwnedChannelDefs[i] in source —
+  // FChannels[i] in source corresponds to FOwnedChannelDefs[i] in source -
   // we preserve that 1:1 ordering in the clone.
   FChannels.Capacity := Source.FChannels.Count;
   for I := 0 to Source.FChannels.Count - 1 do
@@ -470,7 +470,7 @@ var
   I: Integer;
 begin
   // Index here is the channel's logical index from its TOSFChannelDef, not
-  // the position inside FChannels — same semantics as TOSFFile.ChannelByIndex.
+  // the position inside FChannels - same semantics as TOSFFile.ChannelByIndex.
   for I := 0 to FChannels.Count - 1 do
     if Assigned(FChannels[I].ChannelDef) and (FChannels[I].ChannelDef.Index = Index) then
       Exit(FChannels[I]);
@@ -503,7 +503,7 @@ begin
   FS := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
   try
     LoadFromStream(FS);
-    // Set source info AFTER LoadFromStream — that call clears the manager.
+    // Set source info AFTER LoadFromStream - that call clears the manager.
     FSourceFileName := FileName;
     FSourceFileSize := FS.Size;
   finally
@@ -595,7 +595,7 @@ begin
   for I := 0 to AFiler.Channels.Count - 1 do
   begin
     SrcDef := AFiler.Channels[I];
-    // Skip excluded channels entirely — no def clone, no TOSFDataChannel.
+    // Skip excluded channels entirely - no def clone, no TOSFDataChannel.
     // The filer is already skipping their blocks at the stream level, so
     // creating an empty data channel here would only confuse downstream
     // consumers iterating Channels[].
@@ -635,7 +635,7 @@ begin
 
   Channel := FindChannelByDefIndex(Block.ChannelIndex);
   if not Assigned(Channel) then
-    Exit; // unknown channel — silently skip
+    Exit; // unknown channel - silently skip
 
   case Block.BlockType of
     bcAbsTimeStampData:
@@ -671,7 +671,7 @@ begin
     bcContinuedRelStampData:
       DecodeRelTimestampedBlock(Channel, Block);
   else
-    // Reserved / deprecated block types are skipped — the filer already
+    // Reserved / deprecated block types are skipped - the filer already
     // consumed their bytes via the length field.
   end;
 end;

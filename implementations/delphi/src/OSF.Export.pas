@@ -55,7 +55,7 @@ resourcestring
   // Log messages emitted by Export() before, after and on failure.
   SOSFLogExportStarted  = 'Export started: %s';
   SOSFLogExportFinished = 'Export finished: %s';
-  SOSFLogExportFailed   = 'Export failed: %s — %s';
+  SOSFLogExportFailed   = 'Export failed: %s - %s';
 
 implementation
 

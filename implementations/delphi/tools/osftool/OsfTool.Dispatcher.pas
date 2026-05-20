@@ -16,9 +16,6 @@ uses
   System.SysUtils,
   Cmd.Base;
 
-const
-  C_OSFTOOL_VERSION = '1.0.0';
-
 type
   TOsfToolDispatcher = class
   strict private
@@ -40,6 +37,7 @@ implementation
 
 uses
   System.StrUtils,
+  OSF.Version,
   Cmd.Merge,
   Cmd.Export,
   Cmd.Info,
@@ -86,8 +84,8 @@ procedure TOsfToolDispatcher.PrintGlobalHelp;
 var
   C: IOsfCommand;
 begin
-  StdoutLine('osftool — Open Streaming Format command-line tool');
-  StdoutLine('Version: ' + C_OSFTOOL_VERSION);
+  StdoutLine('osftool - Open Streaming Format command-line tool');
+  StdoutLine('Version: ' + GetVersionString);
   StdoutLine('');
   StdoutLine('Usage:  osftool <command> [options] [arguments]');
   StdoutLine('        osftool <command> --help');
@@ -95,6 +93,11 @@ begin
   StdoutLine('Commands:');
   for C in FCommands do
     StdoutLine(Format('  %-10s %s', [C.Name, C.ShortDescription]));
+  StdoutLine('');
+  StdoutLine('Global options:');
+  StdoutLine('  -h, --help     Show this help message');
+  StdoutLine('  -V, --version  Show version information');
+  StdoutLine('      --short    With --version: print only the version number');
   StdoutLine('');
   StdoutLine('Exit codes: 0=ok  1=bad args  2=not found  3=io error  4=format error');
 end;
@@ -105,10 +108,26 @@ var
   C: IOsfCommand;
   Rest: TArray<string>;
   I: Integer;
+  ShortVersion: Boolean;
 begin
   if Length(AArgs) = 0 then
   begin
     PrintGlobalHelp;
+    Exit(EXIT_OK);
+  end;
+
+  // Top-level --version / -V, analogous to --help. -V is matched
+  // case-sensitively so it never collides with a verb's lowercase -v.
+  if SameText(AArgs[0], '--version') or (AArgs[0] = '-V') then
+  begin
+    ShortVersion := False;
+    for I := 1 to High(AArgs) do
+      if SameText(AArgs[I], '--short') then
+        ShortVersion := True;
+    if ShortVersion then
+      StdoutLine(GetVersionString)
+    else
+      StdoutLine(GetFullVersionString);
     Exit(EXIT_OK);
   end;
 
