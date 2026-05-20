@@ -73,11 +73,13 @@ osf/
 ├── implementations/
 │   ├── delphi/                      — reference implementation (full)
 │   │   ├── src/                     — library units
+│   │   ├── src/hdf5/                — HDF5 DLL wrapper units (Windows)
 │   │   ├── demos/osfviewer/         — viewer (uses TeeChart)
 │   │   ├── demos/osfgenerator/      — writes the reference set
 │   │   ├── demos/osfcsvexport/      — OSF → CSV export demo
 │   │   ├── demos/osfmerger/         — VCL merger GUI (OsfMerger, Win64)
 │   │   ├── tools/osftool/           — osftool CLI (9 verbs, Win64)
+│   │   ├── setup/                   — Inno Setup installer for osftool
 │   │   └── OSFCompileCheck.dpr      — compile-only smoke test
 │   ├── rust/                        — Cargo workspace; foundation for Python (DECISIONS §18)
 │   │   └── osf-core/                — read + write + transparent OSFZ complete
@@ -90,6 +92,8 @@ osf/
 │   ├── weather_station.osfz         — real gzip-OSFZ field sample
 │   ├── Testdata Train OSFZ/         — one week of OSF4-OSFZ field recordings (346 files, daily dirs)
 │   └── generated/                   — 17 reference files (from OSFGenerator)
+├── dataformats/
+│   └── hdf5/                        — language-agnostic HDF5 spec, knowledge base, DLL install scripts
 ├── CHANGELOG.md, DECISIONS.md, CONTRIBUTING.md, README.md, LICENSE
 └── STATUS.md                         — this file
 ```
@@ -113,6 +117,15 @@ osf/
 | `OSF.Export.CSV.Unified` | `TOSFUnifiedCSVExporter` — single shared timeline: one timestamp column + one value column per channel, empty cell where a channel has no sample. `TUnifiedCSVTimestampFormat` (datetime / seconds / iso8601 / nanoseconds). O(N) cursor-walk over the merged, de-duplicated timeline. |
 | `OSF.Meta.Cache` | `TOSFMetaCache` — sidecar `.json` per OSF/OSFZ file (source size + mtime validity stamp, global and per-channel first/last timestamps and sample counts; `CachePathFor` maps `foo.osf`/`foo.osfz` → `foo.json`). `TOSFMetaCacheBuilder` scans a file via `TOSFFile` discarding sample payloads. |
 | `OSF.Merger` | `TOSFMerger` — scans a directory (or explicit `FileList`) for OSF/OSFZ files overlapping a UTC interval, merges selected channels into a single OSF4/OSF5 output. Cache-driven file selection, `osSkip`/`osOverwrite` overlap strategy, per-sample interval clipping. Output is emitted as `bcAbsTimeStampData` (equidistant inputs expanded to per-sample timestamps). |
+| `OSF.Export.HDF5` | `TOSFHDF5Exporter` — exports a `TOSFDataManager` as an HDF5 file: one chunked / shuffled / deflated 1-D dataset of `{int64 timestamp_ns; value}` compound records per channel, the channel name split on the namespace separator into HDF5 groups, file and channel metadata as root/dataset attributes. Covers `bool`, every signed/unsigned integer width, `float`, `double`, `gpslocation` (a lat/lon/alt sub-compound) and `string` (variable-length UTF-8); `binary` is skipped. Configurable `ChunkSize`, `DeflateLevel`, `UseShuffle`, `NamespaceSep`, `LibraryDir`. Windows-only. |
+
+**HDF5 DLL binding in `implementations/delphi/src/hdf5/`:** `Hdf5.Types`,
+`Hdf5.Api` and `Hdf5.Wrapper` form a reusable, OSF-agnostic Delphi binding
+to the HDF5 C library — `cdecl` function-pointer types, a six-stage
+`hdf5.dll` resolver, the mandatory `H5open`-first initialisation with
+`_g`-global readout, and RAII handle wrappers. `OSF.Export.HDF5` builds on
+them. The runtime itself is never committed; `dataformats/hdf5/lib/install-hdf5.ps1`
+fetches HDF5 1.14.4-3 from the HDF Group.
 
 **`OSFCompileCheck.dpr`** at the implementation root is a no-form `uses`-only
 program covering every `OSF.*` unit (including `OSF.Meta.Cache` and
@@ -150,7 +163,7 @@ Nine verbs, dispatched by `TOsfToolDispatcher`:
 | Verb | Purpose |
 |---|---|
 | `merge` | Merge OSF files from a directory into one OSF — positionals `<rootdir> <outputfile> [channel ...]`; optional `--start`/`--end` ISO-8601 interval bounds (default `1970-01-01`..now), plus `--osf4`, `--overwrite`, `--no-cache`. Wraps `TOSFMerger`; supersedes the standalone `OsfMerge.dpr` (removed) |
-| `export` | Export channels to CSV — `--format csv` (per-channel XY) or `unified-csv` (single timeline); `--timestamp-format`, `--decimal-sep`, `--encoding`, `--start/--end` |
+| `export` | Export channels — `--format csv` (per-channel XY), `unified-csv` (single shared timeline) or `hdf5` (Windows; one compound dataset per channel via `TOSFHDF5Exporter`); `--timestamp-format`, `--decimal-sep`, `--encoding`, `--start/--end`, plus the HDF5 options `--chunk-size`, `--deflate-level`, `--no-shuffle`, `--namespace-sep`, `--hdf5-lib-dir` |
 | `info` | File metadata + global time range (cache-backed when a valid sidecar exists) |
 | `channels` | List channels with optional `--filter` wildcard (`System.Masks`) |
 | `stat` | Per-channel min/max/mean/stddev via single-pass Welford; `--start/--end` interval filter |
@@ -165,6 +178,17 @@ stdout/stderr split, global `--json` / `--quiet` / `--verbose`).
 (Windows) or `~/.config/osftool/config.json` (POSIX). Uniform exit codes:
 0 ok, 1 bad args, 2 not found, 3 io error, 4 format error. Compiles
 clean with `dcc64`.
+
+### osftool installer
+
+`implementations/delphi/setup/osftool.iss` is an Inno Setup 6 script that
+packages osftool as a Windows installer: it deploys `OsfTool.exe` plus the
+HDF5 runtime (`hdf5.dll` and the bundled MSVC redistributable DLLs) into a
+`lib\` subfolder, adds the install directory to PATH, and lets the user
+choose an all-users (Program Files, system PATH) or per-user
+(`%LocalAppData%`, user PATH) install at runtime. The compiled installer
+binary is not committed; the build prerequisites are documented in the
+script header.
 
 ---
 

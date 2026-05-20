@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.8.0] — 2026-05-20
+
+### Added
+
+- HDF5 export for the Delphi implementation. `osftool export --format hdf5` renders a loaded OSF file as an HDF5 file: every channel becomes one chunked, shuffled and deflated 1-D dataset of compound records `{int64 timestamp_ns; value}`, the hierarchical channel name is split on the namespace separator into an HDF5 group path, file-level metadata lands in root attributes and per-channel metadata in dataset attributes. Datatype coverage: `bool`, `int8`/`16`/`32`/`64`, `uint8`/`16`/`32`/`64`, `float`, `double`, `gpslocation` (a `{latitude;longitude;altitude}` sub-compound) and `string` (an HDF5 variable-length UTF-8 string); `binary` channels are skipped for now. New `export` flags: `--chunk-size`, `--deflate-level`, `--no-shuffle`, `--namespace-sep`, `--hdf5-lib-dir`.
+- Language-agnostic HDF5 format infrastructure under `dataformats/hdf5/` — the OSF→HDF5 mapping specification (`SPEC.md`), the HDF5 DLL-binding knowledge base (`WISSENSBASIS.md`), and `install-hdf5.ps1` / `install-hdf5.sh`, which fetch the official HDF Group runtime (HDF5 1.14.4-3) from GitHub. Binary DLLs are never committed.
+- Delphi HDF5 binding units under `implementations/delphi/src/hdf5/` — `Hdf5.Types`, `Hdf5.Api` (dynamic `hdf5.dll` loading with a six-stage resolver and the mandatory `H5open`-first initialisation order with `_g`-global readout) and `Hdf5.Wrapper` (idiomatic RAII handle classes), a reusable OSF-agnostic binding to the HDF5 C library. The new `OSF.Export.HDF5` unit (`TOSFHDF5Exporter`, a `TOSFExporter` subclass) builds on them.
+- Inno Setup installer for osftool at `implementations/delphi/setup/osftool.iss` — packages `OsfTool.exe` together with the HDF5 runtime (`hdf5.dll` plus the bundled MSVC redistributable DLLs), adds the install directory to PATH, and lets the user choose an all-users or per-user install.
+
+### Notes
+
+- The HDF5 export and its binding units are Windows-only; they compile to empty units on other platforms, so the cross-platform osftool build is unaffected. zlib is statically linked into the bundled `hdf5.dll`, so no separate `zlib.dll` is needed.
+
+---
+
 ## [0.7.0] — 2026-05-20
 
 ### Added
