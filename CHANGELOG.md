@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - Relicensed the entire project from the Apache License 2.0 to the MIT License. The `LICENSE` file, every source-file header (Delphi, Rust, C++), package metadata (`Cargo.toml`, `pyproject.toml`), and documentation were updated accordingly. Vendored third-party code under `implementations/cpp/third_party/` keeps its own upstream licenses (`tl::expected` CC0-1.0, `nlohmann/json` MIT). The `[0.1.0]` entry below is left intact as a historical record — that release did ship under Apache 2.0.
+- Delphi CLI: the `osftool merge` verb's interval bounds are now optional named flags `--start` / `--end` instead of the required third and fourth positionals. Positionals are reduced to `<rootdir> <outputfile> [channel ...]`. Each bound defaults independently — `--start` to `1970-01-01`, `--end` to the current time (UTC) — and a flag, when given, overrides only that one bound; `osftool merge <rootdir> <outputfile>` with no interval flags merges the full available range. An invalid flag value is now reported explicitly instead of being mistaken for a channel name.
 
 ---
 
