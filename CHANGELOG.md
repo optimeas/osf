@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.7.0] — 2026-05-20
 
+### Added
+
+- Documentation: new `tools/` chapter under `docs/en/` and `docs/de/` documenting the `osftool` command-line tool — installation and building from source, general usage, global options and exit codes, the sidecar cache, a full command reference for all nine verbs (`merge`, `export`, `info`, `channels`, `stat`, `cache`, `config`, `convert`, `verify`), and the configuration file. Available in English and German.
+
 ### Changed
 
 - Relicensed the entire project from the Apache License 2.0 to the MIT License. The `LICENSE` file, every source-file header (Delphi, Rust, C++), package metadata (`Cargo.toml`, `pyproject.toml`), and documentation were updated accordingly. Vendored third-party code under `implementations/cpp/third_party/` keeps its own upstream licenses (`tl::expected` CC0-1.0, `nlohmann/json` MIT). The `[0.1.0]` entry below is left intact as a historical record — that release did ship under Apache 2.0.
