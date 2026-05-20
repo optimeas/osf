@@ -25,6 +25,10 @@ uses
   OSF.Export              in '..\..\src\OSF.Export.pas',
   OSF.Export.CSV          in '..\..\src\OSF.Export.CSV.pas',
   OSF.Export.CSV.Unified  in '..\..\src\OSF.Export.CSV.Unified.pas',
+  Hdf5.Types              in '..\..\src\hdf5\Hdf5.Types.pas',
+  Hdf5.Api                in '..\..\src\hdf5\Hdf5.Api.pas',
+  Hdf5.Wrapper            in '..\..\src\hdf5\Hdf5.Wrapper.pas',
+  OSF.Export.HDF5         in '..\..\src\OSF.Export.HDF5.pas',
   OSF.Meta.Cache          in '..\..\src\OSF.Meta.Cache.pas',
   OSF.Merger              in '..\..\src\OSF.Merger.pas';
 

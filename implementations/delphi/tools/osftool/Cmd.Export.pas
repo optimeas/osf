@@ -21,6 +21,9 @@ uses
   OSF.Export,
   OSF.Export.CSV,
   OSF.Export.CSV.Unified,
+  {$IFDEF MSWINDOWS}
+  OSF.Export.HDF5,
+  {$ENDIF}
   OSF.Merger,
   OsfToolConfig;
 
@@ -85,13 +88,18 @@ begin
   Print('  channel      Optional channel names (omit for all)');
   Print('');
   Print('Options:');
-  Print('  --format <fmt>            Output format: csv (default), unified-csv');
+  Print('  --format <fmt>            Output format: csv (default), unified-csv, hdf5');
   Print('  --timestamp-format <fmt>  Timestamp format for unified-csv:');
   Print('                              datetime (default), seconds, iso8601, nanoseconds');
   Print('  --start <time>            Only export samples from this UTC time (ISO 8601)');
   Print('  --end <time>              Only export samples up to this UTC time (ISO 8601)');
   Print('  --decimal-sep <c>         Decimal separator: comma (default) or dot');
   Print('  --encoding <enc>          iso-8859-1 (default) or utf-8');
+  Print('  --chunk-size <n>          hdf5: samples per chunk (default 8192)');
+  Print('  --deflate-level <n>       hdf5: gzip level 0-9 (default 4)');
+  Print('  --no-shuffle              hdf5: disable the shuffle filter');
+  Print('  --namespace-sep <c>       hdf5: channel-name separator (default ".")');
+  Print('  --hdf5-lib-dir <path>     hdf5: directory to search for hdf5.dll');
   Print('  --exclude-empty           Skip channels with 0 samples');
   Print('  --json                    Result summary as JSON');
   Print('  --quiet / --verbose');
@@ -103,7 +111,10 @@ var
   InputFile, OutputFile, FmtName, DecStr, EncName, TsFmtStr: string;
   StartStr, EndStr: string;
   StartUtc, EndUtc: TDateTime;
-  HasInterval, UseUtf8: Boolean;
+  HasInterval, UseUtf8, FormatOk: Boolean;
+  {$IFDEF MSWINDOWS}
+  NsSep: string;
+  {$ENDIF}
   Channels: TArray<string>;
   Mgr, OwnedMgr: TOSFDataManager;
   Merger: TOSFMerger;
@@ -118,7 +129,8 @@ begin
   Positionals := PositionalArgs([
     '--format', '--timestamp-format',
     '--start', '--end',
-    '--decimal-sep', '--encoding']);
+    '--decimal-sep', '--encoding',
+    '--chunk-size', '--deflate-level', '--hdf5-lib-dir', '--namespace-sep']);
   if Length(Positionals) < 2 then
   begin
     PrintErr('osftool export: expected <inputfile> <outputfile>');
@@ -128,9 +140,13 @@ begin
   OutputFile := Positionals[1];
 
   FmtName := LowerCase(FlagValue('--format', 'csv'));
-  if (FmtName <> 'csv') and (FmtName <> 'unified-csv') then
+  FormatOk := (FmtName = 'csv') or (FmtName = 'unified-csv');
+  {$IFDEF MSWINDOWS}
+  FormatOk := FormatOk or (FmtName = 'hdf5');
+  {$ENDIF}
+  if not FormatOk then
   begin
-    PrintErrf('osftool export: unsupported format "%s" (expected csv or unified-csv)', [FmtName]);
+    PrintErrf('osftool export: unsupported format "%s" (expected csv, unified-csv or hdf5)', [FmtName]);
     Exit(EXIT_BAD_ARGS);
   end;
 
@@ -258,6 +274,11 @@ begin
     end;
 
     UseUtf8 := SameText(EncName, 'utf-8') or SameText(EncName, 'utf8');
+    {$IFDEF MSWINDOWS}
+    if FmtName = 'hdf5' then
+      Exporter := TOSFHDF5Exporter.Create(Mgr)
+    else
+    {$ENDIF}
     if FmtName = 'unified-csv' then
       Exporter := TOSFUnifiedCSVExporter.Create(Mgr)
     else
@@ -270,6 +291,21 @@ begin
       // type-dispatch here. Property semantics are identical in both:
       // DecimalSeparator is a Char, Encoding is owned by the exporter
       // only when the exporter constructed it itself.
+      {$IFDEF MSWINDOWS}
+      if Exporter is TOSFHDF5Exporter then
+      begin
+        TOSFHDF5Exporter(Exporter).ChunkSize :=
+          StrToIntDef(FlagValue('--chunk-size', ''), 8192);
+        TOSFHDF5Exporter(Exporter).DeflateLevel :=
+          StrToIntDef(FlagValue('--deflate-level', ''), 4);
+        TOSFHDF5Exporter(Exporter).UseShuffle := not HasFlag('--no-shuffle');
+        TOSFHDF5Exporter(Exporter).LibraryDir := FlagValue('--hdf5-lib-dir', '');
+        NsSep := FlagValue('--namespace-sep', '');
+        if NsSep <> '' then
+          TOSFHDF5Exporter(Exporter).NamespaceSep := NsSep;
+      end
+      else
+      {$ENDIF}
       if Exporter is TOSFUnifiedCSVExporter then
       begin
         TOSFUnifiedCSVExporter(Exporter).DecimalSeparator := DecSep;
@@ -288,7 +324,7 @@ begin
       except
         on E: Exception do
         begin
-          PrintErrf('osftool export: CSV write failed: %s', [E.Message]);
+          PrintErrf('osftool export: write failed: %s', [E.Message]);
           Exit(EXIT_IO_ERROR);
         end;
       end;
