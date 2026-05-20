@@ -147,7 +147,7 @@ Nine verbs, dispatched by `TOsfToolDispatcher`:
 
 | Verb | Purpose |
 |---|---|
-| `merge` | Merge OSF files from a directory over a time interval — wraps `TOSFMerger`; supersedes the standalone `OsfMerge.dpr` (removed) |
+| `merge` | Merge OSF files from a directory into one OSF — positionals `<rootdir> <outputfile> [channel ...]`; optional `--start`/`--end` ISO-8601 interval bounds (default `1970-01-01`..now), plus `--osf4`, `--overwrite`, `--no-cache`. Wraps `TOSFMerger`; supersedes the standalone `OsfMerge.dpr` (removed) |
 | `export` | Export channels to CSV — `--format csv` (per-channel XY) or `unified-csv` (single timeline); `--timestamp-format`, `--decimal-sep`, `--encoding`, `--start/--end` |
 | `info` | File metadata + global time range (cache-backed when a valid sidecar exists) |
 | `channels` | List channels with optional `--filter` wildcard (`System.Masks`) |
