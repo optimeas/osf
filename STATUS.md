@@ -66,6 +66,8 @@ osf/
 │   │   ├── osf_general.md
 │   │   ├── examples/{index, osf_file_examples}.md
 │   │   ├── references/{index, osf4, osf5, osf_vector_matrix}.md
+│   │   ├── integrations/{index, python}.md
+│   │   ├── tools/{index, osftool}.md  — osftool CLI documentation
 │   │   └── media/                   — shared images
 │   └── en/                          — English mirror, same structure
 ├── implementations/
