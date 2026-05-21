@@ -75,6 +75,7 @@ begin
     Dispatcher := TOsfToolDispatcher.Create;
     try
       ExitCode := Dispatcher.Run(Args);
+      Writeln;
     finally
       Dispatcher.Free;
     end;

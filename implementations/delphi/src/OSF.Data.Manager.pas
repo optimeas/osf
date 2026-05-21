@@ -567,9 +567,9 @@ begin
   for I := 0 to FChannels.Count - 1 do
   begin
     Ch := FChannels[I];
-    Log(llInfo, SOSFLogChannelSummary, [Ch.Name, Ch.SampleCount, FormatDateTime(TS_FMT, Ch.StartTimeUtc), FormatDateTime(TS_FMT, Ch.EndTimeUtc)]);
+    Log(llDebug, SOSFLogChannelSummary, [Ch.Name, Ch.SampleCount, FormatDateTime(TS_FMT, Ch.StartTimeUtc), FormatDateTime(TS_FMT, Ch.EndTimeUtc)]);
     if Ch.HasDoublePrecisionLoss then
-      Log(llWarning, SOSFLogPrecisionLossInt64, [Ch.Name]);
+      Log(llDebug, SOSFLogPrecisionLossInt64, [Ch.Name]);
   end;
 end;
 
