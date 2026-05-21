@@ -37,6 +37,38 @@ implementation
 uses
   System.StrUtils;
 
+resourcestring
+  SCacheDesc = 'Manage .json sidecar cache files';
+  SCacheHelp =
+    'osftool cache <subcommand> <rootdir> [options]' + sLineBreak +
+    sLineBreak +
+    'Subcommands:' + sLineBreak +
+    '  build    Build missing .json sidecars (skip if already valid)' + sLineBreak +
+    '  rebuild  Force rebuild all .json sidecars' + sLineBreak +
+    '  clean    Delete all .json sidecars under rootdir' + sLineBreak +
+    '  status   Show which .osf/.osfz files have no valid sidecar' + sLineBreak +
+    sLineBreak +
+    'Options:' + sLineBreak +
+    '  --recursive   Include subdirectories (default: true)' + sLineBreak +
+    '  --no-recursive  Restrict to the root directory only' + sLineBreak +
+    '  --json' + sLineBreak +
+    '  --quiet / --verbose';
+  SCacheErrExpectArgs  = 'osftool cache: expected <subcommand> <rootdir>';
+  SCacheErrUnknownSub  = 'osftool cache: unknown subcommand "%s"';
+  SCacheErrDirNotFound = 'osftool cache: directory not found: %s';
+  SCacheScanning = 'Scanning %s ...';
+  SCacheFound    = 'Found %d OSF files.';
+  SCacheSkip     = '  [skip]  %s  (cache valid)';
+  SCacheBuilt    = '  [build] %s  -> %d channels';
+  SCacheFail     = '  [fail]  %s: %s';
+  SCacheBuildSummary      = 'Built: %d new caches. Skipped: %d (already valid).%s';
+  SCacheBuildFailedSuffix = ' Failed: %d.';
+  SCacheRemoved      = '  removed: %s';
+  SCacheRemoveFailed = '  failed:  %s: %s';
+  SCacheCleanSummary = 'Removed %d cache files under %s.';
+  SCacheMissing       = '  missing: %s';
+  SCacheStatusSummary = '%d files: %d with valid cache, %d missing.';
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function IsOsfFile(const APath: string): Boolean;
@@ -56,24 +88,12 @@ end;
 
 function TOsfCacheCommand.ShortDescription: string;
 begin
-  Result := 'Manage .json sidecar cache files';
+  Result := SCacheDesc;
 end;
 
 procedure TOsfCacheCommand.PrintHelp;
 begin
-  Print('osftool cache <subcommand> <rootdir> [options]');
-  Print('');
-  Print('Subcommands:');
-  Print('  build    Build missing .json sidecars (skip if already valid)');
-  Print('  rebuild  Force rebuild all .json sidecars');
-  Print('  clean    Delete all .json sidecars under rootdir');
-  Print('  status   Show which .osf/.osfz files have no valid sidecar');
-  Print('');
-  Print('Options:');
-  Print('  --recursive   Include subdirectories (default: true)');
-  Print('  --no-recursive  Restrict to the root directory only');
-  Print('  --json');
-  Print('  --quiet / --verbose');
+  Print(SCacheHelp);
 end;
 
 function TOsfCacheCommand.GatherOsfFiles(const ARoot: string; ARecursive: Boolean): TArray<string>;
@@ -116,8 +136,8 @@ var
 begin
   Recursive := not HasFlag('--no-recursive');
   Files := GatherOsfFiles(ARoot, Recursive);
-  Print(Format('Scanning %s ...', [ARoot]));
-  Print(Format('Found %d OSF files.', [Length(Files)]));
+  Print(Format(SCacheScanning, [ARoot]));
+  Print(Format(SCacheFound, [Length(Files)]));
 
   Built := 0;
   Skipped := 0;
@@ -141,7 +161,7 @@ begin
       begin
         Inc(Skipped);
         if not FJson then
-          Printf('  [skip]  %s  (cache valid)', [TPath.GetFileName(F)]);
+          Printf(SCacheSkip, [TPath.GetFileName(F)]);
         Status := 'skipped';
       end
       else
@@ -151,7 +171,7 @@ begin
           Cache.SaveToFile(CachePath);
           Inc(Built);
           if not FJson then
-            Printf('  [build] %s  -> %d channels',
+            Printf(SCacheBuilt,
               [TPath.GetFileName(F), Length(Cache.Channels)]);
           Status := 'built';
         finally
@@ -161,7 +181,7 @@ begin
         on E: Exception do
         begin
           Inc(FailedCount);
-          PrintErrf('  [fail]  %s: %s', [TPath.GetFileName(F), E.Message]);
+          PrintErrf(SCacheFail, [TPath.GetFileName(F), E.Message]);
           Status := 'failed';
         end;
       end;
@@ -183,8 +203,8 @@ begin
     end
     else
     begin
-      Printf('Built: %d new caches. Skipped: %d (already valid).%s',
-        [Built, Skipped, IfThen(FailedCount > 0, Format(' Failed: %d.', [FailedCount]), '')]);
+      Printf(SCacheBuildSummary,
+        [Built, Skipped, IfThen(FailedCount > 0, Format(SCacheBuildFailedSuffix, [FailedCount]), '')]);
     end;
   finally
     if FJson then
@@ -215,16 +235,16 @@ begin
       TFile.Delete(CachePath);
       Inc(Removed);
       if not FJson then
-        Printf('  removed: %s', [TPath.GetFileName(CachePath)]);
+        Printf(SCacheRemoved, [TPath.GetFileName(CachePath)]);
     except
       on E: Exception do
-        PrintErrf('  failed:  %s: %s', [CachePath, E.Message]);
+        PrintErrf(SCacheRemoveFailed, [CachePath, E.Message]);
     end;
   end;
   if FJson then
     PrintJson(Format('{"removed": %d}', [Removed]))
   else
-    Printf('Removed %d cache files under %s.', [Removed, ARoot]);
+    Printf(SCacheCleanSummary, [Removed, ARoot]);
   Result := EXIT_OK;
 end;
 
@@ -268,7 +288,7 @@ begin
     begin
       Inc(Missing);
       if not FJson then
-        Printf('  missing: %s', [F]);
+        Printf(SCacheMissing, [F]);
       if FJson then
       begin
         Item := TJSONObject.Create;
@@ -290,7 +310,7 @@ begin
     end;
   end
   else
-    Printf('%d files: %d with valid cache, %d missing.',
+    Printf(SCacheStatusSummary,
       [Length(Files), Valid, Missing]);
   Result := EXIT_OK;
 end;
@@ -303,19 +323,19 @@ begin
   Positionals := PositionalArgs([]);
   if Length(Positionals) < 2 then
   begin
-    PrintErr('osftool cache: expected <subcommand> <rootdir>');
+    PrintErr(SCacheErrExpectArgs);
     Exit(EXIT_BAD_ARGS);
   end;
   Sub := LowerCase(Positionals[0]);
   Root := Positionals[1];
   if (Sub <> 'build') and (Sub <> 'rebuild') and (Sub <> 'clean') and (Sub <> 'status') then
   begin
-    PrintErrf('osftool cache: unknown subcommand "%s"', [Sub]);
+    PrintErrf(SCacheErrUnknownSub, [Sub]);
     Exit(EXIT_BAD_ARGS);
   end;
   if not TDirectory.Exists(Root) then
   begin
-    PrintErrf('osftool cache: directory not found: %s', [Root]);
+    PrintErrf(SCacheErrDirNotFound, [Root]);
     Exit(EXIT_NOT_FOUND);
   end;
 

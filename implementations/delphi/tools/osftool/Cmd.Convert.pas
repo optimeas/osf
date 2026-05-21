@@ -36,6 +36,31 @@ uses
   System.StrUtils,
   System.DateUtils;
 
+resourcestring
+  SConvertDesc = 'Convert between OSF4 and OSF5';
+  SConvertHelp =
+    'osftool convert <inputfile> <outputfile> [options]' + sLineBreak +
+    sLineBreak +
+    'Arguments:' + sLineBreak +
+    '  inputfile    Source .osf or .osfz' + sLineBreak +
+    '  outputfile   Output .osf' + sLineBreak +
+    sLineBreak +
+    'Options:' + sLineBreak +
+    '  --osf4    Write as OSF4 (default: from config "output.format")' + sLineBreak +
+    '  --osf5    Write as OSF5 (explicit; default in fresh installs)' + sLineBreak +
+    '  --json' + sLineBreak +
+    '  --quiet / --verbose';
+  SConvertErrExpectArgs        = 'osftool convert: expected <inputfile> <outputfile>';
+  SConvertErrInputNotFound     = 'osftool convert: input file not found: %s';
+  SConvertErrOsfFlagsExclusive = 'osftool convert: --osf4 and --osf5 are mutually exclusive';
+  SConvertErrFailed            = 'osftool convert: failed: %s';
+  SConvertReadingOsf4    = 'Reading: %s  (OSF4)';
+  SConvertReadingOsf5    = 'Reading: %s  (OSF5)';
+  SConvertReadingUnknown = 'Reading: %s  (version unknown)';
+  SConvertWritingOsf4    = 'Writing: %s  (OSF4)';
+  SConvertWritingOsf5    = 'Writing: %s  (OSF5)';
+  SConvertDone           = 'Done. Written: %d bytes.';
+
 // ── TOsfConvertCommand ──────────────────────────────────────────────────────
 
 function TOsfConvertCommand.Name: string;
@@ -45,22 +70,12 @@ end;
 
 function TOsfConvertCommand.ShortDescription: string;
 begin
-  Result := 'Convert between OSF4 and OSF5';
+  Result := SConvertDesc;
 end;
 
 procedure TOsfConvertCommand.PrintHelp;
 begin
-  Print('osftool convert <inputfile> <outputfile> [options]');
-  Print('');
-  Print('Arguments:');
-  Print('  inputfile    Source .osf or .osfz');
-  Print('  outputfile   Output .osf');
-  Print('');
-  Print('Options:');
-  Print('  --osf4    Write as OSF4 (default: from config "output.format")');
-  Print('  --osf5    Write as OSF5 (explicit; default in fresh installs)');
-  Print('  --json');
-  Print('  --quiet / --verbose');
+  Print(SConvertHelp);
 end;
 
 function PeekSourceVersion(const AFile: string): TOSFVersion;
@@ -96,7 +111,7 @@ begin
   Positionals := PositionalArgs([]);
   if Length(Positionals) < 2 then
   begin
-    PrintErr('osftool convert: expected <inputfile> <outputfile>');
+    PrintErr(SConvertErrExpectArgs);
     Exit(EXIT_BAD_ARGS);
   end;
   InputFile := Positionals[0];
@@ -104,13 +119,13 @@ begin
 
   if not TFile.Exists(InputFile) then
   begin
-    PrintErrf('osftool convert: input file not found: %s', [InputFile]);
+    PrintErrf(SConvertErrInputNotFound, [InputFile]);
     Exit(EXIT_NOT_FOUND);
   end;
 
   if HasFlag('--osf4') and HasFlag('--osf5') then
   begin
-    PrintErr('osftool convert: --osf4 and --osf5 are mutually exclusive');
+    PrintErr(SConvertErrOsfFlagsExclusive);
     Exit(EXIT_BAD_ARGS);
   end;
 
@@ -136,15 +151,15 @@ begin
   if not FJson then
   begin
     if SourceVersion = osvOSF4 then
-      Printf('Reading: %s  (OSF4)', [TPath.GetFileName(InputFile)])
+      Printf(SConvertReadingOsf4, [TPath.GetFileName(InputFile)])
     else if SourceVersion = osvOSF5 then
-      Printf('Reading: %s  (OSF5)', [TPath.GetFileName(InputFile)])
+      Printf(SConvertReadingOsf5, [TPath.GetFileName(InputFile)])
     else
-      Printf('Reading: %s  (version unknown)', [TPath.GetFileName(InputFile)]);
+      Printf(SConvertReadingUnknown, [TPath.GetFileName(InputFile)]);
     if TargetVersion = osvOSF4 then
-      Printf('Writing: %s  (OSF4)', [TPath.GetFileName(OutputFile)])
+      Printf(SConvertWritingOsf4, [TPath.GetFileName(OutputFile)])
     else
-      Printf('Writing: %s  (OSF5)', [TPath.GetFileName(OutputFile)]);
+      Printf(SConvertWritingOsf5, [TPath.GetFileName(OutputFile)]);
   end;
 
   Merger := TOSFMerger.Create;
@@ -160,7 +175,7 @@ begin
     except
       on E: Exception do
       begin
-        PrintErrf('osftool convert: failed: %s', [E.Message]);
+        PrintErrf(SConvertErrFailed, [E.Message]);
         Exit(EXIT_IO_ERROR);
       end;
     end;
@@ -194,7 +209,7 @@ begin
     end;
   end
   else
-    Printf('Done. Written: %d bytes.', [OutSize]);
+    Printf(SConvertDone, [OutSize]);
   Result := EXIT_OK;
 end;
 

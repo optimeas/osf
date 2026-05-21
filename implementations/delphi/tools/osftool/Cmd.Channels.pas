@@ -47,6 +47,31 @@ const
   C_ISO_FMT = 'yyyy-mm-dd"T"hh:nn:ss';
   C_NS_PER_DAY = 86400.0 * 1.0E9;
 
+resourcestring
+  SChannelsDesc = 'List all channels in a file';
+  SChannelsHelp =
+    'osftool channels <file> [options]' + sLineBreak +
+    sLineBreak +
+    'Arguments:' + sLineBreak +
+    '  file                .osf or .osfz file' + sLineBreak +
+    sLineBreak +
+    'Options:' + sLineBreak +
+    '  --filter <pattern>  Wildcard filter on channel name (e.g. GPS.*)' + sLineBreak +
+    '  --json              Output as JSON array' + sLineBreak +
+    '  --no-cache          Do not consult .json sidecar' + sLineBreak +
+    '  --quiet / --verbose';
+  SChannelsErrExpectFile   = 'osftool channels: expected a file argument';
+  SChannelsErrFileNotFound = 'osftool channels: file not found: %s';
+  SChannelsErrOpenFailed   = 'osftool channels: failed to open %s: %s';
+  SChannelsColName    = 'Name';
+  SChannelsColType    = 'Type';
+  SChannelsColUnit    = 'Unit';
+  SChannelsColSamples = 'Samples';
+  SChannelsColFirst   = 'First';
+  SChannelsColLast    = 'Last';
+  SChannelsMatched = '%d of %d channels matched filter "%s".';
+  SChannelsTotal   = '%d channels total.';
+
 function UnixNsToUtcDateTime(ANs: Int64): TDateTime;
 begin
   if ANs = 0 then
@@ -87,21 +112,12 @@ end;
 
 function TOsfChannelsCommand.ShortDescription: string;
 begin
-  Result := 'List all channels in a file';
+  Result := SChannelsDesc;
 end;
 
 procedure TOsfChannelsCommand.PrintHelp;
 begin
-  Print('osftool channels <file> [options]');
-  Print('');
-  Print('Arguments:');
-  Print('  file                .osf or .osfz file');
-  Print('');
-  Print('Options:');
-  Print('  --filter <pattern>  Wildcard filter on channel name (e.g. GPS.*)');
-  Print('  --json              Output as JSON array');
-  Print('  --no-cache          Do not consult .json sidecar');
-  Print('  --quiet / --verbose');
+  Print(SChannelsHelp);
 end;
 
 function TOsfChannelsCommand.MatchesFilter(const AName, APattern: string): Boolean;
@@ -125,7 +141,8 @@ var
   SamplesStr, FirstStr, LastStr: string;
 begin
   HasCache := Assigned(ACache);
-  Print(Format(C_HEADER, ['#', 'Name', 'Type', 'Unit', 'Samples', 'First', 'Last']));
+  Print(Format(C_HEADER, ['#', SChannelsColName, SChannelsColType, SChannelsColUnit,
+    SChannelsColSamples, SChannelsColFirst, SChannelsColLast]));
   Print(StringOfChar('-', 4 + 30 + 10 + 8 + 10 + 19 + 19 + 6));
   Shown := 0;
   for I := 0 to AFiler.Channels.Count - 1 do
@@ -154,10 +171,10 @@ begin
   end;
   Print('');
   if (APattern <> '') and (Shown < AFiler.Channels.Count) then
-    Printf('%d of %d channels matched filter "%s".',
+    Printf(SChannelsMatched,
       [Shown, AFiler.Channels.Count, APattern])
   else
-    Printf('%d channels total.', [AFiler.Channels.Count]);
+    Printf(SChannelsTotal, [AFiler.Channels.Count]);
 end;
 
 procedure TOsfChannelsCommand.EmitJson(AFiler: TOSFFile; ACache: TOSFMetaCache;
@@ -212,7 +229,7 @@ begin
   Positionals := PositionalArgs(['--filter']);
   if Length(Positionals) < 1 then
   begin
-    PrintErr('osftool channels: expected a file argument');
+    PrintErr(SChannelsErrExpectFile);
     Exit(EXIT_BAD_ARGS);
   end;
   FileName := Positionals[0];
@@ -221,7 +238,7 @@ begin
 
   if not TFile.Exists(FileName) then
   begin
-    PrintErrf('osftool channels: file not found: %s', [FileName]);
+    PrintErrf(SChannelsErrFileNotFound, [FileName]);
     Exit(EXIT_NOT_FOUND);
   end;
 
@@ -235,7 +252,7 @@ begin
     except
       on E: Exception do
       begin
-        PrintErrf('osftool channels: failed to open %s: %s', [FileName, E.Message]);
+        PrintErrf(SChannelsErrOpenFailed, [FileName, E.Message]);
         Exit(EXIT_FORMAT_ERROR);
       end;
     end;

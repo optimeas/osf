@@ -62,6 +62,45 @@ const
   // user's PATH silently.
   C_WIN_ENV_MAX_LEN = 32767;
 
+resourcestring
+  SConfigDesc = 'View and edit default settings';
+  SConfigHelp =
+    'osftool config                       Show all current settings' + sLineBreak +
+    'osftool config set <key> <value>     Set a value' + sLineBreak +
+    'osftool config reset                 Reset all settings to defaults' + sLineBreak +
+    'osftool config install-path          Add osftool to user PATH (no admin required)' + sLineBreak +
+    'osftool config uninstall-path        Remove osftool from user PATH' + sLineBreak +
+    'osftool config --json                Show current settings as JSON' + sLineBreak +
+    sLineBreak +
+    'Keys and defaults:' + sLineBreak +
+    '  output.format          osf5          Default output format for merge/convert' + sLineBreak +
+    '  output.overlap         skip          Overlap strategy: skip or overwrite' + sLineBreak +
+    '  export.decimal_sep     ,             CSV decimal separator' + sLineBreak +
+    '  export.encoding        iso-8859-1    CSV encoding' + sLineBreak +
+    '  cache.enabled          true          Use .json sidecar files' + sLineBreak +
+    '  cache.auto_build       true          Auto-build cache during scan';
+  SConfigFileLine         = 'Config file: %s';
+  SConfigSetOk            = 'Set %s = %s';
+  SConfigResetOk          = 'Config reset to defaults.';
+  SConfigErrSaveFailed    = 'osftool config: failed to save: %s';
+  SConfigErrSetExpectArgs = 'osftool config set: expected <key> <value>';
+  SConfigErrUnknownSub    = 'osftool config: unknown subcommand "%s"';
+  SConfigPathAlready      = 'osftool is already in PATH: %s';
+  SConfigNoChanges        = 'No changes made.';
+  SConfigPathAdded        = 'Added to PATH: %s';
+  SConfigPathRemoved      = 'Removed from PATH: %s';
+  SConfigPathNotFound     = 'osftool directory was not found in PATH. No changes made.';
+  SConfigRestartTerminal  = 'Restart your terminal for the change to take effect.';
+  SConfigErrPathTooLong   =
+    'osftool: refused to write PATH - resulting %d characters exceeds the Windows %d-char limit';
+  SConfigErrWritePathReg  = 'osftool: failed to write PATH to HKCU\Environment';
+  SConfigErrWritePath     = 'osftool: failed to write PATH: %s';
+  SConfigShellNoAutoPath  = 'osftool cannot modify PATH automatically on this platform.';
+  SConfigShellAddIntro    = 'Add the following line to your shell configuration file';
+  SConfigShellRemoveIntro = 'Remove the following line from your shell configuration file';
+  SConfigShellConfigHint  = '(~/.zshrc on macOS, ~/.bashrc on Linux, or equivalent):';
+  SConfigShellReload      = 'Then reload your shell:';
+
 function TOsfConfigCommand.Name: string;
 begin
   Result := 'config';
@@ -69,25 +108,12 @@ end;
 
 function TOsfConfigCommand.ShortDescription: string;
 begin
-  Result := 'View and edit default settings';
+  Result := SConfigDesc;
 end;
 
 procedure TOsfConfigCommand.PrintHelp;
 begin
-  Print('osftool config                       Show all current settings');
-  Print('osftool config set <key> <value>     Set a value');
-  Print('osftool config reset                 Reset all settings to defaults');
-  Print('osftool config install-path          Add osftool to user PATH (no admin required)');
-  Print('osftool config uninstall-path        Remove osftool from user PATH');
-  Print('osftool config --json                Show current settings as JSON');
-  Print('');
-  Print('Keys and defaults:');
-  Print('  output.format          osf5          Default output format for merge/convert');
-  Print('  output.overlap         skip          Overlap strategy: skip or overwrite');
-  Print('  export.decimal_sep     ,             CSV decimal separator');
-  Print('  export.encoding        iso-8859-1    CSV encoding');
-  Print('  cache.enabled          true          Use .json sidecar files');
-  Print('  cache.auto_build       true          Auto-build cache during scan');
+  Print(SConfigHelp);
 end;
 
 function TOsfConfigCommand.RunShow: Integer;
@@ -105,7 +131,7 @@ begin
       for K in Cfg.Keys do
         Printf('  %-22s = %s', [K, Cfg.Get(K)]);
       Print('');
-      Printf('Config file: %s', [TOsfToolConfig.ConfigFilePath]);
+      Printf(SConfigFileLine, [TOsfToolConfig.ConfigFilePath]);
     end;
   finally
     Cfg.Free;
@@ -126,12 +152,12 @@ begin
     except
       on E: Exception do
       begin
-        PrintErrf('osftool config: failed to save: %s', [E.Message]);
+        PrintErrf(SConfigErrSaveFailed, [E.Message]);
         Exit(EXIT_IO_ERROR);
       end;
     end;
     if not FQuiet then
-      Printf('Set %s = %s', [AKey, AValue]);
+      Printf(SConfigSetOk, [AKey, AValue]);
   finally
     Cfg.Free;
   end;
@@ -150,12 +176,12 @@ begin
     except
       on E: Exception do
       begin
-        PrintErrf('osftool config: failed to save: %s', [E.Message]);
+        PrintErrf(SConfigErrSaveFailed, [E.Message]);
         Exit(EXIT_IO_ERROR);
       end;
     end;
     if not FQuiet then
-      Print('Config reset to defaults.');
+      Print(SConfigResetOk);
   finally
     Cfg.Free;
   end;
@@ -258,14 +284,14 @@ end;
 
 procedure TOsfConfigCommand.PrintShellInstallInstructions(const AExeDir: string);
 begin
-  Print('osftool cannot modify PATH automatically on this platform.');
+  Print(SConfigShellNoAutoPath);
   Print('');
-  Print('Add the following line to your shell configuration file');
-  Print('(~/.zshrc on macOS, ~/.bashrc on Linux, or equivalent):');
+  Print(SConfigShellAddIntro);
+  Print(SConfigShellConfigHint);
   Print('');
   Printf('  export PATH="$PATH:%s"', [AExeDir]);
   Print('');
-  Print('Then reload your shell:');
+  Print(SConfigShellReload);
 {$IFDEF MACOS}
   Print('  source ~/.zshrc');
 {$ELSE}
@@ -275,10 +301,10 @@ end;
 
 procedure TOsfConfigCommand.PrintShellUninstallInstructions(const AExeDir: string);
 begin
-  Print('osftool cannot modify PATH automatically on this platform.');
+  Print(SConfigShellNoAutoPath);
   Print('');
-  Print('Remove the following line from your shell configuration file');
-  Print('(~/.zshrc on macOS, ~/.bashrc on Linux, or equivalent):');
+  Print(SConfigShellRemoveIntro);
+  Print(SConfigShellConfigHint);
   Print('');
   Printf('  export PATH="$PATH:%s"', [AExeDir]);
 end;
@@ -301,8 +327,8 @@ begin
   for Existing in CurrentPath.Split([';']) do
     if (Existing <> '') and (NormalizeForCompare(Existing) = NormalizedDir) then
     begin
-      Printf('osftool is already in PATH: %s', [AExeDir]);
-      Print('No changes made.');
+      Printf(SConfigPathAlready, [AExeDir]);
+      Print(SConfigNoChanges);
       Exit(EXIT_OK);
     end;
 
@@ -313,7 +339,7 @@ begin
 
   if Length(NewPath) > C_WIN_ENV_MAX_LEN then
   begin
-    PrintErrf('osftool: refused to write PATH - resulting %d characters exceeds the Windows %d-char limit',
+    PrintErrf(SConfigErrPathTooLong,
       [Length(NewPath), C_WIN_ENV_MAX_LEN]);
     Exit(EXIT_IO_ERROR);
   end;
@@ -321,20 +347,20 @@ begin
   try
     if not WriteUserPath(NewPath) then
     begin
-      PrintErr('osftool: failed to write PATH to HKCU\Environment');
+      PrintErr(SConfigErrWritePathReg);
       Exit(EXIT_IO_ERROR);
     end;
   except
     on E: Exception do
     begin
-      PrintErrf('osftool: failed to write PATH: %s', [E.Message]);
+      PrintErrf(SConfigErrWritePath, [E.Message]);
       Exit(EXIT_IO_ERROR);
     end;
   end;
 
   BroadcastEnvChange;
-  Printf('Added to PATH: %s', [AExeDir]);
-  Print('Restart your terminal for the change to take effect.');
+  Printf(SConfigPathAdded, [AExeDir]);
+  Print(SConfigRestartTerminal);
   Result := EXIT_OK;
 end;
 
@@ -359,7 +385,7 @@ begin
 
     if RemovedCount = 0 then
     begin
-      Print('osftool directory was not found in PATH. No changes made.');
+      Print(SConfigPathNotFound);
       Exit(EXIT_OK);
     end;
 
@@ -368,13 +394,13 @@ begin
     try
       if not WriteUserPath(NewPath) then
       begin
-        PrintErr('osftool: failed to write PATH to HKCU\Environment');
+        PrintErr(SConfigErrWritePathReg);
         Exit(EXIT_IO_ERROR);
       end;
     except
       on E: Exception do
       begin
-        PrintErrf('osftool: failed to write PATH: %s', [E.Message]);
+        PrintErrf(SConfigErrWritePath, [E.Message]);
         Exit(EXIT_IO_ERROR);
       end;
     end;
@@ -383,8 +409,8 @@ begin
   end;
 
   BroadcastEnvChange;
-  Printf('Removed from PATH: %s', [AExeDir]);
-  Print('Restart your terminal for the change to take effect.');
+  Printf(SConfigPathRemoved, [AExeDir]);
+  Print(SConfigRestartTerminal);
   Result := EXIT_OK;
 end;
 
@@ -430,7 +456,7 @@ begin
   begin
     if Length(Positionals) < 3 then
     begin
-      PrintErr('osftool config set: expected <key> <value>');
+      PrintErr(SConfigErrSetExpectArgs);
       Exit(EXIT_BAD_ARGS);
     end;
     Result := RunSet(Positionals[1], Positionals[2]);
@@ -443,7 +469,7 @@ begin
     Result := RunUninstallPath
   else
   begin
-    PrintErrf('osftool config: unknown subcommand "%s"', [Sub]);
+    PrintErrf(SConfigErrUnknownSub, [Sub]);
     Result := EXIT_BAD_ARGS;
   end;
 end;

@@ -47,6 +47,40 @@ implementation
 uses
   System.StrUtils;
 
+resourcestring
+  SVerifyDesc = 'Check file integrity and block consistency';
+  SVerifyHelp =
+    'osftool verify <file> [options]' + sLineBreak +
+    sLineBreak +
+    'Checks performed:' + sLineBreak +
+    '  1. Magic header readable and version recognised' + sLineBreak +
+    '  2. Metablock parseable (XML or JSON valid)' + sLineBreak +
+    '  3. All block channel indices present in metablock' + sLineBreak +
+    '  4. No blocks with length exceeding file size' + sLineBreak +
+    '  5. Timestamps monotonically increasing per channel' + sLineBreak +
+    '  6. File ends cleanly (last block not truncated)' + sLineBreak +
+    sLineBreak +
+    'Options:' + sLineBreak +
+    '  --strict   Treat warnings as errors (affects exit code)' + sLineBreak +
+    '  --json     Output as JSON' + sLineBreak +
+    '  --quiet / --verbose';
+  SVerifyErrExpectFile        = 'osftool verify: expected a file argument';
+  SVerifyErrFileNotFound      = 'osftool verify: file not found: %s';
+  SVerifyErrCannotOpen        = 'osftool verify: cannot open %s: %s';
+  SVerifyErrUnknownChannelIdx = 'block %d references unknown channel index %d';
+  SVerifyErrTimestampBackward =
+    'channel "%s" (idx %d): bcStartData timestamp %d is earlier than previous %d';
+  SVerifyVersionUnknown = 'unknown';
+  SVerifyStatusOk      = 'OK';
+  SVerifyStatusWarning = 'WARNING';
+  SVerifyStatusErrors  = 'ERRORS';
+  SVerifyLineVersion         = '  Version:  %s';
+  SVerifyLineBlocks          = '  Blocks:   %d';
+  SVerifyLineBlocksTruncated = '  Blocks:   %d (%d truncated)';
+  SVerifyLineChannels        = '  Channels: %d';
+  SVerifyLineWarnings        = '  Warnings: %d';
+  SVerifyLineErrors          = '  Errors:   %d';
+
 // ── TOsfVerifyCommand ───────────────────────────────────────────────────────
 
 function TOsfVerifyCommand.Name: string;
@@ -56,25 +90,12 @@ end;
 
 function TOsfVerifyCommand.ShortDescription: string;
 begin
-  Result := 'Check file integrity and block consistency';
+  Result := SVerifyDesc;
 end;
 
 procedure TOsfVerifyCommand.PrintHelp;
 begin
-  Print('osftool verify <file> [options]');
-  Print('');
-  Print('Checks performed:');
-  Print('  1. Magic header readable and version recognised');
-  Print('  2. Metablock parseable (XML or JSON valid)');
-  Print('  3. All block channel indices present in metablock');
-  Print('  4. No blocks with length exceeding file size');
-  Print('  5. Timestamps monotonically increasing per channel');
-  Print('  6. File ends cleanly (last block not truncated)');
-  Print('');
-  Print('Options:');
-  Print('  --strict   Treat warnings as errors (affects exit code)');
-  Print('  --json     Output as JSON');
-  Print('  --quiet / --verbose');
+  Print(SVerifyHelp);
 end;
 
 procedure TOsfVerifyCommand.HandleFilerLog(ALevel: TOSFLogLevel; const AMsg: string);
@@ -109,8 +130,7 @@ begin
   Def := AFiler.ChannelByIndex(ABlock.ChannelIndex);
   if not Assigned(Def) then
   begin
-    FErrors.Add(Format(
-      'block %d references unknown channel index %d',
+    FErrors.Add(Format(SVerifyErrUnknownChannelIdx,
       [FBlockCount, ABlock.ChannelIndex]));
     Exit;
   end;
@@ -122,8 +142,7 @@ begin
   begin
     ThisTs := ABlock.StartTimestampNs;
     if FLastTsPerChannel.TryGetValue(ABlock.ChannelIndex, LastTs) and (ThisTs < LastTs) then
-      FErrors.Add(Format(
-        'channel "%s" (idx %d): bcStartData timestamp %d is earlier than previous %d',
+      FErrors.Add(Format(SVerifyErrTimestampBackward,
         [Def.Name, ABlock.ChannelIndex, ThisTs, LastTs]));
     FLastTsPerChannel.AddOrSetValue(ABlock.ChannelIndex, ThisTs);
   end;
@@ -143,26 +162,26 @@ begin
     osvOSF4: VersionStr := 'OSF4';
     osvOSF5: VersionStr := 'OSF5';
   else
-    VersionStr := 'unknown';
+    VersionStr := SVerifyVersionUnknown;
   end;
 
   if FErrors.Count > 0 then
-    Status := 'ERRORS'
+    Status := SVerifyStatusErrors
   else if FWarnings.Count > 0 then
-    Status := 'WARNING'
+    Status := SVerifyStatusWarning
   else
-    Status := 'OK';
+    Status := SVerifyStatusOk;
   Printf('%s: %s', [TPath.GetFileName(AFile), Status]);
-  Printf('  Version:  %s', [VersionStr]);
+  Printf(SVerifyLineVersion, [VersionStr]);
   if FTruncatedCount > 0 then
-    Printf('  Blocks:   %d (%d truncated)', [FBlockCount, FTruncatedCount])
+    Printf(SVerifyLineBlocksTruncated, [FBlockCount, FTruncatedCount])
   else
-    Printf('  Blocks:   %d', [FBlockCount]);
-  Printf('  Channels: %d', [AChannelCount]);
-  Printf('  Warnings: %d', [FWarnings.Count]);
+    Printf(SVerifyLineBlocks, [FBlockCount]);
+  Printf(SVerifyLineChannels, [AChannelCount]);
+  Printf(SVerifyLineWarnings, [FWarnings.Count]);
   for Msg in FWarnings do
     Printf('    [W] %s', [Msg]);
-  Printf('  Errors:   %d', [FErrors.Count]);
+  Printf(SVerifyLineErrors, [FErrors.Count]);
   for Msg in FErrors do
     Printf('    [E] %s', [Msg]);
 end;
@@ -223,7 +242,7 @@ begin
   Positionals := PositionalArgs([]);
   if Length(Positionals) < 1 then
   begin
-    PrintErr('osftool verify: expected a file argument');
+    PrintErr(SVerifyErrExpectFile);
     Exit(EXIT_BAD_ARGS);
   end;
   FileName := Positionals[0];
@@ -231,7 +250,7 @@ begin
 
   if not TFile.Exists(FileName) then
   begin
-    PrintErrf('osftool verify: file not found: %s', [FileName]);
+    PrintErrf(SVerifyErrFileNotFound, [FileName]);
     Exit(EXIT_NOT_FOUND);
   end;
 
@@ -249,7 +268,7 @@ begin
     except
       on E: Exception do
       begin
-        PrintErrf('osftool verify: cannot open %s: %s', [FileName, E.Message]);
+        PrintErrf(SVerifyErrCannotOpen, [FileName, E.Message]);
         Exit(EXIT_FORMAT_ERROR);
       end;
     end;

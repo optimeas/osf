@@ -44,6 +44,46 @@ uses
 const
   C_NS_PER_DAY = 86400.0 * 1.0E9;
 
+resourcestring
+  SExportDesc = 'Export OSF channels to CSV or other formats';
+  SExportHelp =
+    'osftool export <inputfile> <outputfile> [channel ...] [options]' + sLineBreak +
+    sLineBreak +
+    'Arguments:' + sLineBreak +
+    '  inputfile    Source .osf or .osfz' + sLineBreak +
+    '  outputfile   Output file path' + sLineBreak +
+    '  channel      Optional channel names (omit for all)' + sLineBreak +
+    sLineBreak +
+    'Options:' + sLineBreak +
+    '  --format <fmt>            Output format: csv (default), unified-csv, hdf5' + sLineBreak +
+    '  --timestamp-format <fmt>  Timestamp format for unified-csv:' + sLineBreak +
+    '                              datetime (default), seconds, iso8601, nanoseconds' + sLineBreak +
+    '  --start <time>            Only export samples from this UTC time (ISO 8601)' + sLineBreak +
+    '  --end <time>              Only export samples up to this UTC time (ISO 8601)' + sLineBreak +
+    '  --decimal-sep <c>         Decimal separator: comma (default) or dot' + sLineBreak +
+    '  --encoding <enc>          iso-8859-1 (default) or utf-8' + sLineBreak +
+    '  --chunk-size <n>          hdf5: samples per chunk (default 8192)' + sLineBreak +
+    '  --deflate-level <n>       hdf5: gzip level 0-9 (default 4)' + sLineBreak +
+    '  --no-shuffle              hdf5: disable the shuffle filter' + sLineBreak +
+    '  --namespace-sep <c>       hdf5: channel-name separator (default ".")' + sLineBreak +
+    '  --hdf5-lib-dir <path>     hdf5: directory to search for hdf5.dll' + sLineBreak +
+    '  --exclude-empty           Skip channels with 0 samples' + sLineBreak +
+    '  --json                    Result summary as JSON' + sLineBreak +
+    '  --quiet / --verbose';
+  SExportErrExpectArgs        = 'osftool export: expected <inputfile> <outputfile>';
+  SExportErrBadFormat         = 'osftool export: unsupported format "%s" (expected csv, unified-csv or hdf5)';
+  SExportErrBadTsFormat       = 'osftool export: unknown --timestamp-format "%s" (expected datetime / seconds / iso8601 / nanoseconds)';
+  SExportErrInputNotFound     = 'osftool export: input file not found: %s';
+  SExportErrBadDecimalSep     = 'osftool export: invalid decimal separator "%s"';
+  SExportErrStartNoEnd        = 'osftool export: --start without --end is not allowed';
+  SExportErrEndNoStart        = 'osftool export: --end without --start is not allowed';
+  SExportErrInvalidStart      = 'osftool export: invalid --start: %s';
+  SExportErrInvalidEnd        = 'osftool export: invalid --end: %s';
+  SExportErrFilterMergeFailed = 'osftool export: filter-merge failed: %s';
+  SExportErrLoadFailed        = 'osftool export: load failed: %s';
+  SExportErrWriteFailed       = 'osftool export: write failed: %s';
+  SExportWritten              = 'Written: %s (%d channels, %d bytes)';
+
 function ParseIso8601(const AStr: string; out ADT: TDateTime): Boolean;
 var
   Y, M, D, H, N, S: Word;
@@ -75,34 +115,12 @@ end;
 
 function TOsfExportCommand.ShortDescription: string;
 begin
-  Result := 'Export OSF channels to CSV or other formats';
+  Result := SExportDesc;
 end;
 
 procedure TOsfExportCommand.PrintHelp;
 begin
-  Print('osftool export <inputfile> <outputfile> [channel ...] [options]');
-  Print('');
-  Print('Arguments:');
-  Print('  inputfile    Source .osf or .osfz');
-  Print('  outputfile   Output file path');
-  Print('  channel      Optional channel names (omit for all)');
-  Print('');
-  Print('Options:');
-  Print('  --format <fmt>            Output format: csv (default), unified-csv, hdf5');
-  Print('  --timestamp-format <fmt>  Timestamp format for unified-csv:');
-  Print('                              datetime (default), seconds, iso8601, nanoseconds');
-  Print('  --start <time>            Only export samples from this UTC time (ISO 8601)');
-  Print('  --end <time>              Only export samples up to this UTC time (ISO 8601)');
-  Print('  --decimal-sep <c>         Decimal separator: comma (default) or dot');
-  Print('  --encoding <enc>          iso-8859-1 (default) or utf-8');
-  Print('  --chunk-size <n>          hdf5: samples per chunk (default 8192)');
-  Print('  --deflate-level <n>       hdf5: gzip level 0-9 (default 4)');
-  Print('  --no-shuffle              hdf5: disable the shuffle filter');
-  Print('  --namespace-sep <c>       hdf5: channel-name separator (default ".")');
-  Print('  --hdf5-lib-dir <path>     hdf5: directory to search for hdf5.dll');
-  Print('  --exclude-empty           Skip channels with 0 samples');
-  Print('  --json                    Result summary as JSON');
-  Print('  --quiet / --verbose');
+  Print(SExportHelp);
 end;
 
 function TOsfExportCommand.DoExecute: Integer;
@@ -133,7 +151,7 @@ begin
     '--chunk-size', '--deflate-level', '--hdf5-lib-dir', '--namespace-sep']);
   if Length(Positionals) < 2 then
   begin
-    PrintErr('osftool export: expected <inputfile> <outputfile>');
+    PrintErr(SExportErrExpectArgs);
     Exit(EXIT_BAD_ARGS);
   end;
   InputFile := Positionals[0];
@@ -146,7 +164,7 @@ begin
   {$ENDIF}
   if not FormatOk then
   begin
-    PrintErrf('osftool export: unsupported format "%s" (expected csv, unified-csv or hdf5)', [FmtName]);
+    PrintErrf(SExportErrBadFormat, [FmtName]);
     Exit(EXIT_BAD_ARGS);
   end;
 
@@ -164,14 +182,14 @@ begin
     TsFmt := tfNanoseconds
   else
   begin
-    PrintErrf('osftool export: unknown --timestamp-format "%s" (expected datetime / seconds / iso8601 / nanoseconds)',
+    PrintErrf(SExportErrBadTsFormat,
       [TsFmtStr]);
     Exit(EXIT_BAD_ARGS);
   end;
 
   if not TFile.Exists(InputFile) then
   begin
-    PrintErrf('osftool export: input file not found: %s', [InputFile]);
+    PrintErrf(SExportErrInputNotFound, [InputFile]);
     Exit(EXIT_NOT_FOUND);
   end;
 
@@ -192,7 +210,7 @@ begin
     DecSep := DecStr[1]
   else
   begin
-    PrintErrf('osftool export: invalid decimal separator "%s"', [DecStr]);
+    PrintErrf(SExportErrBadDecimalSep, [DecStr]);
     Exit(EXIT_BAD_ARGS);
   end;
 
@@ -201,12 +219,12 @@ begin
   HasInterval := (StartStr <> '') and (EndStr <> '');
   if (StartStr <> '') and (EndStr = '') then
   begin
-    PrintErr('osftool export: --start without --end is not allowed');
+    PrintErr(SExportErrStartNoEnd);
     Exit(EXIT_BAD_ARGS);
   end;
   if (EndStr <> '') and (StartStr = '') then
   begin
-    PrintErr('osftool export: --end without --start is not allowed');
+    PrintErr(SExportErrEndNoStart);
     Exit(EXIT_BAD_ARGS);
   end;
 
@@ -215,12 +233,12 @@ begin
   begin
     if not ParseIso8601(StartStr, StartUtc) then
     begin
-      PrintErrf('osftool export: invalid --start: %s', [StartStr]);
+      PrintErrf(SExportErrInvalidStart, [StartStr]);
       Exit(EXIT_BAD_ARGS);
     end;
     if not ParseIso8601(EndStr, EndUtc) then
     begin
-      PrintErrf('osftool export: invalid --end: %s', [EndStr]);
+      PrintErrf(SExportErrInvalidEnd, [EndStr]);
       Exit(EXIT_BAD_ARGS);
     end;
   end;
@@ -249,7 +267,7 @@ begin
       except
         on E: Exception do
         begin
-          PrintErrf('osftool export: filter-merge failed: %s', [E.Message]);
+          PrintErrf(SExportErrFilterMergeFailed, [E.Message]);
           Exit(EXIT_IO_ERROR);
         end;
       end;
@@ -266,7 +284,7 @@ begin
       except
         on E: Exception do
         begin
-          PrintErrf('osftool export: load failed: %s', [E.Message]);
+          PrintErrf(SExportErrLoadFailed, [E.Message]);
           Exit(EXIT_FORMAT_ERROR);
         end;
       end;
@@ -324,7 +342,7 @@ begin
       except
         on E: Exception do
         begin
-          PrintErrf('osftool export: write failed: %s', [E.Message]);
+          PrintErrf(SExportErrWriteFailed, [E.Message]);
           Exit(EXIT_IO_ERROR);
         end;
       end;
@@ -351,7 +369,7 @@ begin
       end;
     end
     else
-      Printf('Written: %s (%d channels, %d bytes)',
+      Printf(SExportWritten,
         [OutputFile, Mgr.ChannelCount, OutSize]);
   finally
     OwnedMgr.Free;

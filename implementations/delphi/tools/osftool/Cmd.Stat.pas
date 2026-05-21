@@ -64,6 +64,41 @@ const
   C_NS_PER_DAY = 86400.0 * 1.0E9;
   C_ISO_FMT    = 'yyyy-mm-dd"T"hh:nn:ss';
 
+resourcestring
+  SStatDesc = 'Compute statistics (min, max, mean, ...) per channel';
+  SStatHelp =
+    'osftool stat <file> [channel ...] [options]' + sLineBreak +
+    sLineBreak +
+    'Arguments:' + sLineBreak +
+    '  file       .osf or .osfz file' + sLineBreak +
+    '  channel    Optional channel names (omit for all)' + sLineBreak +
+    sLineBreak +
+    'Options:' + sLineBreak +
+    '  --start <time>   Only consider samples from this UTC time (ISO 8601)' + sLineBreak +
+    '  --end <time>     Only consider samples up to this UTC time (ISO 8601)' + sLineBreak +
+    '  --json           Output as JSON' + sLineBreak +
+    '  --quiet / --verbose' + sLineBreak +
+    sLineBreak +
+    'Note: Int64/UInt64 channels may lose precision when converted to' + sLineBreak +
+    '      Double for statistical calculations.';
+  SStatErrExpectFile     = 'osftool stat: expected a file argument';
+  SStatErrFileNotFound   = 'osftool stat: file not found: %s';
+  SStatErrInvalidStart   = 'osftool stat: invalid --start: %s';
+  SStatErrInvalidEnd     = 'osftool stat: invalid --end: %s';
+  SStatErrEndBeforeStart = 'osftool stat: --end is earlier than --start';
+  SStatErrCannotLoad     = 'osftool stat: cannot load %s: %s';
+  SStatInterval      = 'Interval: %s .. %s';
+  SStatNotNumeric    = '(not numeric)';
+  SStatNotePrecision = 'Note: Int64/UInt64 channels may lose precision when converted to Double.';
+  SStatColChannel = 'Channel';
+  SStatColType    = 'Type';
+  SStatColUnit    = 'Unit';
+  SStatColSamples = 'Samples';
+  SStatColMin     = 'Min';
+  SStatColMax     = 'Max';
+  SStatColMean    = 'Mean';
+  SStatColStdDev  = 'StdDev';
+
 // ── ISO 8601 + Unix-ns helpers ───────────────────────────────────────────────
 //
 // Local copies of the same helpers used in Cmd.Merge.pas. Kept private so
@@ -171,25 +206,12 @@ end;
 
 function TOsfStatCommand.ShortDescription: string;
 begin
-  Result := 'Compute statistics (min, max, mean, ...) per channel';
+  Result := SStatDesc;
 end;
 
 procedure TOsfStatCommand.PrintHelp;
 begin
-  Print('osftool stat <file> [channel ...] [options]');
-  Print('');
-  Print('Arguments:');
-  Print('  file       .osf or .osfz file');
-  Print('  channel    Optional channel names (omit for all)');
-  Print('');
-  Print('Options:');
-  Print('  --start <time>   Only consider samples from this UTC time (ISO 8601)');
-  Print('  --end <time>     Only consider samples up to this UTC time (ISO 8601)');
-  Print('  --json           Output as JSON');
-  Print('  --quiet / --verbose');
-  Print('');
-  Print('Note: Int64/UInt64 channels may lose precision when converted to');
-  Print('      Double for statistical calculations.');
+  Print(SStatHelp);
 end;
 
 function TOsfStatCommand.CollectStats(AMgr: TOSFDataManager;
@@ -253,18 +275,19 @@ procedure TOsfStatCommand.EmitHuman(const AStats: TArray<TChannelStat>;
 const
   C_HEADER = '%-30s %-8s %-8s %10s %12s %12s %12s %12s';
   C_NUMERIC = '%-30s %-8s %-8s %10d %12.4f %12.4f %12.4f %12.4f';
-  C_NON_NUM = '%-30s %-8s %-8s %10d   (not numeric)';
+  C_NON_NUM = '%-30s %-8s %-8s %10d   %s';
 var
   Rec: TChannelStat;
   AnyPrecisionLoss: Boolean;
 begin
   if (AStartUtc <> 0) or (AEndUtc <> 0) then
   begin
-    Printf('Interval: %s .. %s',
+    Printf(SStatInterval,
       [FormatIntervalBound(AStartUtc), FormatIntervalBound(AEndUtc)]);
     Print('');
   end;
-  Print(Format(C_HEADER, ['Channel', 'Type', 'Unit', 'Samples', 'Min', 'Max', 'Mean', 'StdDev']));
+  Print(Format(C_HEADER, [SStatColChannel, SStatColType, SStatColUnit, SStatColSamples,
+    SStatColMin, SStatColMax, SStatColMean, SStatColStdDev]));
   Print(StringOfChar('-', 30 + 8 + 8 + 10 + 12 + 12 + 12 + 12 + 7));
   AnyPrecisionLoss := False;
   for Rec in AStats do
@@ -276,14 +299,14 @@ begin
     else
       Print(Format(C_NON_NUM,
         [Rec.Name, OSFDataTypeToString(Rec.DataType), Rec.PhysicalUnit,
-         Rec.SampleCount]));
+         Rec.SampleCount, SStatNotNumeric]));
     if Rec.PrecisionLossRisk then
       AnyPrecisionLoss := True;
   end;
   if AnyPrecisionLoss then
   begin
     Print('');
-    Print('Note: Int64/UInt64 channels may lose precision when converted to Double.');
+    Print(SStatNotePrecision);
   end;
 end;
 
@@ -361,13 +384,13 @@ begin
   Positionals := PositionalArgs(['--start', '--end']);
   if Length(Positionals) < 1 then
   begin
-    PrintErr('osftool stat: expected a file argument');
+    PrintErr(SStatErrExpectFile);
     Exit(EXIT_BAD_ARGS);
   end;
   FileName := Positionals[0];
   if not TFile.Exists(FileName) then
   begin
-    PrintErrf('osftool stat: file not found: %s', [FileName]);
+    PrintErrf(SStatErrFileNotFound, [FileName]);
     Exit(EXIT_NOT_FOUND);
   end;
 
@@ -389,7 +412,7 @@ begin
   begin
     if not ParseIso8601(StartStr, StartUtc) then
     begin
-      PrintErrf('osftool stat: invalid --start: %s', [StartStr]);
+      PrintErrf(SStatErrInvalidStart, [StartStr]);
       Exit(EXIT_BAD_ARGS);
     end;
     StartNs := UtcDateTimeToUnixNs(StartUtc);
@@ -398,14 +421,14 @@ begin
   begin
     if not ParseIso8601(EndStr, EndUtc) then
     begin
-      PrintErrf('osftool stat: invalid --end: %s', [EndStr]);
+      PrintErrf(SStatErrInvalidEnd, [EndStr]);
       Exit(EXIT_BAD_ARGS);
     end;
     EndNs := UtcDateTimeToUnixNs(EndUtc);
   end;
   if (StartNs > 0) and (EndNs > 0) and (EndNs < StartNs) then
   begin
-    PrintErr('osftool stat: --end is earlier than --start');
+    PrintErr(SStatErrEndBeforeStart);
     Exit(EXIT_BAD_ARGS);
   end;
 
@@ -419,7 +442,7 @@ begin
     except
       on E: Exception do
       begin
-        PrintErrf('osftool stat: cannot load %s: %s', [FileName, E.Message]);
+        PrintErrf(SStatErrCannotLoad, [FileName, E.Message]);
         Exit(EXIT_FORMAT_ERROR);
       end;
     end;

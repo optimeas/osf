@@ -45,6 +45,38 @@ const
   C_ISO_FMT = 'yyyy-mm-dd"T"hh:nn:ss"."zzz"Z"';
   C_NS_PER_DAY = 86400.0 * 1.0E9;
 
+resourcestring
+  SInfoDesc = 'Show file metadata and time range';
+  SInfoHelp =
+    'osftool info <file> [options]' + sLineBreak +
+    sLineBreak +
+    'Show file metadata and global time range.' + sLineBreak +
+    sLineBreak +
+    'Arguments:' + sLineBreak +
+    '  file        .osf or .osfz file' + sLineBreak +
+    sLineBreak +
+    'Options:' + sLineBreak +
+    '  --json      Output as JSON' + sLineBreak +
+    '  --no-cache  Do not consult .json sidecar; scan the OSF file directly' + sLineBreak +
+    '  --quiet / --verbose';
+  SInfoErrExpectFile   = 'osftool info: expected a file argument';
+  SInfoErrFileNotFound = 'osftool info: file not found: %s';
+  SInfoErrOpenFailed   = 'osftool info: failed to open %s: %s';
+  SInfoFile           = 'File:        %s';
+  SInfoSize           = 'Size:        %d bytes';
+  SInfoVersionOsf4    = 'Version:     OSF4';
+  SInfoVersionOsf5    = 'Version:     OSF5';
+  SInfoVersionUnknown = 'Version:     unknown';
+  SInfoCreator        = 'Creator:     %s';
+  SInfoCreatedUtc     = 'Created UTC: %s';
+  SInfoTag            = 'Tag:         %s';
+  SInfoReason         = 'Reason:      %s';
+  SInfoComment        = 'Comment:     %s';
+  SInfoChannels       = 'Channels:    %d';
+  SInfoFirstData      = 'First data:  %s';
+  SInfoLastData       = 'Last data:   %s';
+  SInfoDuration       = 'Duration:    %s';
+
 function UnixNsToUtcDateTime(ANs: Int64): TDateTime;
 begin
   if ANs = 0 then
@@ -82,22 +114,12 @@ end;
 
 function TOsfInfoCommand.ShortDescription: string;
 begin
-  Result := 'Show file metadata and time range';
+  Result := SInfoDesc;
 end;
 
 procedure TOsfInfoCommand.PrintHelp;
 begin
-  Print('osftool info <file> [options]');
-  Print('');
-  Print('Show file metadata and global time range.');
-  Print('');
-  Print('Arguments:');
-  Print('  file        .osf or .osfz file');
-  Print('');
-  Print('Options:');
-  Print('  --json      Output as JSON');
-  Print('  --no-cache  Do not consult .json sidecar; scan the OSF file directly');
-  Print('  --quiet / --verbose');
+  Print(SInfoHelp);
 end;
 
 // Reads the global first/last timestamp from the sidecar if available,
@@ -148,30 +170,30 @@ end;
 procedure TOsfInfoCommand.PrintHuman(const AFile: string; AFiler: TOSFFile;
   AFirstNs, ALastNs: Int64);
 begin
-  Printf('File:        %s', [TPath.GetFileName(AFile)]);
-  Printf('Size:        %d bytes', [TFile.GetSize(AFile)]);
+  Printf(SInfoFile, [TPath.GetFileName(AFile)]);
+  Printf(SInfoSize, [TFile.GetSize(AFile)]);
   case AFiler.Version of
-    osvOSF4: Print('Version:     OSF4');
-    osvOSF5: Print('Version:     OSF5');
+    osvOSF4: Print(SInfoVersionOsf4);
+    osvOSF5: Print(SInfoVersionOsf5);
   else
-    Print('Version:     unknown');
+    Print(SInfoVersionUnknown);
   end;
   if AFiler.Metadata.Creator <> '' then
-    Printf('Creator:     %s', [AFiler.Metadata.Creator]);
+    Printf(SInfoCreator, [AFiler.Metadata.Creator]);
   if AFiler.Metadata.CreatedUtc <> 0 then
-    Printf('Created UTC: %s', [FormatUtc(AFiler.Metadata.CreatedUtc)]);
+    Printf(SInfoCreatedUtc, [FormatUtc(AFiler.Metadata.CreatedUtc)]);
   if AFiler.Metadata.Tag <> '' then
-    Printf('Tag:         %s', [AFiler.Metadata.Tag]);
+    Printf(SInfoTag, [AFiler.Metadata.Tag]);
   if AFiler.Metadata.Reason <> '' then
-    Printf('Reason:      %s', [AFiler.Metadata.Reason]);
+    Printf(SInfoReason, [AFiler.Metadata.Reason]);
   if AFiler.Metadata.Comment <> '' then
-    Printf('Comment:     %s', [AFiler.Metadata.Comment]);
-  Printf('Channels:    %d', [AFiler.ChannelCount]);
+    Printf(SInfoComment, [AFiler.Metadata.Comment]);
+  Printf(SInfoChannels, [AFiler.ChannelCount]);
   if AFirstNs > 0 then
-    Printf('First data:  %s', [FormatUtc(UnixNsToUtcDateTime(AFirstNs))]);
+    Printf(SInfoFirstData, [FormatUtc(UnixNsToUtcDateTime(AFirstNs))]);
   if ALastNs > 0 then
-    Printf('Last data:   %s', [FormatUtc(UnixNsToUtcDateTime(ALastNs))]);
-  Printf('Duration:    %s', [FormatDuration(AFirstNs, ALastNs)]);
+    Printf(SInfoLastData, [FormatUtc(UnixNsToUtcDateTime(ALastNs))]);
+  Printf(SInfoDuration, [FormatDuration(AFirstNs, ALastNs)]);
 end;
 
 procedure TOsfInfoCommand.EmitJson(const AFile: string; AFiler: TOSFFile;
@@ -223,13 +245,13 @@ begin
   Positionals := PositionalArgs([]);
   if Length(Positionals) < 1 then
   begin
-    PrintErr('osftool info: expected a file argument');
+    PrintErr(SInfoErrExpectFile);
     Exit(EXIT_BAD_ARGS);
   end;
   FileName := Positionals[0];
   if not TFile.Exists(FileName) then
   begin
-    PrintErrf('osftool info: file not found: %s', [FileName]);
+    PrintErrf(SInfoErrFileNotFound, [FileName]);
     Exit(EXIT_NOT_FOUND);
   end;
 
@@ -242,7 +264,7 @@ begin
     except
       on E: Exception do
       begin
-        PrintErrf('osftool info: failed to open %s: %s', [FileName, E.Message]);
+        PrintErrf(SInfoErrOpenFailed, [FileName, E.Message]);
         Exit(EXIT_FORMAT_ERROR);
       end;
     end;

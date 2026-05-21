@@ -48,6 +48,29 @@ uses
   Cmd.Convert,
   Cmd.Verify;
 
+const
+  // Layout-only: column skeleton for the command list. Not translatable.
+  C_CMD_ROW = '  %-10s %s';
+
+resourcestring
+  SCliHelpHead =
+    'osftool - Open Streaming Format command-line tool' + sLineBreak +
+    'Version: %s' + sLineBreak +
+    sLineBreak +
+    'Usage:  osftool <command> [options] [arguments]' + sLineBreak +
+    '        osftool <command> --help' + sLineBreak +
+    sLineBreak +
+    'Commands:';
+  SCliHelpTail =
+    'Global options:' + sLineBreak +
+    '  -h, --help     Show this help message' + sLineBreak +
+    '  -V, --version  Show version information' + sLineBreak +
+    '      --short    With --version: print only the version number' + sLineBreak +
+    sLineBreak +
+    'Exit codes: 0=ok  1=bad args  2=not found  3=io error  4=format error';
+  SCliUnknownCommand = 'osftool: unknown command: %s';
+  SCliRunHelpHint    = 'Run "osftool --help" for usage.';
+
 constructor TOsfToolDispatcher.Create;
 begin
   inherited Create;
@@ -84,22 +107,11 @@ procedure TOsfToolDispatcher.PrintGlobalHelp;
 var
   C: IOsfCommand;
 begin
-  StdoutLine('osftool - Open Streaming Format command-line tool');
-  StdoutLine('Version: ' + GetVersionString);
-  StdoutLine('');
-  StdoutLine('Usage:  osftool <command> [options] [arguments]');
-  StdoutLine('        osftool <command> --help');
-  StdoutLine('');
-  StdoutLine('Commands:');
+  StdoutLine(Format(SCliHelpHead, [GetVersionString]));
   for C in FCommands do
-    StdoutLine(Format('  %-10s %s', [C.Name, C.ShortDescription]));
+    StdoutLine(Format(C_CMD_ROW, [C.Name, C.ShortDescription]));
   StdoutLine('');
-  StdoutLine('Global options:');
-  StdoutLine('  -h, --help     Show this help message');
-  StdoutLine('  -V, --version  Show version information');
-  StdoutLine('      --short    With --version: print only the version number');
-  StdoutLine('');
-  StdoutLine('Exit codes: 0=ok  1=bad args  2=not found  3=io error  4=format error');
+  StdoutLine(SCliHelpTail);
 end;
 
 function TOsfToolDispatcher.Run(const AArgs: TArray<string>): Integer;
@@ -141,8 +153,8 @@ begin
   C := FindCommand(CmdName);
   if not Assigned(C) then
   begin
-    StderrLine('osftool: unknown command: ' + CmdName);
-    StderrLine('Run "osftool --help" for usage.');
+    StderrLine(Format(SCliUnknownCommand, [CmdName]));
+    StderrLine(SCliRunHelpHint);
     Exit(EXIT_BAD_ARGS);
   end;
 

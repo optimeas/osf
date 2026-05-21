@@ -41,6 +41,46 @@ uses
   OSF.Progress.Live,
   OSF.Progress.LogFile;
 
+resourcestring
+  SMergeDesc = 'Merge OSF files from a directory over a time interval';
+  SMergeHelp =
+    'osftool merge <input-dir> <output-file> [channel ...] [options]' + sLineBreak +
+    sLineBreak +
+    'Arguments:' + sLineBreak +
+    '  input-dir     Root directory (recursive scan for .osf and .osfz)' + sLineBreak +
+    '  output-file   Output file path (.osf)' + sLineBreak +
+    '  channel       Optional channel names (omit for all)' + sLineBreak +
+    sLineBreak +
+    'Options:' + sLineBreak +
+    '  --start <ts>      Interval start, ISO 8601 (default: 1970-01-01T00:00:00)' + sLineBreak +
+    '  --end <ts>        Interval end,   ISO 8601 (default: current date and time)' + sLineBreak +
+    '  --osf4            Write OSF4 output (default: from config "output.format")' + sLineBreak +
+    '  --overwrite       Overwrite overlapping timestamps' + sLineBreak +
+    '  --no-cache        Do not read or write .json sidecar files' + sLineBreak +
+    sLineBreak +
+    'Output options:' + sLineBreak +
+    '  -q, --quiet       Suppress live output; errors only on stderr' + sLineBreak +
+    '  -v, --verbose     Print all log messages (no live progress bar)' + sLineBreak +
+    '      --json        Emit a machine-readable JSON-Lines event stream' + sLineBreak +
+    '      --log <path>  Write a full diagnostic log to file' + sLineBreak +
+    sLineBreak +
+    'Examples:' + sLineBreak +
+    '  osftool merge ./data merged.osf' + sLineBreak +
+    '  osftool merge ./data merged.osf --log merge.log' + sLineBreak +
+    '  osftool merge ./data merged.osf --json > merge-events.jsonl' + sLineBreak +
+    '  osftool merge ./data merged.osf --verbose';
+  SMergeErrExpectArgs       = 'osftool merge: expected <input-dir> <output-file>';
+  SMergeErrQuietVerbose     = 'osftool merge: --quiet and --verbose are mutually exclusive';
+  SMergeErrQuietJson        = 'osftool merge: --quiet and --json are mutually exclusive';
+  SMergeErrVerboseJson      = 'osftool merge: --verbose and --json are mutually exclusive';
+  SMergeErrInvalidStart     = 'osftool merge: invalid --start: %s';
+  SMergeErrInvalidEnd       = 'osftool merge: invalid --end: %s';
+  SMergeErrInputDirNotFound = 'osftool merge: input-dir not found: %s';
+  SMergeErrLogFile          = 'osftool merge: cannot open log file "%s": %s';
+  SMergeErrScanFailed       = 'osftool merge: scan failed: %s';
+  SMergeErrNoOverlap        = 'osftool merge: no files overlap the interval';
+  SMergeErrWriteFailed      = 'osftool merge: write failed: %s';
+
 // ── shared timestamp parsing ────────────────────────────────────────────────
 
 function ParseIso8601(const AStr: string; out ADT: TDateTime): Boolean;
@@ -99,36 +139,12 @@ end;
 
 function TOsfMergeCommand.ShortDescription: string;
 begin
-  Result := 'Merge OSF files from a directory over a time interval';
+  Result := SMergeDesc;
 end;
 
 procedure TOsfMergeCommand.PrintHelp;
 begin
-  Print('osftool merge <input-dir> <output-file> [channel ...] [options]');
-  Print('');
-  Print('Arguments:');
-  Print('  input-dir     Root directory (recursive scan for .osf and .osfz)');
-  Print('  output-file   Output file path (.osf)');
-  Print('  channel       Optional channel names (omit for all)');
-  Print('');
-  Print('Options:');
-  Print('  --start <ts>      Interval start, ISO 8601 (default: 1970-01-01T00:00:00)');
-  Print('  --end <ts>        Interval end,   ISO 8601 (default: current date and time)');
-  Print('  --osf4            Write OSF4 output (default: from config "output.format")');
-  Print('  --overwrite       Overwrite overlapping timestamps');
-  Print('  --no-cache        Do not read or write .json sidecar files');
-  Print('');
-  Print('Output options:');
-  Print('  -q, --quiet       Suppress live output; errors only on stderr');
-  Print('  -v, --verbose     Print all log messages (no live progress bar)');
-  Print('      --json        Emit a machine-readable JSON-Lines event stream');
-  Print('      --log <path>  Write a full diagnostic log to file');
-  Print('');
-  Print('Examples:');
-  Print('  osftool merge ./data merged.osf');
-  Print('  osftool merge ./data merged.osf --log merge.log');
-  Print('  osftool merge ./data merged.osf --json > merge-events.jsonl');
-  Print('  osftool merge ./data merged.osf --verbose');
+  Print(SMergeHelp);
 end;
 
 function TOsfMergeCommand.DoExecute: Integer;
@@ -149,7 +165,7 @@ begin
   Positionals := PositionalArgs(['--start', '--end', '--log']);
   if Length(Positionals) < 2 then
   begin
-    PrintErr('osftool merge: expected <input-dir> <output-file>');
+    PrintErr(SMergeErrExpectArgs);
     Exit(EXIT_BAD_ARGS);
   end;
   Root := Positionals[0];
@@ -164,17 +180,17 @@ begin
 
   if Quiet and Verbose then
   begin
-    PrintErr('osftool merge: --quiet and --verbose are mutually exclusive');
+    PrintErr(SMergeErrQuietVerbose);
     Exit(EXIT_BAD_ARGS);
   end;
   if Quiet and Json then
   begin
-    PrintErr('osftool merge: --quiet and --json are mutually exclusive');
+    PrintErr(SMergeErrQuietJson);
     Exit(EXIT_BAD_ARGS);
   end;
   if Verbose and Json then
   begin
-    PrintErr('osftool merge: --verbose and --json are mutually exclusive');
+    PrintErr(SMergeErrVerboseJson);
     Exit(EXIT_BAD_ARGS);
   end;
 
@@ -184,7 +200,7 @@ begin
   StartStr := FlagValue('--start', '');
   if (StartStr <> '') and not ParseIso8601(StartStr, StartUtc) then
   begin
-    PrintErrf('osftool merge: invalid --start: %s', [StartStr]);
+    PrintErrf(SMergeErrInvalidStart, [StartStr]);
     Exit(EXIT_BAD_ARGS);
   end;
 
@@ -192,13 +208,13 @@ begin
   EndStr := FlagValue('--end', '');
   if (EndStr <> '') and not ParseIso8601(EndStr, EndUtc) then
   begin
-    PrintErrf('osftool merge: invalid --end: %s', [EndStr]);
+    PrintErrf(SMergeErrInvalidEnd, [EndStr]);
     Exit(EXIT_BAD_ARGS);
   end;
 
   if not TDirectory.Exists(Root) then
   begin
-    PrintErrf('osftool merge: input-dir not found: %s', [Root]);
+    PrintErrf(SMergeErrInputDirNotFound, [Root]);
     Exit(EXIT_NOT_FOUND);
   end;
 
@@ -213,7 +229,7 @@ begin
   except
     on E: Exception do
     begin
-      PrintErrf('osftool merge: cannot open log file "%s": %s', [LogPath, E.Message]);
+      PrintErrf(SMergeErrLogFile, [LogPath, E.Message]);
       Exit(EXIT_IO_ERROR);
     end;
   end;
@@ -262,13 +278,13 @@ begin
     except
       on E: Exception do
       begin
-        PrintErrf('osftool merge: scan failed: %s', [E.Message]);
+        PrintErrf(SMergeErrScanFailed, [E.Message]);
         Exit(EXIT_IO_ERROR);
       end;
     end;
     if Length(Entries) = 0 then
     begin
-      PrintErr('osftool merge: no files overlap the interval');
+      PrintErr(SMergeErrNoOverlap);
       Exit(EXIT_NOT_FOUND);
     end;
 
@@ -277,7 +293,7 @@ begin
     except
       on E: Exception do
       begin
-        PrintErrf('osftool merge: write failed: %s', [E.Message]);
+        PrintErrf(SMergeErrWriteFailed, [E.Message]);
         Exit(EXIT_IO_ERROR);
       end;
     end;
