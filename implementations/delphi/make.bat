@@ -128,11 +128,10 @@ if exist "%~dp0demos\" (
     for %%f in ("%%~d\Win64\Release\*.exe") do copy /y "%%f" "!BINDIR!\" >nul
   )
 )
-for %%f in ("%~dp0setup\*-setup-x64.exe") do copy /y "%%f" "!BINDIR!\" >nul
-
 echo.
-echo Build complete.  All executables collected in:
-echo   %~dp0bin
+echo Build complete.
+echo   executables : %~dp0bin
+echo   installer   : %~dp0setup\  ^(osftool-^<version^>-setup-x64.exe^)
 popd
 endlocal
 exit /b 0
