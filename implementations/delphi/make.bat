@@ -4,7 +4,7 @@ rem  make.bat - full release build of osftool + demos + setup
 rem
 rem  Steps:  clean -> locate Delphi -> check HDF5 runtime ->
 rem          build osftool -> compile-check demos -> build setup
-rem          -> collect executables into bin\
+rem          -> collect build outputs into bin\
 rem
 rem  Each Delphi project is built with dcc64 driven by a
 rem  temporary dcc64.cfg (written into the project directory and
@@ -118,8 +118,8 @@ if errorlevel 1 (
   popd & endlocal & exit /b 3
 )
 
-rem --- [7/7] Collect executables into bin\ -------------------------
-echo --- [7/7] Collecting executables into bin\ ---
+rem --- [7/7] Collect build outputs into bin\ -----------------------
+echo --- [7/7] Collecting build outputs into bin\ ---
 set "BINDIR=%~dp0bin"
 if not exist "!BINDIR!" mkdir "!BINDIR!" >nul 2>&1
 if exist "%~dp0tools\osftool\Win64\Release\OsfTool.exe" copy /y "%~dp0tools\osftool\Win64\Release\OsfTool.exe" "!BINDIR!\" >nul
@@ -128,6 +128,10 @@ if exist "%~dp0demos\" (
     for %%f in ("%%~d\Win64\Release\*.exe") do copy /y "%%f" "!BINDIR!\" >nul
   )
 )
+rem  HDF5 runtime into bin\lib\ - osftool resolves "lib\ next to the exe"
+rem  (Hdf5.Api candidate 4), so bin\OsfTool.exe runs straight from bin\.
+if not exist "!BINDIR!\lib" mkdir "!BINDIR!\lib" >nul 2>&1
+copy /y "%~dp0..\..\dataformats\hdf5\lib\win64\*.dll" "!BINDIR!\lib\" >nul
 echo.
 echo Build complete.
 echo   executables : %~dp0bin
