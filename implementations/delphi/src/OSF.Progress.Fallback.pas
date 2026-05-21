@@ -40,17 +40,20 @@ uses
   OSF.Progress.Console;
 
 const
-  MSG_SCAN_STARTED  = 'Scanning directory: %s';
-  MSG_SCAN_FINISHED = 'Found %d OSF files.';
-  MSG_READING       = 'Reading: %d%% (%d/%d)';
-  MSG_FILE_ERROR    = '[ERROR] %s: %s';
-  MSG_LOG_ERROR     = '[ERROR] %s';
+  // Layout / severity-marker frames - not translatable prose.
+  MSG_FILE_ERROR = '[ERROR] %s: %s';
+  MSG_LOG_ERROR  = '[ERROR] %s';
 
   // A progress line is printed once either threshold is crossed, but never
   // more often than the minimum interval.
   EMIT_PERCENT_STEP    = 5;
   EMIT_COUNT_STEP      = 50;
   EMIT_MIN_INTERVAL_MS = 2000;
+
+resourcestring
+  MSG_SCAN_STARTED  = 'Scanning directory: %s';
+  MSG_SCAN_FINISHED = 'Found %d OSF files.';
+  MSG_READING       = 'Reading: %d%% (%d/%d)';
 
 procedure TOSFFallbackProgressReporter.ReadStarted(ATotal: Integer);
 begin

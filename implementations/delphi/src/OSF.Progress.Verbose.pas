@@ -36,6 +36,11 @@ uses
   OSF.Progress.Console;
 
 const
+  // Layout / severity-marker frames - not translatable prose.
+  MSG_FILE_ERROR = '[ERROR] %s: %s';
+  MSG_LOG_LINE   = '[%s] %s';
+
+resourcestring
   MSG_SCAN_STARTED    = 'Scanning directory: %s';
   MSG_SCAN_FINISHED   = 'Found %d OSF files.';
   MSG_SIDECAR_STARTED = 'Creating sidecar files (%d candidates)...';
@@ -43,10 +48,8 @@ const
   MSG_READ_STARTED    = 'Reading %d files...';
   MSG_FILE_STARTED    = 'Reading file %d/%d: %s';
   MSG_FILE_FINISHED   = '  file %d done: %d channels, %d samples';
-  MSG_FILE_ERROR      = '[ERROR] %s: %s';
   MSG_WRITE_STARTED   = 'Writing output: %s';
   MSG_WRITE_FINISHED  = 'Wrote %s (%d bytes)';
-  MSG_LOG_LINE        = '[%s] %s';
 
 procedure TOSFVerboseProgressReporter.ScanStarted(const ADirectory: string);
 begin

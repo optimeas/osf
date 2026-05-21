@@ -94,6 +94,7 @@ resourcestring
   SOSFLogHDF5SkipChannel     = 'Skipping channel [%s]: %s';
   SOSFLogHDF5UnsupportedType = 'Skipping channel [%s]: data type "%s" is not supported by the HDF5 export';
   SOSFLogHDF5Failed          = 'HDF5 export failed: %s';
+  SOSFHDF5UnsupportedValueType = 'Unsupported HDF5 value type: %d';
 {$ENDIF}
 
 implementation
@@ -227,7 +228,7 @@ begin
           end;
       else
         // Unreachable — WriteChannel checks IsSupported first.
-        raise EOSFException.CreateFmt('Unsupported HDF5 value type: %d', [Ord(DataType)]);
+        raise EOSFException.CreateFmt(SOSFHDF5UnsupportedValueType, [Ord(DataType)]);
       end;
       // H5Tinsert copies the member type, so ValueTypeObj may be freed after.
       Result.Insert('value', TIMESTAMP_FIELD_SIZE, ValueType);

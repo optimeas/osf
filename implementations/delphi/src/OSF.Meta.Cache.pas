@@ -124,6 +124,7 @@ resourcestring
   SOSFCacheLogBuilt           = 'Cache built: %s  channels=%d  %s .. %s';
   SOSFCacheLogReused          = 'Cache reused (still valid): %s';
   SOSFCacheLogTruncatedSource = 'OSF source was truncated; cache saved with truncated=true';
+  SOSFCacheNotJSONObject      = 'OSF meta cache: not a JSON object';
 
 implementation
 
@@ -380,7 +381,7 @@ begin
   Bytes := TFile.ReadAllBytes(AJsonFile);
   Root := TJSONObject.ParseJSONValue(TEncoding.UTF8.GetString(Bytes)) as TJSONObject;
   if not Assigned(Root) then
-    raise EOSFFormatError.Create('OSF meta cache: not a JSON object');
+    raise EOSFFormatError.Create(SOSFCacheNotJSONObject);
   try
     CacheVer := JInt(Root, 'osf_cache_version', 0);
     if CacheVer <> OSF_CACHE_VERSION then

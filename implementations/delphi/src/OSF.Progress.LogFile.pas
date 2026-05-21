@@ -48,16 +48,19 @@ uses
   OSF.Progress.Console;
 
 const
-  MSG_SCAN_STARTED   = 'Scanning directory: %s';
-  MSG_SCAN_FINISHED  = 'Found %d OSF files.';
+  // Layout frame - not translatable prose.
+  MSG_FILE_ERROR = '%s: %s';
+
+resourcestring
+  MSG_SCAN_STARTED    = 'Scanning directory: %s';
+  MSG_SCAN_FINISHED   = 'Found %d OSF files.';
   MSG_SIDECAR_STARTED = 'Creating sidecar files (%d candidates)...';
-  MSG_SIDECAR_DONE   = 'Sidecar files created: %d';
-  MSG_READ_STARTED   = 'Reading %d files...';
-  MSG_FILE_STARTED   = 'Reading file %d/%d: %s';
-  MSG_FILE_FINISHED  = 'File %d finished: %d channels, %d samples';
-  MSG_FILE_ERROR     = '%s: %s';
-  MSG_WRITE_STARTED  = 'Writing output: %s';
-  MSG_WRITE_FINISHED = 'Wrote %s (%d bytes)';
+  MSG_SIDECAR_DONE    = 'Sidecar files created: %d';
+  MSG_READ_STARTED    = 'Reading %d files...';
+  MSG_FILE_STARTED    = 'Reading file %d/%d: %s';
+  MSG_FILE_FINISHED   = 'File %d finished: %d channels, %d samples';
+  MSG_WRITE_STARTED   = 'Writing output: %s';
+  MSG_WRITE_FINISHED  = 'Wrote %s (%d bytes)';
 
 constructor TOSFLogFileProgressReporter.Create(const AInner: IProgressReporter;
   const ALogPath: string);

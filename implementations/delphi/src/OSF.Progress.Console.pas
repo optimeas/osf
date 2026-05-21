@@ -52,6 +52,11 @@ const
   ELLIPSIS = '...';
   LEVEL_TAGS: array[TOSFLogLevel] of string = ('DEBUG', 'INFO ', 'WARN ', 'ERROR');
 
+resourcestring
+  MSG_SUMMARY         = 'Done. Merged %d of %d files in %s';
+  MSG_SUMMARY_ERRWARN = ' (%d errors, %d warnings)';
+  MSG_SUMMARY_WARN    = ' (%d warnings)';
+
 function LogLevelTag(ALevel: TOSFLogLevel): string;
 begin
   Result := LEVEL_TAGS[ALevel];
@@ -119,12 +124,12 @@ end;
 function FormatSummaryLine(AFilesOk, AFilesTotal: Integer; ADurationMs: Int64;
   AErrors, AWarnings: Integer): string;
 begin
-  Result := Format('Done. Merged %d of %d files in %s',
+  Result := Format(MSG_SUMMARY,
     [AFilesOk, AFilesTotal, FormatDuration(ADurationMs)]);
   if AErrors > 0 then
-    Result := Result + Format(' (%d errors, %d warnings)', [AErrors, AWarnings])
+    Result := Result + Format(MSG_SUMMARY_ERRWARN, [AErrors, AWarnings])
   else if AWarnings > 0 then
-    Result := Result + Format(' (%d warnings)', [AWarnings]);
+    Result := Result + Format(MSG_SUMMARY_WARN, [AWarnings]);
   Result := Result + '.';
 end;
 

@@ -55,15 +55,18 @@ const
   BAR_FILLED = #$2588;  // U+2588 FULL BLOCK
   BAR_EMPTY  = #$2591;  // U+2591 LIGHT SHADE
 
+  // Layout / severity-marker frames - not translatable prose.
+  MSG_FILE_LINE  = '  %s';
+  MSG_BAR_LINE   = '  [%s] %d%% (%d/%d)';
+  MSG_FILE_ERROR = '  [ERROR] %s: %s';
+  MSG_LOG_ERROR  = '  [ERROR] %s';
+
+resourcestring
   MSG_SCAN_STARTED  = 'Scanning directory: %s';
   MSG_SCAN_FINISHED = 'Found %d OSF files.';
   MSG_SIDECAR       = 'Creating sidecar files... %d/%d';
   MSG_SIDECAR_DONE  = 'Creating sidecar files... %d/%d done.';
   MSG_READING       = 'Reading files...';
-  MSG_FILE_LINE     = '  %s';
-  MSG_BAR_LINE      = '  [%s] %d%% (%d/%d)';
-  MSG_FILE_ERROR    = '  [ERROR] %s: %s';
-  MSG_LOG_ERROR     = '  [ERROR] %s';
   MSG_WRITE_STARTED = 'Writing output: %s';
 
 // Returns AText up to its first line break — multi-line messages would
