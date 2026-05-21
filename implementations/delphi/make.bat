@@ -4,6 +4,7 @@ rem  make.bat - full release build of osftool + demos + setup
 rem
 rem  Steps:  clean -> locate Delphi -> check HDF5 runtime ->
 rem          build osftool -> compile-check demos -> build setup
+rem          -> collect executables into bin\
 rem
 rem  Each Delphi project is built with dcc64 driven by a
 rem  temporary dcc64.cfg (written into the project directory and
@@ -23,12 +24,12 @@ pushd "%~dp0"
 set "PF86=%ProgramFiles(x86)%"
 set "PF=%ProgramFiles%"
 
-rem --- [1/6] Clean ------------------------------------------------
-echo --- [1/6] Cleaning build artifacts ---
+rem --- [1/7] Clean ------------------------------------------------
+echo --- [1/7] Cleaning build artifacts ---
 call "%~dp0clean.bat"
 
-rem --- [2/6] Locate Delphi ---------------------------------------
-echo --- [2/6] Locating Delphi (rsvars.bat) ---
+rem --- [2/7] Locate Delphi ---------------------------------------
+echo --- [2/7] Locating Delphi (rsvars.bat) ---
 set "RSVARS="
 for %%v in (23.0 22.0 37.0 38.0) do (
   if not defined RSVARS if exist "!PF86!\Embarcadero\Studio\%%v\bin\rsvars.bat" (
@@ -49,16 +50,16 @@ if not exist "!BDS!\bin\dcc64.exe" (
 set "DCC64=!BDS!\bin\dcc64.exe"
 set "RTL=!BDS!\lib\Win64\release"
 
-rem --- [3/6] Check HDF5 runtime ----------------------------------
-echo --- [3/6] Checking HDF5 runtime ---
+rem --- [3/7] Check HDF5 runtime ----------------------------------
+echo --- [3/7] Checking HDF5 runtime ---
 if not exist "%~dp0..\..\dataformats\hdf5\lib\win64\hdf5.dll" (
   echo ERROR: hdf5.dll not found under dataformats\hdf5\lib\win64\.
   echo        Run dataformats\hdf5\lib\install-hdf5.ps1 to fetch the HDF5 runtime.
   popd & endlocal & exit /b 1
 )
 
-rem --- [4/6] Build osftool ----------------------------------------
-echo --- [4/6] Building osftool (Release / Win64) ---
+rem --- [4/7] Build osftool ----------------------------------------
+echo --- [4/7] Building osftool (Release / Win64) ---
 call :build_project "%~dp0tools\osftool" "OsfTool.dpr" ""
 if errorlevel 1 (
   echo ERROR: osftool build failed.
@@ -69,12 +70,12 @@ if not exist "%~dp0tools\osftool\Win64\Release\OsfTool.exe" (
   popd & endlocal & exit /b 2
 )
 
-rem --- [5/6] Compile-check the demo projects ----------------------
+rem --- [5/7] Compile-check the demo projects ----------------------
 rem  osfviewer depends on TeeChart, which is present with Delphi 22 / 23
 rem  but not (yet) with Delphi 37. It is therefore treated as optional:
 rem  a build failure there is a warning, not a fatal error. Every other
 rem  demo is mandatory and aborts the build on failure.
-echo --- [5/6] Building demo projects (Release / Win64) ---
+echo --- [5/7] Building demo projects (Release / Win64) ---
 set /a DEMOCOUNT=0
 if exist "%~dp0demos\" (
   for /d %%d in ("%~dp0demos\*") do (
@@ -101,8 +102,8 @@ if exist "%~dp0demos\" (
 )
 if !DEMOCOUNT! EQU 0 echo   No demo projects found.
 
-rem --- [6/6] Build the installer ----------------------------------
-echo --- [6/6] Building the installer (ISCC) ---
+rem --- [6/7] Build the installer ----------------------------------
+echo --- [6/7] Building the installer (ISCC) ---
 set "ISCC="
 if exist "!PF86!\Inno Setup 6\ISCC.exe" set "ISCC=!PF86!\Inno Setup 6\ISCC.exe"
 if not defined ISCC if exist "!PF!\Inno Setup 6\ISCC.exe" set "ISCC=!PF!\Inno Setup 6\ISCC.exe"
@@ -117,10 +118,21 @@ if errorlevel 1 (
   popd & endlocal & exit /b 3
 )
 
+rem --- [7/7] Collect executables into bin\ -------------------------
+echo --- [7/7] Collecting executables into bin\ ---
+set "BINDIR=%~dp0bin"
+if not exist "!BINDIR!" mkdir "!BINDIR!" >nul 2>&1
+if exist "%~dp0tools\osftool\Win64\Release\OsfTool.exe" copy /y "%~dp0tools\osftool\Win64\Release\OsfTool.exe" "!BINDIR!\" >nul
+if exist "%~dp0demos\" (
+  for /d %%d in ("%~dp0demos\*") do (
+    for %%f in ("%%~d\Win64\Release\*.exe") do copy /y "%%f" "!BINDIR!\" >nul
+  )
+)
+for %%f in ("%~dp0setup\*-setup-x64.exe") do copy /y "%%f" "!BINDIR!\" >nul
+
 echo.
-echo Build complete.
-echo   osftool   : %~dp0tools\osftool\Win64\Release\OsfTool.exe
-echo   installer : in %~dp0setup\  ^(osftool-^<version^>-setup-x64.exe^)
+echo Build complete.  All executables collected in:
+echo   %~dp0bin
 popd
 endlocal
 exit /b 0
