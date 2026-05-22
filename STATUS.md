@@ -474,8 +474,8 @@ enough that the Arc-Channel optimisation is not needed yet.
 
 ## C++ implementation — current state
 
-Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19. Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
-Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, and OSF5 metablock parsing are in place; OSF4 XML metablock parsing arrives in Phase 4.
+Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23. Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
+Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, and both OSF4 + OSF5 metablock parsers are in place; the block reader arrives in Phase 5.
 
 **Library targets:**
 
@@ -493,20 +493,24 @@ Standalone C++17 implementation, parallel to the Rust core — not a port from C
 | `include/osf/error.hpp` | `osf::Error` (`Code` enum: Unknown / InvalidArgument / IoError / ParseError / NotFound / InvalidMagicHeader / UnsupportedVersion / MagicHeaderTooLong / InvalidMetablock / RemovedInSpec / JsonParseError; plus `std::string message`); `osf::Result<T>` as `tl::expected<T, Error>`; `error_category_name(Code)` declaration |
 | `include/osf/header.hpp` | Magic-header API: `osf::OsfVersion` (Osf4/Osf5 enum), `osf::MagicHeader` struct (version + metablock_len, friend equality), three `parse_magic_header` overloads (`std::istream&`, `std::uint8_t const*` + size, `std::filesystem::path`), `osf::MAX_MAGIC_HEADER_LEN = 128` |
 | `include/osf/types.hpp` | Core OSF type enumerations (spec rev 2026-05-04): `DataType` (Bool / Int8..Int64 / UInt8..UInt64 / Float / Double / String / Binary / ByteArray / GpsLocation / Unsupported), `ChannelType` (Scalar / Equidistant / Timestamped / Unsupported), `SpectrumType` (Amplitude / RealImag / AmpPhaseRad / AmpPhaseDeg); plus `parse_data_type` / `parse_channel_type` (Result-returning) and `parse_spectrum_type` (noexcept) |
-| `include/osf/metablock.hpp` | OSF metablock data model: `FileInfo`, `Channel`, `Info`, `MetaBlock` structs (`std::optional<T>` everywhere the Rust reference has `Option<T>`); `parse_metablock_json` in two overloads (`std::uint8_t const*` + size; `std::string_view`) |
-| `src/error.cpp` | `error_category_name` implementation; covers all eleven `Error::Code` enumerators |
+| `include/osf/metablock.hpp` | OSF metablock data model: `FileInfo`, `Channel`, `Info`, `MetaBlock` structs (`std::optional<T>` everywhere the Rust reference has `Option<T>`); `parse_metablock_json` (OSF5) and `parse_metablock_xml` (OSF4), each in two overloads (`std::uint8_t const*` + size; `std::string_view`) — both populate the same `MetaBlock` data model |
+| `src/error.cpp` | `error_category_name` implementation; covers all twelve `Error::Code` enumerators |
 | `src/header.cpp` | Magic-header parser implementation. Byte-by-byte read via `istream::get()`, anonymous-namespace helpers for line read / identifier mapping / `from_chars`-based length parse, CRLF tolerance |
 | `src/types.cpp` | `parse_data_type` / `parse_channel_type` / `parse_spectrum_type` implementations. If-chain over wire spellings; `bytearray` normalises to `Binary`; removed datatypes (`gpsdata` / `pair` / `triple` / `candata`) reject with `Error::Code::RemovedInSpec` and a replacement-hint message |
 | `src/metablock.cpp` | `parse_metablock_json` implementation over vendored `nlohmann::json`. `allow_exceptions=false` parse keeps the core API exception-free; anonymous-namespace helpers (`invalid_metablock`, `is_discarded`, `get_optional_string`, `get_optional_double`, `validate_size_of_length_value`, `parse_file_info`, `parse_channel`, `parse_channels`, `parse_infos`) factor out per-field work; deprecated channel fields tolerated silently; `created_at_*` short-spelling fallback (`latitude=` etc.) accepted on read |
+| `src/metablock_xml.cpp` | `parse_metablock_xml` implementation over vendored `pugi::xml_document`. DOM-walking parser, not event-driven (XPath not needed; the metablock is small). pugixml is configured with `parse_default` plus the explicit `encoding_utf8` hint so CP1252-in-UTF-8 byte sequences in real field files (`°` in `°C` etc.) become Unicode replacement characters rather than parse errors. Anonymous-namespace helpers (`invalid_metablock`, `xml_parse_error`, `has_attr`, `get_optional_string`, `get_required_string`, `parse_optional_double`, `parse_optional_i64`, `validate_size_of_length_value`, `parse_optimeas_attrs`, `parse_channel`, `parse_channels`, `parse_info`, `parse_infos`) keep per-attribute work tight; deprecated channel fields tolerated silently; `created_at_*` short-spelling fallback (`latitude=` etc.) accepted on read. The root element must be `<optimeas>`; unknown children and unknown attributes are ignored (forward-compat). The `<channels count="N">` attribute is informational — actual channel count comes from element children, matching the Rust reference |
 | `tests/CMakeLists.txt` | GoogleTest via `FetchContent`; pinned to v1.15.2 by tarball URL + SHA256; `gtest_force_shared_crt=ON` for /MD parity; `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE` for CMP0135 NEW behaviour; `OSF_EXAMPLES_DIR` define for integration tests |
 | `tests/integration/test_header_examples.cpp` | Four integration tests against `examples/`: `motorbike.osf` and `steam_loco.osf` parse as Osf4; `weather_station.osfz` rejects until Phase 8; the 17 generated files in `examples/generated/` all parse with version per filename prefix |
 | `tests/integration/test_metablock_examples.cpp` | Three integration tests against the OSF5 reference files in `examples/generated/`: snapshot check on `osf5_equidistant.osf`; every `osf5_*.osf` parses with non-empty channels and valid `sizeoflengthvalue`; `osf5_gpslocation.osf` actually declares a `GpsLocation` channel |
+| `tests/integration/test_metablock_xml_examples.cpp` | Six integration tests against `examples/generated/osf4_*.osf` plus the two field samples: snapshot check on `osf4_equidistant.osf`; every `osf4_*.osf` parses with valid `sizeoflengthvalue`; `osf4_gpslocation.osf` declares a `GpsLocation` channel; `motorbike.osf` and `steam_loco.osf` metablocks parse end-to-end (encoding-tolerance + deprecated-field-tolerance paths); cross-parser symmetry probe (`osf4_equidistant.osf` via XML parser matches `osf5_equidistant.osf` via JSON parser on every channel field) |
 | `tests/unit/test_error.cpp` | Five smoke tests covering Error, Result-with-value, Result-with-error, `osf::version()`, and `error_category_name` |
 | `tests/unit/test_header.cpp` | 16 unit tests against synthetic byte sequences: identifier spellings, error codes, CRLF tolerance, lone-CR rejection, stream-position invariant, buffer↔istream equivalence, path overload (success + missing-file), `MagicHeader` equality |
 | `tests/unit/test_types.cpp` | Nine unit tests for `parse_data_type` / `parse_channel_type` / `parse_spectrum_type`: every current spelling, `bytearray` alias, removed-in-spec rejection, unknown-spelling fallback |
 | `tests/unit/test_metablock.cpp` | 20 unit tests for `parse_metablock_json`: minimal + full channel + infos round-trip, forward-compat (unknown top-level + deprecated channel fields tolerated), negative cases (removed datatype, missing envelope, malformed JSON, non-object root, non-array channels/infos, every required channel field missing, index out-of-range, invalid `sizeoflengthvalue`), overload-agreement, null-pointer edge cases |
+| `tests/unit/test_metablock_xml.cpp` | 20 unit tests for `parse_metablock_xml`: minimal + full channel + infos round-trip, short-form / long-form geolocation, `bytearray` alias, `count` mismatch tolerance, deprecated `scale`/`offset` tolerated, unknown attribute ignored, negative cases (removed datatype, wrong root, malformed XML, every required-attribute-missing case, invalid `sizeoflengthvalue`, channel-index out-of-u16-range, non-numeric `timeincrement`), overload-agreement, null-pointer edge cases |
 | `third_party/tl-expected/` | Vendored TartanLlama/expected v1.3.1 (`tl/expected.hpp` + `LICENSE`, CC0 1.0) |
 | `third_party/nlohmann-json/` | Vendored nlohmann/json v3.11.3 (`nlohmann/json.hpp` + `LICENSE`, MIT). Single-header form; SHA-256 of `json.hpp` matches the upstream v3.11.3 release asset |
+| `third_party/pugixml/` | Vendored pugixml v1.15 (`pugixml.hpp` + `pugixml.cpp` + `pugiconfig.hpp` + `LICENSE`, MIT). Unlike the other two vendored libraries pugixml is not header-only; the `.cpp` compiles into `osf_core` directly with warnings disabled (`/W0` on MSVC, `-w` on GCC/Clang). SHA-256: `pugixml.hpp = 2555F950…0043BE734`, `pugixml.cpp = 67C3892E…D09E0744`, `pugiconfig.hpp = 981CD9AD…FC98B92D` |
 | `README.md`, `BUILD.md`, `CHANGELOG.md` | Per-package documentation |
 
 **Build options (DECISIONS §20):**
@@ -522,12 +526,12 @@ cmake --build build
 ctest --test-dir build
 ```
 
-**Build verification (local, 2026-05-19):**
+**Build verification (local, 2026-05-23):**
 
-- Toolchain: MSVC 19.50.35717, Visual Studio 18 generator, CMake 4.2.3.
+- Toolchain: MSVC 19.50.35730, Visual Studio 18 generator, CMake 4.2.3.
 - `cmake -B build` configures with **0 CMake warnings** (CMP0135 set to NEW explicitly via `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE`).
-- `cmake --build` produces `osf.lib`, `test_error.exe`, `test_header.exe`, `test_header_examples.exe`, `test_types.exe`, `test_metablock.exe`, and `test_metablock_examples.exe` with **0 compile warnings** under `/W4 /permissive-`.
-- `ctest` reports **57/57 passed in 1.80 s** (5 Phase-1 smoke + 16 header-unit + 4 header-integration + 9 types-unit + 20 metablock-unit + 3 metablock-integration; the header integration suite internally exercises 17 generated reference files, the metablock integration suite exercises 9 OSF5 reference files).
+- `cmake --build` produces `osf.lib`, `test_error.exe`, `test_header.exe`, `test_header_examples.exe`, `test_types.exe`, `test_metablock.exe`, `test_metablock_xml.exe`, `test_metablock_examples.exe`, and `test_metablock_xml_examples.exe` with **0 compile warnings** under `/W4 /permissive-` (the vendored `pugixml.cpp` is built with `/W0` since it is treated as binary-identical to upstream).
+- `ctest` reports **83/83 passed in 2.50 s** (5 Phase-1 smoke + 16 header-unit + 4 header-integration + 9 types-unit + 20 metablock-unit + 3 metablock-integration + 20 metablock-xml-unit + 6 metablock-xml-integration; the header integration suite internally exercises 17 generated reference files, the JSON metablock integration suite 9 OSF5 reference files, the XML metablock integration suite 8 OSF4 reference files plus the two field samples `motorbike.osf` and `steam_loco.osf`).
 
 **Constraints:**
 
@@ -536,7 +540,10 @@ ctest --test-dir build
 
 **Pending:**
 
-Phase 4: OSF4 XML metablock parser (vendor pugixml, add `parse_metablock_xml` against the shared `MetaBlock` model). Then sequentially per §20 Implementation Order: block reader, `DataManager`, OSF5 writer, transparent OSFZ decompression, throwing convenience layer.
+Phase 5: block reader (`BlockReader` iterating control-byte-typed
+`Block` records over an `std::istream`). Then sequentially per §20
+Implementation Order: `DataManager`, OSF5 writer, transparent OSFZ
+decompression, throwing convenience layer.
 
 The C ABI shared-library wrapper (Phase 11) is the deferred deliverable for cross-language consumption — Windows DLL / ActiveX/OCX, future bindings. It will land after the core C++ library reaches roundtrip validation and gets its own DECISIONS entry covering handle patterns, error codes, string ownership, and ABI stability guarantees.
 

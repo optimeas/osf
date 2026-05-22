@@ -6,6 +6,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-05-23
+
+### Added
+
+- OSF4 XML metablock parser (`osf::parse_metablock_xml`) in two
+  overloads: `std::uint8_t const*` + size and `std::string_view`.
+  Populates the same `osf::MetaBlock` data model as the OSF5 JSON
+  parser (Phase 3); Phase 4's success criterion is symmetric
+  population, pinned by an `equidistant_osf4_and_osf5_have_matching_channels`
+  integration test.
+- New `osf::Error::Code::XmlParseError` enumerator, paralleling the
+  existing `JsonParseError`. `error_category_name` extended.
+- Vendored `pugixml` v1.15 (MIT) under `third_party/pugixml/`.
+  Unlike the previous two vendored libraries pugixml is not
+  header-only; its `pugixml.cpp` compiles into `osf_core` directly.
+  The translation unit is built with warnings disabled
+  (`/W0` on MSVC, `-w` on GCC/Clang) since it is treated as
+  binary-identical to upstream. Include path is attached to
+  `osf::headers` SYSTEM so consumers can `#include <pugixml.hpp>`
+  via the interface target if needed.
+- `tests/unit/test_metablock_xml.cpp` — 20 unit tests covering
+  happy-path field round-trip (minimal + full channel + infos),
+  short-form / long-form geolocation, `bytearray` alias,
+  `count` mismatch tolerance, deprecated `scale`/`offset` tolerated,
+  unknown attribute ignored, plus negative cases (removed datatype,
+  wrong root, malformed XML, every required-attribute-missing case,
+  invalid `sizeoflengthvalue`, channel-index out-of-u16-range,
+  non-numeric `timeincrement`, overload agreement, null-pointer
+  edge cases).
+- `tests/integration/test_metablock_xml_examples.cpp` — 6
+  integration tests against `examples/generated/osf4_*.osf` plus
+  the field samples `examples/motorbike.osf` and
+  `examples/steam_loco.osf`. Includes the cross-parser symmetry
+  probe (OSF4 file via XML parser vs. OSF5 file via JSON parser
+  must have matching channel lists).
+
+### Changed
+
+- `osf_core` library target gains a third translation unit
+  (`src/metablock_xml.cpp`) and the vendored
+  `third_party/pugixml/pugixml.cpp`.
+- `osf::headers` interface target gains a third SYSTEM include
+  path (`third_party/pugixml/`).
+- `ctest` count: 57 → 83 (5 + 16 + 4 + 9 + 20 + 3 unchanged; 20 new
+  XML unit tests in `test_metablock_xml`; 6 new XML integration
+  tests in `test_metablock_xml_examples`).
+
 ## [0.0.3] - 2026-05-19
 
 ### Added

@@ -81,27 +81,27 @@ cd tools\osftool
 Always remove the `*.dcu` / `*.exe` build artefacts after a verify;
 they are gitignored but clutter `git status`.
 
-## C++ track — Phase 4 is next
+## C++ track — Phase 5 is next
 
-Phases 1, 2, 3 complete (skeleton, magic-header parser, OSF5 JSON
-metablock parser). 57/57 ctest cases green as of commit `152d1ba`.
+Phases 1, 2, 3, 4 complete (skeleton, magic-header parser, OSF5 JSON
+metablock parser, OSF4 XML metablock parser via vendored pugixml v1.15).
+**83/83 ctest cases green** as of Phase 4 completion (2026-05-23).
+Both parsers populate the same `MetaBlock` data model — symmetric
+population pinned by `equidistant_osf4_and_osf5_have_matching_channels`
+in `tests/integration/test_metablock_xml_examples.cpp`.
 
-**Phase 4 — OSF4 XML metablock parser** is the immediate next step:
+**Phase 5 — block reader** is the immediate next step:
 
-- Vendor `pugixml` (`pugixml.hpp` + `pugixml.cpp` + `pugiconfig.hpp`,
-  MIT) under `implementations/cpp/third_party/pugixml/` following the
-  Phase-1 vendoring pattern (tag-pinned URL, SHA256 verified, LICENSE
-  renamed + prefixed with two provenance lines). pugixml has a `.cpp`
-  file unlike the prior two header-only vendors — it compiles into
-  `osf_core` directly, not via the `osf::headers` SYSTEM include.
-- Implement `osf::parse_metablock_xml(uint8_t const*, size_t)` against
-  the existing `MetaBlock` data model in `include/osf/metablock.hpp`
-  (shared with the JSON parser). Symmetric population with the JSON
-  parser is the success criterion.
-- Rust reference: `implementations/rust/osf-core/src/meta_xml.rs`.
-- Commit shape: vendor → API surface → implementation → unit tests →
-  integration tests against `examples/generated/osf4_*.osf` plus
-  `examples/motorbike.osf` / `steam_loco.osf` → cleanup-mini.
+- Introduce `osf::Block` / `osf::BlockKind` / payload structs in a
+  new `include/osf/block.hpp` mirroring `implementations/rust/osf-core/src/block.rs`.
+- Introduce `osf::BlockReader` as a stream-driven iterator producing
+  `Result<Block>` values, given an `std::istream&` positioned at the
+  end of the metablock and the `MetaBlock` itself for channel-index
+  lookup. Control bytes 5/6/7/8, length-prefix width 2 or 4 per
+  channel, trailing `0x00` strip for `string` / `binary`, optional
+  `0xFFFF` info block + 40-byte magic trailer (OSF4 only).
+- Rust reference: `implementations/rust/osf-core/src/reader.rs`
+  plus `block.rs`.
 
 ### C++ network caveat (local environment)
 
@@ -170,7 +170,8 @@ Always remove `implementations\cpp\build` after a successful verify.
 1. `git pull`.
 2. Read `STATUS.md`, then this file.
 3. If continuing the **C++ track**: read DECISIONS.md §20 + §16, run the
-   C++ build flow, then start Phase 4 (pugixml vendoring plan first).
+   C++ build flow, then start Phase 5 (block reader — `osf::BlockReader`
+   over the existing `MetaBlock`).
 4. If a new **Delphi brief** arrives as `~/Downloads/task-*.md`: read it,
    work it, compile-verify with dcc32/dcc64, commit + push.
 5. Any new source file: MIT SPDX header, not Apache.
