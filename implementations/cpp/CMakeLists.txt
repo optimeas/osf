@@ -73,6 +73,16 @@ target_include_directories(osf_headers SYSTEM INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann-json"
 )
 
+# Vendored pugixml v1.15 (MIT). Used by the OSF4 metablock parser.
+# Unlike the other two vendored libraries pugixml is not header-only,
+# so its translation unit compiles into osf_core directly (below).
+# The include path is still attached via osf::headers SYSTEM so the
+# upstream's own warnings stay silent under our /W4 / -Wall profiles
+# and consumers can include <pugixml.hpp> via the interface target.
+target_include_directories(osf_headers SYSTEM INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pugixml"
+)
+
 # osf::osf — core library. Static by default, shared if BUILD_SHARED_LIBS=ON.
 # The internal target name is osf_core (consistent with osf_headers); the
 # OUTPUT_NAME property keeps the produced file as libosf.a / osf.lib.
@@ -80,7 +90,9 @@ add_library(osf_core
     src/error.cpp
     src/header.cpp
     src/metablock.cpp
+    src/metablock_xml.cpp
     src/types.cpp
+    third_party/pugixml/pugixml.cpp
 )
 add_library(osf::osf ALIAS osf_core)
 
@@ -91,6 +103,17 @@ set_target_properties(osf_core PROPERTIES
 target_link_libraries(osf_core PUBLIC osf::headers)
 
 osf_set_warnings(osf_core)
+
+# The vendored pugixml.cpp must not be subject to our own warning
+# profile — it is third-party code and we treat it as binary-identical
+# to upstream. Disable warnings on that translation unit only.
+if(MSVC)
+    set_source_files_properties(third_party/pugixml/pugixml.cpp
+        PROPERTIES COMPILE_OPTIONS "/W0")
+else()
+    set_source_files_properties(third_party/pugixml/pugixml.cpp
+        PROPERTIES COMPILE_OPTIONS "-w")
+endif()
 
 # ---------------------------------------------------------------------------
 # Tests

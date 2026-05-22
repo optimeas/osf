@@ -17,6 +17,7 @@ std::string_view error_category_name(Error::Code code) noexcept {
         case Error::Code::InvalidMetablock:   return "InvalidMetablock";
         case Error::Code::RemovedInSpec:      return "RemovedInSpec";
         case Error::Code::JsonParseError:     return "JsonParseError";
+        case Error::Code::XmlParseError:      return "XmlParseError";
     }
     // fallback for cast-from-int values outside the declared enumerators
     return "Unknown";

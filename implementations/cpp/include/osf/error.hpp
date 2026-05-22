@@ -40,6 +40,9 @@ struct Error {
         /// JSON parser (nlohmann::json) could not tokenise the metablock
         /// body. Carries the parser's diagnostic in `message`.
         JsonParseError,
+        /// XML parser (pugixml) could not tokenise the metablock body.
+        /// Carries the parser's diagnostic plus byte offset in `message`.
+        XmlParseError,
     };
 
     Code code = Code::Unknown;

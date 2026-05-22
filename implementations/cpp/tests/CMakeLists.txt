@@ -93,6 +93,23 @@ osf_set_warnings(test_metablock)
 gtest_discover_tests(test_metablock)
 
 # ---------------------------------------------------------------------------
+# test_metablock_xml — OSF4 XML metablock parser unit tests (Phase 4).
+# ---------------------------------------------------------------------------
+
+add_executable(test_metablock_xml
+    unit/test_metablock_xml.cpp
+)
+
+target_link_libraries(test_metablock_xml PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_metablock_xml)
+
+gtest_discover_tests(test_metablock_xml)
+
+# ---------------------------------------------------------------------------
 # test_header_examples — magic-header tests against reference files.
 # ---------------------------------------------------------------------------
 
@@ -136,3 +153,25 @@ target_compile_definitions(test_metablock_examples PRIVATE
 osf_set_warnings(test_metablock_examples)
 
 gtest_discover_tests(test_metablock_examples)
+
+# ---------------------------------------------------------------------------
+# test_metablock_xml_examples — OSF4 XML metablock parser tests against
+# reference files in examples/generated/ plus the motorbike/steam_loco
+# field samples (Phase 4).
+# ---------------------------------------------------------------------------
+
+add_executable(test_metablock_xml_examples
+    integration/test_metablock_xml_examples.cpp
+)
+
+target_link_libraries(test_metablock_xml_examples PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_compile_definitions(test_metablock_xml_examples PRIVATE
+    OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+
+osf_set_warnings(test_metablock_xml_examples)
+
+gtest_discover_tests(test_metablock_xml_examples)

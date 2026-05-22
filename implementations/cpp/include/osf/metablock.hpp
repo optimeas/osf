@@ -156,4 +156,36 @@ struct MetaBlock {
 /// form; bytes are interpreted as the JSON text.
 [[nodiscard]] Result<MetaBlock> parse_metablock_json(std::string_view text);
 
+/// Parse an OSF4 metablock body into a `MetaBlock`.
+///
+/// The OSF4 wire form is a single `<optimeas>` element carrying
+/// file-level attributes plus `<channels>` and optionally `<infos>`
+/// children. `data` must point to exactly the metablock — no
+/// magic-header line and no following block-stream bytes.
+///
+/// Population of the returned `MetaBlock` is symmetric with
+/// `parse_metablock_json`: every field one parser sets, the other
+/// parser fills from the equivalent on-disk representation.
+///
+/// Real-world OSF4 field files declare `encoding="UTF-8"` but in
+/// practice carry CP1252-encoded bytes for non-ASCII characters such
+/// as `°` in `°C`. To stay usable on those files the parser configures
+/// pugixml with `parse_default | parse_ws_pcdata_single` and a UTF-8
+/// encoding hint; invalid byte sequences become Unicode replacement
+/// characters rather than parse errors.
+///
+/// Possible errors (`Result::error().code`):
+/// - `Error::Code::XmlParseError` — body is not well-formed XML.
+/// - `Error::Code::InvalidMetablock` — the root element is not
+///   `<optimeas>`, a required attribute is missing, or
+///   `sizeoflengthvalue` is neither 2 nor 4.
+/// - `Error::Code::RemovedInSpec` — a channel references a datatype
+///   removed in spec revision 2026-05-04.
+[[nodiscard]] Result<MetaBlock> parse_metablock_xml(std::uint8_t const* data,
+                                                   std::size_t size);
+
+/// String-view convenience overload. Equivalent to the pointer/size
+/// form; bytes are interpreted as the XML text.
+[[nodiscard]] Result<MetaBlock> parse_metablock_xml(std::string_view text);
+
 }  // namespace osf
