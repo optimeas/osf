@@ -36,6 +36,14 @@ osftool deckt die wiederkehrenden Aufgaben eines OSF-basierten Arbeitsablaufs au
 
 ## Installation
 
+### Windows-Installer
+
+Der schnellste Weg zu osftool unter Windows ist der vorgefertigte Installer:
+
+**[osftool für Windows (64-Bit) herunterladen](https://www.optimeas.com/hubfs/Software%20Download/osftool-setup-latest.exe)**
+
+Der Installer richtet `OsfTool.exe` zusammen mit der HDF5-Laufzeitumgebung ein, fügt das Programmverzeichnis dem `PATH` hinzu und lässt die Wahl zwischen einer Installation für alle Benutzer und einer nur für den aktuellen Benutzer. Nach Abschluss steht `osftool` in jedem Terminal zur Verfügung.
+
 ### Aus dem Quellcode bauen
 
 osftool ist Teil des OSF-Repositorys und wird mit Embarcadero Delphi 12 (RAD Studio 23) oder neuer gebaut.

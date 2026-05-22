@@ -36,6 +36,14 @@ osftool covers the recurring tasks of an OSF-based workflow from a script or a t
 
 ## Installation
 
+### Windows installer
+
+The quickest way to get osftool on Windows is the prebuilt installer:
+
+**[Download osftool for Windows (64-bit)](https://www.optimeas.com/hubfs/Software%20Download/osftool-setup-latest.exe)**
+
+The installer deploys `OsfTool.exe` together with the HDF5 runtime, adds the program directory to `PATH`, and lets you choose an all-users or a per-user installation. Once it finishes, `osftool` is available from any terminal.
+
 ### Building from source
 
 osftool is part of the OSF repository and is built with Embarcadero Delphi 12 (RAD Studio 23) or newer.
