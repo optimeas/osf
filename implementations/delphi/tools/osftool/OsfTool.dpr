@@ -76,6 +76,7 @@ begin
     try
       ExitCode := Dispatcher.Run(Args);
       Writeln;
+      // Readln; //only for IDE Debugging
     finally
       Dispatcher.Free;
     end;

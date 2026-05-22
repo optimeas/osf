@@ -12,7 +12,7 @@ uses
 
 const
   // Width the live display shortens file paths to.
-  PROGRESS_PATH_MAX_LEN = 80;
+  PROGRESS_PATH_MAX_LEN = 100;
 
 // Five-character level tag used in "[LEVEL] message" log lines, matching
 // the format osftool has always written.
@@ -38,6 +38,9 @@ function FormatDuration(AMilliseconds: Int64): string;
 function FormatSummaryLine(AFilesOk, AFilesTotal: Integer; ADurationMs: Int64;
                            AErrors, AWarnings: Integer): string;
 
+// Fills a string to 80 chars minimum, and shortens to AMax if longer
+function MakeConsoleString( const AText:String; AMax:Integer=PROGRESS_PATH_MAX_LEN):String;
+
 implementation
 
 uses
@@ -60,6 +63,17 @@ resourcestring
 function LogLevelTag(ALevel: TOSFLogLevel): string;
 begin
   Result := LEVEL_TAGS[ALevel];
+end;
+
+function MakeConsoleString( const AText:String; AMax:Integer=PROGRESS_PATH_MAX_LEN):String;
+begin
+  if AMax < PROGRESS_PATH_MAX_LEN then
+    AMax := PROGRESS_PATH_MAX_LEN;
+
+  Result := Copy(AText, 1, AMax);
+
+  if Length(Result) < PROGRESS_PATH_MAX_LEN then
+    Result := Result + StringOfChar(' ', PROGRESS_PATH_MAX_LEN - Length(Result));
 end;
 
 function ShortenPath(const APath: string; AMaxLen: Integer): string;

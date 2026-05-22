@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
 // OSF merger.
@@ -536,7 +536,7 @@ end;
 function TOSFMerger.Scan: TArray<TOSFFileEntry>;
 var
   Sources: TArray<string>;
-  I, NeedBuild: Integer;
+  I, CacheCreated: Integer;
   Cache: TOSFMetaCache;
   Kept: TList<TOSFFileEntry>;
   Entry: TOSFFileEntry;
@@ -560,13 +560,10 @@ begin
 
   // The sidecar phase is only surfaced when at least one cache has to be
   // built - when every sidecar is already valid it stays invisible.
-  NeedBuild := 0;
-  for I := 0 to High(Sources) do
-    if not (FUseCache and TOSFMetaCache.IsValid(Sources[I])) then
-      Inc(NeedBuild);
-  if Assigned(FReporter) and (NeedBuild > 0) then
+  if Assigned(FReporter) then
     FReporter.SidecarStarted(Length(Sources));
 
+  CacheCreated := 0;
   Kept := TList<TOSFFileEntry>.Create;
   try
     for I := 0 to High(Sources) do
@@ -577,6 +574,8 @@ begin
       // otherwise as a plain warning.
       Cache := nil;
       try
+        if not TOSFMetaCache.IsValid(Sources[i]) then
+          inc(CacheCreated);
         Cache := LoadOrBuildCache(Sources[I]);
       except
         on E: Exception do
@@ -593,7 +592,7 @@ begin
           FreeAndNil(Cache);
         end;
       end;
-      if Assigned(FReporter) and (NeedBuild > 0) then
+      if Assigned(FReporter) then
         FReporter.SidecarProgress(I + 1, Length(Sources));
       if Assigned(Cache) then
       begin
@@ -612,8 +611,8 @@ begin
     Kept.Free;
   end;
 
-  if Assigned(FReporter) and (NeedBuild > 0) then
-    FReporter.SidecarFinished(NeedBuild);
+  if Assigned(FReporter) then
+    FReporter.SidecarFinished(CacheCreated);
 
   SortByFirstTimestamp(FScanResult);
 
@@ -727,7 +726,7 @@ begin
               IngestChannel(Merge, SrcChan, FIntervalStartNs, FIntervalEndNs, FOverlapStrategy);
             end
             else if Merge.Def.DataType <> SrcChan.ChannelDef.DataType then
-              LogChannelMismatch(SrcChan.Name,
+              LogChannelMismatch(ExtractFileName(Entry.FilePath)+':'+SrcChan.Name,
                 OSFDataTypeToString(Merge.Def.DataType),
                 OSFDataTypeToString(SrcChan.ChannelDef.DataType))
             else
@@ -759,6 +758,9 @@ begin
       end;
       OutFiler.WriteHeader;
 
+      if Assigned(FReporter) then
+        FReporter.StartProgress('', 0, Order.Count);
+
       TotalSamples := 0;
       for I := 0 to Order.Count - 1 do
       begin
@@ -776,9 +778,16 @@ begin
           OutFiler.WriteTimestampedBlock(Merge.Def.Index, Timestamps, Values);
           TotalSamples := TotalSamples + Length(Samples);
         end;
+
+        if Assigned(FReporter) then
+          FReporter.DoProgress('', I+1, Order.Count);
       end;
 
       OutFiler.Close;
+
+      if Assigned(FReporter) then
+        FReporter.EndProgress;
+
       Log(llInfo, SOSFMergerLogMergeComplete, [Order.Count, TotalSamples]);
       if Assigned(FReporter) then
         FReporter.WriteFinished(AOutputLabel, AStream.Size);

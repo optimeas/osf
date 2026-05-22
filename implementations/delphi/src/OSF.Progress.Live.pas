@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
 // Live progress reporter for an interactive terminal. Keeps a two-line
@@ -18,8 +18,7 @@ type
   strict private
     FBlockDrawn: Boolean;
     FSidecarTotal: Integer;
-    procedure DrawBlock(const APath: string; AIndex, ATotal: Integer);
-    procedure EraseBlock;
+    FSidecarFinished : Boolean;
   public
     constructor Create;
     destructor Destroy; override;
@@ -32,9 +31,13 @@ type
     procedure FileStarted(AIndex, ATotal: Integer; const APath: string); override;
     procedure FileError(AIndex: Integer; const APath, AErrorMessage: string); override;
     procedure WriteStarted(const AOutputPath: string); override;
+    procedure WriteFinished(const AOutputPath: string; ABytes: Int64); override;
     procedure Log(ALevel: TOSFLogLevel; const AMessage: string); override;
     procedure Summary(AFilesOk, AFilesTotal: Integer; ADurationMs: Int64;
                       AErrors, AWarnings: Integer); override;
+    procedure StartProgress(const AText: string; AIndex, ATotal: Integer); override;
+    procedure DoProgress(const AText: string; AIndex, ATotal: Integer); override;
+    procedure EndProgress; override;
   end;
 
 implementation
@@ -60,14 +63,16 @@ const
   MSG_BAR_LINE   = '  [%s] %d%% (%d/%d)';
   MSG_FILE_ERROR = '  [ERROR] %s: %s';
   MSG_LOG_ERROR  = '  [ERROR] %s';
+  MSG_LOG_WARNING  = '  [WARNING] %s';
 
 resourcestring
   MSG_SCAN_STARTED  = 'Scanning directory: %s';
   MSG_SCAN_FINISHED = 'Found %d OSF files.';
-  MSG_SIDECAR       = 'Creating sidecar files... %d/%d';
-  MSG_SIDECAR_DONE  = 'Creating sidecar files... %d/%d done.';
+  MSG_SIDECAR_STARTED = 'Reading file Information from %d files...';
+  MSG_SIDECAR_DONE  = 'Done. %d new sidecar files created.';
   MSG_READING       = 'Reading files...';
   MSG_WRITE_STARTED = 'Writing output: %s';
+  MSG_WRITE_FINISHED= 'File %s created. File size is %s %s';
 
 // Returns AText up to its first line break — multi-line messages would
 // corrupt the two-line block accounting.
@@ -90,16 +95,17 @@ end;
 
 destructor TOSFLiveProgressReporter.Destroy;
 begin
+  FSidecarFinished := false;
+  EndProgress;
   // Leave the terminal tidy if the run ends with the block still pinned.
-  EraseBlock;
   inherited;
 end;
 
-procedure TOSFLiveProgressReporter.DrawBlock(const APath: string;
-  AIndex, ATotal: Integer);
+procedure TOSFLiveProgressReporter.DoProgress(const AText: string; AIndex,
+  ATotal: Integer);
 var
   Filled, Percent: Integer;
-  Bar: string;
+  Bar, S: string;
 begin
   if ATotal > 0 then
   begin
@@ -118,25 +124,28 @@ begin
   Bar := StringOfChar(BAR_FILLED, Filled) +
          StringOfChar(BAR_EMPTY, BAR_WIDTH - Filled);
 
-  Writeln(Output, Format(MSG_FILE_LINE, [ShortenPath(APath)]));
-  Writeln(Output, Format(MSG_BAR_LINE, [Bar, Percent, AIndex, ATotal]));
+  S := AText;
+  if S.Length>0 then
+    S := ' - '+S;
+
+  Write(Output, #13 + MakeConsoleString( Format(MSG_BAR_LINE, [Bar, Percent, AIndex, ATotal])+S) + #13);
   Flush(Output);
   FBlockDrawn := True;
 end;
 
-procedure TOSFLiveProgressReporter.EraseBlock;
+procedure TOSFLiveProgressReporter.EndProgress;
 begin
-  if not FBlockDrawn then
-    Exit;
-  // Cursor sits one line below the block; step up over both lines and wipe.
-  Write(Output, ANSI_CURSOR_UP2 + ANSI_ERASE_DOWN);
+  Writeln;
   Flush(Output);
-  FBlockDrawn := False;
 end;
 
 procedure TOSFLiveProgressReporter.ScanStarted(const ADirectory: string);
 begin
   Writeln(Output, Format(MSG_SCAN_STARTED, [ADirectory]));
+  Flush(Output);
+
+  //HideCursor;
+  Write(#27+'[?25l');
   Flush(Output);
 end;
 
@@ -144,23 +153,42 @@ procedure TOSFLiveProgressReporter.ScanFinished(AFileCount: Integer);
 begin
   Writeln(Output, Format(MSG_SCAN_FINISHED, [AFileCount]));
   Flush(Output);
+
+  //ShowCursor;
+  Write(#27+'[?25h');
+  Flush(Output);
 end;
 
 procedure TOSFLiveProgressReporter.SidecarStarted(ATotal: Integer);
 begin
   FSidecarTotal := ATotal;
+  FSidecarFinished := False;
+
+  Writeln(Output, Format(MSG_SIDECAR_STARTED, [ATotal]));
+  Flush(Output);
+
+  StartProgress( '', 0, ATotal);
+end;
+
+procedure TOSFLiveProgressReporter.StartProgress(const AText: string; AIndex,
+  ATotal: Integer);
+begin
+  Writeln;
+  Flush(Output);
+  DoProgress(AText, AIndex, ATotal);
 end;
 
 procedure TOSFLiveProgressReporter.SidecarProgress(ADone, ATotal: Integer);
 begin
-  // Carriage return overwrites the running count on one line.
-  Write(Output, #13 + Format(MSG_SIDECAR, [ADone, ATotal]));
-  Flush(Output);
+  DoProgress( '', ADone, ATotal);
 end;
 
 procedure TOSFLiveProgressReporter.SidecarFinished(ACreated: Integer);
 begin
-  Writeln(Output, #13 + Format(MSG_SIDECAR_DONE, [FSidecarTotal, FSidecarTotal]));
+  FSidecarFinished := true;
+  EndProgress;
+
+  Writeln(Output, #13 + Format(MSG_SIDECAR_DONE, [ACreated]));
   Flush(Output);
 end;
 
@@ -168,20 +196,18 @@ procedure TOSFLiveProgressReporter.ReadStarted(ATotal: Integer);
 begin
   Writeln(Output, MSG_READING);
   Flush(Output);
-  FBlockDrawn := False;
+  StartProgress( '', 0, ATotal);
 end;
 
 procedure TOSFLiveProgressReporter.FileStarted(AIndex, ATotal: Integer;
   const APath: string);
 begin
-  EraseBlock;
-  DrawBlock(APath, AIndex, ATotal);
+  DoProgress(ExtractFilename(APath), AIndex, ATotal);
 end;
 
 procedure TOSFLiveProgressReporter.FileError(AIndex: Integer;
   const APath, AErrorMessage: string);
 begin
-  EraseBlock;
   Writeln(Output, Format(MSG_FILE_ERROR,
     [ExtractFileName(APath), FirstLine(AErrorMessage)]));
   Flush(Output);
@@ -189,17 +215,32 @@ end;
 
 procedure TOSFLiveProgressReporter.Log(ALevel: TOSFLogLevel; const AMessage: string);
 begin
-  // INFO and WARN are swallowed in the live view; only errors get a line.
-  if ALevel <> llError then
+  // Warnings and errors always get a line; INFO is surfaced only once the
+  // sidecar phase is over; DEBUG is always swallowed in the live view.
+  if (ALevel < llWarning) and not (FSidecarFinished and (ALevel = llInfo)) then
     Exit;
-  EraseBlock;
-  Writeln(Output, Format(MSG_LOG_ERROR, [FirstLine(AMessage)]));
+  if ALevel = llWarning then
+    Writeln(Output, MakeConsoleString( Format(MSG_LOG_WARNING, [FirstLine(AMessage)])))
+  else if ALevel = llError then
+    Writeln(Output, MakeConsoleString( Format(MSG_LOG_ERROR, [FirstLine(AMessage)])))
+
+  //Write all Info Messages
+  else if FSidecarFinished and (ALevel = llInfo) then
+    Writeln(Output, MakeConsoleString( AMessage));
+
+  Flush(Output);
+end;
+
+procedure TOSFLiveProgressReporter.WriteFinished(const AOutputPath: string;
+  ABytes: Int64);
+begin
+  Writeln(Output, Format(MSG_WRITE_FINISHED, [AOutputPath, IntToStr( ABytes div 1024), 'kB']));
   Flush(Output);
 end;
 
 procedure TOSFLiveProgressReporter.WriteStarted(const AOutputPath: string);
 begin
-  EraseBlock;
+  EndProgress;
   Writeln(Output);
   Writeln(Output, Format(MSG_WRITE_STARTED, [AOutputPath]));
   Flush(Output);
@@ -208,7 +249,6 @@ end;
 procedure TOSFLiveProgressReporter.Summary(AFilesOk, AFilesTotal: Integer;
   ADurationMs: Int64; AErrors, AWarnings: Integer);
 begin
-  EraseBlock;
   Writeln(Output, FormatSummaryLine(AFilesOk, AFilesTotal, ADurationMs,
                                     AErrors, AWarnings));
   Flush(Output);

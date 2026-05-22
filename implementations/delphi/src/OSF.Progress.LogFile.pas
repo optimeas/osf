@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
 // Log-file progress reporter: a decorator that forwards every call to an
@@ -39,6 +39,9 @@ type
     procedure Log(ALevel: TOSFLogLevel; const AMessage: string);
     procedure Summary(AFilesOk, AFilesTotal: Integer; ADurationMs: Int64;
                       AErrors, AWarnings: Integer);
+    procedure StartProgress(const AText: string; AIndex, ATotal: Integer);
+    procedure DoProgress(const AText: string; AIndex, ATotal: Integer);
+    procedure EndProgress;
   end;
 
 implementation
@@ -54,7 +57,7 @@ const
 resourcestring
   MSG_SCAN_STARTED    = 'Scanning directory: %s';
   MSG_SCAN_FINISHED   = 'Found %d OSF files.';
-  MSG_SIDECAR_STARTED = 'Creating sidecar files (%d candidates)...';
+  MSG_SIDECAR_STARTED = 'Reading file information (%d files)...';
   MSG_SIDECAR_DONE    = 'Sidecar files created: %d';
   MSG_READ_STARTED    = 'Reading %d files...';
   MSG_FILE_STARTED    = 'Reading file %d/%d: %s';
@@ -75,6 +78,17 @@ begin
   FStream.Free;
   FInner := nil;
   inherited;
+end;
+
+procedure TOSFLogFileProgressReporter.DoProgress(const AText: string; AIndex,
+  ATotal: Integer);
+begin
+
+end;
+
+procedure TOSFLogFileProgressReporter.EndProgress;
+begin
+
 end;
 
 procedure TOSFLogFileProgressReporter.WriteLogLine(ALevel: TOSFLogLevel;
@@ -103,6 +117,12 @@ procedure TOSFLogFileProgressReporter.SidecarStarted(ATotal: Integer);
 begin
   WriteLogLine(llInfo, Format(MSG_SIDECAR_STARTED, [ATotal]));
   FInner.SidecarStarted(ATotal);
+end;
+
+procedure TOSFLogFileProgressReporter.StartProgress(const AText: string; AIndex,
+  ATotal: Integer);
+begin
+
 end;
 
 procedure TOSFLogFileProgressReporter.SidecarProgress(ADone, ATotal: Integer);

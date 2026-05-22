@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
 // Progress-reporting interface for long-running, multi-file operations.
@@ -47,6 +47,10 @@ type
     // ── Phase 5: final summary ────────────────────────────────────────────────
     procedure Summary(AFilesOk, AFilesTotal: Integer; ADurationMs: Int64;
                       AErrors, AWarnings: Integer);
+    // ── Helper ───────────────────────────────────────────────────────────────
+    procedure StartProgress(const AText: string; AIndex, ATotal: Integer);
+    procedure DoProgress(const AText: string; AIndex, ATotal: Integer);
+    procedure EndProgress;
   end;
 
   // Do-nothing adapter base. Implements every IProgressReporter method as an
@@ -68,6 +72,9 @@ type
     procedure Log(ALevel: TOSFLogLevel; const AMessage: string); virtual;
     procedure Summary(AFilesOk, AFilesTotal: Integer; ADurationMs: Int64;
                       AErrors, AWarnings: Integer); virtual;
+    procedure StartProgress(const AText: string; AIndex, ATotal: Integer); virtual;
+    procedure DoProgress(const AText: string; AIndex, ATotal: Integer); virtual;
+    procedure EndProgress; virtual;
   end;
 
 implementation
@@ -82,6 +89,12 @@ end;
 
 procedure TOSFProgressReporterBase.SidecarStarted(ATotal: Integer);
 begin
+end;
+
+procedure TOSFProgressReporterBase.StartProgress(const AText: string; AIndex,
+  ATotal: Integer);
+begin
+
 end;
 
 procedure TOSFProgressReporterBase.SidecarProgress(ADone, ATotal: Integer);
@@ -102,6 +115,17 @@ end;
 
 procedure TOSFProgressReporterBase.FileFinished(AIndex: Integer; AChannels, ASamples: Integer);
 begin
+end;
+
+procedure TOSFProgressReporterBase.DoProgress(const AText: string; AIndex,
+  ATotal: Integer);
+begin
+
+end;
+
+procedure TOSFProgressReporterBase.EndProgress;
+begin
+
 end;
 
 procedure TOSFProgressReporterBase.FileError(AIndex: Integer; const APath, AErrorMessage: string);
