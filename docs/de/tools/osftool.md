@@ -11,7 +11,7 @@ keywords:
   - merge
   - export
 last_update:
-  date: 2026-05-20
+  date: 2026-05-22
   author: Optimeas GmbH
 ---
 
@@ -19,7 +19,7 @@ last_update:
 
 # osftool — Kommandozeilen-Werkzeug
 
-**osftool** ist ein verb-basiertes Kommandozeilen-Werkzeug für die Arbeit mit Dateien im Open Streaming Format. Es liest und schreibt OSF4 und OSF5, verarbeitet komprimierte OSFZ-Dateien transparent und bündelt die alltäglichen Aufgaben rund um OSF-Daten in einer einzigen ausführbaren Datei: Dateien über ein Zeitintervall zusammenführen, Kanäle nach CSV exportieren, Metadaten prüfen, Statistiken berechnen, zwischen Formatversionen konvertieren und die Dateiintegrität prüfen.
+**osftool** ist ein verb-basiertes Kommandozeilen-Werkzeug für die Arbeit mit Dateien im Open Streaming Format. Es liest und schreibt OSF4 und OSF5, verarbeitet komprimierte OSFZ-Dateien transparent und bündelt die alltäglichen Aufgaben rund um OSF-Daten in einer einzigen ausführbaren Datei: Dateien über ein Zeitintervall zusammenführen, Kanäle nach CSV oder HDF5 exportieren, Metadaten prüfen, Statistiken berechnen, zwischen Formatversionen konvertieren und die Dateiintegrität prüfen.
 
 osftool baut auf der Delphi-OSF-Bibliothek auf (`implementations/delphi/src/`). Primäres Build-Ziel ist Windows 64-Bit; das Projekt enthält zusätzlich Build-Konfigurationen für macOS (Intel und Apple Silicon) und Linux 64-Bit. Die aktuelle Version ist **1.1.0**.
 
@@ -28,7 +28,7 @@ osftool baut auf der Delphi-OSF-Bibliothek auf (`implementations/delphi/src/`). 
 osftool deckt die wiederkehrenden Aufgaben eines OSF-basierten Arbeitsablaufs aus einem Skript oder einem Terminal heraus ab — ohne IDE und ohne Programmierung:
 
 - **Felddaten zusammenführen.** Viele über einen Verzeichnisbaum verteilte OSF/OSFZ-Dateien werden eingelesen und für ein gewähltes Zeitintervall und eine Kanalauswahl zu einer einzigen Datei zusammengeführt.
-- **Daten in Auswerteprogramme bringen.** Kanäle werden nach CSV exportiert — entweder als ein XY-Block je Kanal oder als gemeinsame Zeitachse mit einer Spalte je Kanal.
+- **Daten in Auswerteprogramme bringen.** Kanäle werden nach CSV exportiert — als ein XY-Block je Kanal oder als gemeinsame Zeitachse mit einer Spalte je Kanal — oder, im Windows-Build, in eine HDF5-Datei.
 - **Dateien schnell prüfen.** Metadaten, Zeitbereich, Kanallisten und Statistiken je Kanal stehen zur Verfügung, ohne die Datei in einer Anwendung zu öffnen.
 - **Zwischen Formatversionen migrieren.** OSF4-Dateien werden als OSF5 neu geschrieben und umgekehrt.
 - **Integrität prüfen.** Dateien werden Block für Block durchlaufen und auf strukturelle Konsistenz geprüft.
@@ -147,19 +147,18 @@ osftool merge ./feld-daten fenster.osf Sensor/Temperatur Sensor/Druck \
   --start 2026-05-05T10:00:00 --end 2026-05-05T12:00:00
 ```
 
-Standardmäßig zeigt `merge` eine **Live-Fortschrittsanzeige**: eine Überschrift je Phase, die gerade gelesene Datei und einen Fortschrittsbalken. Fehlerzeilen bleiben dauerhaft oberhalb des Balkens stehen, während die informativen und warnenden Meldungen je Kanal unterdrückt werden.
+Standardmäßig zeigt `merge` eine **Live-Fortschrittsanzeige**: eine kurze Überschrift kündigt jede Phase an — Verzeichnis durchsuchen, Datei-Metadaten lesen, Dateien lesen, Ausgabe schreiben — und darunter wird eine einzelne Fortschrittsbalken-Zeile an Ort und Stelle neu gezeichnet, die Prozentwert, Dateizähler und den Namen der gerade verarbeiteten Datei zeigt. Warnungen und Fehler laufen oberhalb des Balkens heraus, sobald sie auftreten; die informativen Meldungen je Kanal auf niedriger Ebene bleiben unterdrückt.
 
 ```
 Reading files...
-  V:\feld-daten\20260517\20260517_192802.osfz
-  [████████████████████░░░░░░░░░░░░░░░░░░░░] 50% (173/346)
+  [████████████████████░░░░░░░░░░░░░░░░░░░░] 50% (173/346) - 20260517_192802.osfz
 ```
 
 Die Ausgabe-Optionen ändern diese Darstellung und schließen sich gegenseitig aus: `-v` / `--verbose` gibt stattdessen das vollständige Scroll-Log aus; `-q` / `--quiet` gibt nur Fehler auf stderr aus und ist sonst still; `--json` liefert einen JSON-Lines-Ereignisstrom für Pipelines. `--log <pfad>` ist orthogonal — es schreibt in jedem Modus das vollständige Diagnose-Log in eine Datei. Wird stdout in eine Pipe oder Datei umgeleitet, ersetzt osftool die Live-Anzeige automatisch durch periodische einfache Fortschrittszeilen.
 
 ### export
 
-Exportiert die Kanäle einer einzelnen OSF/OSFZ-Datei nach CSV.
+Exportiert die Kanäle einer einzelnen OSF/OSFZ-Datei nach CSV — oder, im Windows-Build, nach HDF5.
 
 ```
 osftool export <inputfile> <outputfile> [kanal ...] [optionen]
@@ -173,19 +172,29 @@ osftool export <inputfile> <outputfile> [kanal ...] [optionen]
 
 | Option                     | Beschreibung |
 |----------------------------|--------------|
-| `--format <fmt>`           | `csv` (Vorgabe) — ein XY-Block je Kanal; oder `unified-csv` — eine gemeinsame Zeitachse mit einer Spalte je Kanal |
+| `--format <fmt>`           | `csv` (Vorgabe) — ein XY-Block je Kanal; `unified-csv` — eine gemeinsame Zeitachse mit einer Spalte je Kanal; `hdf5` — eine HDF5-Datei, ein Dataset je Kanal (nur Windows-Build) |
 | `--timestamp-format <fmt>` | Zeitstempelformat für `unified-csv`: `datetime` (Vorgabe), `seconds`, `iso8601`, `nanoseconds` |
 | `--start <zeit>`           | Nur Werte ab dieser UTC-Zeit exportieren (ISO 8601) |
 | `--end <zeit>`             | Nur Werte bis zu dieser UTC-Zeit exportieren (ISO 8601) |
-| `--decimal-sep <c>`        | Dezimaltrennzeichen: `comma` (Vorgabe) oder `dot` |
-| `--encoding <enc>`         | `iso-8859-1` (Vorgabe) oder `utf-8` |
+| `--decimal-sep <c>`        | CSV-Dezimaltrennzeichen: `comma` (Vorgabe) oder `dot` |
+| `--encoding <enc>`         | CSV-Kodierung: `iso-8859-1` (Vorgabe) oder `utf-8` |
+| `--chunk-size <n>`         | HDF5: Werte je Dataset-Chunk (Vorgabe `8192`) |
+| `--deflate-level <n>`      | HDF5: gzip-Kompressionsstufe `0`–`9` (Vorgabe `4`) |
+| `--no-shuffle`             | HDF5: den Shuffle-Vorfilter deaktivieren |
+| `--namespace-sep <c>`      | HDF5: Trennzeichen, das einen Kanalnamen in einen HDF5-Gruppenpfad zerlegt (Vorgabe `.`) |
+| `--hdf5-lib-dir <pfad>`    | HDF5: Verzeichnis, in dem nach `hdf5.dll` gesucht wird |
 | `--exclude-empty`          | Kanäle ohne Werte überspringen |
 
 `--start` und `--end` müssen gemeinsam angegeben werden — eine Option ohne die andere wird abgelehnt. Die Vorgaben für `--decimal-sep` und `--encoding` stammen aus der Konfigurationsdatei.
 
+Das Format `hdf5` steht nur im Windows-Build zur Verfügung. Jeder Kanal wird zu einem gechunkten, deflate-komprimierten 1-D-Dataset aus `{int64 timestamp_ns; value}`-Datensätzen; der Kanalname wird an `--namespace-sep` in eine HDF5-Gruppenhierarchie zerlegt, und Metadaten auf Datei- und Kanalebene werden als HDF5-Attribute geschrieben. Der Export benötigt die HDF5-Laufzeitbibliothek: `hdf5.dll` muss über den System-Suchpfad oder über das mit `--hdf5-lib-dir` angegebene Verzeichnis erreichbar sein. Die Optionen `--chunk-size`, `--deflate-level`, `--no-shuffle` und `--namespace-sep` wirken nur auf `hdf5`; `--decimal-sep` und `--encoding` wirken nur auf die CSV-Formate.
+
 ```
 osftool export motorbike.osf motorbike.csv --format unified-csv \
   --timestamp-format iso8601 --decimal-sep dot
+
+# HDF5-Export (Windows-Build), stärkere Kompression
+osftool export motorbike.osf motorbike.h5 --format hdf5 --deflate-level 6
 ```
 
 ### info

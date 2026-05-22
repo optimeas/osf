@@ -11,7 +11,7 @@ keywords:
   - merge
   - export
 last_update:
-  date: 2026-05-20
+  date: 2026-05-22
   author: Optimeas GmbH
 ---
 
@@ -19,7 +19,7 @@ last_update:
 
 # osftool — Command-Line Tool
 
-**osftool** is a verb-based command-line tool for working with Open Streaming Format files. It reads and writes OSF4 and OSF5, transparently handles compressed OSFZ files, and bundles the everyday tasks around OSF data into a single executable: merging files over a time interval, exporting channels to CSV, inspecting metadata, computing statistics, converting between format versions, and checking file integrity.
+**osftool** is a verb-based command-line tool for working with Open Streaming Format files. It reads and writes OSF4 and OSF5, transparently handles compressed OSFZ files, and bundles the everyday tasks around OSF data into a single executable: merging files over a time interval, exporting channels to CSV or HDF5, inspecting metadata, computing statistics, converting between format versions, and checking file integrity.
 
 osftool is built on the Delphi OSF library (`implementations/delphi/src/`). The primary build target is Windows 64-bit; the project also carries macOS (Intel and Apple Silicon) and Linux 64-bit build configurations. The current version is **1.1.0**.
 
@@ -28,7 +28,7 @@ osftool is built on the Delphi OSF library (`implementations/delphi/src/`). The 
 osftool covers the recurring tasks of an OSF-based workflow from a script or a terminal — no IDE and no code required:
 
 - **Combining field data.** Many OSF/OSFZ files scattered across a directory tree are scanned and merged into a single file for a chosen time interval and channel selection.
-- **Getting data into analysis tools.** Channels are exported to CSV — either one XY block per channel, or a single shared timeline with one column per channel.
+- **Getting data into analysis tools.** Channels are exported to CSV — one XY block per channel, or a single shared timeline with one column per channel — or, on the Windows build, to an HDF5 file.
 - **Inspecting files quickly.** Metadata, time range, channel lists, and per-channel statistics are available without opening the file in an application.
 - **Migrating between format versions.** OSF4 files are rewritten as OSF5 and vice versa.
 - **Checking integrity.** Files are walked block by block and verified for structural consistency.
@@ -147,19 +147,18 @@ osftool merge ./field-data window.osf Sensor/Temperature Sensor/Pressure \
   --start 2026-05-05T10:00:00 --end 2026-05-05T12:00:00
 ```
 
-By default `merge` shows a **live progress display**: a header for each phase, the file currently being read, and a progress bar. Error lines stay pinned permanently above the bar, while the per-channel informational and warning chatter is suppressed.
+By default `merge` shows a **live progress display**: a short header announces each phase — scanning the directory, reading the file metadata, reading the files, writing the output — and a single progress-bar line is redrawn in place beneath it, showing the percentage, the file counter, and the name of the file currently being processed. Warnings and errors scroll out above the bar as they occur; the low-level per-channel informational chatter stays suppressed.
 
 ```
 Reading files...
-  V:\field-data\20260517\20260517_192802.osfz
-  [████████████████████░░░░░░░░░░░░░░░░░░░░] 50% (173/346)
+  [████████████████████░░░░░░░░░░░░░░░░░░░░] 50% (173/346) - 20260517_192802.osfz
 ```
 
 The output flags change this presentation and are mutually exclusive: `-v` / `--verbose` prints the full scrolling log instead; `-q` / `--quiet` prints only errors on stderr and is otherwise silent; `--json` emits a JSON-Lines event stream for pipelines. `--log <path>` is orthogonal — it writes the complete diagnostic log to a file in any mode. When stdout is redirected to a pipe or file the live display is automatically replaced by periodic plain progress lines.
 
 ### export
 
-Exports the channels of a single OSF/OSFZ file to CSV.
+Exports the channels of a single OSF/OSFZ file to CSV — or, on the Windows build, to HDF5.
 
 ```
 osftool export <inputfile> <outputfile> [channel ...] [options]
@@ -173,19 +172,29 @@ osftool export <inputfile> <outputfile> [channel ...] [options]
 
 | Option                     | Description |
 |----------------------------|-------------|
-| `--format <fmt>`           | `csv` (default) — one XY block per channel; or `unified-csv` — a single shared timeline with one column per channel |
+| `--format <fmt>`           | `csv` (default) — one XY block per channel; `unified-csv` — a single shared timeline with one column per channel; `hdf5` — an HDF5 file, one dataset per channel (Windows build only) |
 | `--timestamp-format <fmt>` | Timestamp format for `unified-csv`: `datetime` (default), `seconds`, `iso8601`, `nanoseconds` |
 | `--start <time>`           | Only export samples from this UTC time (ISO 8601) |
 | `--end <time>`             | Only export samples up to this UTC time (ISO 8601) |
-| `--decimal-sep <c>`        | Decimal separator: `comma` (default) or `dot` |
-| `--encoding <enc>`         | `iso-8859-1` (default) or `utf-8` |
+| `--decimal-sep <c>`        | CSV decimal separator: `comma` (default) or `dot` |
+| `--encoding <enc>`         | CSV encoding: `iso-8859-1` (default) or `utf-8` |
+| `--chunk-size <n>`         | HDF5: samples per dataset chunk (default `8192`) |
+| `--deflate-level <n>`      | HDF5: gzip compression level `0`–`9` (default `4`) |
+| `--no-shuffle`             | HDF5: disable the shuffle pre-compression filter |
+| `--namespace-sep <c>`      | HDF5: separator that splits a channel name into an HDF5 group path (default `.`) |
+| `--hdf5-lib-dir <path>`    | HDF5: directory to search for `hdf5.dll` |
 | `--exclude-empty`          | Skip channels with zero samples |
 
 `--start` and `--end` must be supplied together — one without the other is rejected. The defaults for `--decimal-sep` and `--encoding` come from the configuration file.
 
+The `hdf5` format is available on the Windows build only. Each channel becomes a chunked, deflate-compressed 1-D dataset of `{int64 timestamp_ns; value}` records; the channel name is split on `--namespace-sep` into an HDF5 group hierarchy, and file- and channel-level metadata is written as HDF5 attributes. The export needs the HDF5 runtime: `hdf5.dll` must be reachable on the system search path or in the directory named by `--hdf5-lib-dir`. The `--chunk-size`, `--deflate-level`, `--no-shuffle`, and `--namespace-sep` flags apply to `hdf5` only; `--decimal-sep` and `--encoding` apply to the CSV formats only.
+
 ```
 osftool export motorbike.osf motorbike.csv --format unified-csv \
   --timestamp-format iso8601 --decimal-sep dot
+
+# HDF5 export (Windows build), stronger compression
+osftool export motorbike.osf motorbike.h5 --format hdf5 --deflate-level 6
 ```
 
 ### info
