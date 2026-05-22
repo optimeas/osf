@@ -69,7 +69,8 @@ osf/
 │   │   ├── integrations/{index, python}.md
 │   │   ├── tools/{index, osftool}.md  — osftool CLI documentation
 │   │   └── media/                   — shared images
-│   └── en/                          — English mirror, same structure
+│   ├── en/                          — English mirror, same structure
+│   └── scripts/docs-to-pdf.py       — builds one combined PDF per language (docs/pdf-out/, gitignored)
 ├── implementations/
 │   ├── delphi/                      — reference implementation (full)
 │   │   ├── src/                     — library units
@@ -120,7 +121,7 @@ osf/
 | `OSF.Export.HDF5` | `TOSFHDF5Exporter` — exports a `TOSFDataManager` as an HDF5 file: one chunked / shuffled / deflated 1-D dataset of `{int64 timestamp_ns; value}` compound records per channel, the channel name split on the namespace separator into HDF5 groups, file and channel metadata as root/dataset attributes. Covers `bool`, every signed/unsigned integer width, `float`, `double`, `gpslocation` (a lat/lon/alt sub-compound) and `string` (variable-length UTF-8); `binary` is skipped. Configurable `ChunkSize`, `DeflateLevel`, `UseShuffle`, `NamespaceSep`, `LibraryDir`. Windows-only. |
 
 | `OSF.Version` | osftool version single-source-of-truth: `OSFTOOL_VERSION` constant + `GetVersionString` / `GetFullVersionString` (build timestamp taken from the executable's own file date). |
-| `OSF.Progress` (+ `.Console` / `.Quiet` / `.Verbose` / `.Json` / `.Fallback` / `.Live` / `.LogFile`) | Reusable, OSF-agnostic `IProgressReporter` abstraction for long-running multi-file operations: structured phase events plus a `Log` catch-all, six reporter implementations (live ANSI progress bar, plain redirect-fallback, quiet, verbose, JSON-Lines) and a log-file decorator. Consumed by `osftool merge`. |
+| `OSF.Progress` (+ `.Console` / `.Quiet` / `.Verbose` / `.Json` / `.Fallback` / `.Live` / `.LogFile`) | Reusable, OSF-agnostic `IProgressReporter` abstraction for long-running multi-file operations: structured phase events, a generic `StartProgress`/`DoProgress`/`EndProgress` progress-bar triplet, and a `Log` catch-all; six reporter implementations (live progress bar, plain redirect-fallback, quiet, verbose, JSON-Lines) and a log-file decorator. The live reporter draws a single in-place progress-bar line that carries the current file name. Consumed by `osftool merge`. |
 
 **HDF5 DLL binding in `implementations/delphi/src/hdf5/`:** `Hdf5.Types`,
 `Hdf5.Api` and `Hdf5.Wrapper` form a reusable, OSF-agnostic Delphi binding
@@ -184,11 +185,11 @@ clean with `dcc64`.
 
 The top-level dispatcher also handles `--version` / `-V` (plus `--short`),
 sourced from the `OSF.Version` unit (osftool 1.1.0). The `merge` verb
-renders progress through the `OSF.Progress.*` reporter subsystem — a live
-ANSI progress bar by default, the `--verbose` / `--json` / `--quiet` /
-`--log` alternatives, and an automatic plain-text fallback when stdout is
-redirected. On Windows the console is switched to the UTF-8 code page at
-startup so non-ASCII output renders correctly.
+renders progress through the `OSF.Progress.*` reporter subsystem — a
+single-line live progress bar by default, the `--verbose` / `--json` /
+`--quiet` / `--log` alternatives, and an automatic plain-text fallback
+when stdout is redirected. On Windows the console is switched to the
+UTF-8 code page at startup so non-ASCII output renders correctly.
 
 ### osftool installer
 

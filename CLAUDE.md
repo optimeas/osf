@@ -1,6 +1,6 @@
 # Claude Code Session State
 
-Last updated: 2026-05-20 (after the Apache→MIT relicense).
+Last updated: 2026-05-22 (after the osftool live-progress rework).
 
 This file is a hand-off document for the next Claude Code session. Read
 [STATUS.md](STATUS.md) and [DECISIONS.md](DECISIONS.md) for the
@@ -58,6 +58,12 @@ Recently delivered (task-driven):
   `.dproj` also carries OSX64/OSXARM64/Linux64 configs and the source is
   conditional-compilation clean for them (verified by inspection only).
 - `OSF.Export.CSV.Unified` — single-timeline CSV exporter.
+- The `osftool merge` live progress display was reworked — a single
+  in-place progress-bar line replaces the old two-line ANSI block,
+  driven by a new generic `StartProgress`/`DoProgress`/`EndProgress`
+  triplet on `IProgressReporter` (commit `cf77461`). `osftool.md`
+  (EN + DE) was brought in sync and gained the previously
+  undocumented HDF5 export path (commit `6f8c7e7`).
 
 The standalone `OsfMerge.dpr` was superseded by `osftool merge` and
 removed.
@@ -154,6 +160,10 @@ Always remove `implementations\cpp\build` after a successful verify.
 - **Don't modify OSF library units from a demo / tool** unless a brief
   explicitly says so; demos and `osftool` depend on `src/` via
   `..\..\src\`.
+- **Docs → PDF:** `python docs/scripts/docs-to-pdf.py` renders the
+  Docusaurus docs tree to one combined PDF per language under
+  `docs/pdf-out/` (gitignored build artifact — the `.md` files stay
+  the single source of truth). Auto-discovers languages and new files.
 
 ## Pickup checklist for the next session
 
