@@ -41,3 +41,7 @@ implementations/python/python/osf/*.pdb
 
 # maturin build produces wheels here.
 implementations/python/dist/
+
+# Generated documentation PDFs (docs/scripts/docs-to-pdf.py).
+# The Markdown sources under docs/ are the single source of truth.
+docs/pdf-out/
