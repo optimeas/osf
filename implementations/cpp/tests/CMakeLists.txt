@@ -162,6 +162,40 @@ osf_set_warnings(test_reader)
 gtest_discover_tests(test_reader)
 
 # ---------------------------------------------------------------------------
+# test_data_channel — typed channel model unit tests (Phase 6).
+# ---------------------------------------------------------------------------
+
+add_executable(test_data_channel
+    unit/test_data_channel.cpp
+)
+
+target_link_libraries(test_data_channel PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_data_channel)
+
+gtest_discover_tests(test_data_channel)
+
+# ---------------------------------------------------------------------------
+# test_manager — DataManager builder state-machine unit tests (Phase 6).
+# ---------------------------------------------------------------------------
+
+add_executable(test_manager
+    unit/test_manager.cpp
+)
+
+target_link_libraries(test_manager PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_manager)
+
+gtest_discover_tests(test_manager)
+
+# ---------------------------------------------------------------------------
 # test_header_examples — magic-header tests against reference files.
 # ---------------------------------------------------------------------------
 
@@ -249,3 +283,25 @@ target_compile_definitions(test_reader_examples PRIVATE
 osf_set_warnings(test_reader_examples)
 
 gtest_discover_tests(test_reader_examples)
+
+# ---------------------------------------------------------------------------
+# test_manager_examples — DataManager integration tests against the
+# generated reference files and the motorbike / steam_loco field
+# samples (Phase 6).
+# ---------------------------------------------------------------------------
+
+add_executable(test_manager_examples
+    integration/test_manager_examples.cpp
+)
+
+target_link_libraries(test_manager_examples PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_compile_definitions(test_manager_examples PRIVATE
+    OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+
+osf_set_warnings(test_manager_examples)
+
+gtest_discover_tests(test_manager_examples)

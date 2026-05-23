@@ -9,8 +9,10 @@
 #pragma once
 
 #include <osf/block.hpp>
+#include <osf/data_channel.hpp>
 #include <osf/error.hpp>
 #include <osf/header.hpp>
+#include <osf/manager.hpp>
 #include <osf/metablock.hpp>
 #include <osf/reader.hpp>
 #include <osf/stats.hpp>
