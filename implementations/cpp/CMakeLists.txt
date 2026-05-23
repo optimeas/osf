@@ -87,10 +87,13 @@ target_include_directories(osf_headers SYSTEM INTERFACE
 # The internal target name is osf_core (consistent with osf_headers); the
 # OUTPUT_NAME property keeps the produced file as libosf.a / osf.lib.
 add_library(osf_core
+    src/block.cpp
     src/error.cpp
     src/header.cpp
     src/metablock.cpp
     src/metablock_xml.cpp
+    src/reader.cpp
+    src/stats.cpp
     src/types.cpp
     third_party/pugixml/pugixml.cpp
 )

@@ -18,6 +18,12 @@ std::string_view error_category_name(Error::Code code) noexcept {
         case Error::Code::RemovedInSpec:      return "RemovedInSpec";
         case Error::Code::JsonParseError:     return "JsonParseError";
         case Error::Code::XmlParseError:      return "XmlParseError";
+        case Error::Code::UnknownChannelIndex:        return "UnknownChannelIndex";
+        case Error::Code::InvalidBlock:               return "InvalidBlock";
+        case Error::Code::ChannelMixedBlockTypes:     return "ChannelMixedBlockTypes";
+        case Error::Code::ContinuedDataWithoutStart:  return "ContinuedDataWithoutStart";
+        case Error::Code::RelStampWithoutAnchor:      return "RelStampWithoutAnchor";
+        case Error::Code::DataTypeMismatch:           return "DataTypeMismatch";
     }
     // fallback for cast-from-int values outside the declared enumerators
     return "Unknown";

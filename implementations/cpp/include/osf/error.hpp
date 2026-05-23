@@ -43,6 +43,41 @@ struct Error {
         /// XML parser (pugixml) could not tokenise the metablock body.
         /// Carries the parser's diagnostic plus byte offset in `message`.
         XmlParseError,
+        /// The block stream referenced a channel index that does not
+        /// appear in the metablock. Without the channel definition the
+        /// reader cannot know how wide the length prefix is, so this
+        /// is a hard error rather than a graceful skip — the file is
+        /// corrupted. The index is included in `message`.
+        UnknownChannelIndex,
+        /// The block-stream payload was structurally malformed (wrong
+        /// length for the declared data type, required field missing,
+        /// equidistant block on a string/binary channel, …). Carries a
+        /// per-block diagnostic in `message`.
+        InvalidBlock,
+        /// The same channel produced both equidistant blocks
+        /// (`bcStartData` / `bcContinuedData`) and timestamped blocks
+        /// (`bcAbsTimeStampData` / `bcContinuedRelStampData`). Spec
+        /// revision 2026-05-04 forbids the mix per channel. Surfaced
+        /// by the future `DataManager` layer; reserved here for shared
+        /// use.
+        ChannelMixedBlockTypes,
+        /// A `bcContinuedData` block arrived for a channel that has not
+        /// yet seen a `bcStartData`. Equidistant continuation depends
+        /// on the most recent start block for its sample rate, so
+        /// without an open segment the data has no meaningful timeline.
+        /// Surfaced by the future `DataManager`.
+        ContinuedDataWithoutStart,
+        /// A `bcContinuedRelStampData` block arrived for a channel
+        /// that has not yet observed an absolute timestamp. The first
+        /// relative delta is anchored to the channel's last known
+        /// absolute time; without an anchor the deltas cannot be
+        /// lifted to absolute time. Surfaced by the future `DataManager`.
+        RelStampWithoutAnchor,
+        /// A block payload's typed variant did not match the channel's
+        /// declared `data_type`. The reader normally enforces this at
+        /// the stream level; surfaced here so the future `DataManager`
+        /// has a typed code for the equivalent check.
+        DataTypeMismatch,
     };
 
     Code code = Code::Unknown;

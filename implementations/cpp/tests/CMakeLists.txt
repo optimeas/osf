@@ -110,6 +110,58 @@ osf_set_warnings(test_metablock_xml)
 gtest_discover_tests(test_metablock_xml)
 
 # ---------------------------------------------------------------------------
+# test_block — block-model primitive unit tests (Phase 5).
+# ---------------------------------------------------------------------------
+
+add_executable(test_block
+    unit/test_block.cpp
+)
+
+target_link_libraries(test_block PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_block)
+
+gtest_discover_tests(test_block)
+
+# ---------------------------------------------------------------------------
+# test_stats — reader-stats helper unit tests (Phase 5).
+# ---------------------------------------------------------------------------
+
+add_executable(test_stats
+    unit/test_stats.cpp
+)
+
+target_link_libraries(test_stats PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_stats)
+
+gtest_discover_tests(test_stats)
+
+# ---------------------------------------------------------------------------
+# test_reader — BlockReader unit tests against synthetic byte sequences
+# (Phase 5).
+# ---------------------------------------------------------------------------
+
+add_executable(test_reader
+    unit/test_reader.cpp
+)
+
+target_link_libraries(test_reader PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_reader)
+
+gtest_discover_tests(test_reader)
+
+# ---------------------------------------------------------------------------
 # test_header_examples — magic-header tests against reference files.
 # ---------------------------------------------------------------------------
 
@@ -175,3 +227,25 @@ target_compile_definitions(test_metablock_xml_examples PRIVATE
 osf_set_warnings(test_metablock_xml_examples)
 
 gtest_discover_tests(test_metablock_xml_examples)
+
+# ---------------------------------------------------------------------------
+# test_reader_examples — BlockReader integration tests against the
+# generated reference files and the motorbike / steam_loco field
+# samples (Phase 5).
+# ---------------------------------------------------------------------------
+
+add_executable(test_reader_examples
+    integration/test_reader_examples.cpp
+)
+
+target_link_libraries(test_reader_examples PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_compile_definitions(test_reader_examples PRIVATE
+    OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+
+osf_set_warnings(test_reader_examples)
+
+gtest_discover_tests(test_reader_examples)
