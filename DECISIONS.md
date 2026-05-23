@@ -99,14 +99,19 @@ The format version is detected automatically:
 
 ## 7. Streaming vs. Block Mode
 
-**Decision:** Streaming write mode is required only for embedded implementations. Desktop and server implementations read both streaming and block data, and write in block mode only.
+**Decision:** Write-mode requirements differ by target platform. Embedded implementations must support streaming write — sample-by-sample or chunk-by-chunk, with each block reaching the filesystem before the next is composed. Desktop and server implementations write in block mode, accumulating data in memory and emitting it at the end. C++ is special: it serves both worlds with two separate writer classes (`StreamingWriter` for embedded, `BlockWriter` for desktop). Read mode is **uniform** across all implementations and platforms — every reader loads the file fully into memory and exposes typed channels (the `DataManager` pattern). Embedded users facing oversized files must size their recordings to fit available RAM; a streaming reader is not provided.
 
 **Why:** Embedded devices must write sample by sample without buffering all data in RAM — power loss must not corrupt previously written samples. Desktop writers have no real-time constraint and can collect all data before writing, which simplifies the implementation significantly.
 
 | Platform | Read | Write |
 |---|---|---|
-| Embedded (C, MicroPython, Swift/Watch) | — | Streaming |
-| Desktop / Server (all others) | Streaming + Block | Block |
+| Embedded (C, MicroPython, Swift/Watch) | In-memory (all formats) | Streaming |
+| Desktop / Server (others) | In-memory (all formats) | Block |
+| **C++** (both worlds) | In-memory (all formats) | Streaming + Block (two writer classes) |
+
+**Why C++ is in both worlds.** Modern embedded systems on Linux (including the Optimeas devices that originate OSF) are written in C++, not C. The C ecosystem still covers bare-metal microcontrollers and Linux kernel drivers, but for higher-level embedded application code C++ is the default. Treating C++ as desktop-only would force these systems to choose between OSF and their language of choice — neither outcome serves OSF adoption. The two writer classes (`StreamingWriter`, `BlockWriter`) share a private block-encoder backend so the format-encoding logic exists only once; the difference between them is when the encoded bytes leave for the output stream.
+
+**HIL test recordings as a read use case.** Optimeas devices replay previously recorded OSF files during hardware-in-the-loop tests to drive simulations from real measurement data. This requires the embedded software to read OSF files — including files that were themselves streaming-written. Combined with the analyst-side block-written files, this is why every implementation must handle both file shapes on read; the embedded read use case is what made the uniform in-memory reader a hard requirement rather than a desktop-only convenience.
 
 ---
 
