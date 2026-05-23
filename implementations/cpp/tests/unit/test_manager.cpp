@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -51,6 +52,13 @@ void put_f64(std::vector<std::uint8_t>& dst, double v) {
     std::uint64_t bits;
     std::memcpy(&bits, &v, sizeof(bits));
     for (int i = 0; i < 8; ++i)
+        dst.push_back(static_cast<std::uint8_t>((bits >> (8 * i)) & 0xFF));
+}
+
+void put_f32(std::vector<std::uint8_t>& dst, float v) {
+    std::uint32_t bits;
+    std::memcpy(&bits, &v, sizeof(bits));
+    for (int i = 0; i < 4; ++i)
         dst.push_back(static_cast<std::uint8_t>((bits >> (8 * i)) & 0xFF));
 }
 
@@ -109,6 +117,68 @@ void append_continued_double(std::vector<std::uint8_t>& out,
     out.push_back(static_cast<std::uint8_t>(multi ? 0x85 : 0x05));
     if (multi) put_u32(out, static_cast<std::uint32_t>(samples.size()));
     for (double v : samples) put_f64(out, v);
+}
+
+// bcStartData for float channel sizeoflengthvalue=2.
+// payload = 1 ctl + 8 ts + 8 rate [+ 4 N if multi] + 4*n samples
+void append_start_float(std::vector<std::uint8_t>& out, std::uint16_t channel,
+                        std::int64_t ts, double rate,
+                        std::vector<float> const& samples) {
+    bool const multi = samples.size() != 1;
+    std::uint16_t const len = static_cast<std::uint16_t>(
+        1 + 8 + 8 + (multi ? 4 : 0) + 4 * samples.size());
+    put_u16(out, channel);
+    put_u16(out, len);
+    out.push_back(static_cast<std::uint8_t>(multi ? 0x86 : 0x06));
+    put_i64(out, ts);
+    put_f64(out, rate);
+    if (multi) put_u32(out, static_cast<std::uint32_t>(samples.size()));
+    for (float v : samples) put_f32(out, v);
+}
+
+// bcContinuedData for float, sizeoflengthvalue=2.
+void append_continued_float(std::vector<std::uint8_t>& out,
+                            std::uint16_t channel,
+                            std::vector<float> const& samples) {
+    bool const multi = samples.size() != 1;
+    std::uint16_t const len = static_cast<std::uint16_t>(
+        1 + (multi ? 4 : 0) + 4 * samples.size());
+    put_u16(out, channel);
+    put_u16(out, len);
+    out.push_back(static_cast<std::uint8_t>(multi ? 0x85 : 0x05));
+    if (multi) put_u32(out, static_cast<std::uint32_t>(samples.size()));
+    for (float v : samples) put_f32(out, v);
+}
+
+// bcStartData for int32 channel sizeoflengthvalue=2.
+// payload = 1 ctl + 8 ts + 8 rate [+ 4 N if multi] + 4*n samples
+void append_start_int32(std::vector<std::uint8_t>& out, std::uint16_t channel,
+                        std::int64_t ts, double rate,
+                        std::vector<std::int32_t> const& samples) {
+    bool const multi = samples.size() != 1;
+    std::uint16_t const len = static_cast<std::uint16_t>(
+        1 + 8 + 8 + (multi ? 4 : 0) + 4 * samples.size());
+    put_u16(out, channel);
+    put_u16(out, len);
+    out.push_back(static_cast<std::uint8_t>(multi ? 0x86 : 0x06));
+    put_i64(out, ts);
+    put_f64(out, rate);
+    if (multi) put_u32(out, static_cast<std::uint32_t>(samples.size()));
+    for (std::int32_t v : samples) put_i32(out, v);
+}
+
+// bcContinuedData for int32, sizeoflengthvalue=2.
+void append_continued_int32(std::vector<std::uint8_t>& out,
+                            std::uint16_t channel,
+                            std::vector<std::int32_t> const& samples) {
+    bool const multi = samples.size() != 1;
+    std::uint16_t const len = static_cast<std::uint16_t>(
+        1 + (multi ? 4 : 0) + 4 * samples.size());
+    put_u16(out, channel);
+    put_u16(out, len);
+    out.push_back(static_cast<std::uint8_t>(multi ? 0x85 : 0x05));
+    if (multi) put_u32(out, static_cast<std::uint32_t>(samples.size()));
+    for (std::int32_t v : samples) put_i32(out, v);
 }
 
 // bcAbsTimeStampData int32, sizeoflengthvalue=2.
@@ -194,6 +264,14 @@ std::string meta_one_int32(std::uint16_t index = 0) {
         "\"sizeoflengthvalue\":2}]}}";
 }
 
+std::string meta_one_float(std::uint16_t index = 0) {
+    return std::string{"{\"osf\":{\"version\":5,\"channels\":["
+        "{\"index\":"} + std::to_string(index) +
+        ",\"name\":\"ch" + std::to_string(index) + "\","
+        "\"channeltype\":\"scalar\",\"datatype\":\"float\","
+        "\"sizeoflengthvalue\":2}]}}";
+}
+
 std::string meta_one_string(std::uint16_t index = 0) {
     return std::string{"{\"osf\":{\"version\":5,\"channels\":["
         "{\"index\":"} + std::to_string(index) +
@@ -244,6 +322,77 @@ TEST(DataManager, two_start_blocks_open_two_segments) {
     EXPECT_EQ(eq->segments[1].sample_count, 30u);
     EXPECT_EQ(eq->segments[1].start_index, 50u);
     EXPECT_EQ(osf::numeric_values_len(eq->samples), 80u);
+}
+
+// Coverage probe: the manager state machine and the reader's
+// read_numeric_n both accept all 11 numeric data types for
+// equidistant blocks even though spec rev 2026-05-04 documents
+// float/double only. The Rust reference exercises the same
+// permissiveness with `parses_continued_data_int16_multi` in
+// reader.rs — we mirror that with end-to-end Float + Int32 tests
+// here. Memory-path verification only (no arithmetic); sample
+// equality uses EXPECT_EQ for exact bit-pattern match.
+
+TEST(DataManager, one_start_plus_one_continued_float) {
+    std::vector<float> const first   = {0.1f, 1.5f, -3.25f, 100.0f, -200.5f};
+    std::vector<float> const rest    = {1.0f, 2.0f, 3.0f};
+
+    std::vector<std::uint8_t> blocks;
+    append_start_float(blocks, 0, 1'000, 1000.0, first);
+    append_continued_float(blocks, 0, rest);
+
+    auto ss = make_osf5_stream(meta_one_float(), blocks);
+    auto mgr = osf::DataManager::load_from_stream(ss);
+    ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
+    ASSERT_EQ(mgr->channels().size(), 1u);
+    auto const& dc = mgr->channels()[0];
+    auto const* eq = std::get_if<osf::EquidistantChannel>(&dc);
+    ASSERT_NE(eq, nullptr);
+    EXPECT_EQ(eq->data_type, osf::DataType::Float);
+    ASSERT_EQ(eq->segments.size(), 1u);
+    EXPECT_EQ(eq->segments[0].sample_count, 8u);
+    EXPECT_EQ(osf::numeric_values_len(eq->samples), 8u);
+
+    auto flat = osf::as_floats_flat(*eq);
+    ASSERT_TRUE(flat.has_value()) << flat.error().message;
+    std::vector<float> expected;
+    expected.insert(expected.end(), first.begin(), first.end());
+    expected.insert(expected.end(), rest.begin(), rest.end());
+    EXPECT_EQ(*flat, expected);
+}
+
+TEST(DataManager, one_start_plus_one_continued_int32) {
+    std::vector<std::int32_t> const first = {
+        0,
+        100'000,
+        -50'000,
+        std::numeric_limits<std::int32_t>::max(),
+        std::numeric_limits<std::int32_t>::min(),
+    };
+    std::vector<std::int32_t> const rest = {1, 2, 3};
+
+    std::vector<std::uint8_t> blocks;
+    append_start_int32(blocks, 0, 2'000, 2000.0, first);
+    append_continued_int32(blocks, 0, rest);
+
+    auto ss = make_osf5_stream(meta_one_int32(), blocks);
+    auto mgr = osf::DataManager::load_from_stream(ss);
+    ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
+    ASSERT_EQ(mgr->channels().size(), 1u);
+    auto const& dc = mgr->channels()[0];
+    auto const* eq = std::get_if<osf::EquidistantChannel>(&dc);
+    ASSERT_NE(eq, nullptr);
+    EXPECT_EQ(eq->data_type, osf::DataType::Int32);
+    ASSERT_EQ(eq->segments.size(), 1u);
+    EXPECT_EQ(eq->segments[0].sample_count, 8u);
+    EXPECT_EQ(osf::numeric_values_len(eq->samples), 8u);
+
+    auto flat = osf::as_int32_flat(*eq);
+    ASSERT_TRUE(flat.has_value()) << flat.error().message;
+    std::vector<std::int32_t> expected;
+    expected.insert(expected.end(), first.begin(), first.end());
+    expected.insert(expected.end(), rest.begin(), rest.end());
+    EXPECT_EQ(*flat, expected);
 }
 
 TEST(DataManager, start_then_abs_timestamp_is_mixed_block_types_error) {
