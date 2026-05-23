@@ -6,6 +6,89 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-05-23
+
+### Added
+
+- Block-stream reader (`osf::BlockReader`). Borrows an `std::istream`
+  positioned at the end of the metablock plus the parsed `MetaBlock`,
+  iterates the block stream producing typed `osf::Block` values.
+  Provides both a primitive `next() -> std::optional<Result<Block>>`
+  API and a range-based-for compatible iterator
+  (`begin()` / `end()` with an `EndSentinel`).
+- Block-model primitives in `include/osf/block.hpp`: `Block`,
+  `BlockKind` as `std::variant<StartData, ContinuedData,
+  AbsTimestampData, ContinuedRelStampData, Skipped>`, payload variants
+  `NumericPayload` / `TimestampedPayload` / `RelTimestampedPayload`
+  (one `std::vector<T>` alternative per spec datatype),
+  `GpsLocation`, `SkipReason`, `decode_control_byte`,
+  `TRAILER_CHANNEL_INDEX`, `MAGIC_TRAILER_LEN`.
+- Reader telemetry in `include/osf/stats.hpp`: `ReaderStats` and
+  `ChannelStats` with per-channel detail, byte/block counters,
+  `time_range_ns`, plus a `CompressionFormat` enum reserved for
+  Phase 8. `operator<<` overloads format both structs in the same
+  shape as the Rust reference (`File size: …`, `Channels total: …`,
+  `blocks=X+Yskipped samples=…`).
+- Six new `osf::Error::Code` values: `UnknownChannelIndex`,
+  `InvalidBlock`, `ChannelMixedBlockTypes`,
+  `ContinuedDataWithoutStart`, `RelStampWithoutAnchor`,
+  `DataTypeMismatch`. The last four are reserved for the future
+  `DataManager`; the first two surface from the block reader
+  itself.
+- Best-effort truncation handling: a file that ends mid-block
+  bumps `stats().blocks_truncated` from 0 to 1 (capped) and
+  iteration ends cleanly. Hard error on unknown channel index
+  (the reader can't know the length-prefix width without the
+  channel record).
+- Forward-compat skipping: channels declared with
+  `DataType::Unsupported` or `ChannelType::Unsupported` produce
+  `BlockKind::Skipped` records and consume their payload from
+  the stream so other channels stay aligned. The optional
+  `0xFFFF` info-data block plus 40-byte `OSF_STREAM_END` magic
+  trailer are consumed silently.
+- Skipped-payload capture is opt-in via
+  `with_capture_skipped_payload(true)` — default behaviour drops
+  the bytes without allocation.
+- `tests/unit/test_block.cpp` — payload `len()` helpers,
+  control-byte decoder (every documented value plus multi-sample
+  bit + unknown-byte fallback), `GpsLocation` equality, Skipped
+  default payload.
+- `tests/unit/test_stats.cpp` — `observe_timestamp` two-sided
+  growth, `format_bytes` unit thresholds, `format_duration`
+  ms/s split, `compression_format_name` mapping, ostream output
+  for both structs.
+- `tests/unit/test_reader.cpp` — 21 BlockReader tests against
+  synthetic byte sequences, direct port of the Rust reader
+  suite: empty stream, truncation paths, unknown channel
+  (hard error), Unsupported-channel skip with stream alignment,
+  capture-skipped opt-in, deprecated control bytes, unknown
+  control bytes, every typed parser
+  (`bcAbsTimeStampData` for int64/double/string/binary/gps,
+  `bcStartData` single + multi for double/float,
+  `bcContinuedData` int16,
+  `bcContinuedRelStampData` int16),
+  `InvalidBlock` for equidistant-on-string, trailer consumption,
+  range-based-for iteration.
+- `tests/integration/test_reader_examples.cpp` — every
+  uncompressed `.osf` under `examples/generated/` streams clean
+  end-to-end producing at least one block; snapshot probes on
+  `osf5_scalar_int64.osf` (first block is single-sample AbsTs
+  Int64) and `osf4_equidistant.osf` (first block is StartData);
+  `motorbike.osf` and `steam_loco.osf` field samples read
+  through with no hard errors; stats sanity check.
+
+### Changed
+
+- `osf_core` library target gains three translation units
+  (`src/block.cpp`, `src/reader.cpp`, `src/stats.cpp`).
+- `include/osf/osf.hpp` umbrella re-exports the three new
+  headers.
+- `error_category_name` extended to cover the six new
+  `Error::Code` values.
+- `ctest` count: 83 → 124 (5 + 16 + 4 + 9 + 20 + 3 + 20 + 6
+  unchanged; 7 new block-unit + 6 new stats-unit + 22 new
+  reader-unit + 6 new reader-integration).
+
 ## [0.0.4] - 2026-05-23
 
 ### Added

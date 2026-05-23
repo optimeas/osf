@@ -81,27 +81,33 @@ cd tools\osftool
 Always remove the `*.dcu` / `*.exe` build artefacts after a verify;
 they are gitignored but clutter `git status`.
 
-## C++ track — Phase 5 is next
+## C++ track — Phase 6 is next
 
-Phases 1, 2, 3, 4 complete (skeleton, magic-header parser, OSF5 JSON
-metablock parser, OSF4 XML metablock parser via vendored pugixml v1.15).
-**83/83 ctest cases green** as of Phase 4 completion (2026-05-23).
-Both parsers populate the same `MetaBlock` data model — symmetric
-population pinned by `equidistant_osf4_and_osf5_have_matching_channels`
-in `tests/integration/test_metablock_xml_examples.cpp`.
+Phases 1, 2, 3, 4, 5 complete (skeleton, magic-header parser, OSF5
+JSON metablock parser, OSF4 XML metablock parser, block-stream
+reader with full `ReaderStats`). **124/124 ctest cases green** as of
+Phase 5 completion (2026-05-23). `BlockReader` consumes any
+uncompressed `.osf` reference file end-to-end including the
+`motorbike.osf` and `steam_loco.osf` field samples.
 
-**Phase 5 — block reader** is the immediate next step:
+**Phase 6 — typed `DataManager`** is the immediate next step:
 
-- Introduce `osf::Block` / `osf::BlockKind` / payload structs in a
-  new `include/osf/block.hpp` mirroring `implementations/rust/osf-core/src/block.rs`.
-- Introduce `osf::BlockReader` as a stream-driven iterator producing
-  `Result<Block>` values, given an `std::istream&` positioned at the
-  end of the metablock and the `MetaBlock` itself for channel-index
-  lookup. Control bytes 5/6/7/8, length-prefix width 2 or 4 per
-  channel, trailing `0x00` strip for `string` / `binary`, optional
-  `0xFFFF` info block + 40-byte magic trailer (OSF4 only).
-- Rust reference: `implementations/rust/osf-core/src/reader.rs`
-  plus `block.rs`.
+- Introduce `osf::DataManager` as a high-level reader: drives a
+  `BlockReader` to completion and assembles per-channel typed
+  storage (equidistant segments, timestamped samples, variable
+  string/binary). Surface `channel(name)` (mandatory lookup) and
+  `channel_by_index(u16)` (optional) per DECISIONS §10.
+- Define an `osf::Channel` enum-like type (`std::variant` of
+  `Equidistant` / `Timestamped` / `Variable`) with `Segment`,
+  typed sample vectors, and timestamp reconstruction helpers.
+- Builder state machine: numeric channels start "Pending", lock
+  to `Equidistant` on first `bcStartData` or `Timestamped` on
+  first `bcAbsTimeStampData`; mismatched later blocks surface
+  `Error::Code::ChannelMixedBlockTypes`. Orphan continuations
+  surface `ContinuedDataWithoutStart` / `RelStampWithoutAnchor`.
+- Rust reference:
+  `implementations/rust/osf-core/src/data_channel.rs` and
+  `manager.rs`.
 
 ### C++ network caveat (local environment)
 
@@ -170,8 +176,9 @@ Always remove `implementations\cpp\build` after a successful verify.
 1. `git pull`.
 2. Read `STATUS.md`, then this file.
 3. If continuing the **C++ track**: read DECISIONS.md §20 + §16, run the
-   C++ build flow, then start Phase 5 (block reader — `osf::BlockReader`
-   over the existing `MetaBlock`).
+   C++ build flow, then start Phase 6 (`DataManager` over the existing
+   `BlockReader` — typed per-channel storage with segment tracking and
+   channel-by-name lookup).
 4. If a new **Delphi brief** arrives as `~/Downloads/task-*.md`: read it,
    work it, compile-verify with dcc32/dcc64, commit + push.
 5. Any new source file: MIT SPDX header, not Apache.
