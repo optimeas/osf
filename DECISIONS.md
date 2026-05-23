@@ -513,3 +513,178 @@ reference file:
 
 Each phase produces a green build with passing tests against the
 reference files before the next phase begins.
+
+## 21. Java Implementation Architecture
+
+**Decision:** The Java implementation at `implementations/java/` is built on
+Java 25 with Maven, ships as a single Maven module, and supports both
+block-write and streaming-write modes. It activates the Java Platform Module
+System (JPMS) for true encapsulation of internal classes.
+
+**Why:** The Java implementation targets two main audiences identified by
+the project owner: enterprise backends (Spring, microservices, optiCloud)
+and big-data / AI pipelines (Spark, Flink, data analysts). Additionally,
+there is a concrete embedded project where a Java application records
+operating data on an industrial gateway — this rules out the
+"desktop/server only" simplification from §7.
+
+### Baseline platform
+
+- **Java 25.** Newest LTS, released September 2025. Includes records, sealed
+  classes, pattern matching for switch, virtual threads, sequenced
+  collections, and the modern primitive-pattern features. The project is
+  greenfield; targeting an older baseline would only carry weight if
+  existing customers required it, which is not the case.
+- **Maven** as the build system. Library projects have a standardized
+  lifecycle (compile, test, package, deploy to Maven Central) that Maven
+  handles with minimal configuration. Maven `pom.xml` files are also more
+  readable for contributors coming from non-Java backgrounds than Gradle
+  build scripts. Consistency with the declarative tooling used by the
+  other implementations (Cargo, CMake, pyproject.toml) is a secondary
+  benefit.
+
+### Module structure
+
+- **Single Maven module** at `implementations/java/`. Java package root is
+  `com.optimeas.osf`. Internal helpers live under `com.optimeas.osf.internal`
+  and are not exported via JPMS.
+- One Maven artifact: `groupId=com.optimeas.osf`, `artifactId=osf-java`.
+- Splitting into multiple modules (`osf-core` + `osf-api`, or per-feature
+  modules) was considered and rejected: it would diverge from the other
+  language implementations (each ships as a single library), add Maven
+  multi-module complexity without measurable benefit, and pre-commit to
+  an internal split that the implementation does not yet justify.
+- Integrations (Arrow, Spark, Flink connectors) — if they ever materialize
+  for Java — will live under the repo-wide `integrations/` directory per
+  §3, not as sub-modules of `implementations/java/`.
+
+### Dependencies
+
+Runtime:
+- **Jackson** (`jackson-databind`) for OSF5 JSON metablock parsing. Jackson
+  is the de-facto JSON library in the Java enterprise ecosystem and will
+  almost always already be on the consumer's classpath. We do not expose
+  Jackson types in our public API, so swapping the parser later remains
+  possible.
+- **SLF4J** (`slf4j-api`) as logging facade. No concrete logger ships with
+  the library — consumers bind their own (Logback, Log4j2, JUL). This is
+  the standard pattern for Java libraries.
+- **`java.util.zip`** (built into the JDK) for transparent OSFZ
+  decompression (gzip per RFC 1952, zlib per RFC 1950). No external
+  compression dependency.
+- **`javax.xml.stream` (StAX)** (built into the JDK) for OSF4 XML metablock
+  parsing. Streaming pull-parser, matches the architectural philosophy of
+  the rest of the format.
+
+Test scope (not shipped in the JAR):
+- **JUnit 5 (Jupiter)** as test framework. Modern standard, no realistic
+  alternative for new projects.
+- **AssertJ** for fluent assertions. Improves test readability,
+  particularly for complex data structures (channel lists, segment
+  arrangements).
+
+Explicitly **not** used:
+- Lombok — invasive annotation processor; Java 25 records cover most of
+  the boilerplate Lombok would solve.
+- Apache Commons Lang / Guava — every needed utility is available in
+  modern standard Java.
+
+### Read and write strategy
+
+The Java implementation provides **both** a block-mode writer and a
+streaming-mode writer. This is a deliberate divergence from the original
+§7 simplification, justified by a concrete embedded recording project.
+
+- **`BlockWriter`** (or `Writer` with a builder API; final naming during
+  implementation): accumulates samples in memory, serializes the complete
+  OSF5 file in one pass when `writeToFile(Path)` is called. Optimal for
+  enterprise / big-data batch workflows.
+- **`StreamingWriter`**: writes sample by sample, calls
+  `FileChannel.force(true)` after each completed block. Power-loss-safe
+  recording for the embedded use case. Constant memory footprint
+  regardless of recording duration.
+- Both writers produce on-disk-identical OSF5 files. The choice is purely
+  a write-time strategy; readers see no difference.
+- Reader behavior is unchanged from §8: best-effort, returns all data up
+  to the last fully readable block, never crashes on truncated files.
+  The streaming writer relies on this read behavior for power-loss
+  recovery.
+
+Implementation order: block-writer first (simpler), then streaming-writer
+(adds the durability mechanics).
+
+### Java Platform Module System (JPMS)
+
+The library ships with a `module-info.java` declaring
+`module com.optimeas.osf`. Only the package `com.optimeas.osf` is
+exported; `com.optimeas.osf.internal` stays hidden.
+
+- Consumers using JPMS can `requires com.optimeas.osf` and get true
+  encapsulation — internal classes are unreachable, also via reflection
+  without explicit `--add-opens`.
+- Consumers on the classic classpath can still use the library normally;
+  encapsulation is then weaker but the public API is still clearly
+  documented as the contract.
+- Refactoring of internal classes does not break consumers, because the
+  public API surface is explicit.
+- This positions the library for future GraalVM Native Image support
+  (smaller reachability set).
+
+Multi-release-JAR with optional `module-info` was considered and rejected:
+the library targets Java 25, not Java 8 — consumers below the baseline
+cannot use it regardless of JPMS configuration.
+
+### Binary I/O strategy
+
+- **`ByteBuffer` on `FileChannel`**, with `ByteOrder.LITTLE_ENDIAN` set
+  once. Standard buffer size 8–64 KB.
+- Streaming writer calls `FileChannel.force(true)` after every completed
+  block. This synchronizes both data and metadata to disk, which is the
+  correct trade-off for power-loss safety in the embedded use case.
+- Direct buffers (`ByteBuffer.allocateDirect`) and memory-mapped files
+  (`FileChannel.map`) are **not** part of the initial implementation.
+  They are tracked in `BACKLOG.md` as potential performance optimizations
+  if measurement on real workloads ever justifies the added complexity
+  (especially the Windows file-lock and cleanup semantics of mapped
+  files).
+
+### Spec revision 2026-05-04 compliance
+
+The Java implementation follows the same semantic rules as Rust, Python,
+and C++ for the spec revision in effect:
+
+- All current data types must be supported (`bool`, `int8`–`int64`,
+  `uint8`–`uint64`, `float`, `double`, `string`, `binary`, `gpslocation`).
+  Unsigned integer types use Java type promotion: `uint8`/`uint16` →
+  `int`, `uint32` → `long`, `uint64` → `long` with documented signed-bit
+  caveat or `BigInteger` for full range when needed.
+- Removed types (`pair`, `triple`, `candata`, `gpsdata`) are explicitly
+  rejected on read with a clear error message pointing to the spec
+  replacement. No silent fallback.
+- `bytearray` is accepted on read as an alias for `binary`; writer always
+  emits `binary`.
+- `string` and `binary` payloads in `bcAbsTimeStampData` end with a
+  trailing `0x00` byte. Writer appends, reader strips. Uniform for OSF4
+  and OSF5.
+- All four magic header identifiers are accepted on read (`OSF4`, `OSF5`,
+  `OCEAN_STREAM_FORMAT4`, `OCEAN_STREAMING_FORMAT4`).
+- Equidistant data channels: spec restricts to `float` and `double`;
+  Java is permissive on read (accepts all 11 numeric types) consistent
+  with the other implementations. Writer enforces the spec restriction.
+
+### Future considerations (tracked in BACKLOG.md)
+
+- GraalVM Native Image support: reflection config for Jackson, possibly
+  a Jackson-free JSON path.
+- Embedded micro-JVM support (Azul Zulu Embedded, OpenJ9): would require
+  a lightweight JSON parser as alternative to Jackson.
+- Memory-mapped file reader path: only if measurement on multi-GB files
+  shows a real bottleneck.
+
+### Consequence for §15 priority order
+
+Java moves up in practical importance because of the concrete embedded
+recording project, but the implementation effort estimate stays as
+listed in §15. The §15 list still describes the order in which language
+ecosystems become available to end users; it does not imply Java waits
+for the languages listed before it.
