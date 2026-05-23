@@ -81,33 +81,43 @@ cd tools\osftool
 Always remove the `*.dcu` / `*.exe` build artefacts after a verify;
 they are gitignored but clutter `git status`.
 
-## C++ track — Phase 6 is next
+## C++ track — Phase 7 is next
 
-Phases 1, 2, 3, 4, 5 complete (skeleton, magic-header parser, OSF5
-JSON metablock parser, OSF4 XML metablock parser, block-stream
-reader with full `ReaderStats`). **124/124 ctest cases green** as of
-Phase 5 completion (2026-05-23). `BlockReader` consumes any
-uncompressed `.osf` reference file end-to-end including the
-`motorbike.osf` and `steam_loco.osf` field samples.
+Phases 1, 2, 3, 4, 5, 6 complete (skeleton, magic-header parser,
+OSF5 JSON metablock parser, OSF4 XML metablock parser, block-stream
+reader, typed `DataManager`). **153/153 ctest cases green** as of
+Phase 6 completion (2026-05-23). `DataManager::load_from_file`
+opens any uncompressed `.osf` reference file and yields a
+typed-channel list with full segment / timestamp reconstruction.
+OSFZ inputs are detected and rejected with a clear Phase-8 stub
+error.
 
-**Phase 6 — typed `DataManager`** is the immediate next step:
+Naming note: `osf::DataChannel` (the assembled-samples variant) is
+distinct from `osf::Channel` (the metablock-level channel
+*definition*, sitting in `metablock.hpp`). The Rust reference has
+them in separate modules; in C++ they share `namespace osf` so the
+names differ.
 
-- Introduce `osf::DataManager` as a high-level reader: drives a
-  `BlockReader` to completion and assembles per-channel typed
-  storage (equidistant segments, timestamped samples, variable
-  string/binary). Surface `channel(name)` (mandatory lookup) and
-  `channel_by_index(u16)` (optional) per DECISIONS §10.
-- Define an `osf::Channel` enum-like type (`std::variant` of
-  `Equidistant` / `Timestamped` / `Variable`) with `Segment`,
-  typed sample vectors, and timestamp reconstruction helpers.
-- Builder state machine: numeric channels start "Pending", lock
-  to `Equidistant` on first `bcStartData` or `Timestamped` on
-  first `bcAbsTimeStampData`; mismatched later blocks surface
-  `Error::Code::ChannelMixedBlockTypes`. Orphan continuations
-  surface `ContinuedDataWithoutStart` / `RelStampWithoutAnchor`.
-- Rust reference:
-  `implementations/rust/osf-core/src/data_channel.rs` and
-  `manager.rs`.
+**Phase 7 — OSF5 writer** is the immediate next step:
+
+- Introduce `osf::WriterBuilder` mirroring
+  `implementations/rust/osf-core/src/writer.rs`: accumulator with
+  `add_channel`, two equidistant + twelve timestamped + two
+  variable `add_*` methods. `write_to_file(path)` and
+  `write_to(ostream&)` emit OSF5; `from_manager(DataManager
+  const&)` builds a builder from a loaded manager for the
+  round-trip case.
+- Block mode only (DECISIONS §7); always emits OSF5 even if the
+  source manager came from an OSF4 file (DECISIONS §6). No OSFZ
+  output (DECISIONS §12 — compression is downstream concern). No
+  magic trailer (OSF5 dropped it).
+- Equidistant blocks chunk into `bcContinuedData` blocks so each
+  payload fits the channel's `sizeoflengthvalue`; timestamped
+  numeric blocks set the multi-sample bit; variable blocks emit
+  one sample per block per spec with optional `sizeoflengthvalue`
+  bump 2 → 4 when needed.
+- Rust reference: `implementations/rust/osf-core/src/writer.rs`
+  and `binary_write.rs`.
 
 ### C++ network caveat (local environment)
 
@@ -176,9 +186,9 @@ Always remove `implementations\cpp\build` after a successful verify.
 1. `git pull`.
 2. Read `STATUS.md`, then this file.
 3. If continuing the **C++ track**: read DECISIONS.md §20 + §16, run the
-   C++ build flow, then start Phase 6 (`DataManager` over the existing
-   `BlockReader` — typed per-channel storage with segment tracking and
-   channel-by-name lookup).
+   C++ build flow, then start Phase 7 (OSF5 writer — `WriterBuilder`
+   over the existing `DataManager` types, emitting OSF5 per
+   DECISIONS §6 / §7).
 4. If a new **Delphi brief** arrives as `~/Downloads/task-*.md`: read it,
    work it, compile-verify with dcc32/dcc64, commit + push.
 5. Any new source file: MIT SPDX header, not Apache.

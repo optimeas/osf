@@ -6,6 +6,92 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-05-23
+
+### Added
+
+- Typed in-memory channel model in `include/osf/data_channel.hpp`:
+  `DataChannel` as `std::variant<EquidistantChannel,
+  TimestampedChannel, VariableChannel>` (distinct from the
+  metablock-level `osf::Channel`, which is the channel *definition*;
+  `DataChannel` represents the assembled *samples*).
+  `EquidistantChannel` holds flat samples + `std::vector<Segment>`;
+  `TimestampedChannel` holds parallel `std::vector<int64>` +
+  `NumericValues`; `VariableChannel` holds string XOR binary samples.
+  `Segment`, `ChannelMeta`, `NumericValues` (variant per data type +
+  `GpsLocation`), `Sample<T>` template, `NumericValueRef` (GPS by
+  value, 24 B), `VariableValueRef` (string XOR binary).
+- Materializing `samples_vector()` per channel kind that reconstructs
+  per-sample timestamps (using the segment math from spec rev
+  2026-05-04) and returns a `std::vector<Sample<...>>`.
+- Flat-access helpers: `as_doubles_flat` / `as_int32_flat` / ... in
+  twelve overloads each for `EquidistantChannel` (returning
+  `std::vector<T>`) and `TimestampedChannel` (returning
+  `std::vector<std::pair<i64, T>>`). Type mismatch produces
+  `Error::Code::DataTypeMismatch`.
+- Common-accessor free functions on `DataChannel`: `channel_index`,
+  `channel_name`, `channel_data_type`, `channel_physical_unit`,
+  `channel_display_name`, `channel_sample_count`, `channel_is_empty`,
+  `channel_meta`.
+- High-level reader `osf::DataManager` in
+  `include/osf/manager.hpp`: `load_from_file(path)` and
+  `load_from_stream(istream&)` drive a `BlockReader` to completion
+  and assemble the typed channel list. `channel(name)` (mandatory
+  per DECISIONS §10) and `channel_by_index(u16)` (optional)
+  lookups; `meta` and `stats` are public fields carrying the parsed
+  metablock and reader telemetry.
+- Internal builder state machine in `src/manager.cpp` mirroring the
+  Rust reference: per-channel `ChannelBuilder` with states
+  `Pending` / `Equidistant` / `Timestamped` / `Variable` /
+  `Unsupported`; numeric channels start `Pending` and lock to
+  `Equidistant` on first `bcStartData` or to `Timestamped` on first
+  `bcAbsTimeStampData`; mismatched later blocks produce
+  `ChannelMixedBlockTypes`. Orphan continuations produce
+  `ContinuedDataWithoutStart` / `RelStampWithoutAnchor`.
+  `bcContinuedRelStampData` deltas are converted to absolute
+  timestamps using the channel's last absolute ts as anchor.
+- OSFZ-stub detection: `DataManager::load_from_file` /
+  `load_from_stream` peek at the first two bytes and reject
+  gzip / zlib magic with a clear `IoError` message pointing to
+  Phase 8 — keeps callers from getting a confusing magic-header
+  parse failure on a compressed file.
+- `tests/unit/test_data_channel.cpp` — 11 tests covering
+  `NumericValues` helpers (`data_type`, `empty_for`),
+  `samples_vector` for equidistant (single + multi-segment, no
+  interpolation between segments), `samples_vector` for
+  timestamped, variable string/binary collection, flat-access
+  mismatch, common Channel accessors.
+- `tests/unit/test_manager.cpp` — 13 tests driving the builder
+  through synthetic in-memory OSF5 streams:
+  one start + continued = one segment, two starts = two segments,
+  start + abs-ts = `ChannelMixedBlockTypes`, continued without
+  start = `ContinuedDataWithoutStart`, abs-int32 builds
+  Timestamped, rel-stamp extends cumulatively, rel-stamp without
+  anchor = `RelStampWithoutAnchor`, variable strings collected,
+  Unsupported channel dropped from output, name + index lookups,
+  gzip / zlib magic produce the Phase-8 error.
+- `tests/integration/test_manager_examples.cpp` — 7 tests against
+  the generated reference files plus the field samples: every
+  `.osf` under `examples/generated/` loads through
+  `load_from_file` and produces at least one channel with
+  samples; snapshot probes pin equidistant / GPS / string
+  channels on specific files; `motorbike.osf` + `steam_loco.osf`
+  load clean; `weather_station.osfz` produces the Phase-8 OSFZ
+  error.
+
+### Changed
+
+- `osf_core` library target gains two translation units
+  (`src/data_channel.cpp`, `src/manager.cpp`).
+- `include/osf/osf.hpp` umbrella re-exports the two new headers.
+- `ctest` count: 124 → 153 (existing 124 unchanged; 11 new
+  data-channel-unit + 13 new manager-unit + 7 new
+  manager-integration; one test from the manager suite is
+  intentionally omitted — the `data_type_mismatch` check in the
+  builder is defensive against custom block sources and is
+  unreachable through `load_from_stream` because the reader
+  already typed-decodes payloads).
+
 ## [0.0.5] - 2026-05-23
 
 ### Added
