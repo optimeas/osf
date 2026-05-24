@@ -525,8 +525,8 @@ System (JPMS) for true encapsulation of internal classes.
 the project owner: enterprise backends (Spring, microservices, optiCloud)
 and big-data / AI pipelines (Spark, Flink, data analysts). Additionally,
 there is a concrete embedded project where a Java application records
-operating data on an industrial gateway — this rules out the
-"desktop/server only" simplification from §7.
+operating data on an industrial gateway — the same kind of both-worlds
+situation §7 already documents for C++.
 
 ### Baseline platform
 
@@ -592,8 +592,10 @@ Explicitly **not** used:
 ### Read and write strategy
 
 The Java implementation provides **both** a block-mode writer and a
-streaming-mode writer. This is a deliberate divergence from the original
-§7 simplification, justified by a concrete embedded recording project.
+streaming-mode writer, following the same two-writer pattern §7
+documents for C++. The justification is parallel: a concrete embedded
+recording project where Java records operating data on an industrial
+gateway with power-loss safety as a hard requirement.
 
 - **`BlockWriter`** (or `Writer` with a builder API; final naming during
   implementation): accumulates samples in memory, serializes the complete
