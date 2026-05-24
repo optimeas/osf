@@ -550,16 +550,20 @@ end;
 // Builds the binary payload of an absolute-timestamped data block.
 // Layout: [ctrl 1B] [uint32 N 4B if N>1] [int64 ts | (uint32 len if variable) | bytes]*
 //
-// For variable-length data types (string, binary), every value is written with
-// a trailing 0x00 byte per the spec (revision 2026-05-04). The trailing byte is
-// included in the per-value uint32 length when present, and in the block-level
-// length field for the single-sample / no-length-prefix case.
-function EncodeTimestampedPayload(IsVariableLength: Boolean; const Timestamps: array of Int64; const Values: array of TBytes): TBytes;
+// For variable-length data types (string, binary) the trailing 0x00 byte is
+// version-deterministic per spec rev 2026-05-24:
+//   OSF4: byte is appended (writer MUST) and is included in the per-value
+//         uint32 length (multi-sample) or in the block-level length
+//         (single-sample / no-length-prefix case).
+//   OSF5: byte is NOT appended; the payload ends at the last data byte and
+//         the lengths reflect the bare payload size.
+function EncodeTimestampedPayload(AVersion: TOSFVersion; IsVariableLength: Boolean; const Timestamps: array of Int64; const Values: array of TBytes): TBytes;
 const
   ZERO_BYTE: Byte = 0;
 var
   N: Integer;
   IsMulti: Boolean;
+  AppendTerminator: Boolean;
   CtrlByte: Byte;
   Ms: TMemoryStream;
   I: Integer;
@@ -570,6 +574,7 @@ var
 begin
   N := Length(Timestamps);
   IsMulti := N > 1;
+  AppendTerminator := IsVariableLength and (AVersion = osvOSF4);
   CtrlByte := OSFMakeControlByte(bcAbsTimeStampData, IsMulti);
 
   Ms := TMemoryStream.Create;
@@ -587,17 +592,20 @@ begin
       Ms.WriteBuffer(TS, SizeOf(TS));
       ValueLen := Length(Values[I]);
       // Variable-length values inside a multi-sample block need a uint32
-      // length prefix per value. The length includes the trailing null byte.
-      // Single-sample blocks don't need a per-value prefix because the block
-      // length already determines the value size (also including the null byte).
+      // length prefix per value. The prefix includes the trailing null byte
+      // when one is written (OSF4); single-sample blocks rely on the block-
+      // level length instead.
       if IsVariableLength and IsMulti then
       begin
-        Len4 := UInt32(ValueLen + 1); // +1 for the trailing 0x00
+        if AppendTerminator then
+          Len4 := UInt32(ValueLen + 1)
+        else
+          Len4 := UInt32(ValueLen);
         Ms.WriteBuffer(Len4, SizeOf(Len4));
       end;
       if ValueLen > 0 then
         Ms.WriteBuffer(Values[I][0], ValueLen);
-      if IsVariableLength then
+      if AppendTerminator then
         Ms.WriteBuffer(ZERO_BYTE, 1);
     end;
 
@@ -1688,7 +1696,7 @@ begin
   if not Assigned(Channel) then
     raise EOSFFormatError.CreateFmt(SOSFTSBlockUnknown, [ChannelIndex]);
 
-  Payload := EncodeTimestampedPayload(OSFDataTypeIsVariableLength(Channel.DataType), Timestamps, Values);
+  Payload := EncodeTimestampedPayload(FVersion, OSFDataTypeIsVariableLength(Channel.DataType), Timestamps, Values);
   WriteDataBlock(Channel, Payload);
 
   Channel.SampleCount := Channel.SampleCount + N;

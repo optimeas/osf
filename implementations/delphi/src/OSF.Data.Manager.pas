@@ -159,15 +159,18 @@ begin
 end;
 
 // Decodes a bcAbsTimeStampData block and feeds samples to Channel.
-// Layout depends on Block.SampleCount and the channel's data type:
+// Layout depends on Block.SampleCount, the channel's data type, and the
+// on-disk OSF version:
 // Single-sample fixed         : [int64 ts][value bytes]
 // Multi-sample fixed          : [int64 ts][value bytes] × N
-// Single-sample variable      : [int64 ts][value bytes][0x00]
-// Multi-sample  variable      : [int64 ts][uint32 len][value bytes including 0x00] × N
-// For variable-length values the trailing 0x00 is included in the length
-// (per spec revision 2026-05-04) and is stripped before the value reaches
-// the channel.
-procedure DecodeAbsTimestampedBlock(Channel: TOSFDataChannel; const Block: TOSFDataBlock);
+// Single-sample variable      : [int64 ts][value bytes] (+ trailing 0x00 in OSF4)
+// Multi-sample  variable      : [int64 ts][uint32 len][value bytes (+ 0x00 in OSF4)] × N
+// Per spec rev 2026-05-24 the trailing 0x00 on variable-length payloads is
+// version-deterministic: OSF4 writers MUST append it (so OSF4 readers strip
+// the last byte unconditionally and the per-value uint32 length includes
+// it); OSF5 writers MUST NOT append it (so OSF5 readers consume the payload
+// verbatim and a trailing 0x00 is a regular data byte).
+procedure DecodeAbsTimestampedBlock(AVersion: TOSFVersion; Channel: TOSFDataChannel; const Block: TOSFDataBlock);
 var
   Pos, ValSize: Integer;
   PayloadSize: Integer;
@@ -176,6 +179,7 @@ var
   ValueBytes: TBytes;
   IsVariable: Boolean;
   IsMulti: Boolean;
+  StripTerminator: Boolean;
   FixedSize: Integer;
   I: Integer;
   ChannelDef: TOSFChannelDef;
@@ -188,6 +192,7 @@ begin
   IsVariable := OSFDataTypeIsVariableLength(ChannelDef.DataType);
   FixedSize := OSFDataTypeFixedSize(ChannelDef.DataType);
   IsMulti := Block.SampleCount > 1;
+  StripTerminator := IsVariable and (AVersion = osvOSF4);
   PayloadLen := Length(Block.RawPayload);
 
   Pos := 0;
@@ -217,15 +222,17 @@ begin
     if (ValSize < 0) or (Pos + ValSize > PayloadLen) then
       Exit;
 
-    if IsVariable then
+    if StripTerminator then
     begin
-      // Drop the trailing 0x00. ValSize counts the null byte; the channel
-      // gets the bare payload.
+      // OSF4: drop the spec-mandated trailing 0x00. ValSize counts the
+      // byte; the channel gets the bare payload.
       if ValSize < 1 then
         Exit;
       PayloadSize := ValSize - 1;
     end
     else
+      // OSF5 variable, or any fixed-width type: payload is ValSize bytes
+      // verbatim.
       PayloadSize := ValSize;
 
     SetLength(ValueBytes, PayloadSize);
@@ -639,7 +646,7 @@ begin
 
   case Block.BlockType of
     bcAbsTimeStampData:
-      DecodeAbsTimestampedBlock(Channel, Block);
+      DecodeAbsTimestampedBlock(FVersion, Channel, Block);
 
     bcStartData:
       begin
