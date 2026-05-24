@@ -151,6 +151,25 @@ Triggers for action: profiling on a representative workload shows
 the I/O path is the bottleneck; or a connector implementation
 explicitly needs random access into multi-GB OSF files.
 
+### Delphi-Writer multi-sample string/binary uses non-spec layout
+
+The Delphi writer's `WriteTimestampedBlock` for `string` and `binary`
+channels can emit multi-sample blocks with a per-sample `uint32`
+length prefix between samples
+(`implementations/delphi/src/OSF.Filer.pas:593-602`). This layout is
+not part of the spec and not understood by the Rust or C++ readers,
+which expect either equal-length segments or one sample per block.
+
+In practice, Delphi writers nearly always emit one sample per block
+for variable-length types, so the incompatibility is latent. But a
+Delphi-produced file that genuinely contains multi-sample string or
+binary blocks would parse incorrectly on Rust and C++ readers.
+
+Future action: align the Delphi writer with the Rust/C++ convention
+(one sample per block for `string` and `binary`). The Delphi fix is
+planned as part of a broader Delphi-implementation maintenance pass
+that follows the OSF4/OSF5 spec update.
+
 ---
 
 ## How to add an entry
