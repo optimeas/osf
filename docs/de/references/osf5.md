@@ -117,13 +117,18 @@ OSF5 unterstützt dieselben Datentypen wie OSF4.
 | `uint64`   | 8 Byte   | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 18 446 744 073 709 551 615 |
 | `float`    | 4 Byte   | IEEE 754 Single Precision |
 | `double`   | 8 Byte   | IEEE 754 Double Precision |
-| `string`   | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert. Endet mit abschließender Nullbyte (`0x00`) – siehe [`osf_general.md`](../osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
-| `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen für Bild-, Audio- oder andere Binärdaten mit MIME-Type. Maximale Länge wird durch `sizeoflengthvalue` bestimmt. Endet mit abschließender Nullbyte (`0x00`) – siehe [`osf_general.md`](../osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
+| `string`   | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert. OSF5-Schreiber speichern die Payload ohne abschließendes Nullbyte; Leser müssen ein abschließendes `0x00` dennoch entfernen, falls vorhanden, zur Migration von älteren OSF5-Schreibern und von OSF4-kompatiblen Schreibern – siehe [`osf_general.md`](../osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
+| `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen für Bild-, Audio- oder andere Binärdaten mit MIME-Type. Maximale Länge wird durch `sizeoflengthvalue` bestimmt. OSF5-Schreiber speichern die Payload ohne abschließendes Nullbyte; Leser müssen ein abschließendes `0x00` dennoch entfernen, falls vorhanden, zur Migration von älteren OSF5-Schreibern und von OSF4-kompatiblen Schreibern – siehe [`osf_general.md`](../osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary). |
 | `gpslocation` | 24 Byte | Struktur für GPS-Positionen |
 
 ## Stringterminierung
 
-Für `bcAbsTimeStampData` mit `datatype=string` oder `datatype=binary` gilt die in [`osf_general.md`](../osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary) beschriebene Regel: abschließende Nullbyte (`0x00`) am Ende des Datenfelds. Diese Regel ist mit OSF4 identisch.
+Für `bcAbsTimeStampData` mit `datatype=string` oder `datatype=binary` in OSF5:
+
+- **Schreiber** dürfen kein abschließendes Nullbyte (`0x00`) mehr anhängen. Die Payload endet am letzten Datenbyte; `sizeoflengthvalue` definiert die exakte Länge.
+- **Leser** müssen ein abschließendes `0x00` dennoch entfernen, falls vorhanden, zur Migration von älteren OSF5-Schreibern und von OSF4-kompatiblen Schreibern.
+
+Siehe [`osf_general.md`](../osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary) für die Begründung.
 
 ### `bcStartData` mit Abtastrate
 

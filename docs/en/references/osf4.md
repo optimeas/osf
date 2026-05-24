@@ -133,12 +133,17 @@ All parameters as described in the general OSF documentation. For OSF4:
 | `uint64`    | 8 bytes  | Unsigned integer, range 0 … 18 446 744 073 709 551 615 |
 | `float`     | 4 bytes  | IEEE 754 single precision |
 | `double`    | 8 bytes  | IEEE 754 double precision |
-| `string`    | variable | UTF-8 encoded, length defined by block size. Ends with a trailing null byte (`0x00`) — see [`osf_general.md`](../osf_general.md#note-on-null-termination-of-string-and-binary). |
+| `string`    | variable | UTF-8 encoded, length defined by block size. May be followed by an optional trailing null byte (`0x00`) on disk for backward compatibility — see [`osf_general.md`](../osf_general.md#note-on-null-termination-of-string-and-binary) for version-dependent writer/reader rules. |
 | `gpslocation` | 24 bytes | Structure for GPS positions |
 
 ## Null termination
 
-For `bcAbsTimeStampData` with `datatype=string` or `datatype=binary`, the rule described in [`osf_general.md`](../osf_general.md#note-on-null-termination-of-string-and-binary) applies: a trailing null byte (`0x00`) at the end of the data field. This is existing behavior in OSF4 and remains unchanged.
+For `bcAbsTimeStampData` with `datatype=string` or `datatype=binary` in OSF4:
+
+- **Writers** may write payloads with or without a trailing null byte (`0x00`). Existing OSF4 writers that emit the null byte remain spec-conforming. New OSF4 writers may omit it to save four bytes per sample.
+- **Readers** must strip a trailing `0x00` if present.
+
+See [`osf_general.md`](../osf_general.md#note-on-null-termination-of-string-and-binary) for the rationale and the full multi-version policy.
 
 ---
 
