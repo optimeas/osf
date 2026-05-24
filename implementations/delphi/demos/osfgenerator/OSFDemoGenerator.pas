@@ -4,10 +4,12 @@
 // Builds the suite of demo OSF files used for visual testing. Every method
 // is self-contained — a failure in one file does not stop the others.
 //
-// Per spec revision 2026-05-04 the writer in OSF.Filer appends the trailing
-// 0x00 byte for `string` and `binary` values inside bcAbsTimeStampData
-// blocks. The generator therefore passes the bare payload bytes; the filer
-// adds the null terminator automatically.
+// Per spec revision 2026-05-24 the trailing 0x00 byte on `string` and
+// `binary` values inside bcAbsTimeStampData is version-deterministic:
+// OSF4 writers append it (handled centrally in OSF.Filer), OSF5 writers
+// do not. The generator passes the bare payload bytes in both cases;
+// OSF.Filer adds the terminator only for the OSF4 path based on the
+// file's FVersion.
 unit OSFDemoGenerator;
 
 interface
