@@ -164,21 +164,25 @@ end;
 // Single-sample fixed         : [int64 ts][value bytes]
 // Multi-sample fixed          : [int64 ts][value bytes] × N
 // Single-sample variable      : [int64 ts][value bytes] (+ trailing 0x00 in OSF4)
-// Multi-sample  variable      : [int64 ts][uint32 len][value bytes (+ 0x00 in OSF4)] × N
+//
+// Multi-sample variable is intentionally not handled here — the caller
+// (TOSFDataManager.DispatchBlock) filters such blocks out with a warning
+// because there is no standard wire format for that combination. The
+// historical Delphi per-sample uint32 length-prefix layout was removed in
+// 2026-05-24 (no real-world files known to use it).
+//
 // Per spec rev 2026-05-24 the trailing 0x00 on variable-length payloads is
 // version-deterministic: OSF4 writers MUST append it (so OSF4 readers strip
-// the last byte unconditionally and the per-value uint32 length includes
-// it); OSF5 writers MUST NOT append it (so OSF5 readers consume the payload
-// verbatim and a trailing 0x00 is a regular data byte).
+// the last byte unconditionally); OSF5 writers MUST NOT append it (so OSF5
+// readers consume the payload verbatim and a trailing 0x00 is a regular
+// data byte).
 procedure DecodeAbsTimestampedBlock(AVersion: TOSFVersion; Channel: TOSFDataChannel; const Block: TOSFDataBlock);
 var
   Pos, ValSize: Integer;
   PayloadSize: Integer;
   Ts: Int64;
-  Len: UInt32;
   ValueBytes: TBytes;
   IsVariable: Boolean;
-  IsMulti: Boolean;
   StripTerminator: Boolean;
   FixedSize: Integer;
   I: Integer;
@@ -191,9 +195,12 @@ begin
 
   IsVariable := OSFDataTypeIsVariableLength(ChannelDef.DataType);
   FixedSize := OSFDataTypeFixedSize(ChannelDef.DataType);
-  IsMulti := Block.SampleCount > 1;
   StripTerminator := IsVariable and (AVersion = osvOSF4);
   PayloadLen := Length(Block.RawPayload);
+
+  Assert(not (IsVariable and (Block.SampleCount > 1)),
+    'DecodeAbsTimestampedBlock: multi-sample variable-length blocks must be ' +
+    'filtered by the caller (TOSFDataManager.DispatchBlock)');
 
   Pos := 0;
   for I := 0 to Integer(Block.SampleCount) - 1 do
@@ -204,18 +211,7 @@ begin
     Inc(Pos, 8);
 
     if IsVariable then
-    begin
-      if IsMulti then
-      begin
-        if Pos + 4 > PayloadLen then
-          Exit;
-        Move(Block.RawPayload[Pos], Len, 4);
-        Inc(Pos, 4);
-        ValSize := Integer(Len);
-      end
-      else
-        ValSize := PayloadLen - Pos; // single sample: rest of payload
-    end
+      ValSize := PayloadLen - Pos  // single sample: rest of payload
     else
       ValSize := FixedSize;
 
@@ -646,7 +642,23 @@ begin
 
   case Block.BlockType of
     bcAbsTimeStampData:
-      DecodeAbsTimestampedBlock(FVersion, Channel, Block);
+      begin
+        // String and binary in bcAbsTimeStampData are one-sample-per-block
+        // per spec. Multi-sample variable-length blocks have no standard
+        // wire format — the historical Delphi per-sample uint32 length-
+        // prefix layout was removed in 2026-05-24. Best-effort skip with
+        // a warning per DECISIONS §8 so a single non-spec block does not
+        // abort the rest of the file load.
+        if Assigned(Channel.ChannelDef) and
+           OSFDataTypeIsVariableLength(Channel.ChannelDef.DataType) and
+           (Block.SampleCount > 1) then
+          Log(llWarning,
+              'non-spec multi-sample variable-length bcAbsTimeStampData on ' +
+              'channel %d (%s) - block skipped',
+              [Block.ChannelIndex, Channel.ChannelDef.Name])
+        else
+          DecodeAbsTimestampedBlock(FVersion, Channel, Block);
+      end;
 
     bcStartData:
       begin

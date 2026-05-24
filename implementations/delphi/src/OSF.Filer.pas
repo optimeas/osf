@@ -548,15 +548,17 @@ begin
 end;
 
 // Builds the binary payload of an absolute-timestamped data block.
-// Layout: [ctrl 1B] [uint32 N 4B if N>1] [int64 ts | (uint32 len if variable) | bytes]*
+// Layout: [ctrl 1B] [uint32 N 4B if N>1] [int64 ts | bytes]*
 //
 // For variable-length data types (string, binary) the trailing 0x00 byte is
 // version-deterministic per spec rev 2026-05-24:
-//   OSF4: byte is appended (writer MUST) and is included in the per-value
-//         uint32 length (multi-sample) or in the block-level length
-//         (single-sample / no-length-prefix case).
-//   OSF5: byte is NOT appended; the payload ends at the last data byte and
-//         the lengths reflect the bare payload size.
+//   OSF4: byte is appended (writer MUST) and is included in the block-
+//         level length.
+//   OSF5: byte is NOT appended; the payload ends at the last data byte.
+// Multi-sample variable-length blocks have no standard wire format and are
+// not produced here — the caller (WriteTimestampedBlock) splits such calls
+// into N single-sample blocks before reaching this function. The Assert
+// at the top guards against direct internal misuse.
 function EncodeTimestampedPayload(AVersion: TOSFVersion; IsVariableLength: Boolean; const Timestamps: array of Int64; const Values: array of TBytes): TBytes;
 const
   ZERO_BYTE: Byte = 0;
@@ -568,12 +570,14 @@ var
   Ms: TMemoryStream;
   I: Integer;
   Cnt: UInt32;
-  Len4: UInt32;
   TS: Int64;
   ValueLen: Integer;
 begin
   N := Length(Timestamps);
   IsMulti := N > 1;
+  Assert(not (IsVariableLength and IsMulti),
+    'EncodeTimestampedPayload: multi-sample variable-length blocks are not ' +
+    'spec — WriteTimestampedBlock must split before reaching this function');
   AppendTerminator := IsVariableLength and (AVersion = osvOSF4);
   CtrlByte := OSFMakeControlByte(bcAbsTimeStampData, IsMulti);
 
@@ -591,18 +595,6 @@ begin
       TS := Timestamps[I];
       Ms.WriteBuffer(TS, SizeOf(TS));
       ValueLen := Length(Values[I]);
-      // Variable-length values inside a multi-sample block need a uint32
-      // length prefix per value. The prefix includes the trailing null byte
-      // when one is written (OSF4); single-sample blocks rely on the block-
-      // level length instead.
-      if IsVariableLength and IsMulti then
-      begin
-        if AppendTerminator then
-          Len4 := UInt32(ValueLen + 1)
-        else
-          Len4 := UInt32(ValueLen);
-        Ms.WriteBuffer(Len4, SizeOf(Len4));
-      end;
       if ValueLen > 0 then
         Ms.WriteBuffer(Values[I][0], ValueLen);
       if AppendTerminator then
@@ -1681,6 +1673,7 @@ procedure TOSFFile.WriteTimestampedBlock(ChannelIndex: Integer; const Timestamps
 var
   Channel: TOSFChannelDef;
   N: Integer;
+  I: Integer;
   Payload: TBytes;
 begin
   if not FHeaderWritten then
@@ -1695,6 +1688,19 @@ begin
   Channel := ChannelByIndex(ChannelIndex);
   if not Assigned(Channel) then
     raise EOSFFormatError.CreateFmt(SOSFTSBlockUnknown, [ChannelIndex]);
+
+  // String and binary in bcAbsTimeStampData are one-sample-per-block per
+  // spec. The multi-sample form for variable-length types is not part of
+  // the standard wire format and the Rust / C++ reference readers do not
+  // parse the historical Delphi per-sample uint32 length-prefix layout.
+  // Auto-split multi-sample variable-length calls into N single-sample
+  // blocks so callers get a uniform API regardless of datatype.
+  if OSFDataTypeIsVariableLength(Channel.DataType) and (N > 1) then
+  begin
+    for I := 0 to N - 1 do
+      WriteTimestampedSample(ChannelIndex, Timestamps[I], Values[I]);
+    Exit;
+  end;
 
   Payload := EncodeTimestampedPayload(FVersion, OSFDataTypeIsVariableLength(Channel.DataType), Timestamps, Values);
   WriteDataBlock(Channel, Payload);
