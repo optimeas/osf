@@ -24,9 +24,11 @@
 //! - **No trailer / no magic trailer** — OSF5 dropped both.
 //! - **`bcStartData` numeric only**: equidistant blocks support `float`
 //!   and `double` only per spec rev 2026-05-04.
-//! - **String / binary trailing 0x00**: `bcAbsTimeStampData` payloads
-//!   for these types end with the spec-mandated null terminator;
-//!   handled centrally in [`crate::binary_write`].
+//! - **String / binary payloads are NOT null-terminated**: spec rev
+//!   2026-05-24 made the null-terminator rule version-deterministic;
+//!   OSF5 writers MUST NOT append a trailing `0x00` byte. Payloads
+//!   are written verbatim and `sizeoflengthvalue` defines the exact
+//!   on-disk length.
 
 use crate::binary_write;
 use crate::block::GpsLocation;
@@ -345,9 +347,10 @@ fn autobump_size_of_length_value(channels: &mut [ChannelDef], data: &[ChannelDat
                     v.iter().map(Vec::len).max().unwrap_or(0)
                 });
                 let sample_bytes = s_max.max(b_max);
-                // Variable layout for one sample per block:
-                // [control][u32 N=1][i64 ts][bytes][0x00] = 14 + sample_bytes
-                14 + sample_bytes
+                // Variable layout for one sample per block (OSF5, no
+                // trailing 0x00):
+                // [control][u32 N=1][i64 ts][bytes] = 13 + sample_bytes
+                13 + sample_bytes
             }
             _ => 0,
         };
@@ -631,7 +634,7 @@ fn write_abs_timestamp_numeric<W: Write>(
 
 // -----------------------------------------------------------
 // Timestamped variable: one sample per block; bcAbsTimeStampData with
-// the multi-sample bit set and N = 1, payload ends with 0x00.
+// the multi-sample bit set and N = 1. OSF5 writer — no trailing 0x00.
 // -----------------------------------------------------------
 
 fn write_abs_timestamp_variable<W: Write>(
@@ -671,7 +674,7 @@ fn write_variable_one_string<W: Write>(
     check_variable_block_fits(channel, def.size_of_length_value, payload_len, s.len())?;
     let mut payload = Vec::with_capacity(payload_len);
     write_variable_header(&mut payload, timestamp_ns)?;
-    binary_write::write_string_with_terminator(&mut payload, s)?;
+    payload.write_all(s.as_bytes())?;
     write_block(writer, channel, def.size_of_length_value, &payload)
 }
 
@@ -686,14 +689,14 @@ fn write_variable_one_binary<W: Write>(
     check_variable_block_fits(channel, def.size_of_length_value, payload_len, bytes.len())?;
     let mut payload = Vec::with_capacity(payload_len);
     write_variable_header(&mut payload, timestamp_ns)?;
-    binary_write::write_binary_with_terminator(&mut payload, bytes)?;
+    payload.write_all(bytes)?;
     write_block(writer, channel, def.size_of_length_value, &payload)
 }
 
-/// Total payload bytes for a single-sample variable block:
-/// `[control][u32 N=1][i64 ts][bytes][0x00]`.
+/// Total payload bytes for a single-sample variable block (OSF5, no
+/// trailing 0x00): `[control][u32 N=1][i64 ts][bytes]`.
 fn variable_payload_size(sample_bytes: usize) -> usize {
-    1 + 4 + 8 + sample_bytes + 1
+    1 + 4 + 8 + sample_bytes
 }
 
 fn write_variable_header<W: Write>(w: &mut W, timestamp_ns: i64) -> Result<(), OsfError> {

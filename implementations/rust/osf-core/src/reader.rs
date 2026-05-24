@@ -37,6 +37,7 @@ use crate::block::{
     SkipReason, TimestampedPayload, decode_control_byte,
 };
 use crate::error::OsfError;
+use crate::header::OsfVersion;
 use crate::meta::MetaBlock;
 use crate::stats::{ChannelStats, ReaderStats};
 use crate::types::{ChannelType, DataType};
@@ -83,6 +84,11 @@ struct ChannelInfo {
 ///   when the convenience wrapper [`crate::read_file`] is used).
 pub struct BlockReader<R: Read> {
     inner: R,
+    /// OSF file version derived from `meta.file_info.version`. Drives
+    /// the version-deterministic null-terminator rule (spec rev
+    /// 2026-05-24): OSF4 strips the last byte of every
+    /// string/binary AbsTs payload, OSF5 leaves it alone.
+    osf_version: OsfVersion,
     channels: HashMap<u16, ChannelInfo>,
     finished: bool,
     capture_skipped: bool,
@@ -98,6 +104,15 @@ impl<R: Read> BlockReader<R> {
     /// index for fast lookup during iteration. Per-channel stats are
     /// pre-seeded with the channel name and zero counters.
     pub fn new(inner: R, meta: &MetaBlock) -> Self {
+        // Spec rev 2026-05-24 — version-deterministic null-terminator
+        // rule. `version == 4` activates the OSF4 strip path; every
+        // other value (5, 0, unknown) defaults to OSF5 (no strip).
+        // `MetaBlock::default()` yields `version: 0` which the test
+        // helpers rely on for OSF5 behaviour.
+        let osf_version = match meta.file_info.version {
+            4 => OsfVersion::Osf4,
+            _ => OsfVersion::Osf5,
+        };
         let mut channels = HashMap::with_capacity(meta.channels.len());
         let mut stats = ReaderStats {
             channels_total: meta.channels.len(),
@@ -127,6 +142,7 @@ impl<R: Read> BlockReader<R> {
         }
         Self {
             inner,
+            osf_version,
             channels,
             finished: false,
             capture_skipped: false,
@@ -481,7 +497,12 @@ impl<R: Read> Iterator for BlockReader<R> {
                 }
             }
             ControlKind::AbsTimeStampData => {
-                match parse_abs_timestamp_data(body, &info.data_type, control.multi_sample) {
+                match parse_abs_timestamp_data(
+                    body,
+                    &info.data_type,
+                    control.multi_sample,
+                    self.osf_version,
+                ) {
                     Ok(samples) => {
                         let chan_stats =
                             self.stats.per_channel.entry(channel_index).or_default();
@@ -682,16 +703,17 @@ fn parse_abs_timestamp_data(
     body: &[u8],
     dt: &DataType,
     multi: bool,
+    osf_version: OsfVersion,
 ) -> Result<TimestampedPayload, OsfError> {
     // String / binary always require bit 7 set per spec; we tolerate
     // bit-7-clear with a warn and treat it as N=1.
     if matches!(dt, DataType::String | DataType::Binary) {
-        return parse_abs_timestamp_string_or_binary(body, dt, multi);
+        return parse_abs_timestamp_string_or_binary(body, dt, multi, osf_version);
     }
     if matches!(dt, DataType::ByteArray) {
         // Reader normalises bytearray -> Binary in the metablock parser,
         // so this branch is theoretically unreachable. Defensive only.
-        return parse_abs_timestamp_string_or_binary(body, &DataType::Binary, multi);
+        return parse_abs_timestamp_string_or_binary(body, &DataType::Binary, multi, osf_version);
     }
 
     let mut cur = body;
@@ -763,10 +785,15 @@ fn parse_abs_timestamp_data(
 /// equal-length segments — we split the body equally and parse each
 /// chunk. If the body length is not divisible by `N`, we log a warn
 /// and fall back to a single-sample interpretation rather than failing.
+///
+/// The null-terminator handling is version-deterministic (spec rev
+/// 2026-05-24): OSF4 strips the last byte of every per-sample payload
+/// unconditionally; OSF5 keeps the payload verbatim.
 fn parse_abs_timestamp_string_or_binary(
     body: &[u8],
     dt: &DataType,
     multi: bool,
+    osf_version: OsfVersion,
 ) -> Result<TimestampedPayload, OsfError> {
     let (n, rest) = if multi {
         let mut cur = body;
@@ -790,7 +817,7 @@ fn parse_abs_timestamp_string_or_binary(
         let ts = cur
             .read_i64::<LittleEndian>()
             .map_err(|e| invalid_block(format!("AbsTs string/binary ts: {e}")))?;
-        let payload = strip_trailing_nul(cur);
+        let payload = strip_osf4_terminator(cur, osf_version);
         return build_string_or_binary(dt, vec![(ts, payload.to_vec())]);
     }
 
@@ -805,15 +832,26 @@ fn parse_abs_timestamp_string_or_binary(
         let ts = cur
             .read_i64::<LittleEndian>()
             .map_err(|e| invalid_block(format!("AbsTs string/binary ts: {e}")))?;
-        let payload = strip_trailing_nul(cur);
+        let payload = strip_osf4_terminator(cur, osf_version);
         return build_string_or_binary(dt, vec![(ts, payload.to_vec())]);
     }
 
     let per_sample = total / n;
-    if per_sample < 9 {
+    // OSF4 needs i64 ts (8) + at least one byte (terminator alone is
+    // legal for an empty payload) = 9. OSF5 needs only i64 ts = 8.
+    let min_per_sample = match osf_version {
+        OsfVersion::Osf4 => 9usize,
+        OsfVersion::Osf5 => 8usize,
+    };
+    if per_sample < min_per_sample {
         return Err(invalid_block(format!(
             "bcAbsTimeStampData for {dt:?} N={n}: per-sample size {per_sample} \
-             is less than 9 (need i64 ts + at least one byte + null terminator)"
+             is less than {min_per_sample} (need i64 ts{})",
+            if osf_version == OsfVersion::Osf4 {
+                " + at least the OSF4 null terminator"
+            } else {
+                ""
+            }
         )));
     }
     let mut samples = Vec::with_capacity(n);
@@ -823,7 +861,7 @@ fn parse_abs_timestamp_string_or_binary(
         let ts = chunk_cur
             .read_i64::<LittleEndian>()
             .map_err(|e| invalid_block(format!("AbsTs string/binary ts (chunk {i}): {e}")))?;
-        let payload = strip_trailing_nul(chunk_cur);
+        let payload = strip_osf4_terminator(chunk_cur, osf_version);
         samples.push((ts, payload.to_vec()));
     }
     build_string_or_binary(dt, samples)
@@ -851,17 +889,18 @@ fn build_string_or_binary(
     }
 }
 
-/// Strip a single trailing `0x00` if present; log a warn if the byte
-/// is not `0x00` (writer bug). Returns the remaining slice.
-fn strip_trailing_nul(bytes: &[u8]) -> &[u8] {
-    if let Some((last, rest)) = bytes.split_last() {
-        if *last == 0x00 {
-            return rest;
-        }
-        warn!(
-            "string/binary block did not end with the spec-mandated 0x00; \
-             keeping the byte"
-        );
+/// Spec rev 2026-05-24 — version-deterministic null-terminator rule.
+///
+/// - OSF4: strip the last byte of `bytes` unconditionally. The byte is
+///   guaranteed to be `0x00` per spec; if a writer is non-conforming
+///   and emits a non-zero last byte, that byte is silently discarded.
+///   The reader does not validate it because the rule is deterministic
+///   and there is no fallback path to take.
+/// - OSF5: return `bytes` unchanged. A trailing `0x00` is a regular
+///   data byte, not a sentinel.
+fn strip_osf4_terminator(bytes: &[u8], osf_version: OsfVersion) -> &[u8] {
+    if osf_version == OsfVersion::Osf4 && !bytes.is_empty() {
+        return &bytes[..bytes.len() - 1];
     }
     bytes
 }
@@ -1009,6 +1048,17 @@ mod tests {
     fn make_meta(channels: Vec<Channel>) -> MetaBlock {
         MetaBlock {
             file_info: Default::default(),
+            channels,
+            infos: Vec::new(),
+        }
+    }
+
+    fn make_meta_v4(channels: Vec<Channel>) -> MetaBlock {
+        MetaBlock {
+            file_info: crate::meta::FileInfo {
+                version: 4,
+                ..Default::default()
+            },
             channels,
             infos: Vec::new(),
         }
@@ -1278,9 +1328,36 @@ mod tests {
     }
 
     #[test]
-    fn parses_abs_timestamp_string_with_null_strip() {
-        // [u16 0][u32 length][u8 0x88][u32 N=1][i64 ts][b"hi" + 0x00]
+    fn parses_abs_timestamp_string_osf5_keeps_payload_verbatim() {
+        // OSF5 reader: payload bytes are kept verbatim, no terminator
+        // stripping. [u16 0][u32 length][u8 0x88][u32 N=1][i64 ts][b"hi"]
         let meta = make_meta(vec![channel(0, DataType::String, 4)]);
+        let body_string = b"hi";
+        let payload_len = 1 + 4 + 8 + body_string.len();
+        let mut bytes = vec![0u8, 0];
+        bytes.extend_from_slice(&u32::try_from(payload_len).unwrap().to_le_bytes());
+        bytes.push(0x88);
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&42i64.to_le_bytes());
+        bytes.extend_from_slice(body_string);
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::AbsTimestampData {
+                samples: TimestampedPayload::String(v),
+            } => {
+                assert_eq!(v, vec![(42, "hi".to_string())]);
+            }
+            other => panic!("expected AbsTimestampData/String, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_abs_timestamp_string_osf4_strips_last_byte() {
+        // OSF4 reader: the spec-mandated trailing 0x00 is stripped
+        // unconditionally before the payload reaches the manager.
+        // [u16 0][u32 length][u8 0x88][u32 N=1][i64 ts][b"hi" + 0x00]
+        let meta = make_meta_v4(vec![channel(0, DataType::String, 4)]);
         let body_string = b"hi\x00";
         let payload_len = 1 + 4 + 8 + body_string.len();
         let mut bytes = vec![0u8, 0];
@@ -1302,9 +1379,39 @@ mod tests {
     }
 
     #[test]
-    fn parses_abs_timestamp_binary_jpeg_magic() {
+    fn parses_abs_timestamp_binary_osf5_keeps_trailing_null_byte() {
+        // OSF5 reader: a trailing 0x00 in a binary payload is a real
+        // data byte (ASN.1 blob, protobuf message, …). The reader
+        // keeps it verbatim.
         let meta = make_meta(vec![channel(0, DataType::Binary, 4)]);
-        let body = [0xFFu8, 0xD8, 0xFF, 0xE0, 0x00]; // JPEG magic + null
+        let body = [0xFFu8, 0xD8, 0xFF, 0xE0, 0x00];
+        let payload_len = 1 + 4 + 8 + body.len();
+        let mut bytes = vec![0u8, 0];
+        bytes.extend_from_slice(&u32::try_from(payload_len).unwrap().to_le_bytes());
+        bytes.push(0x88);
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&123i64.to_le_bytes());
+        bytes.extend_from_slice(&body);
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::AbsTimestampData {
+                samples: TimestampedPayload::Binary(v),
+            } => {
+                assert_eq!(v, vec![(123, vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00])]);
+            }
+            other => panic!("expected AbsTimestampData/Binary, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_abs_timestamp_binary_osf4_strips_trailing_null_byte() {
+        // OSF4 reader: the spec-mandated trailing 0x00 is the
+        // terminator and is removed before the payload reaches the
+        // manager. JPEG magic + null on disk → JPEG magic only after
+        // strip.
+        let meta = make_meta_v4(vec![channel(0, DataType::Binary, 4)]);
+        let body = [0xFFu8, 0xD8, 0xFF, 0xE0, 0x00];
         let payload_len = 1 + 4 + 8 + body.len();
         let mut bytes = vec![0u8, 0];
         bytes.extend_from_slice(&u32::try_from(payload_len).unwrap().to_le_bytes());

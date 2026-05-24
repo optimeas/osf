@@ -196,11 +196,14 @@ pub enum TimestampedPayload {
     Float(Vec<(i64, f32)>),
     /// IEEE-754 double-precision floats with absolute timestamps.
     Double(Vec<(i64, f64)>),
-    /// UTF-8 strings with absolute timestamps; the trailing `0x00`
-    /// has been stripped by the reader.
+    /// UTF-8 strings with absolute timestamps. For OSF4 input the
+    /// spec-mandated trailing `0x00` byte has been stripped by the
+    /// reader; OSF5 input carries no terminator on disk.
     String(Vec<(i64, String)>),
-    /// Opaque byte payloads with absolute timestamps; the trailing
-    /// `0x00` has been stripped by the reader.
+    /// Opaque byte payloads with absolute timestamps. For OSF4 input
+    /// the spec-mandated trailing `0x00` byte has been stripped by
+    /// the reader; OSF5 input carries no terminator on disk and may
+    /// legitimately end in `0x00`.
     Binary(Vec<(i64, Vec<u8>)>),
     /// 24-byte GPS-location structs paired with absolute timestamps.
     GpsLocation(Vec<(i64, GpsLocation)>),

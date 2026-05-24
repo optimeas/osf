@@ -5,8 +5,11 @@
 //!
 //! The reader side uses `byteorder::ReadBytesExt`; this module is the
 //! symmetric write side. Variable-length payloads (`string`, `binary`)
-//! get the trailing `0x00` byte appended that spec rev 2026-05-04
-//! mandates for `bcAbsTimeStampData`.
+//! are written as raw bytes only — the writer is OSF5-only
+//! (DECISIONS §6) and OSF5 does not carry a trailing `0x00`
+//! terminator (spec rev 2026-05-24, version-deterministic rule). The
+//! callers in `writer.rs` invoke `write_all` directly on the payload
+//! buffer; this module exposes only the fixed-width numeric helpers.
 
 use byteorder::{LittleEndian, WriteBytesExt};
 use std::io::{self, Write};
@@ -72,20 +75,6 @@ pub(crate) fn write_length_field<W: Write>(
     }
 }
 
-/// Write a UTF-8 string and append the spec-mandated trailing `0x00`
-/// byte. Used for `bcAbsTimeStampData` payloads on `string` channels.
-pub(crate) fn write_string_with_terminator<W: Write>(w: &mut W, s: &str) -> io::Result<()> {
-    w.write_all(s.as_bytes())?;
-    write_u8(w, 0)
-}
-
-/// Write a binary payload and append the spec-mandated trailing `0x00`
-/// byte. Used for `bcAbsTimeStampData` payloads on `binary` channels.
-pub(crate) fn write_binary_with_terminator<W: Write>(w: &mut W, data: &[u8]) -> io::Result<()> {
-    w.write_all(data)?;
-    write_u8(w, 0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,27 +120,6 @@ mod tests {
         write_bool(&mut buf, true).unwrap();
         write_bool(&mut buf, false).unwrap();
         assert_eq!(buf, vec![1, 0]);
-    }
-
-    #[test]
-    fn string_with_terminator_appends_null() {
-        let mut buf = Vec::new();
-        write_string_with_terminator(&mut buf, "hi").unwrap();
-        assert_eq!(buf, b"hi\0");
-    }
-
-    #[test]
-    fn binary_with_terminator_appends_null() {
-        let mut buf = Vec::new();
-        write_binary_with_terminator(&mut buf, &[0xFF, 0xD8, 0xFF]).unwrap();
-        assert_eq!(buf, vec![0xFF, 0xD8, 0xFF, 0x00]);
-    }
-
-    #[test]
-    fn empty_string_still_writes_terminator() {
-        let mut buf = Vec::new();
-        write_string_with_terminator(&mut buf, "").unwrap();
-        assert_eq!(buf, vec![0]);
     }
 
     #[test]

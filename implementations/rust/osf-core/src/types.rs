@@ -40,10 +40,13 @@ pub enum DataType {
     Float,
     /// IEEE-754 double-precision floating point.
     Double,
-    /// UTF-8 string with a trailing `0x00` byte on disk
-    /// (writer appends, reader strips).
+    /// UTF-8 string. On-disk layout is version-deterministic per spec
+    /// rev 2026-05-24: OSF4 writers MUST append a trailing `0x00`
+    /// terminator and OSF4 readers MUST strip it; OSF5 writers MUST
+    /// NOT append it and OSF5 readers MUST NOT strip it.
     String,
-    /// Opaque byte payload with a trailing `0x00` byte on disk.
+    /// Opaque byte payload. Same version-deterministic null-terminator
+    /// rule as [`DataType::String`]: present in OSF4, absent in OSF5.
     Binary,
     /// Reserved spelling for the read-side alias `bytearray`. The current
     /// parser normalises `bytearray` directly to [`DataType::Binary`] on
