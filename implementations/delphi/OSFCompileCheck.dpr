@@ -22,7 +22,8 @@ uses
   OSF.Export.CSV          in 'src\OSF.Export.CSV.pas',
   OSF.Export.CSV.Unified  in 'src\OSF.Export.CSV.Unified.pas',
   OSF.Meta.Cache          in 'src\OSF.Meta.Cache.pas',
-  OSF.Merger              in 'src\OSF.Merger.pas';
+  OSF.Merger              in 'src\OSF.Merger.pas',
+  Console.ProgressBar     in 'src\console\Console.ProgressBar.pas';
 
 // OSF.Export.HDF5 plus the src\hdf5\ wrapper units are intentionally
 // excluded from this smoke test: they depend on the Windows-only HDF5
