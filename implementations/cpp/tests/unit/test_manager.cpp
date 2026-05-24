@@ -213,20 +213,21 @@ void append_abs_double(std::vector<std::uint8_t>& out, std::uint16_t channel,
     }
 }
 
-// bcAbsTimeStampData string, sizeoflengthvalue=4.
+// bcAbsTimeStampData string, sizeoflengthvalue=4. OSF5 layout: no
+// trailing 0x00 byte per spec rev 2026-05-24 (consumed by the
+// meta_one_string metablock template which declares version=5).
 void append_abs_string(std::vector<std::uint8_t>& out, std::uint16_t channel,
                        std::int64_t ts, std::string const& value) {
     // Single-sample variant per spec mandate (and easier to test).
     // bit 7 must be set per spec; we always emit multi (matches Rust + our parser).
     std::uint32_t const payload_len = static_cast<std::uint32_t>(
-        1 + 4 + 8 + value.size() + 1);  // ctl + N + ts + bytes + 0x00
+        1 + 4 + 8 + value.size());  // ctl + N + ts + bytes (no terminator)
     put_u16(out, channel);
     put_u32(out, payload_len);
     out.push_back(0x88);
     put_u32(out, 1);  // N=1
     put_i64(out, ts);
     for (char c : value) out.push_back(static_cast<std::uint8_t>(c));
-    out.push_back(0x00);
 }
 
 // bcContinuedRelStampData int32, sizeoflengthvalue=2.

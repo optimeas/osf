@@ -100,6 +100,12 @@ using NumericPayload = std::variant<
 /// Timestamped payload: `(timestamp_ns, value)` pairs per supported
 /// data type. `string`, `binary`, and `gpslocation` only occur here
 /// (equidistant blocks are numeric-only per spec).
+///
+/// For `string` and `binary`, the null-terminator handling is
+/// version-deterministic per spec rev 2026-05-24: OSF4 input has the
+/// spec-mandated trailing `0x00` byte stripped by the reader before
+/// it lands in the variant; OSF5 input is delivered verbatim, so a
+/// trailing `0x00` is part of the payload.
 using TimestampedPayload = std::variant<
     std::vector<std::pair<std::int64_t, bool>>,
     std::vector<std::pair<std::int64_t, std::int8_t>>,

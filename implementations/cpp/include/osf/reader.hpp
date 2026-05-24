@@ -40,6 +40,7 @@
 
 #include <osf/block.hpp>
 #include <osf/error.hpp>
+#include <osf/header.hpp>
 #include <osf/metablock.hpp>
 #include <osf/stats.hpp>
 #include <osf/types.hpp>
@@ -203,6 +204,11 @@ private:
                      SkipReason const& reason);
 
     std::istream* stream_;
+    /// OSF file version derived from `meta.file_info.version`. Drives
+    /// the version-deterministic null-terminator rule (spec rev
+    /// 2026-05-24): OSF4 strips the last byte of every string/binary
+    /// AbsTs payload, OSF5 leaves it alone.
+    OsfVersion osf_version_ = OsfVersion::Osf5;
     std::unordered_map<std::uint16_t, ChannelInfo> channels_;
     bool finished_ = false;
     bool capture_skipped_ = false;

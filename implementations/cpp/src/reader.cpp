@@ -236,11 +236,19 @@ Result<NumericPayload> read_numeric_n(PayloadCursor& cur, DataType dt,
         return TimestampedPayload{std::move(v)};                         \
     }
 
-// Helper: drop trailing 0x00 if present (spec-mandated null terminator
-// on string / binary payloads).
-std::vector<std::uint8_t> strip_trailing_nul(std::uint8_t const* p,
-                                             std::size_t n) {
-    if (n > 0 && p[n - 1] == 0x00) {
+// Spec rev 2026-05-24 — version-deterministic null-terminator rule.
+//
+// - OSF4: strip the last byte of `[p, p+n)` unconditionally. The byte
+//   is guaranteed to be `0x00` per spec; if a writer is non-conforming
+//   and emits a non-zero last byte, that byte is silently discarded.
+//   The reader does not validate it because the rule is deterministic
+//   and there is no fallback path to take.
+// - OSF5: return `[p, p+n)` unchanged. A trailing `0x00` is a regular
+//   data byte, not a sentinel.
+std::vector<std::uint8_t> strip_osf4_terminator(std::uint8_t const* p,
+                                                std::size_t n,
+                                                OsfVersion osf_version) {
+    if (osf_version == OsfVersion::Osf4 && n > 0) {
         return std::vector<std::uint8_t>(p, p + n - 1);
     }
     return std::vector<std::uint8_t>(p, p + n);
@@ -267,8 +275,13 @@ Result<TimestampedPayload> build_string_or_binary(
     return TimestampedPayload{std::move(raw)};
 }
 
+// Null-terminator handling is version-deterministic per spec rev
+// 2026-05-24: OSF4 strips the last byte of every per-sample payload
+// unconditionally; OSF5 keeps the payload verbatim. See
+// strip_osf4_terminator for the rationale.
 Result<TimestampedPayload> parse_abs_ts_string_or_binary(
-    std::uint8_t const* body, std::size_t body_len, DataType dt, bool multi) {
+    std::uint8_t const* body, std::size_t body_len, DataType dt, bool multi,
+    OsfVersion osf_version) {
     std::size_t n = 1;
     std::size_t rest_off = 0;
 
@@ -296,7 +309,7 @@ Result<TimestampedPayload> parse_abs_ts_string_or_binary(
                 "AbsTs string/binary ts: short read"));
         }
         std::int64_t const ts = le_i64(rest);
-        auto payload = strip_trailing_nul(rest + 8, rest_len - 8);
+        auto payload = strip_osf4_terminator(rest + 8, rest_len - 8, osf_version);
         std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>> raw;
         raw.emplace_back(ts, std::move(payload));
         return build_string_or_binary(dt, std::move(raw));
@@ -311,18 +324,27 @@ Result<TimestampedPayload> parse_abs_ts_string_or_binary(
                 "AbsTs string/binary ts: short read"));
         }
         std::int64_t const ts = le_i64(rest);
-        auto payload = strip_trailing_nul(rest + 8, rest_len - 8);
+        auto payload = strip_osf4_terminator(rest + 8, rest_len - 8, osf_version);
         std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>> raw;
         raw.emplace_back(ts, std::move(payload));
         return build_string_or_binary(dt, std::move(raw));
     }
 
     std::size_t const per_sample = rest_len / n;
-    if (per_sample < 9) {
+    // OSF4 needs i64 ts (8) + at least one byte (the terminator alone
+    // is a legal empty payload) = 9. OSF5 needs only i64 ts = 8.
+    std::size_t const min_per_sample =
+        (osf_version == OsfVersion::Osf4) ? 9u : 8u;
+    if (per_sample < min_per_sample) {
         std::ostringstream oss;
         oss << "AbsTs string/binary N=" << n
             << ": per-sample size " << per_sample
-            << " is less than 9 (need i64 ts + at least 1 byte + null terminator)";
+            << " is less than " << min_per_sample
+            << " (need i64 ts";
+        if (osf_version == OsfVersion::Osf4) {
+            oss << " + at least the OSF4 null terminator";
+        }
+        oss << ")";
         return tl::make_unexpected(invalid_block(oss.str()));
     }
 
@@ -331,19 +353,21 @@ Result<TimestampedPayload> parse_abs_ts_string_or_binary(
     for (std::size_t i = 0; i < n; ++i) {
         std::uint8_t const* chunk = rest + i * per_sample;
         std::int64_t const ts = le_i64(chunk);
-        auto payload = strip_trailing_nul(chunk + 8, per_sample - 8);
+        auto payload = strip_osf4_terminator(chunk + 8, per_sample - 8,
+                                             osf_version);
         raw.emplace_back(ts, std::move(payload));
     }
     return build_string_or_binary(dt, std::move(raw));
 }
 
 Result<TimestampedPayload> parse_abs_timestamp_data(
-    std::uint8_t const* body, std::size_t body_len, DataType dt, bool multi) {
+    std::uint8_t const* body, std::size_t body_len, DataType dt, bool multi,
+    OsfVersion osf_version) {
     if (dt == DataType::String || dt == DataType::Binary ||
         dt == DataType::ByteArray) {
         return parse_abs_ts_string_or_binary(
             body, body_len, dt == DataType::ByteArray ? DataType::Binary : dt,
-            multi);
+            multi, osf_version);
     }
 
     PayloadCursor cur{body, body_len};
@@ -521,6 +545,14 @@ std::optional<SkipReason> channel_unsupported_reason(ChannelType ct,
 
 BlockReader::BlockReader(std::istream& stream, MetaBlock const& meta)
     : stream_(&stream), started_(std::chrono::steady_clock::now()) {
+    // Spec rev 2026-05-24 — version-deterministic null-terminator
+    // rule. version == 4 activates the OSF4 strip path; every other
+    // value (5, 0, unknown) defaults to OSF5 (no strip). A
+    // default-constructed MetaBlock yields version == 0 which the
+    // test helpers rely on for OSF5 behaviour.
+    osf_version_ = (meta.file_info.version == 4)
+                       ? OsfVersion::Osf4
+                       : OsfVersion::Osf5;
     channels_.reserve(meta.channels.size());
     stats_.channels_total = meta.channels.size();
     for (auto const& ch : meta.channels) {
@@ -842,7 +874,7 @@ std::optional<Result<Block>> BlockReader::next() {
         }
         case ControlKind::AbsTimeStampData: {
             auto r = parse_abs_timestamp_data(body, body_len, info.data_type,
-                                              cb.multi_sample);
+                                              cb.multi_sample, osf_version_);
             if (!r) return Result<Block>{tl::make_unexpected(r.error())};
             std::size_t const n = timestamped_payload_len(*r);
             auto& cs = stats_.per_channel[channel_index];

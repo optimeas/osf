@@ -43,6 +43,13 @@ osf::MetaBlock make_meta(std::vector<osf::Channel> channels) {
     return mb;
 }
 
+osf::MetaBlock make_meta_v4(std::vector<osf::Channel> channels) {
+    osf::MetaBlock mb;
+    mb.file_info.version = 4;
+    mb.channels = std::move(channels);
+    return mb;
+}
+
 void put_u16(std::vector<std::uint8_t>& dst, std::uint16_t v) {
     dst.push_back(static_cast<std::uint8_t>( v        & 0xFF));
     dst.push_back(static_cast<std::uint8_t>((v >>  8) & 0xFF));
@@ -347,8 +354,36 @@ TEST(BlockReader, parses_continued_data_int16_multi) {
     EXPECT_EQ(v, (std::vector<std::int16_t>{0, 10, 20, 30}));
 }
 
-TEST(BlockReader, parses_abs_timestamp_string_with_null_strip) {
+TEST(BlockReader, parses_abs_timestamp_string_osf5_keeps_payload_verbatim) {
+    // OSF5 reader: payload bytes are kept verbatim, no terminator
+    // stripping. Body = "hi" (no trailing 0x00 per spec rev 2026-05-24).
     auto meta = make_meta({make_channel(0, osf::DataType::String, 4)});
+    std::uint8_t const body_string[] = {'h', 'i'};
+    std::uint32_t const payload_len =
+        static_cast<std::uint32_t>(1 + 4 + 8 + sizeof(body_string));
+    std::vector<std::uint8_t> bytes;
+    put_u16(bytes, 0);
+    put_u32(bytes, payload_len);
+    bytes.push_back(0x88);
+    put_u32(bytes, 1);
+    put_i64(bytes, 42);
+    bytes.insert(bytes.end(), body_string, body_string + sizeof(body_string));
+    ByteStream s(std::move(bytes));
+    osf::BlockReader r(s.get(), meta);
+    auto blk_r = r.next();
+    ASSERT_TRUE(blk_r && blk_r->has_value());
+    auto const& ad = std::get<osf::AbsTimestampData>((*blk_r)->kind);
+    auto const& v = std::get<std::vector<std::pair<std::int64_t, std::string>>>(
+        ad.samples);
+    ASSERT_EQ(v.size(), 1u);
+    EXPECT_EQ(v[0].first, 42);
+    EXPECT_EQ(v[0].second, "hi");
+}
+
+TEST(BlockReader, parses_abs_timestamp_string_osf4_strips_last_byte) {
+    // OSF4 reader: the spec-mandated trailing 0x00 is stripped
+    // unconditionally before the payload reaches the manager.
+    auto meta = make_meta_v4({make_channel(0, osf::DataType::String, 4)});
     std::uint8_t const body_string[] = {'h', 'i', 0x00};
     std::uint32_t const payload_len =
         static_cast<std::uint32_t>(1 + 4 + 8 + sizeof(body_string));
@@ -371,8 +406,40 @@ TEST(BlockReader, parses_abs_timestamp_string_with_null_strip) {
     EXPECT_EQ(v[0].second, "hi");
 }
 
-TEST(BlockReader, parses_abs_timestamp_binary_jpeg_magic) {
+TEST(BlockReader, parses_abs_timestamp_binary_osf5_keeps_trailing_null_byte) {
+    // OSF5 reader: a trailing 0x00 in a binary payload is a real data
+    // byte (ASN.1 blob, protobuf message, ...). The reader keeps it
+    // verbatim.
     auto meta = make_meta({make_channel(0, osf::DataType::Binary, 4)});
+    std::uint8_t const body[] = {0xFF, 0xD8, 0xFF, 0xE0, 0x00};
+    std::uint32_t const payload_len =
+        static_cast<std::uint32_t>(1 + 4 + 8 + sizeof(body));
+    std::vector<std::uint8_t> bytes;
+    put_u16(bytes, 0);
+    put_u32(bytes, payload_len);
+    bytes.push_back(0x88);
+    put_u32(bytes, 1);
+    put_i64(bytes, 123);
+    bytes.insert(bytes.end(), body, body + sizeof(body));
+    ByteStream s(std::move(bytes));
+    osf::BlockReader r(s.get(), meta);
+    auto blk_r = r.next();
+    ASSERT_TRUE(blk_r && blk_r->has_value());
+    auto const& ad = std::get<osf::AbsTimestampData>((*blk_r)->kind);
+    auto const& v = std::get<std::vector<std::pair<std::int64_t,
+                                                   std::vector<std::uint8_t>>>>(
+        ad.samples);
+    ASSERT_EQ(v.size(), 1u);
+    EXPECT_EQ(v[0].first, 123);
+    EXPECT_EQ(v[0].second,
+              (std::vector<std::uint8_t>{0xFF, 0xD8, 0xFF, 0xE0, 0x00}));
+}
+
+TEST(BlockReader, parses_abs_timestamp_binary_osf4_strips_trailing_null_byte) {
+    // OSF4 reader: the spec-mandated trailing 0x00 is the terminator
+    // and is removed before the payload reaches the manager. JPEG
+    // magic + null on disk -> JPEG magic only after strip.
+    auto meta = make_meta_v4({make_channel(0, osf::DataType::Binary, 4)});
     std::uint8_t const body[] = {0xFF, 0xD8, 0xFF, 0xE0, 0x00};
     std::uint32_t const payload_len =
         static_cast<std::uint32_t>(1 + 4 + 8 + sizeof(body));
