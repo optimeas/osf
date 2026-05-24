@@ -11,31 +11,6 @@ section (or open a new section if none fits).
 
 ---
 
-## Spec Extensions / Future Format Revisions
-
-### OSF6 (or future spec revision): null-terminator handling for string/binary
-
-The trailing `0x00` byte on `string` and `binary` payloads in
-`bcAbsTimeStampData` (mandatory in OSF4 and OSF5 per spec rev
-2026-05-04) is a historical artefact from C-style string handling.
-For binary payloads in particular it is an awkward fit: a JPEG file
-ending in `0xD9 0xFF` becomes `0xD9 0xFF 0x00` on disk, and readers
-that fail to strip the trailing byte produce invalid JPEGs.
-
-Making the null-terminator optional in OSF5 was considered and
-rejected: without a flag bit in the control byte, readers cannot
-distinguish a deliberately-trailing `0x00` (e.g. inside an ASN.1
-binary payload) from a spec-mandated terminator. Such a flag bit
-would be a true spec change requiring all implementations to be
-revised, with marginal payload savings (one byte per string or
-binary sample).
-
-A future spec revision (OSF6 or similar) could remove the trailing
-byte entirely, with a clear version-bump signalling the format
-change. Until then, the byte stays in both OSF4 and OSF5.
-
----
-
 ## Documentation Strategy
 
 ### Multi-language documentation system (after Java implementation)
@@ -150,25 +125,6 @@ is not worth carrying.
 Triggers for action: profiling on a representative workload shows
 the I/O path is the bottleneck; or a connector implementation
 explicitly needs random access into multi-GB OSF files.
-
-### Delphi-Writer multi-sample string/binary uses non-spec layout
-
-The Delphi writer's `WriteTimestampedBlock` for `string` and `binary`
-channels can emit multi-sample blocks with a per-sample `uint32`
-length prefix between samples
-(`implementations/delphi/src/OSF.Filer.pas:593-602`). This layout is
-not part of the spec and not understood by the Rust or C++ readers,
-which expect either equal-length segments or one sample per block.
-
-In practice, Delphi writers nearly always emit one sample per block
-for variable-length types, so the incompatibility is latent. But a
-Delphi-produced file that genuinely contains multi-sample string or
-binary blocks would parse incorrectly on Rust and C++ readers.
-
-Future action: align the Delphi writer with the Rust/C++ convention
-(one sample per block for `string` and `binary`). The Delphi fix is
-planned as part of a broader Delphi-implementation maintenance pass
-that follows the OSF4/OSF5 spec update.
 
 ---
 
