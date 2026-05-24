@@ -10,7 +10,7 @@ when deeper context is needed.
 | Working dir | `V:\github\osf` (Windows) |
 | Latest tag | **v0.2.0** (2026-05-05) |
 | Branch | `main` |
-| Spec revision in effect | **2026-05-04** |
+| Spec revision in effect | **2026-05-24** |
 
 ---
 
@@ -26,7 +26,7 @@ metablock, simplified control byte, no trailer). Backward-compatible.
 
 ---
 
-## Spec revision 2026-05-04 — what changed
+## Spec revisions 2026-05-04 + 2026-05-24 — what changed
 
 **Removed datatypes and channel parameters** (readers reject them with a clear
 "removed" error; do not silently fall back):
@@ -45,13 +45,41 @@ metablock, simplified control byte, no trailer). Backward-compatible.
   start timestamp (OSF4 + OSF5)
 - Multiple `bcStartData` blocks per channel are explicit. Each opens a new
   segment. Equidistant data types are limited to `float` and `double`.
-- `string` and `binary` payloads in `bcAbsTimeStampData` end with a trailing
-  `0x00` byte (uniform OSF4 + OSF5). Writer appends; reader strips. The byte
-  is included in the per-value `uint32` length on multi-sample blocks.
+- `string` and `binary` payloads in `bcAbsTimeStampData` are null-terminated
+  in **OSF4** (writer MUST append the trailing `0x00`, reader MUST strip the
+  last byte unconditionally) and **not** null-terminated in **OSF5** (writer
+  MUST NOT append, reader MUST NOT strip). Version-deterministic — no
+  strip-if-present heuristic. See `docs/{en,de}/osf_general.md` for the full
+  rule. The rule was originally introduced as uniform-append in 2026-05-04
+  and tightened to version-deterministic in 2026-05-24.
 
 Magic header legacy identifiers documented across all four spec docs:
 `OSF4`, `OSF5`, **`OCEAN_STREAM_FORMAT4`** (still emitted by deployed
 devices), `OCEAN_STREAMING_FORMAT4` (older).
+
+### Spec rev 2026-05-24 — clarifications and tightenings
+
+Three follow-ons to the 2026-05-04 revision landed on 2026-05-24:
+
+- **Bit 7 of the control byte is uniformly optional.** The earlier wording
+  said Bit 7 "must be set" for `bcAbsTimeStampData` with string/binary; the
+  new rule is type-agnostic — Bit 7 = 0 means implicit N=1 (no `uint32`
+  N-prefix), Bit 7 = 1 means explicit N via `uint32` prefix. Saves four
+  bytes per single-sample block.
+- **Null-terminator on string/binary `bcAbsTimeStampData` is
+  version-deterministic.** OSF4 keeps the trailing `0x00` (writer MUST
+  append, reader MUST strip); OSF5 omits it entirely (writer MUST NOT
+  append, reader MUST NOT strip). Replaces the strip-if-present
+  heuristic — eliminates the ambiguity for OSF5 binary payloads that
+  legitimately end in `0x00` (ASN.1 blobs, protobuf messages,
+  null-terminated strings stored as binary).
+- **Delphi multi-sample variable-length writer layout removed.** The
+  historical Delphi-only multi-sample form for string/binary used a
+  per-sample `uint32` length prefix between samples (never parsed by
+  the Rust or C++ readers). The Delphi writer now auto-splits N>1
+  variable-length calls into N single-sample blocks; the Delphi reader
+  logs a warning and skips any non-spec multi-sample variable-length
+  block it encounters.
 
 ---
 
@@ -110,7 +138,7 @@ osf/
 | `OSF.Types` | `TOSFDataType` (only current types — pair/triple/candata/gpsdata are gone), `TOSFVersion`, `TOSFGpsLocation`, `TBlockContent`, helpers (`OSFDataTypeFromString`, `OSFNowAsUnixNs`, …) |
 | `OSF.Log` | `TOSFLogEvent`, `TOSFLogLevel`, `TOSFLoggable` |
 | `OSF.Channel` | `TOSFChannelDef` — has `SampleRate: Double`; no longer has `Scale`, `Offset`, `PhysicalUnit1..3`, `PhysicalDimension1..3` |
-| `OSF.Filer` | `TOSFFile` — streaming reader/writer for OSF4 and OSF5. `WriteEquidistantBlock(...)` requires `Channel.SampleRate > 0` and a non-zero `FirstTimestampNs` to start a new segment. `WriteTimestampedSample/Block/Doubles` for timestamped channels. Auto-appends/strips the `0x00` for `string`/`binary`. Adds an optional read-side `ChannelFilter: TArray<string>` (skips blocks of channels not in the list — info blocks always pass through). Transparent **OSFZ (gzip) decompression**: `OpenForRead` peeks the `1F 8B` magic and wraps the stream in `TZDecompressionStream`. OSF4 XML metablock is parsed via **OmniXML** (`GetDOMVendor(sOmniXmlVendor)`) so reads no longer need MSXML installed. |
+| `OSF.Filer` | `TOSFFile` — streaming reader/writer for OSF4 and OSF5. `WriteEquidistantBlock(...)` requires `Channel.SampleRate > 0` and a non-zero `FirstTimestampNs` to start a new segment. `WriteTimestampedSample/Block/Doubles` for timestamped channels. Version-deterministic `0x00` handling for `string`/`binary` in `bcAbsTimeStampData` per spec rev 2026-05-24: writer appends and reader strips for OSF4, both leave the payload verbatim for OSF5. Variable-length `WriteTimestampedBlock` calls with N>1 are auto-split into N single-sample blocks (the historical multi-sample per-sample-uint32-length-prefix layout was removed). Adds an optional read-side `ChannelFilter: TArray<string>` (skips blocks of channels not in the list — info blocks always pass through). Transparent **OSFZ (gzip) decompression**: `OpenForRead` peeks the `1F 8B` magic and wraps the stream in `TZDecompressionStream`. OSF4 XML metablock is parsed via **OmniXML** (`GetDOMVendor(sOmniXmlVendor)`) so reads no longer need MSXML installed. |
 | `OSF.Data.Channels` | Typed in-memory channels. **`TOSFEquidistantDataChannel.Segments: TList<TOSFChannelSegment>`** maps the flat `Values` list onto absolute time — every `bcStartData` opens a new segment with `(StartTimestampNs, StartIndex, SampleCount)`. |
 | `OSF.Data.Manager` | `TOSFDataManager.LoadFromFile/Stream` — high-level read; populates typed channels. Pass-through `ChannelFilter: TArray<string>` forwarded to the internal `TOSFFile`; excluded channels get no `TOSFDataChannel` at all. |
 | `OSF.Export` | `TOSFExporter` abstract base (`ExcludeEmptyChannels`, `AbsoluteTimestamps`) |
@@ -132,9 +160,11 @@ them. The runtime itself is never committed; `dataformats/hdf5/lib/install-hdf5.
 fetches HDF5 1.14.4-3 from the HDF Group.
 
 **`OSFCompileCheck.dpr`** at the implementation root is a no-form `uses`-only
-program covering every `OSF.*` unit (including `OSF.Meta.Cache` and
-`OSF.Merger`); running `dcc32 -B OSFCompileCheck.dpr` from
-`implementations/delphi/` gives a clean compile signal after refactors.
+program covering every `OSF.*` unit in `src/` except the Windows-only
+`OSF.Export.HDF5` and its `src/hdf5/` wrapper cluster (those are exercised
+by the osftool project that links them explicitly). Running
+`dcc32 -B -Q OSFCompileCheck.dpr` from `implementations/delphi/` gives a
+clean compile signal after refactors.
 
 ---
 
@@ -143,7 +173,7 @@ program covering every `OSF.*` unit (including `OSF.Meta.Cache` and
 | Demo | Purpose |
 |---|---|
 | `demos/osfviewer/` | Loads an OSF file, lists channels, renders selected channel as a TeeChart. Uses TeeChart units — only builds inside the IDE (search path defined in the .dproj). |
-| `demos/osfgenerator/` | Writes the 17-file reference set (8 OSF4 + 9 OSF5) into `examples/generated/`. Form has output-dir picker, OSF4/OSF5 toggles, samples-per-channel spinedit, log memo. |
+| `demos/osfgenerator/` | Writes the 17-file reference set (8 OSF4 + 9 OSF5) into `examples/generated/`. Form has output-dir picker, OSF4/OSF5 toggles, samples-per-channel spinedit, log memo. Console companion `OSFGeneratorCLI.dpr` (`dcc32 -B -Q OSFGeneratorCLI.dpr`) generates the same set non-interactively for CI / regen sessions — `OSFGeneratorCLI [output-dir] [samples-per-channel]`, defaults match the GUI (samples = 100). |
 | `demos/osfcsvexport/` | Pipeline demo: `TOSFFile` → `TOSFDataManager` → `TOSFCSVExporter`. Exposes the four exporter options + a debug toggle. |
 | `demos/osfmerger/` | VCL front-end for `TOSFMerger` (`OsfMerger.exe`, Win64). PageControl with directory-scan / explicit-file-list tabs, channel-filter memo, overlap + output-format options, scan/merge/save actions, found-files and merge-result list views, debug toggle + log memo. |
 
@@ -225,7 +255,7 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
 | `stats` | `ReaderStats` with file/section sizes, elapsed, channels and per-reason block counters, plus `per_channel: HashMap<u16, ChannelStats>` (segments, samples_total, time_range_ns); `Display` impls for both |
 | `data_channel` | `Channel` enum (`Equidistant` / `Timestamped` / `Variable`), per-variant typed structs, `Segment`, `ChannelMeta`, `NumericValues`; `samples_with_time()` iterators yielding `Sample<NumericValueRef<'_>>` / `Sample<VariableValueRef<'_>>`; `as_doubles_flat` etc. helpers |
 | `manager` | `DataManager` — `load_from_file(path)` / `load_from_reader(R)` build the typed channel list, expose `channel(name)` (mandatory per DECISIONS §10) and `channel_by_index(u16)` (optional). Internal `build_channels` runs the per-channel builder state machine (Pending → Equidistant or Timestamped on first typed block; Variable upfront for string/binary). |
-| `binary_write` | Crate-private little-endian write helpers (symmetric to `byteorder::ReadBytesExt`); `write_string_with_terminator` / `write_binary_with_terminator` append the spec-mandated `0x00` |
+| `binary_write` | Crate-private little-endian write helpers (symmetric to `byteorder::ReadBytesExt`). Variable-length payloads (`string`, `binary`) are written via `Write::write_all` directly — no terminator appended (OSF5 writer per spec rev 2026-05-24). |
 | `writer` | `WriterBuilder` — accumulator with `add_channel`, 2 equidistant + 12 timestamped + 2 variable `add_*` methods. `write_to_file(path)` / `write_to(W)` emit OSF5; `from_manager(&DataManager)` builds a builder from a loaded manager. Module-level `writer::write_to_file(&DataManager, path)` is the round-trip convenience |
 | `compression` | `MaybeCompressed<R>` enum (Plain / Zlib / Gzip) + `detect_and_wrap<R>(reader)`; transparent OSFZ detection by leading two bytes (gzip `0x1F 0x8B` or zlib `0x78 0x01/5E/9C/DA`). Pure-Rust via `flate2 + miniz_oxide` |
 | `lib` | top-level `parse_metablock(version, &[u8])` dispatcher and `read_file(path) -> (MetaBlock, Vec<Block>, ReaderStats)` convenience |
@@ -271,7 +301,9 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
   `stats.trailer_seen` flips to `true`.
 - All four supported control bytes (5/6/7/8) parse to typed payloads
   via `byteorder` little-endian primitives. String / binary blocks
-  strip the trailing `0x00` per spec rev 2026-05-04 and try
+  handle the trailing `0x00` version-deterministically per spec rev
+  2026-05-24 — OSF4 strips the last byte unconditionally, OSF5 leaves
+  the payload verbatim. Multi-sample variable-length blocks try
   equal-length splitting for `N>1`, falling back to single-sample on
   uneven body lengths with a `log::warn!`.
 
@@ -321,7 +353,8 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
   `sizeoflengthvalue`. Reader merges them back transparently.
 - Timestamped numeric blocks: `bcAbsTimeStampData` with the
   multi-sample bit set; chunked by `sizeoflengthvalue`.
-- Variable (string / binary) blocks: one sample per block per spec.
+- Variable (string / binary) blocks: one sample per block per spec; no
+  trailing `0x00` byte (OSF5 writer per spec rev 2026-05-24).
   `sizeoflengthvalue` auto-bumps from 2 → 4 when a single sample
   would overflow the u16 length field; logged at debug level.
 - File metadata defaults from DECISIONS §13: `created_utc` set to
@@ -352,7 +385,7 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
   `Compressed: yes (gzip)` line when applicable.
 - Writer side: never produces OSFZ output (DECISIONS §12 unchanged).
 
-**Tests:** 123 unit tests across `header.rs`, `meta.rs`, `meta_json.rs`,
+**Tests:** 122 unit tests across `header.rs`, `meta.rs`, `meta_json.rs`,
 `meta_xml.rs`, `block.rs`, `reader.rs`, `stats.rs`, `data_channel.rs`,
 `manager.rs`, `binary_write.rs`, `writer.rs`, `compression.rs`. Six
 integration suites:
@@ -474,7 +507,7 @@ enough that the Arc-Channel optimisation is not needed yet.
 
 ## C++ implementation — current state
 
-Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
+Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Reader updated for the version-deterministic null-terminator rule on 2026-05-24. Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
 Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, both OSF4 + OSF5 metablock parsers, the block-stream reader (with `ReaderStats`), and the typed `DataManager` are in place; the OSF5 writer arrives in Phase 7.
 
 **Library targets:**
@@ -522,7 +555,7 @@ Standalone C++17 implementation, parallel to the Rust core — not a port from C
 | `tests/unit/test_metablock_xml.cpp` | 20 unit tests for `parse_metablock_xml`: minimal + full channel + infos round-trip, short-form / long-form geolocation, `bytearray` alias, `count` mismatch tolerance, deprecated `scale`/`offset` tolerated, unknown attribute ignored, negative cases (removed datatype, wrong root, malformed XML, every required-attribute-missing case, invalid `sizeoflengthvalue`, channel-index out-of-u16-range, non-numeric `timeincrement`), overload-agreement, null-pointer edge cases |
 | `tests/unit/test_block.cpp` | 7 unit tests covering payload `len()` helpers (numeric / timestamped / rel-timestamped, including string / binary / GpsLocation), `decode_control_byte` for every documented value plus the multi-sample bit and unknown-byte fallback, `GpsLocation` equality, default `Skipped::payload` is `nullopt` |
 | `tests/unit/test_stats.cpp` | 6 unit tests for `ChannelStats::observe_timestamp` (two-sided growth), `format_bytes` (unit thresholds), `format_duration` (ms / s split), `compression_format_name`, and the two ostream overloads |
-| `tests/unit/test_reader.cpp` | 22 BlockReader unit tests against synthetic byte sequences (port of the Rust reader suite): empty stream, three truncation paths (channel-index / length-field / mid-payload), unknown-channel-index hard error, `Unsupported`-channel skip with stream alignment, capture-skipped opt-in, deprecated control bytes 1/3/4, unknown high control byte 0x55, every typed parser (single + multi for AbsTs int64 / double, StartData double + float-N10, ContinuedData int16-N4, AbsTs string with null-strip, AbsTs binary, AbsTs gpslocation, ContinuedRelStampData int16), `InvalidBlock` for equidistant-on-string, trailer consumption, range-based-for iteration |
+| `tests/unit/test_reader.cpp` | 24 BlockReader unit tests against synthetic byte sequences (port of the Rust reader suite): empty stream, three truncation paths (channel-index / length-field / mid-payload), unknown-channel-index hard error, `Unsupported`-channel skip with stream alignment, capture-skipped opt-in, deprecated control bytes 1/3/4, unknown high control byte 0x55, every typed parser (single + multi for AbsTs int64 / double, StartData double + float-N10, ContinuedData int16-N4, AbsTs string version-deterministic-strip in both OSF5 and OSF4, AbsTs binary version-deterministic-strip in both OSF5 and OSF4, AbsTs gpslocation, ContinuedRelStampData int16), `InvalidBlock` for equidistant-on-string, trailer consumption, range-based-for iteration |
 | `tests/unit/test_data_channel.cpp` | 11 unit tests for the typed channel model: `NumericValues` data-type detection and `empty_for` (returns `std::nullopt` for variable + Unsupported); equidistant `samples_vector` with single segment, three segments without interpolation between them, empty channel; flat-access mismatch returns `DataTypeMismatch`; timestamped `samples_vector` pairs correctly + flat-access works; variable string + binary channels collect values + `as_strings` / `as_binaries` mismatch handling; common `DataChannel` accessors per variant |
 | `tests/unit/test_manager.cpp` | 13 DataManager unit tests driving the builder through synthetic in-memory OSF5 streams: one-start-plus-continued = one-segment, two-starts = two-segments, start-then-abs-ts = `ChannelMixedBlockTypes`, continued-without-start = `ContinuedDataWithoutStart`, abs-int32 builds Timestamped, rel-stamp-after-abs extends cumulatively, rel-stamp-without-anchor = `RelStampWithoutAnchor`, variable-string collects strings, Unsupported channel dropped from output, name + index lookups, gzip / zlib magic produce the Phase-8 stub error |
 | `third_party/tl-expected/` | Vendored TartanLlama/expected v1.3.1 (`tl/expected.hpp` + `LICENSE`, CC0 1.0) |
@@ -548,7 +581,7 @@ ctest --test-dir build
 - Toolchain: MSVC 19.50.35730, Visual Studio 18 generator, CMake 4.2.3.
 - `cmake -B build` configures with **0 CMake warnings** (CMP0135 set to NEW explicitly via `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE`).
 - `cmake --build` produces `osf.lib` plus fifteen test executables with **0 compile warnings** under `/W4 /permissive-` (the vendored `pugixml.cpp` is built with `/W0` since it is treated as binary-identical to upstream).
-- `ctest` reports **153/153 passed in 5.52 s** (Phase 1–5 suites unchanged at 124; Phase 6 adds 11 data-channel-unit + 13 manager-unit + 7 manager-integration; the manager-integration suite internally exercises every `.osf` under `examples/generated/` plus the `motorbike.osf` and `steam_loco.osf` field samples, and the `weather_station.osfz` Phase-8 stub).
+- `ctest` reports **157/157 passed in ~5.5 s** (Phase 1–5 suites unchanged at 124; Phase 6 adds 11 data-channel-unit + 13 manager-unit + 7 manager-integration; the 2026-05-24 reader refactor split two AbsTs string/binary unit tests into four version-pinned cases for +2; the manager-integration suite internally exercises every `.osf` under `examples/generated/` plus the `motorbike.osf` and `steam_loco.osf` field samples, and the `weather_station.osfz` Phase-8 stub).
 
 **Constraints:**
 
