@@ -281,7 +281,7 @@ Integrations (Arrow, PyTorch, TensorFlow, MCP, LangChain) follow after the Pytho
 - Removed: `scale`, `offset`, `physicalunit1`, `physicalunit2`, datatypes `pair`, `triple`, `candata`.
 - Renamed: datatype `gpsdata` → `gpslocation`. Field order fixed to `latitude`, `longitude`, `altitude`.
 - Added: unsigned integer datatypes `uint8`–`uint64`.
-- Clarified: `string` and `binary` in `bcAbsTimeStampData` are null-terminated for both OSF4 and OSF5. Readers must strip the trailing null byte. This matches existing device behavior and is therefore non-negotiable.
+- Clarified: `string` and `binary` payloads in `bcAbsTimeStampData` are null-terminated in **OSF4** (writer must append, reader must strip the last byte unconditionally) and **not** null-terminated in **OSF5** (writer must not append, reader must not strip). The rule is version-deterministic; no detection or strip-if-present heuristic is used. See [`docs/en/osf_general.md`](docs/en/osf_general.md#note-on-null-termination-of-string-and-binary) for the full rationale.
 - Added: `bytearray` as alias for `binary` (read-side).
 - Added: `bcStartData` carries sample rate as `double` and may appear multiple times per channel (OSF4 + OSF5).
 - Documentation split into `docs/en/` (default) and `docs/de/`. Structure prepared for future spec documents (e.g. `vector_matrix.md`).
@@ -665,9 +665,12 @@ and C++ for the spec revision in effect:
   replacement. No silent fallback.
 - `bytearray` is accepted on read as an alias for `binary`; writer always
   emits `binary`.
-- `string` and `binary` payloads in `bcAbsTimeStampData` end with a
-  trailing `0x00` byte. Writer appends, reader strips. Uniform for OSF4
-  and OSF5.
+- `string` and `binary` payloads in `bcAbsTimeStampData` are
+  null-terminated in OSF4 (writer appends, reader strips the last byte
+  unconditionally) and not null-terminated in OSF5 (writer must not
+  append, reader must not strip). The rule is version-deterministic;
+  see [`docs/en/osf_general.md`](docs/en/osf_general.md#note-on-null-termination-of-string-and-binary)
+  for the full rationale.
 - All four magic header identifiers are accepted on read (`OSF4`, `OSF5`,
   `OCEAN_STREAM_FORMAT4`, `OCEAN_STREAMING_FORMAT4`).
 - Equidistant data channels: spec restricts to `float` and `double`;
