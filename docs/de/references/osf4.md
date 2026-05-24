@@ -133,15 +133,15 @@ Alle Parameter wie in der allgemeinen OSF-Doku beschrieben, für OSF4 gilt:
 | `uint64`    | 8 Byte   | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 18 446 744 073 709 551 615 |
 | `float`     | 4 Byte   | IEEE 754 Single Precision |
 | `double`    | 8 Byte   | IEEE 754 Double Precision |
-| `string`    | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert. Kann optional mit einem abschließenden Nullbyte (`0x00`) versehen sein – siehe [`osf_general.md`](../osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary) für versions-abhängige Schreiber-/Leser-Regeln. |
+| `string`    | variabel | UTF-8 kodiert, Länge durch Blockgröße definiert. Wird auf Disk immer mit einem abschließenden Nullbyte (`0x00`) versehen – siehe [`osf_general.md`](../osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary) für die versions-abhängigen Schreiber-/Leser-Regeln. |
 | `gpslocation` | 24 Byte | Struktur für GPS-Positionen |
 
 ## Stringterminierung
 
 Für `bcAbsTimeStampData` mit `datatype=string` oder `datatype=binary` in OSF4:
 
-- **Schreiber** dürfen Payloads mit oder ohne abschließendes Nullbyte (`0x00`) schreiben. Bestehende OSF4-Schreiber, die das Nullbyte emittieren, bleiben spec-konform. Neue OSF4-Schreiber dürfen es weglassen, um vier Bytes pro Sample zu sparen.
-- **Leser** müssen ein abschließendes `0x00` entfernen, falls vorhanden.
+- **Schreiber MÜSSEN** jeder Nutzlast ein abschließendes Nullbyte (`0x00`) anhängen.
+- **Leser MÜSSEN** das letzte Byte der Nutzlast bedingungslos entfernen — das Byte ist garantiert vorhanden.
 
 Siehe [`osf_general.md`](../osf_general.md#hinweis-zur-nullterminierung-von-string-und-binary) für die Begründung und die vollständige Multi-Versions-Regel.
 

@@ -282,24 +282,27 @@ Der Parameter `datatype` legt das Datenformat der Werte eines Kanals fest. Jeder
 | `uint64`  | 8             | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 18 446 744 073 709 551 615                                                                                |
 | `float`   | 4             | IEEE 754 Single Precision                                                                                                                            |
 | `double`  | 8             | IEEE 754 Double Precision                                                                                                                            |
-| `string`  | variabel      | UTF-8 kodiert, Länge durch Blockgröße definiert. Kann optional mit einem abschließenden Nullbyte (`0x00`) versehen sein – siehe Hinweisblock unten für versions-abhängige Regeln. |
-| `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen für Bild-, Audio- oder andere Binärdaten mit MIME-Type. Die maximale Länge des Blocks wird durch das `sizeoflengthvalue`-Feld des Kanals bestimmt. Kann optional mit einem abschließenden Nullbyte (`0x00`) versehen sein – siehe Hinweisblock unten für versions-abhängige Regeln. |
+| `string`  | variabel      | UTF-8 kodiert, Länge durch Blockgröße definiert. Auf Disk: bei OSF4 mit abschließendem Nullbyte (`0x00`), bei OSF5 ohne abschließendes Byte – siehe Hinweisblock unten für die Regeln. |
+| `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen für Bild-, Audio- oder andere Binärdaten mit MIME-Type. Die maximale Länge des Blocks wird durch das `sizeoflengthvalue`-Feld des Kanals bestimmt. Auf Disk: bei OSF4 mit abschließendem Nullbyte (`0x00`), bei OSF5 ohne abschließendes Byte – siehe Hinweisblock unten für die Regeln. |
 | `gpslocation` | 24        | Struktur für GPS-Positionen (siehe unten)                                                                                                            |
 
 > **Hinweis zu Integer-Typen:** Integer-Werte (`int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) werden in OSF-Dateien typischerweise für **Zustände, Statusinformationen oder Zählerwerte** verwendet, nicht als skalierte Rohwerte einer physikalischen Größe. Aus diesem Grund kennt OSF bewusst **keine** `scale`/`offset`-Parameter zur Umrechnung in physikalische Werte – physikalische Größen werden direkt als `float` oder `double` gespeichert.
 
 <a name="hinweis-zur-nullterminierung-von-string-und-binary"></a>
 > **Hinweis zur Nullterminierung von `string` und `binary`:**
-> Das abschließende `0x00`-Byte bei `string`- und `binary`-Payloads in `bcAbsTimeStampData` ist eine historische Altlast aus der Qt-`QString`-Serialisierung in den ursprünglichen Optimeas-Geräten. Die Blocklänge ist durch das `sizeoflengthvalue`-Feld bereits eindeutig bestimmt, ein Null-Terminator als Sentinel ist redundant. Bei Binärdaten ist es eine aktive Stolperfalle: ein Reader, der das Byte nicht entfernt, produziert ungültige Ausgaben (z. B. eine JPEG-Datei mit angehängtem `0x00` ist keine gültige JPEG mehr).
+> Das abschließende `0x00`-Byte bei `string`- und `binary`-Payloads in `bcAbsTimeStampData` ist eine historische Altlast aus der Qt-`QString`-Serialisierung in den ursprünglichen Optimeas-Geräten. Die Blocklänge ist durch `sizeoflengthvalue` bereits eindeutig bestimmt, ein Null-Terminator als Sentinel ist redundant. Bei Binärdaten ist es eine aktive Stolperfalle: ein Leser, der das Byte nicht entfernt, produziert ungültige Ausgaben (eine JPEG-Datei mit angehängtem `0x00` ist keine gültige JPEG mehr). Umgekehrt schneidet ein Leser, der auf einer OSF5-Binärnutzlast ohne Terminator (ein ASN.1-Blob, der legitim auf `0x00` endet, eine Protobuf-Nachricht, ein als Binary gespeicherter null-terminierter String) ein Byte abschneidet, ein echtes Datenbyte ab. Die Regel ist deshalb an die On-Disk-Versionsnummer geknüpft, damit weder Schreiber noch Leser raten müssen.
 >
-> **Versions-abhängige Schreiber-Regeln:**
+> **OSF4:**
 >
-> - **OSF4-Schreiber** dürfen Payloads mit oder ohne abschließendes Nullbyte schreiben. Bestehende OSF4-Schreiber, die das Nullbyte emittieren, bleiben spec-konform. Neue OSF4-Schreiber dürfen es weglassen, um vier Bytes pro `string`- oder `binary`-Sample zu sparen.
-> - **OSF5-Schreiber** dürfen kein abschließendes Nullbyte mehr anhängen. Die Payload endet am letzten Datenbyte; `sizeoflengthvalue` definiert die exakte Länge.
+> - **Schreiber MÜSSEN** nach jeder `string`- und `binary`-Nutzlast in `bcAbsTimeStampData` ein einzelnes abschließendes `0x00`-Byte anhängen.
+> - **Leser MÜSSEN** das letzte Byte der Nutzlast bedingungslos entfernen — das Byte ist garantiert vorhanden.
 >
-> **Leser-Regel (sowohl OSF4 als auch OSF5):** Ist das letzte Byte des Datenfelds `0x00`, ist es vor der Weiterverarbeitung zu entfernen. Andernfalls wird die volle aufgezeichnete Payload verwendet. Diese einzige Härtungsregel deckt alle Schreiber-Varianten und den spec-versionierten Übergang ab.
+> **OSF5:**
 >
-> Die effektive Nutzlänge ist daher: Blocklänge des Datenfelds, minus 1 Byte falls ein abschließendes `0x00` vorhanden ist.
+> - **Schreiber DÜRFEN KEIN** abschließendes Byte anhängen. Die Nutzlast endet am letzten Datenbyte; `sizeoflengthvalue` definiert die exakte Länge.
+> - **Leser DÜRFEN KEIN** abschließendes Byte entfernen. Ein abschließendes `0x00` wird als reguläres Datenbyte behandelt.
+>
+> Die effektive Nutzlänge ist daher: Blocklänge bei OSF5, Blocklänge minus ein Byte bei OSF4. Es gibt keine Heuristik und keinen Sentinel-Erkennungsschritt.
 
 #### Struktur `gpslocation`
 
@@ -627,12 +630,12 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
 - **Beispiel `datatype=int16`:**[uint32 N] [int64 Zeit1] [int16 Wert1] [int64 Zeit2] [int16 Wert2] ...
 - **Beispiel `datatype=double`:**[uint32 N] [int64 Zeit1] [double Wert1] [int64 Zeit2] [double Wert2] ...
 - **Beispiel `datatype=string`:**
-  - Strings werden als rohe UTF-8-Bytes gespeichert. Die effektive Stringlänge ergibt sich aus der Nutzlänge des Datenfelds abzüglich eines abschließenden Nullbytes, falls vorhanden (siehe den Hinweisblock oben zu versions-abhängigen Null-Terminator-Regeln).
+  - Strings werden als rohe UTF-8-Bytes gespeichert. Die effektive Stringlänge ergibt sich aus der Nutzlänge des Datenfelds, abzüglich eines Bytes bei OSF4 (das spec-vorgeschriebene abschließende `0x00`) oder der vollen Nutzlänge bei OSF5 (siehe den Hinweisblock oben für die vollständigen Regeln).
   - Einzel-Sample-Form (Bit 7 = 0, N implizit 1): [int64 Zeit] [UTF-8 Bytes des Strings]
   - Multi-Sample-Form (Bit 7 = 1) für variable-Längen-Typen ist nicht Teil des Standard-Wire-Formats; siehe Hinweis zu Multi-Sample-Blocks für variable Längen unten.
 
 - **Beispiel `datatype=binary`:**
-  - Binärdaten werden als Rohbytes geschrieben. Der `mimetype` im Kanal definiert die Interpretation. Die effektive Payload-Länge ist die Nutzlänge des Datenfelds abzüglich eines abschließenden Nullbytes, falls vorhanden (siehe den Hinweisblock oben zu versions-abhängigen Null-Terminator-Regeln).
+  - Binärdaten werden als Rohbytes geschrieben. Der `mimetype` im Kanal definiert die Interpretation. Die effektive Payload-Länge ist die Nutzlänge des Datenfelds, abzüglich eines Bytes bei OSF4 (das spec-vorgeschriebene abschließende `0x00`) oder der vollen Nutzlänge bei OSF5 (siehe den Hinweisblock oben für die vollständigen Regeln).
   - Einzel-Sample-Form (Bit 7 = 0, N implizit 1): [int64 Zeit] [Byte1] [Byte2] ... [Byte M]
   - Multi-Sample-Form (Bit 7 = 1) für variable-Längen-Typen ist nicht Teil des Standard-Wire-Formats; siehe Hinweis zu Multi-Sample-Blocks für variable Längen unten.
 
@@ -671,7 +674,7 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
 
 - **Zeitgestempelte Kanäle (bcAbsTimeStampData, bcContinuedRelStampData):**
   - Unterstützen alle Datentypen.
-  - Strings und Binärdaten können optional ein abschließendes Nullbyte (`0x00`) enthalten; siehe Hinweisblock zur Null-Byte-Behandlung für versions-abhängige Regeln. Leser entfernen das Byte, falls vorhanden.
+  - Strings und Binärdaten enthalten bei OSF4 ein abschließendes `0x00`-Byte (von Lesern entfernt) und bei OSF5 kein abschließendes Byte; siehe Hinweisblock zur Null-Byte-Behandlung für die deterministischen Regeln.
 
 #### Wichtige Punkte
 
@@ -685,7 +688,7 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
   - Nicht erkannte Blocktypen können anhand der Längenangabe übersprungen werden.
 
 - **Strings und Binärdaten:**
-  - Für `bcAbsTimeStampData` mit `datatype=string` oder `datatype=binary` ist das abschließende Nullbyte (`0x00`) **schreiberseitig versions-abhängig** und **vom Leser zu entfernen, falls vorhanden**. Siehe Hinweisblock zur Null-Byte-Behandlung für die vollständigen Regeln.
+  - Für `bcAbsTimeStampData` mit `datatype=string` oder `datatype=binary` ist das abschließende Nullbyte (`0x00`) **bei OSF4 immer vorhanden** (Schreiber muss anhängen, Leser muss entfernen) und **bei OSF5 niemals vorhanden** (Schreiber darf nicht anhängen, Leser darf nicht entfernen). Siehe Hinweisblock zur Null-Byte-Behandlung für die vollständigen Regeln.
   - Die Blocklänge ergibt sich aus `sizeoflengthvalue`.
   - Binärdaten verwenden `datatype=binary` plus `mimetype`.
 <br/>

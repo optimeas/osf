@@ -117,16 +117,16 @@ OSF5 supports the same data types as OSF4.
 | `uint64`   | 8 bytes  | Unsigned integer, range 0 … 18 446 744 073 709 551 615 |
 | `float`    | 4 bytes  | IEEE 754 single precision |
 | `double`   | 8 bytes  | IEEE 754 double precision |
-| `string`   | variable | UTF-8 encoded, length defined by block size. OSF5 writers store the payload without a trailing null byte; readers must still strip a trailing `0x00` if present, for migration from older OSF5 writers and from OSF4-compatible writers — see [`osf_general.md`](../osf_general.md#note-on-null-termination-of-string-and-binary). |
-| `binary` *(alias: `bytearray`)* | variable | Arbitrary byte sequences for image, audio, or other binary data with a MIME type. Maximum length is determined by `sizeoflengthvalue`. OSF5 writers store the payload without a trailing null byte; readers must still strip a trailing `0x00` if present, for migration from older OSF5 writers and from OSF4-compatible writers — see [`osf_general.md`](../osf_general.md#note-on-null-termination-of-string-and-binary). |
+| `string`   | variable | UTF-8 encoded, length defined by block size. OSF5 writers store the payload without a trailing null byte; OSF5 readers must not strip any trailing byte — see [`osf_general.md`](../osf_general.md#note-on-null-termination-of-string-and-binary). |
+| `binary` *(alias: `bytearray`)* | variable | Arbitrary byte sequences for image, audio, or other binary data with a MIME type. Maximum length is determined by `sizeoflengthvalue`. OSF5 writers store the payload without a trailing null byte; OSF5 readers must not strip any trailing byte — see [`osf_general.md`](../osf_general.md#note-on-null-termination-of-string-and-binary). |
 | `gpslocation` | 24 bytes | Structure for GPS positions |
 
 ## Null termination
 
 For `bcAbsTimeStampData` with `datatype=string` or `datatype=binary` in OSF5:
 
-- **Writers** must not append a trailing null byte (`0x00`). The payload ends at the last data byte; `sizeoflengthvalue` defines the exact length.
-- **Readers** must still strip a trailing `0x00` if present, for migration from older OSF5 writers and from OSF4-compatible writers.
+- **Writers MUST NOT** append a trailing null byte (`0x00`). The payload ends at the last data byte; `sizeoflengthvalue` defines the exact length.
+- **Readers MUST NOT** strip a trailing byte. A trailing `0x00` is treated as a regular data byte.
 
 See [`osf_general.md`](../osf_general.md#note-on-null-termination-of-string-and-binary) for the rationale.
 

@@ -282,24 +282,27 @@ The `datatype` parameter defines the data format of a channel's values. Each val
 | `uint64`  | 8             | Unsigned integer, range 0 … 18 446 744 073 709 551 615                                                                                               |
 | `float`   | 4             | IEEE 754 single precision                                                                                                                            |
 | `double`  | 8             | IEEE 754 double precision                                                                                                                            |
-| `string`  | variable      | UTF-8 encoded, length defined by block size. On disk may be followed by an optional trailing null byte (`0x00`) — see the note block below for version-dependent rules. |
-| `binary` *(alias: `bytearray`)* | variable | Arbitrary byte sequences for image, audio, or other binary data with a MIME type. The maximum block size is determined by the channel's `sizeoflengthvalue` field. On disk may be followed by an optional trailing null byte (`0x00`) — see the note block below for version-dependent rules. |
+| `string`  | variable      | UTF-8 encoded, length defined by block size. On disk: followed by a trailing null byte (`0x00`) in OSF4, no trailing byte in OSF5 — see the note block below for the rules. |
+| `binary` *(alias: `bytearray`)* | variable | Arbitrary byte sequences for image, audio, or other binary data with a MIME type. The maximum block size is determined by the channel's `sizeoflengthvalue` field. On disk: followed by a trailing null byte (`0x00`) in OSF4, no trailing byte in OSF5 — see the note block below for the rules. |
 | `gpslocation` | 24        | Structure for GPS positions (see below)                                                                                                              |
 
 > **Note on integer types:** Integer values (`int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) are typically used in OSF files for **states, status information, or counter values**, not as scaled raw values of a physical quantity. For this reason OSF deliberately has **no** `scale`/`offset` parameters for conversion to physical values — physical quantities are stored directly as `float` or `double`.
 
 <a name="note-on-null-termination-of-string-and-binary"></a>
 > **Note on null termination of `string` and `binary`:**
-> The trailing `0x00` byte on `string` and `binary` payloads in `bcAbsTimeStampData` is a historical artefact from the Qt `QString` serialisation used in the original Optimeas devices. The block length is already determined by the `sizeoflengthvalue` field, so a null-terminator as a sentinel is redundant. For binary payloads it is an active stumbling block: a reader that fails to strip the trailing byte produces invalid output (e.g. a JPEG file with a trailing `0x00` is no longer a valid JPEG).
+> The trailing `0x00` byte on `string` and `binary` payloads in `bcAbsTimeStampData` is a historical artefact from the Qt `QString` serialisation used in the original Optimeas devices. The block length is already determined by `sizeoflengthvalue`, so a null-terminator as a sentinel is redundant. For binary payloads it is an active stumbling block: a reader that leaves the trailing byte in place produces invalid output (a JPEG file with a trailing `0x00` is no longer a valid JPEG). Equally, a reader that strips a byte from an OSF5 binary payload that never had one (an ASN.1 blob that legitimately ends in `0x00`, a protobuf message, a null-terminated string stored as binary) cuts off a real data byte. The rule is therefore tied to the on-disk format version, so neither writers nor readers have to guess.
 >
-> **Version-dependent writer rules:**
+> **OSF4:**
 >
-> - **OSF4 writers** may write payloads with or without the trailing null byte. Existing OSF4 writers that emit the null byte remain spec-conforming. New OSF4 writers may omit it to save four bytes per `string` or `binary` sample.
-> - **OSF5 writers** must not append a trailing null byte. The payload ends at the last data byte; `sizeoflengthvalue` defines the exact length.
+> - **Writers MUST** append a single trailing `0x00` byte after every `string` and `binary` payload in `bcAbsTimeStampData`.
+> - **Readers MUST** strip the last byte of the payload unconditionally — the byte is guaranteed to be present.
 >
-> **Reader rule (both OSF4 and OSF5):** if the last byte of the data field is `0x00`, strip it before further processing the payload. Otherwise, use the full payload as recorded. This single hardening rule covers all writer variants and the spec-versioned transition.
+> **OSF5:**
 >
-> The effective payload length is therefore: block length of the data field, minus 1 byte if a trailing `0x00` is present.
+> - **Writers MUST NOT** append any trailing byte. The payload ends at the last data byte; `sizeoflengthvalue` defines the exact length.
+> - **Readers MUST NOT** strip any trailing byte. A trailing `0x00` is treated as a regular data byte.
+>
+> The effective payload length is therefore: block length in OSF5, block length minus one byte in OSF4. There is no heuristic and no sentinel-detection step.
 
 #### `gpslocation` structure
 
@@ -627,12 +630,12 @@ The following sections describe how values are stored for the various data types
 - **Example `datatype=int16`:** [uint32 N] [int64 Time1] [int16 Value1] [int64 Time2] [int16 Value2] ...
 - **Example `datatype=double`:** [uint32 N] [int64 Time1] [double Value1] [int64 Time2] [double Value2] ...
 - **Example `datatype=string`:**
-  - Strings are stored as raw UTF-8 bytes. The effective string length is the payload length of the data field, minus a trailing null byte if present (see the note block above for version-dependent null-terminator rules).
+  - Strings are stored as raw UTF-8 bytes. The effective string length is the payload length of the data field, minus one byte in OSF4 (the spec-mandated trailing `0x00`) or the full payload length in OSF5 (see the note block above for the full rules).
   - Single-sample form (bit 7 = 0, N implicit 1): [int64 Time] [UTF-8 bytes of the string]
   - Multi-sample form (bit 7 = 1) for variable-length types is not part of the standard wire format; see the note on multi-sample variable-length blocks below.
 
 - **Example `datatype=binary`:**
-  - Binary data is written as raw bytes. The channel's `mimetype` defines the interpretation. The effective payload length is the data field's payload length, minus a trailing null byte if present (see the note block above for version-dependent null-terminator rules).
+  - Binary data is written as raw bytes. The channel's `mimetype` defines the interpretation. The effective payload length is the data field's payload length, minus one byte in OSF4 (the spec-mandated trailing `0x00`) or the full payload length in OSF5 (see the note block above for the full rules).
   - Single-sample form (bit 7 = 0, N implicit 1): [int64 Time] [Byte1] [Byte2] ... [Byte M]
   - Multi-sample form (bit 7 = 1) for variable-length types is not part of the standard wire format; see the note on multi-sample variable-length blocks below.
 
@@ -671,7 +674,7 @@ The following sections describe how values are stored for the various data types
 
 - **Time-stamped channels (bcAbsTimeStampData, bcContinuedRelStampData):**
   - Support all data types.
-  - Strings and binary data may have an optional trailing null byte (`0x00`); see the note block on null-byte handling for version-dependent rules. Readers strip the byte if present.
+  - Strings and binary data carry a trailing `0x00` byte in OSF4 (stripped by readers) and no trailing byte in OSF5; see the note block on null-byte handling for the deterministic rules.
 
 #### Important points
 
@@ -685,7 +688,7 @@ The following sections describe how values are stored for the various data types
   - Unrecognized block types can be skipped using the length value.
 
 - **Strings and binary data:**
-  - For `bcAbsTimeStampData` with `datatype=string` or `datatype=binary`, the trailing null byte (`0x00`) is **version-dependent on the writer side** and **must be stripped by readers if present**. See the note block on null-byte handling for the full rules.
+  - For `bcAbsTimeStampData` with `datatype=string` or `datatype=binary`, the trailing null byte (`0x00`) is **always present in OSF4** (writer must append, reader must strip) and **never present in OSF5** (writer must not append, reader must not strip). See the note block on null-byte handling for the full rules.
   - The block length is determined by `sizeoflengthvalue`.
   - Binary data uses `datatype=binary` plus `mimetype`.
 <br/>
