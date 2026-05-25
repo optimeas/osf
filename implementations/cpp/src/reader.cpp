@@ -2,6 +2,8 @@
 
 #include <osf/reader.hpp>
 
+#include "binary_io.hpp"
+
 #include <cstring>
 #include <istream>
 #include <sstream>
@@ -40,60 +42,6 @@ Result<bool> stream_read_n(std::istream& s, void* dst, std::streamsize len) {
 }
 
 // ---------------------------------------------------------------------
-// Little-endian byte-by-byte decoders. The OSF wire format is LE on
-// every supported platform. Bit-pattern moves into float/double use
-// std::memcpy, which the compiler folds into a single load on every
-// modern toolchain (no aliasing/UB concerns).
-// ---------------------------------------------------------------------
-
-std::uint16_t le_u16(std::uint8_t const* p) noexcept {
-    return  static_cast<std::uint16_t>(p[0])
-         | (static_cast<std::uint16_t>(p[1]) << 8);
-}
-
-std::uint32_t le_u32(std::uint8_t const* p) noexcept {
-    return  static_cast<std::uint32_t>(p[0])
-         | (static_cast<std::uint32_t>(p[1]) << 8)
-         | (static_cast<std::uint32_t>(p[2]) << 16)
-         | (static_cast<std::uint32_t>(p[3]) << 24);
-}
-
-std::uint64_t le_u64(std::uint8_t const* p) noexcept {
-    return  static_cast<std::uint64_t>(p[0])
-         | (static_cast<std::uint64_t>(p[1]) << 8)
-         | (static_cast<std::uint64_t>(p[2]) << 16)
-         | (static_cast<std::uint64_t>(p[3]) << 24)
-         | (static_cast<std::uint64_t>(p[4]) << 32)
-         | (static_cast<std::uint64_t>(p[5]) << 40)
-         | (static_cast<std::uint64_t>(p[6]) << 48)
-         | (static_cast<std::uint64_t>(p[7]) << 56);
-}
-
-std::int16_t le_i16(std::uint8_t const* p) noexcept {
-    return static_cast<std::int16_t>(le_u16(p));
-}
-std::int32_t le_i32(std::uint8_t const* p) noexcept {
-    return static_cast<std::int32_t>(le_u32(p));
-}
-std::int64_t le_i64(std::uint8_t const* p) noexcept {
-    return static_cast<std::int64_t>(le_u64(p));
-}
-
-float le_f32(std::uint8_t const* p) noexcept {
-    std::uint32_t const bits = le_u32(p);
-    float v;
-    std::memcpy(&v, &bits, sizeof(v));
-    return v;
-}
-
-double le_f64(std::uint8_t const* p) noexcept {
-    std::uint64_t const bits = le_u64(p);
-    double v;
-    std::memcpy(&v, &bits, sizeof(v));
-    return v;
-}
-
-// ---------------------------------------------------------------------
 // Cursor over an in-memory payload. Carries a position; every accessor
 // either advances by the requested width and returns the value, or
 // returns std::nullopt on overflow.
@@ -114,15 +62,15 @@ public:
     }
     std::optional<std::uint16_t> read_u16() {
         if (remaining() < 2) return std::nullopt;
-        auto v = le_u16(data_ + pos_); pos_ += 2; return v;
+        auto v = osf::detail::read_le_u16(data_ + pos_); pos_ += 2; return v;
     }
     std::optional<std::uint32_t> read_u32() {
         if (remaining() < 4) return std::nullopt;
-        auto v = le_u32(data_ + pos_); pos_ += 4; return v;
+        auto v = osf::detail::read_le_u32(data_ + pos_); pos_ += 4; return v;
     }
     std::optional<std::uint64_t> read_u64() {
         if (remaining() < 8) return std::nullopt;
-        auto v = le_u64(data_ + pos_); pos_ += 8; return v;
+        auto v = osf::detail::read_le_u64(data_ + pos_); pos_ += 8; return v;
     }
     std::optional<std::int8_t>  read_i8() {
         auto v = read_u8();
@@ -146,11 +94,11 @@ public:
     }
     std::optional<float>  read_f32() {
         if (remaining() < 4) return std::nullopt;
-        auto v = le_f32(data_ + pos_); pos_ += 4; return v;
+        auto v = osf::detail::read_le_f32(data_ + pos_); pos_ += 4; return v;
     }
     std::optional<double> read_f64() {
         if (remaining() < 8) return std::nullopt;
-        auto v = le_f64(data_ + pos_); pos_ += 8; return v;
+        auto v = osf::detail::read_le_f64(data_ + pos_); pos_ += 8; return v;
     }
     std::optional<bool> read_bool() {
         auto v = read_u8();
@@ -290,7 +238,7 @@ Result<TimestampedPayload> parse_abs_ts_string_or_binary(
             return tl::make_unexpected(invalid_block(
                 "AbsTs string/binary N: short read"));
         }
-        std::uint32_t const raw = le_u32(body);
+        std::uint32_t const raw = osf::detail::read_le_u32(body);
         if (raw == 0) {
             return build_string_or_binary(dt, {});
         }
@@ -308,7 +256,7 @@ Result<TimestampedPayload> parse_abs_ts_string_or_binary(
             return tl::make_unexpected(invalid_block(
                 "AbsTs string/binary ts: short read"));
         }
-        std::int64_t const ts = le_i64(rest);
+        std::int64_t const ts = osf::detail::read_le_i64(rest);
         auto payload = strip_osf4_terminator(rest + 8, rest_len - 8, osf_version);
         std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>> raw;
         raw.emplace_back(ts, std::move(payload));
@@ -323,7 +271,7 @@ Result<TimestampedPayload> parse_abs_ts_string_or_binary(
             return tl::make_unexpected(invalid_block(
                 "AbsTs string/binary ts: short read"));
         }
-        std::int64_t const ts = le_i64(rest);
+        std::int64_t const ts = osf::detail::read_le_i64(rest);
         auto payload = strip_osf4_terminator(rest + 8, rest_len - 8, osf_version);
         std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>> raw;
         raw.emplace_back(ts, std::move(payload));
@@ -352,7 +300,7 @@ Result<TimestampedPayload> parse_abs_ts_string_or_binary(
     raw.reserve(n);
     for (std::size_t i = 0; i < n; ++i) {
         std::uint8_t const* chunk = rest + i * per_sample;
-        std::int64_t const ts = le_i64(chunk);
+        std::int64_t const ts = osf::detail::read_le_i64(chunk);
         auto payload = strip_osf4_terminator(chunk + 8, per_sample - 8,
                                              osf_version);
         raw.emplace_back(ts, std::move(payload));
@@ -574,14 +522,14 @@ BlockReader::read_length_field(std::uint8_t sizeof_field) {
         auto r = stream_read_n(*stream_, buf, 2);
         if (!r)             return tl::make_unexpected(std::move(r).error());
         if (!*r)            return std::optional<std::uint32_t>{};
-        return std::optional<std::uint32_t>{le_u16(buf)};
+        return std::optional<std::uint32_t>{osf::detail::read_le_u16(buf)};
     }
     if (sizeof_field == 4) {
         std::uint8_t buf[4];
         auto r = stream_read_n(*stream_, buf, 4);
         if (!r)             return tl::make_unexpected(std::move(r).error());
         if (!*r)            return std::optional<std::uint32_t>{};
-        return std::optional<std::uint32_t>{le_u32(buf)};
+        return std::optional<std::uint32_t>{osf::detail::read_le_u32(buf)};
     }
     std::ostringstream oss;
     oss << "channel sizeoflengthvalue=" << int{sizeof_field}
@@ -632,7 +580,7 @@ Result<void> BlockReader::consume_trailer() {
         stats_.trailer_seen = true;
         return {};
     }
-    std::uint32_t const length = le_u32(buf);
+    std::uint32_t const length = osf::detail::read_le_u32(buf);
 
     auto drained = drain(length);
     if (!drained) return tl::make_unexpected(std::move(drained).error());
@@ -727,7 +675,7 @@ std::optional<Result<Block>> BlockReader::next() {
         if (!r) { finished_ = true; return Result<Block>{tl::make_unexpected(r.error())}; }
         if (!*r) { finished_ = true; return std::nullopt; }
     }
-    std::uint16_t const channel_index = le_u16(ci_buf);
+    std::uint16_t const channel_index = osf::detail::read_le_u16(ci_buf);
     stats_.data_section_size_bytes += 2;
 
     // Step 2: optional 0xFFFF trailer block.
