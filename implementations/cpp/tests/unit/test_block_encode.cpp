@@ -213,6 +213,53 @@ TEST(BlockEncodeStartData, OversizePayloadReturnsInvalidBlock) {
 }
 
 // ---------------------------------------------------------------------------
+// Post-Phase-7a coverage extensions (final-review nits N1/N2/N3)
+// ---------------------------------------------------------------------------
+
+// N1 — encode_continued_data has the same count==0 guard as encode_start_data;
+// exercise it independently so the error-path matrix is fully covered.
+TEST(BlockEncodeContinuedData, ZeroCountReturnsInvalidArgument) {
+    std::vector<std::uint8_t> out;
+    float dummy = 0.0f;
+    auto r = encode_continued_data<float>(out, 0, 2, &dummy, 0);
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
+    EXPECT_TRUE(out.empty()) << "encoder must not partial-write on error";
+}
+
+// N2 — verify the u32 length-field path (sizeoflengthvalue=4). The prior
+// byte-exact tests only exercise the u16 path; roundtrip tests cover u32
+// implicitly but do not pin its on-disk shape.
+TEST(BlockEncodeStartData, SizeofLengthValue4_U32LengthField) {
+    std::vector<std::uint8_t> out;
+    float const samples[] = {1.0f};
+    auto r = encode_start_data<float>(out, /*ch=*/0, /*sizeoflengthvalue=*/4,
+                                      /*ts=*/0LL, /*rate=*/100.0, samples, 1);
+    ASSERT_TRUE(r.has_value());
+
+    // Frame: [ci u16=0][len u32=21][ctrl=0x06][ts 8B][rate 8B][float 4B]
+    // = 2 + 4 + 1 + 8 + 8 + 4 = 27 bytes.
+    ASSERT_EQ(out.size(), 27u);
+    EXPECT_TRUE(bytes_eq(out, 0, {0x00, 0x00}));                      // channel_index=0
+    EXPECT_TRUE(bytes_eq(out, 2, {0x15, 0x00, 0x00, 0x00}));          // payload_length u32=21
+    EXPECT_EQ(out[6], 0x06);                                           // bcStartData, bit-7=0
+}
+
+// N3 — exercise the high byte of the u16 channel_index field. Prior tests
+// only used channel indices <= 7, which leaves the second byte zero. A
+// non-zero high byte (here 0x01 for channel 0x0142) pins the LE layout.
+TEST(BlockEncodeStartData, ChannelIndexHighByte) {
+    std::vector<std::uint8_t> out;
+    float const samples[] = {1.0f};
+    auto r = encode_start_data<float>(out, /*ch=*/0x0142, /*sizeoflengthvalue=*/2,
+                                      /*ts=*/0LL, /*rate=*/100.0, samples, 1);
+    ASSERT_TRUE(r.has_value());
+
+    // First two bytes are channel_index in little-endian: 0x0142 -> {0x42, 0x01}.
+    EXPECT_TRUE(bytes_eq(out, 0, {0x42, 0x01}));
+}
+
+// ---------------------------------------------------------------------------
 // Task 3: roundtrip tests via BlockReader
 // ---------------------------------------------------------------------------
 
