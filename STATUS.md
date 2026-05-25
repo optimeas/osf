@@ -508,8 +508,8 @@ enough that the Arc-Channel optimisation is not needed yet.
 
 ## C++ implementation — current state
 
-Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Reader updated for the version-deterministic null-terminator rule on 2026-05-24. Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
-Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, both OSF4 + OSF5 metablock parsers, the block-stream reader (with `ReaderStats`), and the typed `DataManager` are in place; the OSF5 writer arrives in Phase 7.
+Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Reader updated for the version-deterministic null-terminator rule on 2026-05-24. **Phase 7a (private block-encoder library) completed 2026-05-26.** Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
+Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, both OSF4 + OSF5 metablock parsers, the block-stream reader (with `ReaderStats`), the typed `DataManager`, and the OSF5 block-encoder primitives are in place. The user-facing `StreamingWriter` (Phase 7b) and `BlockWriter` (Phase 7c) classes compose this encoder layer and arrive next.
 
 **Library targets:**
 
@@ -577,12 +577,12 @@ cmake --build build
 ctest --test-dir build
 ```
 
-**Build verification (local, 2026-05-23):**
+**Build verification (local, 2026-05-26 after Phase 7a):**
 
 - Toolchain: MSVC 19.50.35730, Visual Studio 18 generator, CMake 4.2.3.
 - `cmake -B build` configures with **0 CMake warnings** (CMP0135 set to NEW explicitly via `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE`).
-- `cmake --build` produces `osf.lib` plus fifteen test executables with **0 compile warnings** under `/W4 /permissive-` (the vendored `pugixml.cpp` is built with `/W0` since it is treated as binary-identical to upstream).
-- `ctest` reports **157/157 passed in ~5.5 s** (Phase 1–5 suites unchanged at 124; Phase 6 adds 11 data-channel-unit + 13 manager-unit + 7 manager-integration; the 2026-05-24 reader refactor split two AbsTs string/binary unit tests into four version-pinned cases for +2; the manager-integration suite internally exercises every `.osf` under `examples/generated/` plus the `motorbike.osf` and `steam_loco.osf` field samples, and the `weather_station.osfz` Phase-8 stub).
+- `cmake --build` produces `osf.lib` plus sixteen test executables with **0 compile warnings** under `/W4 /permissive-` (the vendored `pugixml.cpp` is built with `/W0` since it is treated as binary-identical to upstream).
+- `ctest` reports **192/192 passed in ~7.2 s** (157 pre-Phase-7a baseline + 35 new Phase-7a tests in `test_block_encode.cpp` covering all 6 encoder symbols, byte-exact wire-format invariants, three error paths, and a roundtrip-via-BlockReader matrix over all 11 numeric data types plus GPS, string, and binary).
 
 **Constraints:**
 
@@ -591,11 +591,23 @@ ctest --test-dir build
 
 **Pending:**
 
-Phase 7: OSF5 writer (block-mode `WriterBuilder` that accumulates
-samples and emits an OSF5 file). Then sequentially per §20
-Implementation Order: transparent OSFZ decompression (Phase 8 —
-removes the current `DataManager` OSFZ-rejection stub), throwing
-convenience layer.
+Phase 7b: `StreamingWriter` (embedded, sample-by-sample,
+`FileChannel.force(true)`-equivalent per-block flush) that
+composes the new `osf::detail` encoder symbols delivered by
+Phase 7a. Phase 7c: `BlockWriter` (analyst-style, accumulates
+samples, emits whole file in one pass) on the same encoder
+substrate. Phase 7d: optional `StaleValueGuard` layer.
+
+Then sequentially per §20 Implementation Order: transparent OSFZ
+decompression (Phase 8 — removes the current `DataManager`
+OSFZ-rejection stub), throwing convenience layer.
+
+Two cross-implementation findings from the Phase 7a final review
+are parked in `BACKLOG.md` for action before Phase 7b begins:
+the Rust writer's non-spec-canonical bit-7 toggling for
+single-sample variable-length blocks, and the misleading
+"spec requires bit-7 set" comment in both the C++ and Rust
+readers. See *Implementation Gaps and Conventions* in BACKLOG.md.
 
 The C ABI shared-library wrapper (Phase 11) is the deferred deliverable for cross-language consumption — Windows DLL / ActiveX/OCX, future bindings. It will land after the core C++ library reaches roundtrip validation and gets its own DECISIONS entry covering handle patterns, error codes, string ownership, and ABI stability guarantees.
 

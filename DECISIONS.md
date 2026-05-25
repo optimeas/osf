@@ -514,6 +514,30 @@ reference file:
 Each phase produces a green build with passing tests against the
 reference files before the next phase begins.
 
+### Status (updated 2026-05-26)
+
+Phases 1–6 complete (skeleton, magic-header parser, OSF5 JSON
+metablock parser, OSF4 XML metablock parser, block-stream reader,
+typed `DataManager`). **Phase 7a complete (2026-05-26):** private
+block-encoder library at `src/block_encode.hpp/.cpp` in namespace
+`osf::detail`, composed by the future `StreamingWriter` (Phase 7b)
+and `BlockWriter` (Phase 7c). Six encoder symbols, 13 explicit
+template instantiations, 35 new GoogleTest cases bringing the
+ctest count to 192/192 green under MSVC `/W4 /permissive-`. The
+shared little-endian helper hub `src/binary_io.hpp` was introduced
+as a prerequisite refactor (reader-side helpers renamed for
+read/write symmetry, write-side counterparts added). Per spec
+rev 2026-05-24: string/binary blocks emit no trailing `0x00`,
+single-sample variable-length only, automatic bit-7 toggling by
+`count`. Two cross-implementation follow-up items are parked in
+`BACKLOG.md` (Rust writer's non-spec-canonical bit-7 toggling and
+the misleading bit-7 comment in both C++ and Rust readers).
+
+Phase 7b and 7c arrive next: the `StreamingWriter` and
+`BlockWriter` classes compose the new encoder layer with their
+respective flush policies. Phase 7d (`StaleValueGuard`) is
+optional and follows.
+
 ## 21. Java Implementation Architecture
 
 **Decision:** The Java implementation at `implementations/java/` is built on

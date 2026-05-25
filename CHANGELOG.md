@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- C++ `osf-core` Phase 7a — private block-encoder layer at `implementations/cpp/src/block_encode.hpp` / `.cpp` in namespace `osf::detail`, plus the shared little-endian helper hub `src/binary_io.hpp` (9 read + 9 write helpers, file-private, mirroring Rust's `binary_write.rs`). Six encoder symbols: `encode_start_data<T>` and `encode_continued_data<T>` (templates, 2 instantiations each for `float` / `double`), `encode_abs_timestamp_data<T>` (template, 11 instantiations across `bool` / `int8`–`int64` / `uint8`–`uint64` / `float` / `double`), `encode_abs_timestamp_data_gps` (plain function), and two single-sample overloads of `encode_abs_timestamp_data` for `std::string_view` and `BinarySample`. All encoders return `Result<void>` with three documented error conditions (count==0 / bad `sizeoflengthvalue` / oversize payload). Bit-7 selection by `count` per spec rev 2026-05-24; string/binary blocks are single-sample and OSF5-conformant (no trailing `0x00`). Composed by the future `StreamingWriter` (Phase 7b) and `BlockWriter` (Phase 7c). 35 new GoogleTest cases bring the C++ ctest count to **192/192 green** under MSVC `/W4 /permissive-`.
+- Repo-wide convention change: all C++ files under `implementations/cpp/` now carry the two-line `// SPDX-License-Identifier: MIT` + `// Copyright (c) 2026 Optimeas GmbH` header (was: SPDX-only). Matches the Delphi, Rust, and Python-PyO3 implementations; file-level attribution travels with detached source snippets. `CLAUDE.md` updated, 36 pre-existing C++ files retrofitted in the same pass.
+- `BACKLOG.md` — two entries surfaced by the Phase 7a final code review: a low-priority documentation-correctness fix to misleading bit-7 comments in `implementations/cpp/src/reader.cpp` and `implementations/rust/osf-core/src/reader.rs`, plus a high-priority cross-implementation conformance item — the Rust writer emits bit-7=1 with explicit `uint32 N=1` for single-sample variable-length blocks where the spec-canonical and new-C++-encoder form is bit-7=0 with implicit N. Recommended action before Phase 7b begins.
+- `docs/superpowers/specs/2026-05-25-cpp-phase-7a-block-encoder-design.md` and the matching implementation plan under `docs/superpowers/plans/` — design + execution artefacts for the Phase 7a work, retained for future-session traceability.
+
+### Notes
+
+- No release tag yet; this section accumulates until a release decision. The Phase 7a deliverable is independently usable as the substrate for Phase 7b/7c.
+
+---
+
 ## [0.10.0] — 2026-05-25
 
 ### Changed

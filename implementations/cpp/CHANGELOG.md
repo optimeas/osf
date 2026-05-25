@@ -6,6 +6,86 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 7a — Private block-encoder layer.** Six encoder symbols
+  in `src/block_encode.hpp` / `.cpp`, namespace `osf::detail`,
+  composed by the future `StreamingWriter` (Phase 7b) and
+  `BlockWriter` (Phase 7c). All return `Result<void>` with three
+  documented error conditions (count==0, `sizeoflengthvalue` ∉ {2,4},
+  oversize payload):
+  - `encode_start_data<T>` (template, instantiated for `float` /
+    `double` per spec rev 2026-05-04 equidistant restriction)
+  - `encode_continued_data<T>` (template, same instantiations)
+  - `encode_abs_timestamp_data<T>` (template, 11 numeric
+    instantiations: `bool`, `int8` / `int16` / `int32` / `int64`,
+    `uint8` / `uint16` / `uint32` / `uint64`, `float`, `double`)
+  - `encode_abs_timestamp_data_gps` (plain function, separate
+    non-template symbol per the Q3.5 architecture decision —
+    keeps the GPS 32-byte-per-sample layout greppable)
+  - `encode_abs_timestamp_data(... std::string_view)` (single-sample
+    overload; bit-7=0, no `uint32 N`-prefix, **no trailing `0x00`**
+    per spec rev 2026-05-24 OSF5 rule)
+  - `encode_abs_timestamp_data(... BinarySample)` (single-sample
+    overload; same wire-format rules as the string overload).
+    `BinarySample` is a non-owning view struct with explicit
+    constructor + `from_vector` factory — the C++17 substitute
+    for `std::span` with the lifetime trap of implicit-from-vector
+    blocked.
+  Bit-7 selection automatic by `count` (=0 for `count==1`, saves
+  4 bytes; =1 for `count>1` with `uint32 N`-prefix). Control
+  bytes match `block.hpp` enum: 5 = `bcContinuedData`, 6 =
+  `bcStartData`, 8 = `bcAbsTimeStampData`. The encoder never
+  emits 0x07 (`bcContinuedRelStampData` is read-only deprecated).
+- **`src/binary_io.hpp` — shared LE byte-helper hub** in
+  `osf::detail`. 9 read helpers (`read_le_u16` / `_u32` / `_u64`
+  / `_i8` / `_i16` / `_i32` / `_i64` / `_f32` / `_f64`) plus the 9
+  matching `write_le_*` counterparts. The 8 pre-existing reader
+  helpers moved out of `src/reader.cpp`'s anonymous namespace and
+  were renamed for write-side symmetry; `read_le_i8` is new (no
+  current reader call site but added so the read/write pair is
+  complete). Mirror of Rust's `binary_write.rs`. Integer helpers
+  use manual byte shifts; float helpers use `std::memcpy` to
+  avoid strict-aliasing UB.
+- **`tests/unit/test_block_encode.cpp`** — 35 new GoogleTest
+  cases over the encoder symbols: 2 `BinarySample` smoke tests +
+  10 equidistant tests (byte-exact frame layout, bit-7 toggle,
+  error paths including the exact-boundary oversize trip,
+  roundtrip via `BlockReader`) + 14 timestamped numeric tests
+  (single-sample byte-exact, multi-sample byte-exact, roundtrip
+  for all 11 numeric types in single + multi configurations) +
+  4 GPS tests + 9 variable-length tests including a
+  payload-with-embedded-`0x00` preservation check. Roundtrip
+  tests for `float` and `double` use `EXPECT_FLOAT_EQ` /
+  `EXPECT_DOUBLE_EQ` matchers (4-ULP tolerance) instead of bare
+  `EXPECT_EQ`. Three coverage-extension tests added after the
+  final review (encode_continued_data `count==0`,
+  `sizeoflengthvalue=4` byte-exact, `channel_index > 255`
+  high-byte verify).
+- **Two-line SPDX+Copyright header** is now uniform across all
+  C++ source / header / test files in `implementations/cpp/`,
+  matching the rest of the implementations. 36 pre-existing
+  files retrofitted in the same pass; new files inherit the
+  convention by default.
+
+### Changed
+
+- `src/CMakeLists.txt`: `src/block_encode.cpp` added to the
+  `osf_core` source list (alphabetical between `block.cpp` and
+  `data_channel.cpp`).
+- `tests/CMakeLists.txt`: new `test_block_encode` executable
+  with `target_include_directories(... PRIVATE ../src)` to allow
+  the non-public `block_encode.hpp` to be included from the test
+  TU.
+- `src/reader.cpp`: now `#include "binary_io.hpp"` and calls the
+  renamed `osf::detail::read_le_*` helpers. Mechanical refactor;
+  all 157 pre-existing tests stay green.
+
+### Notes
+
+- Total ctest count is now **192/192 green** locally (157
+  pre-Phase-7a baseline + 35 new). No release tag yet.
+
 ## [0.0.6] - 2026-05-23
 
 ### Added
