@@ -1,6 +1,7 @@
 # Claude Code Session State
 
-Last updated: 2026-05-22 (after the osftool live-progress rework).
+Last updated: 2026-05-25 (after the spec rev 2026-05-24 cleanup and
+the Delphi `TOSFLog` listener-pattern refactor).
 
 This file is a hand-off document for the next Claude Code session. Read
 [STATUS.md](STATUS.md) and [DECISIONS.md](DECISIONS.md) for the
@@ -12,13 +13,47 @@ context that would otherwise be lost between runs.
 The repo currently advances on two independent tracks:
 
 1. **C++ implementation** — a phased plan in DECISIONS.md §20. Driven by
-   focused per-phase sessions. Next up: **Phase 4**.
+   focused per-phase sessions. Next up: **Phase 7** (OSF5 writer).
 2. **Delphi tooling** — task-driven (briefs arrive as
-   `~/Downloads/task-*.md`). Recently delivered: the OSF merger and the
-   `osftool` CLI. No fixed phase plan; each brief is self-contained.
+   `~/Downloads/task-*.md`). Recently delivered: cross-impl null-terminator
+   cleanup, then the `TOSFLog` listener-pattern refactor that replaced
+   `OSF.Progress.*`. No fixed phase plan; each brief is self-contained.
 
-A brief may also be repo-wide (the most recent one was the Apache→MIT
-relicense).
+A brief may also be repo-wide.
+
+## Recent sessions (since 2026-05-22)
+
+### Cross-implementation null-terminator cleanup (2026-05-24, 2026-05-25)
+
+Brief: `~/Downloads/cross-impl-null-terminator-cleanup-prompt.md`. The
+spec was tightened to a **version-deterministic** null-terminator rule
+for `string` / `binary` payloads in `bcAbsTimeStampData`:
+
+- **OSF4** writers MUST append the trailing `0x00`; OSF4 readers MUST
+  strip the last byte unconditionally.
+- **OSF5** writers MUST NOT append; OSF5 readers MUST NOT strip.
+
+Replaces the soft "strip-if-present" heuristic that had been the
+2026-05-04 wording. No detection, no fallback. The whole chain (specs
+EN+DE, DECISIONS §16+§21, Rust, Delphi, C++ readers, 17 reference files
+under `examples/generated/`) was updated in one series. The Delphi
+multi-sample variable-length writer layout (non-spec per-sample
+`uint32` length prefix, never parsed by Rust / C++ readers) was also
+removed entirely; auto-split into N single-sample blocks.
+
+### Delphi logging + progress consolidation (2026-05-25)
+
+The `OSF.Progress.*` family (8 units, ~1400 LOC, merge-specific
+`IProgressReporter` interface plus six reporter implementations) plus
+the `TOSFLoggable` mixin plus the per-class `OnLog` events were all
+replaced by a single process-wide `TOSFLog` instance, exposed as the
+global variable `Logger`. Caller-owned `TLoggerListener` instances
+register with it; per-listener `MinLevel` filtering. Documented in
+[DECISIONS.md §22](DECISIONS.md#22-delphi-logging--progress-architecture).
+
+The CLI in-place progress bar moved to its own OSF-agnostic unit
+`implementations/delphi/src/console/Console.ProgressBar.pas`. osftool
+wires it up through `Cmd.Base`'s default listener callbacks.
 
 ## ⚠ Relicense — read before writing any new file
 
@@ -36,7 +71,7 @@ The whole project was relicensed **Apache 2.0 → MIT** on 2026-05-20
 - `LICENSE` is the MIT text. Package manifests say `license = "MIT"`.
 - Vendored third-party code under `implementations/cpp/third_party/`
   keeps its own upstream licenses (`tl::expected` CC0-1.0,
-  `nlohmann/json` MIT) — never relicense those.
+  `nlohmann/json` MIT, `pugixml` MIT) — never relicense those.
 
 ## Delphi track — current state
 
@@ -45,28 +80,13 @@ Library units live in `implementations/delphi/src/`; demos in
 `implementations/delphi/tools/osftool/`. See STATUS.md "Delphi
 implementation" + "Delphi CLI — osftool" for the full surface.
 
-Recently delivered (task-driven):
-
-- `OSF.Filer` gained a read-side `ChannelFilter`, transparent OSFZ
-  (gzip) decompression, and OmniXML-based OSF4 XML parsing (no MSXML
-  dependency).
-- `OSF.Meta.Cache` (sidecar `.json` cache) and `OSF.Merger` (interval
-  merge across many OSF/OSFZ files) — new units.
-- `demos/osfmerger/` — VCL merger GUI (Win64).
-- `tools/osftool/` — verb-based CLI with nine commands (merge, export,
-  info, channels, stat, cache, config, convert, verify). Win64-primary;
-  `.dproj` also carries OSX64/OSXARM64/Linux64 configs and the source is
-  conditional-compilation clean for them (verified by inspection only).
-- `OSF.Export.CSV.Unified` — single-timeline CSV exporter.
-- The `osftool merge` live progress display was reworked — a single
-  in-place progress-bar line replaces the old two-line ANSI block,
-  driven by a new generic `StartProgress`/`DoProgress`/`EndProgress`
-  triplet on `IProgressReporter` (commit `cf77461`). `osftool.md`
-  (EN + DE) was brought in sync and gained the previously
-  undocumented HDF5 export path (commit `6f8c7e7`).
-
-The standalone `OsfMerge.dpr` was superseded by `osftool merge` and
-removed.
+**New logging architecture (2026-05-25):** every OSF library unit
+writes log + progress events to the global `Logger: TOSFLog`. Hosting
+applications (osftool, demos, future GUIs) create and register a
+`TLoggerListener`, set its `MinLevel` and event callbacks, and let
+the singleton do the fan-out. See DECISIONS §22 + `OSF.Log.pas`.
+**Do not reintroduce per-class `OnLog` events** — that was the pattern
+this session retired.
 
 Build flow (Delphi, Windows):
 
@@ -78,19 +98,31 @@ cd tools\osftool
 & "C:\Program Files (x86)\Embarcadero\Studio\23.0\bin64\dcc64.exe" -B -Q OsfTool.dpr
 ```
 
-Always remove the `*.dcu` / `*.exe` build artefacts after a verify;
-they are gitignored but clutter `git status`.
+Always remove the `*.dcu` / `*.exe` / `Win64\` build artefacts after
+a verify; they are gitignored but clutter `git status`.
+
+The headless `OSFGeneratorCLI` at
+`implementations/delphi/demos/osfgenerator/OSFGeneratorCLI.dpr` is
+the non-interactive way to regenerate the 17-file reference set under
+`examples/generated/` — useful after spec or writer changes:
+
+```powershell
+cd implementations\delphi\demos\osfgenerator
+& "C:\Program Files (x86)\Embarcadero\Studio\23.0\bin\dcc32.exe" -B -Q OSFGeneratorCLI.dpr
+.\OSFGeneratorCLI.exe   # writes into ..\..\..\..\examples\generated by default
+```
 
 ## C++ track — Phase 7 is next
 
 Phases 1, 2, 3, 4, 5, 6 complete (skeleton, magic-header parser,
 OSF5 JSON metablock parser, OSF4 XML metablock parser, block-stream
-reader, typed `DataManager`). **153/153 ctest cases green** as of
-Phase 6 completion (2026-05-23). `DataManager::load_from_file`
-opens any uncompressed `.osf` reference file and yields a
-typed-channel list with full segment / timestamp reconstruction.
-OSFZ inputs are detected and rejected with a clear Phase-8 stub
-error.
+reader, typed `DataManager`). Reader updated for the
+version-deterministic null-terminator rule on 2026-05-24.
+**157/157 ctest cases green** as of that update (~5.5 s).
+`DataManager::load_from_file` opens any uncompressed `.osf`
+reference file and yields a typed-channel list with full segment /
+timestamp reconstruction. OSFZ inputs are detected and rejected with
+a clear Phase-8 stub error.
 
 Naming note: `osf::DataChannel` (the assembled-samples variant) is
 distinct from `osf::Channel` (the metablock-level channel
@@ -114,10 +146,15 @@ names differ.
 - Equidistant blocks chunk into `bcContinuedData` blocks so each
   payload fits the channel's `sizeoflengthvalue`; timestamped
   numeric blocks set the multi-sample bit; variable blocks emit
-  one sample per block per spec with optional `sizeoflengthvalue`
-  bump 2 → 4 when needed.
+  one sample per block per spec, **no trailing `0x00`**
+  (version-deterministic per spec rev 2026-05-24).
 - Rust reference: `implementations/rust/osf-core/src/writer.rs`
   and `binary_write.rs`.
+- A separate Phase-7a architecture chat was paused on 2026-05-24
+  mid-Q5 with a saved state snapshot at
+  `implementations/cpp/PHASE7_SNAPSHOT.md`. Some of that snapshot
+  has been simplified by the spec rev (no more null-terminator on
+  OSF5; no `bcAbsTimeStampData` multi-sample for variable types).
 
 ### C++ network caveat (local environment)
 
@@ -137,8 +174,8 @@ cmake -B implementations\cpp\build -S implementations\cpp `
   -D FETCHCONTENT_SOURCE_DIR_GOOGLETEST="$env:TEMP\gtest-extract\googletest-1.15.2"
 ```
 
-The same is needed for any future `FetchContent` integration (pugixml
-can be vendored as plain source, so Phase 4 itself does not hit this).
+The cached extract is reused across runs and survives reboots — no
+need to redownload unless `googletest` itself is bumped.
 
 ### C++ build flow (Windows)
 
@@ -160,13 +197,15 @@ Always remove `implementations\cpp\build` after a successful verify.
   ctest must be green locally first).
 - **Co-Authored-By trailer** on every commit:
   `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`
-- **Commit prefixes:** `feat(cpp|delphi):`, `test(...):`, `fix(...):`,
-  `docs(status|changelog|decisions):`, `chore:` for repo-wide changes.
+- **Commit prefixes:** `feat(cpp|delphi|rust|python|delphi-demo):`,
+  `test(...):`, `fix(...):`, `refactor(...):`,
+  `docs(status|changelog|decisions|backlog|spec):`, `chore:` for
+  repo-wide changes.
 - **New source files use the MIT SPDX header** (see relicense section).
-- **Repo CHANGELOG** is Keep-a-Changelog, currently `[0.7.0]`.
+- **Repo CHANGELOG** is Keep-a-Changelog, currently `[0.10.0]`.
   Per-package CHANGELOGs (`implementations/<lang>/CHANGELOG.md`) are
-  version-decoupled from the repo line; cpp at `[0.0.3]`. Repo headers
-  use an em-dash (`## [X.Y.Z] — DATE`), per-package use a hyphen.
+  version-decoupled from the repo line. Repo headers use an em-dash
+  (`## [X.Y.Z] — DATE`), per-package use a hyphen.
 - **Vendoring pattern:** tag-pinned URL, SHA256 verified, byte-identical
   drop except the LICENSE, which is renamed and prefixed with two
   provenance lines (`# Vendored from <url>` / `# Renamed from <name>…`).
@@ -184,11 +223,17 @@ Always remove `implementations\cpp\build` after a successful verify.
 ## Pickup checklist for the next session
 
 1. `git pull`.
-2. Read `STATUS.md`, then this file.
-3. If continuing the **C++ track**: read DECISIONS.md §20 + §16, run the
-   C++ build flow, then start Phase 7 (OSF5 writer — `WriterBuilder`
-   over the existing `DataManager` types, emitting OSF5 per
-   DECISIONS §6 / §7).
-4. If a new **Delphi brief** arrives as `~/Downloads/task-*.md`: read it,
-   work it, compile-verify with dcc32/dcc64, commit + push.
+2. Read `STATUS.md`, then this file, then `DECISIONS.md` §22 if you
+   are about to add or modify Delphi logging code.
+3. If continuing the **C++ track**: read DECISIONS §20 + §6 + §7, run
+   the C++ build flow, then start Phase 7 (OSF5 writer —
+   `WriterBuilder` over the existing `DataManager` types, emitting
+   OSF5 per DECISIONS §6 / §7, no trailing `0x00` per the
+   version-deterministic rule). The Phase-7a snapshot at
+   `implementations/cpp/PHASE7_SNAPSHOT.md` is still useful but
+   note the simplifications mentioned above.
+4. If a new **Delphi brief** arrives as `~/Downloads/task-*.md`: read
+   it, work it, compile-verify with dcc32/dcc64, commit + push.
 5. Any new source file: MIT SPDX header, not Apache.
+6. Any new Delphi log call: `Logger.Write(Msg, Level, 'TClassName')`
+   from `OSF.Log` — do not reintroduce per-class `OnLog` properties.

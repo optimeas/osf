@@ -693,3 +693,143 @@ recording project, but the implementation effort estimate stays as
 listed in §15. The §15 list still describes the order in which language
 ecosystems become available to end users; it does not imply Java waits
 for the languages listed before it.
+
+## 22. Delphi Logging + Progress Architecture
+
+**Decision:** The Delphi implementation uses a single process-wide
+`TOSFLog` singleton, exposed as the global variable `Logger`, as the
+fan-out point for both log messages and progress events. Caller-owned
+`TLoggerListener` instances register with it; each filters by its own
+`MinLevel` and decides what to render (console output, in-place progress
+bar, JSON-Lines event stream, file append, GUI memo, …). The OSF library
+units only emit; the calling application owns the rendering policy.
+
+**Why this shape, and why now.** The first cut of progress reporting
+for the `osftool merge` verb was an `IProgressReporter` interface plus
+seven concrete reporter implementations (`OSF.Progress`,
+`.Console`, `.Quiet`, `.Verbose`, `.Json`, `.Fallback`, `.Live`,
+`.LogFile`), heavily merge-specific (phase callbacks like
+`ScanStarted`, `FileError`, `SidecarProgress`, `Summary`). It worked,
+but it was over-engineered: ~1400 LOC of interface plumbing for a
+single command's progress display, and tightly bound to the merge
+phases. Reusing it for other commands would have meant either growing
+the interface or carrying merge-shaped events into unrelated code.
+
+At the same time the library still used the older `TOSFLoggable` mixin
+plus per-instance `OnLog: TOSFLogEvent` events. Components that could
+not subclass `TOSFLoggable` (because of an existing inheritance
+constraint, e.g. `TOSFFile` and `TOSFDataManager`) had to copy the Log
+helper verbatim. The manager forwarded the filer's `OnLog` through a
+wrapper that also sniffed warning text to detect truncation. The whole
+chain was fragile.
+
+The 2026-05-25 consolidation replaces both with one mechanism.
+
+### Constraints encoded in the API
+
+- **Singleton-with-injection-escape.** `Logger` is a global instance,
+  but every library class that needs to log writes to that one
+  instance directly — no `FLogger` plumbing through constructors. If
+  test isolation or multi-`Logger` use ever becomes necessary, the
+  pattern is open to constructor-injection of an alternate
+  `TOSFLog` instance; the global is just the convenient default.
+- **Caller-owned listeners.** `RegisterListener` / `UnregisterListener`
+  hold references only. The caller that created the listener is
+  responsible for unregistering and freeing it. Matches Delphi's
+  `TList<T>` (not `TObjectList<T>`) convention.
+- **Plain class, not designed for subclassing.** `TLoggerListener`
+  exposes four event slots (`OnAddLogMessage`, `OnStartProgress`,
+  `OnDoProgress`, `OnEndProgress`) plus a `MinLevel` property.
+  Callers create an instance, attach methods of their own class as
+  handlers, register, and free. Inheritance is not the extension
+  point.
+- **Per-listener filter.** Each listener has its own `MinLevel`
+  (default `llUser`). The singleton fans out to every listener; the
+  listener decides whether to drop the event by ordinal comparison.
+  No filtering happens centrally — multiple listeners with different
+  filters (e.g. a `Warning`-only console listener and a `Debug`-level
+  file listener) compose naturally.
+- **Threadsafe by snapshot.** Register / unregister / write / progress
+  events all hold a `TCriticalSection` for the listener-list
+  mutation; iteration happens on a snapshot taken under the lock, so
+  a listener can register or unregister another listener inside its
+  own callback without invalidating the in-flight iteration.
+- **Listener-callback exceptions are swallowed.** A buggy listener
+  never propagates back into core OSF code. Matches the convention
+  the old `TOSFLoggable.Log` already used.
+
+### TOSFLogLevel ordering and the new `llUser` level
+
+`TOSFLogLevel = (llDebug, llInfo, llUser, llWarning, llError)` —
+verbosity-ascending. `Ord(llDebug) = 0`, `Ord(llError) = 4`. The
+natural `if Ord(Level) >= Ord(MinLevel) then Show` filter reads
+correctly: a listener with `MinLevel = llUser` shows `User` plus
+`Warning` plus `Error` and hides `Info` plus `Debug`.
+
+The new `llUser` level (between `llInfo` and `llWarning`) is the
+default user-facing output stream for CLI and GUI commands. The OSF
+library writes only the minimum at `llUser` and above (warnings,
+errors, the occasional user-facing milestone); internal trace goes at
+`llDebug` and per-step progress info at `llInfo`. The calling
+application's default listener thus shows a clean user-facing surface
+with no library log noise.
+
+### Progress events
+
+`ProgressStart(MaxValue, Msg)` / `DoProgress(Value, Msg)` /
+`EndProgress(Msg)`. `MaxValue` lives implicitly in the listener's
+state between `ProgressStart` and `EndProgress`; `DoProgress` carries
+only the current value plus an optional context message (e.g. the
+current file name). Nesting is not supported — a second
+`ProgressStart` before `EndProgress` is delivered as-is and resets
+any listener-side state; callers that need inner / outer progress
+emit their own modulo logic.
+
+### Console-rendering split
+
+The in-place ANSI progress bar lives in its own unit
+`implementations/delphi/src/console/Console.ProgressBar.pas`, with no
+OSF dependency. Any Delphi console application can drop it in.
+`TConsoleProgressBar` exposes `Start` / `Update` / `Finish` plus a
+plain-text fallback for redirected stdout (throttled at 5 % or 50
+units or 2 s, whichever the smallest). osftool wires it up through
+`Cmd.Base`'s default `OnProgressStart` / `OnProgress` /
+`OnProgressEnd` callbacks; the bar is created only in interactive
+default mode (suppressed under `--quiet`, replaced by per-line stderr
+under `--verbose`, replaced by JSON-Lines events under `--json`).
+
+### osftool listener-configuration matrix
+
+`Cmd.Base.SetupListeners` builds the console listener from the
+parsed output-mode flags:
+
+| Flag combination | Console-listener `MinLevel` | Progress rendering |
+|---|---|---|
+| (default) | `llUser` | `Console.ProgressBar` interactive |
+| `--quiet` | `llWarning` | suppressed |
+| `--verbose` | `llDebug` | per-line stderr echo |
+| `--json` | `llInfo` | JSON-Lines events on stdout |
+
+`--log <path>` registers an additional file listener at `llDebug`
+(always captures everything) and is orthogonal to the console mode.
+
+### Cross-implementation status
+
+This decision is Delphi-specific.
+
+- **Rust** uses the `log` crate with `env_logger` (DECISIONS unchanged);
+  the per-implementation conventions diverge by ecosystem, by design.
+- **C++** is library-only on the logging front so far; if a logging
+  story is ever added it will be Rust-style, not Delphi-style.
+- **Java** (DECISIONS §21) chose SLF4J as the logging facade. The
+  listener pattern here does not transfer.
+
+### What was deleted
+
+The `OSF.Progress.*` family (eight units totalling ~1400 LOC), the
+`TOSFLoggable` mixin, the per-class `OnLog: TOSFLogEvent` events on
+`TOSFFile`, `TOSFDataManager`, `TOSFMerger`, `TOSFMetaCacheBuilder`,
+`TOSFExporter`, and the manager's truncation-detection-by-string-
+sniffing wrapper. `TOSFFile.TruncationSeen: Boolean` is the proper
+signal replacing the latter. Net delta: ~621 LOC removed across the
+Delphi tree.

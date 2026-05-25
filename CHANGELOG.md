@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.10.0] — 2026-05-25
+
+### Changed
+
+- Specification (rev 2026-05-24): the null-terminator rule for `string` and `binary` payloads in `bcAbsTimeStampData` is now **version-deterministic**. OSF4 writers MUST append the trailing `0x00` and OSF4 readers MUST strip the last byte unconditionally; OSF5 writers MUST NOT append it and OSF5 readers MUST NOT strip any trailing byte. Replaces the soft "strip if present" heuristic — eliminates the ambiguity for OSF5 binary payloads that legitimately end in `0x00` (ASN.1 blobs, protobuf messages, null-terminated strings stored as binary). Affects six docs (EN + DE of `osf_general.md`, `osf4.md`, `osf5.md`) plus `DECISIONS.md` §16 + §21. Anchor IDs preserved.
+- Specification (rev 2026-05-24): Bit 7 of the control byte is uniformly optional for all data types. Earlier wording said Bit 7 "must be set" for `bcAbsTimeStampData` with `string` / `binary`; the new rule is type-agnostic. Saves four bytes per single-sample block.
+- Rust `osf-core`: the OSF5 writer no longer appends the trailing `0x00`; `binary_write`'s `write_string_with_terminator` / `write_binary_with_terminator` helpers are removed. `BlockReader` gains an `osf_version` field derived from the metablock and threads it through `parse_abs_timestamp_string_or_binary`; the new `strip_osf4_terminator` replaces the version-agnostic `strip_trailing_nul`. Reader-test surface grew from 22 to 24 unit tests via a 2 → 4 split into OSF5- and OSF4-pinned cases per string / binary path. 122 unit + 16 integration + 1 doc test pass; `cargo clippy --all-targets` clean.
+- Delphi `OSF.Filer` + `OSF.Data.Manager`: same version-deterministic refactor. `TOSFFile` writer appends `0x00` only when `FVersion = osvOSF4`; `TOSFDataManager.DecodeAbsTimestampedBlock` strips the last byte only on OSF4 input. New `TOSFFile.TruncationSeen: Boolean` property replaces the string-sniffing hack that the manager and meta-cache builder used to detect truncation.
+- C++ `osf::BlockReader`: same refactor on the reader side (writer arrives in Phase 7). `osf_version_` field derived from `meta.file_info.version`; `strip_osf4_terminator` replaces `strip_trailing_nul`; per-sample-size sanity check is now version-aware. Reader-test surface grew from 22 to 24 unit tests via the same 2 → 4 split; **157/157 ctest passes** in ~5.5 s.
+- Reference files in `examples/generated/`: all 17 files regenerated against the new rule. OSF4 files are structurally identical (size unchanged; only metadata jitter); OSF5 files with `string` / `binary` channels shrink by exactly 100 bytes each (100 samples × 1 byte terminator removed): `osf5_timestamped_string.osf`, `osf5_timestamped_binary.osf`, `osf5_mixed_extended.osf`. The other six OSF5 files are size-unchanged.
+- Delphi `TOSFMerger`: removed the per-class `WriteTimestampedBlock` path for multi-sample variable-length blocks. The historical Delphi-only layout (per-sample `uint32` length prefix) was non-spec and the Rust / C++ reference readers never parsed it. The writer now auto-splits N>1 string / binary calls into N single-sample blocks; the reader logs a warning and skips any such block it encounters. `BACKLOG.md` entry tracking the issue removed.
+- Delphi logging + progress: replaced the per-class `OnLog` event chain and the standalone `OSF.Progress.IProgressReporter` subsystem (with its eight implementation units) with a single process-wide `TOSFLog` instance, exposed as the global variable `Logger`. Any number of caller-owned `TLoggerListener` instances can register; each filters by its own `MinLevel` and decides what to do with the events (console output, progress bar, JSON-Lines, file append, GUI memo, ...). `TOSFLogLevel` reordered to `(llDebug, llInfo, llUser, llWarning, llError)` — verbosity-ascending — with the new `llUser` level as the default listener filter for user-facing CLI / GUI output. Architecture documented in `DECISIONS.md` §22.
+- osftool: `Cmd.Base` rewritten with listener setup / teardown. Each command registers a console listener (filter level driven by `--quiet` / `--verbose` / `--json`) and optionally a file listener (`--log <path>`, always at `llDebug`). The JSON event schema for `--json` is now generic (`{event: log/progress_start/progress/progress_end, level, msg, sender, value, max}`) — replaces the merge-specific schema from `OSF.Progress.Json`.
+- `STATUS.md` and `BACKLOG.md` refreshed accordingly. `DECISIONS.md` §16 (specification revision) and §21 (Java implementation) align with the new version-deterministic null-terminator rule.
+
+### Added
+
+- `Console.ProgressBar` in `implementations/delphi/src/console/` — schlanke, OSF-agnostische CLI in-place progress bar (`TConsoleProgressBar` with `Start` / `Update` / `Finish`). Picks between an in-place ANSI bar on an interactive TTY and throttled plain `Progress: N% (i/m)` lines on redirected stdout. Used by osftool through `Cmd.Base`'s default listener callbacks.
+- `OSFGeneratorCLI` in `implementations/delphi/demos/osfgenerator/` — console companion to the existing VCL `OSFGenerator` GUI. `OSFGeneratorCLI [output-dir] [samples-per-channel]`; defaults match the GUI (samples = 100). Allows CI-style regeneration of the 17-file reference set without GUI interaction.
+- `DECISIONS.md` §22 — Delphi logging + progress architecture.
+
+### Removed
+
+- The `OSF.Progress.*` Delphi unit family superseded by the `TOSFLog` listener pattern: `OSF.Progress.pas`, `OSF.Progress.Console.pas`, `OSF.Progress.Fallback.pas`, `OSF.Progress.Json.pas`, `OSF.Progress.Live.pas`, `OSF.Progress.LogFile.pas`, `OSF.Progress.Quiet.pas`, `OSF.Progress.Verbose.pas`. Net loss after the consolidation: ~621 LOC across the Delphi tree.
+- `BACKLOG.md` entries: "Delphi-Writer multi-sample string/binary uses non-spec layout" (resolved by the writer auto-split) and the entire "Spec Extensions / Future Format Revisions" section with the OSF6 null-terminator entry (obsoleted by the version-deterministic rule).
+
+### Notes
+
+- Pre-rev-2026-05-24 OSF5 files with a trailing `0x00` in `string` / `binary` payloads become technically non-conforming under the new rule: the byte will appear as a data byte on read. This is the intentional cost of removing the strip-if-present heuristic; the `examples/generated/` set has been regenerated to comply.
+
+---
+
 ## [0.9.0] — 2026-05-20
 
 ### Added
