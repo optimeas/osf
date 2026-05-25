@@ -8,7 +8,7 @@ when deeper context is needed.
 |---|---|
 | Repo | https://github.com/optimeas/osf |
 | Working dir | `V:\github\osf` (Windows) |
-| Latest tag | **v0.2.0** (2026-05-05) |
+| Latest tag | **v0.10.0** (2026-05-25) |
 | Branch | `main` |
 | Spec revision in effect | **2026-05-24** |
 
