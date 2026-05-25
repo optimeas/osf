@@ -727,9 +727,73 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 ---
 
+## Next session priorities (as of 2026-05-26)
+
+Current state — **C++ Phase 7a is complete** (commits
+`e839c66..a558768` on `main`; 192/192 ctest green; zero
+warnings). Recommended sequence for upcoming sessions, in
+priority order:
+
+1. **Rust writer spec-conformance fix** (HIGH priority — do
+   this **before** C++ Phase 7b begins). Background and
+   acceptable resolutions in
+   [BACKLOG.md](BACKLOG.md) → *Implementation Gaps and
+   Conventions* → "Rust-writer spec conformance for
+   single-sample variable-length blocks". The Rust writer
+   currently emits the expanded `bit-7 = 1 + uint32 N=1` form
+   for single-sample string/binary in `bcAbsTimeStampData`
+   where the spec-canonical (and new C++ Phase 7a encoder)
+   form is `bit-7 = 0` with implicit N. Cross-implementation
+   roundtrip tests in Phase 7b will surface this as a
+   bytewise mismatch if not fixed. Mini-session scope.
+2. **Reader-comment correction** in both
+   `implementations/cpp/src/reader.cpp` and
+   `implementations/rust/osf-core/src/reader.rs` (low
+   priority, cosmetic). Both files claim the spec requires
+   bit-7 set for variable-length blocks — wrong; spec allows
+   both forms. Details in
+   [BACKLOG.md](BACKLOG.md) → "Reader-comment correction".
+   Can be folded into the Rust-writer-fix session.
+3. **C++ Phase 7b — `StreamingWriter`**. Embedded,
+   sample-by-sample, per-block `FileChannel.force(true)`
+   equivalent flush. Composes the
+   `osf::detail::encode_*` symbols delivered by Phase 7a.
+   See [DECISIONS.md §20](DECISIONS.md#20-c-implementation-architecture)
+   *Status (updated 2026-05-26)* for the architectural
+   handoff notes.
+4. **C++ Phase 7c — `BlockWriter`**. Analyst-style,
+   accumulates samples in memory, emits whole file in one
+   pass. Same encoder substrate as Phase 7b.
+5. **C++ Phase 7d — `StaleValueGuard`** (optional).
+   100-second-repeat layer over `StreamingWriter` for
+   timestamped channels.
+
+Parallel work: **Java sync** if the Java implementation has
+not yet absorbed the spec rev 2026-05-24 updates
+(version-deterministic null-terminator rule, uniform bit-7
+optionality). DECISIONS §21 already documents the new rules,
+but no Java code exists yet to enforce them — the scaffolding
+prompt would be the next concrete step on that track.
+
+The Phase 7a final code review (commits `e839c66..7cdb561`)
+delivered an approved-with-nits verdict; the two nits were
+addressed in `2fa703a` (style consolidation) and the three
+coverage extensions in `7cdb561`. No outstanding defect-level
+work from Phase 7a survives.
+
+---
+
 ## Resuming in a new Claude Code session
 
 Drop this in as the first message:
+
+> Lies `STATUS.md`, dann `BACKLOG.md`, dann `DECISIONS.md`. Wir machen weiter.
+
+(The `BACKLOG.md` step matters now — the HIGH-priority
+Rust-writer item lives there, not in STATUS.md proper.)
+
+Older form, still works for sessions where the BACKLOG is
+already familiar:
 
 > Lies `STATUS.md`, dann `DECISIONS.md`. Wir machen weiter.
 
