@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 //
 // Unit tests for the OSF type-string parsers
 // (parse_data_type, parse_channel_type, parse_spectrum_type).

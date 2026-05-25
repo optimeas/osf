@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 //
 // Integration tests for parse_metablock_xml against the OSF4 reference
 // files under examples/generated/ plus the two field samples

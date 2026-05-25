@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 //
 // Unit tests for the typed channel model in <osf/data_channel.hpp>.
 // Mirrors implementations/rust/osf-core/src/data_channel.rs tests.

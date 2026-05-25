@@ -65,9 +65,13 @@ The whole project was relicensed **Apache 2.0 → MIT** on 2026-05-20
   // SPDX-License-Identifier: MIT
   // Copyright (c) 2026 Optimeas GmbH
   ```
-  (`#` instead of `//` for Python). C++ files in `implementations/cpp/`
-  keep their minimal one-line `// SPDX-License-Identifier: MIT` house
-  style — no copyright line.
+  (`#` instead of `//` for Python). This applies uniformly across
+  Delphi, Rust, Python (PyO3 bindings), and C++. The historical
+  C++ "SPDX-only" exception was abandoned on 2026-05-25 when the
+  surface inconsistency became visible during Phase 7a (cf. commit
+  introducing the copyright line into all `implementations/cpp/`
+  source files); file-level attribution now matches the rest of
+  the implementations.
 - `LICENSE` is the MIT text. Package manifests say `license = "MIT"`.
 - Vendored third-party code under `implementations/cpp/third_party/`
   keeps its own upstream licenses (`tl::expected` CC0-1.0,

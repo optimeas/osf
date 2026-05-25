@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 
 /// \file stats.hpp
 /// Reader-side telemetry.

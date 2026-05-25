@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 
 /// \file data_channel.hpp
 /// Typed in-memory channel model.

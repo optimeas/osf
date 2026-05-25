@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 //
 // Unit tests for the block-model primitives in <osf/block.hpp>:
 // payload length helpers, control-byte decoder, GpsLocation equality.

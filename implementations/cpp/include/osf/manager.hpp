@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 
 /// \file manager.hpp
 /// High-level OSF reader: assembles typed in-memory channels from the

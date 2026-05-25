@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 //
 // osf.hpp — Umbrella header for the OSF C++ library.
 //

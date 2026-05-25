@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 //
 // Integration tests for osf::BlockReader against real reference and
 // field-recorded OSF files. The Phase-5 success criterion is that

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 //
 // Unit tests for osf::BlockReader against synthetic byte sequences.
 //

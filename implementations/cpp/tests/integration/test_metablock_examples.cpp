@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 //
 // Integration tests for parse_metablock_json against the OSF5 reference
 // files under examples/generated/. These exercise the parser on real

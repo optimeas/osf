@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 
 /// \file reader.hpp
 /// OSF block-stream reader.

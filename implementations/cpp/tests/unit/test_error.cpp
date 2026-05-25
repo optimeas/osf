@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 //
 // Smoke test for the foundation API: osf::Error, osf::Result<T>,
 // osf::version(). Designed to fail loudly if the basics break;

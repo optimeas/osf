@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
 //
 // osf::Error and osf::Result<T> — the foundation error type used by
 // every fallible operation in the OSF C++ library.
