@@ -136,7 +136,7 @@ osf/
 | Unit | Public surface |
 |---|---|
 | `OSF.Types` | `TOSFDataType` (only current types — pair/triple/candata/gpsdata are gone), `TOSFVersion`, `TOSFGpsLocation`, `TBlockContent`, helpers (`OSFDataTypeFromString`, `OSFNowAsUnixNs`, …) |
-| `OSF.Log` | `TOSFLogEvent`, `TOSFLogLevel`, `TOSFLoggable` |
+| `OSF.Log` | Central logging + progress dispatcher. `TOSFLogLevel = (llDebug, llInfo, llUser, llWarning, llError)` (verbosity-ascending; default listener filter is `llUser`). `TOSFLogEvent` carries `(Msg, Level, Sender)`. `TLoggerListener` class with four event slots (`OnAddLogMessage`, `OnStartProgress`, `OnDoProgress`, `OnEndProgress`) plus a per-listener `MinLevel`. `TOSFLog` class with `RegisterListener`/`UnregisterListener`, `Write` (two overloads), `ProgressStart`/`DoProgress`/`EndProgress`, and `IsLevelActive(Level)`; threadsafe via `TCriticalSection`, listener iteration over a snapshot so a listener can register / unregister another listener from inside its own callback. Process-wide singleton exposed as the global `Logger: TOSFLog` (init / final inside the unit). |
 | `OSF.Channel` | `TOSFChannelDef` — has `SampleRate: Double`; no longer has `Scale`, `Offset`, `PhysicalUnit1..3`, `PhysicalDimension1..3` |
 | `OSF.Filer` | `TOSFFile` — streaming reader/writer for OSF4 and OSF5. `WriteEquidistantBlock(...)` requires `Channel.SampleRate > 0` and a non-zero `FirstTimestampNs` to start a new segment. `WriteTimestampedSample/Block/Doubles` for timestamped channels. Version-deterministic `0x00` handling for `string`/`binary` in `bcAbsTimeStampData` per spec rev 2026-05-24: writer appends and reader strips for OSF4, both leave the payload verbatim for OSF5. Variable-length `WriteTimestampedBlock` calls with N>1 are auto-split into N single-sample blocks (the historical multi-sample per-sample-uint32-length-prefix layout was removed). Adds an optional read-side `ChannelFilter: TArray<string>` (skips blocks of channels not in the list — info blocks always pass through). Transparent **OSFZ (gzip) decompression**: `OpenForRead` peeks the `1F 8B` magic and wraps the stream in `TZDecompressionStream`. OSF4 XML metablock is parsed via **OmniXML** (`GetDOMVendor(sOmniXmlVendor)`) so reads no longer need MSXML installed. |
 | `OSF.Data.Channels` | Typed in-memory channels. **`TOSFEquidistantDataChannel.Segments: TList<TOSFChannelSegment>`** maps the flat `Values` list onto absolute time — every `bcStartData` opens a new segment with `(StartTimestampNs, StartIndex, SampleCount)`. |
@@ -149,7 +149,7 @@ osf/
 | `OSF.Export.HDF5` | `TOSFHDF5Exporter` — exports a `TOSFDataManager` as an HDF5 file: one chunked / shuffled / deflated 1-D dataset of `{int64 timestamp_ns; value}` compound records per channel, the channel name split on the namespace separator into HDF5 groups, file and channel metadata as root/dataset attributes. Covers `bool`, every signed/unsigned integer width, `float`, `double`, `gpslocation` (a lat/lon/alt sub-compound) and `string` (variable-length UTF-8); `binary` is skipped. Configurable `ChunkSize`, `DeflateLevel`, `UseShuffle`, `NamespaceSep`, `LibraryDir`. Windows-only. |
 
 | `OSF.Version` | osftool version single-source-of-truth: `OSFTOOL_VERSION` constant + `GetVersionString` / `GetFullVersionString` (build timestamp taken from the executable's own file date). |
-| `OSF.Progress` (+ `.Console` / `.Quiet` / `.Verbose` / `.Json` / `.Fallback` / `.Live` / `.LogFile`) | Reusable, OSF-agnostic `IProgressReporter` abstraction for long-running multi-file operations: structured phase events, a generic `StartProgress`/`DoProgress`/`EndProgress` progress-bar triplet, and a `Log` catch-all; six reporter implementations (live progress bar, plain redirect-fallback, quiet, verbose, JSON-Lines) and a log-file decorator. The live reporter draws a single in-place progress-bar line that carries the current file name. Consumed by `osftool merge`. |
+| `Console.ProgressBar` (in `src/console/`) | OSF-agnostic CLI in-place progress bar. `TConsoleProgressBar` with `Start(MaxValue, Msg)` / `Update(Value, Msg)` / `Finish(Msg)`. Auto-picks between an in-place ANSI bar (interactive TTY, Windows VT processing enabled) and throttled plain "Progress: N% (i/m)" lines (redirected stdout). Plus `ShortenPath` helper for embedding long file paths in progress messages. Wired up by osftool through `Cmd.Base`'s default listener callbacks. |
 
 **HDF5 DLL binding in `implementations/delphi/src/hdf5/`:** `Hdf5.Types`,
 `Hdf5.Api` and `Hdf5.Wrapper` form a reusable, OSF-agnostic Delphi binding
@@ -160,7 +160,8 @@ them. The runtime itself is never committed; `dataformats/hdf5/lib/install-hdf5.
 fetches HDF5 1.14.4-3 from the HDF Group.
 
 **`OSFCompileCheck.dpr`** at the implementation root is a no-form `uses`-only
-program covering every `OSF.*` unit in `src/` except the Windows-only
+program covering every `OSF.*` library unit in `src/` plus
+`Console.ProgressBar` in `src/console/`, except the Windows-only
 `OSF.Export.HDF5` and its `src/hdf5/` wrapper cluster (those are exercised
 by the osftool project that links them explicitly). Running
 `dcc32 -B -Q OSFCompileCheck.dpr` from `implementations/delphi/` gives a
@@ -196,7 +197,7 @@ Nine verbs, dispatched by `TOsfToolDispatcher`:
 
 | Verb | Purpose |
 |---|---|
-| `merge` | Merge OSF files from a directory into one OSF — positionals `<rootdir> <outputfile> [channel ...]`; `--start`/`--end` ISO-8601 interval bounds (default `1970-01-01`..now), `--osf4`, `--overwrite`, `--no-cache`; output-mode flags `-q`/`--quiet`, `-v`/`--verbose`, `--json` (JSON-Lines event stream), `--log <path>`. Default run shows a live progress bar via the `OSF.Progress.*` reporter subsystem. Wraps `TOSFMerger` |
+| `merge` | Merge OSF files from a directory into one OSF — positionals `<rootdir> <outputfile> [channel ...]`; `--start`/`--end` ISO-8601 interval bounds (default `1970-01-01`..now), `--osf4`, `--overwrite`, `--no-cache`; output-mode flags `-q`/`--quiet`, `-v`/`--verbose`, `--json` (JSON-Lines event stream), `--log <path>`. Default run shows a live progress bar via the `TOSFLog` listener registered in `Cmd.Base` (`Console.ProgressBar` under the hood). Wraps `TOSFMerger` |
 | `export` | Export channels — `--format csv` (per-channel XY), `unified-csv` (single shared timeline) or `hdf5` (Windows; one compound dataset per channel via `TOSFHDF5Exporter`); `--timestamp-format`, `--decimal-sep`, `--encoding`, `--start/--end`, plus the HDF5 options `--chunk-size`, `--deflate-level`, `--no-shuffle`, `--namespace-sep`, `--hdf5-lib-dir` |
 | `info` | File metadata + global time range (cache-backed when a valid sidecar exists) |
 | `channels` | List channels with optional `--filter` wildcard (`System.Masks`) |
@@ -215,7 +216,7 @@ clean with `dcc64`.
 
 The top-level dispatcher also handles `--version` / `-V` (plus `--short`),
 sourced from the `OSF.Version` unit (osftool 1.1.0). The `merge` verb
-renders progress through the `OSF.Progress.*` reporter subsystem — a
+renders progress through the `TOSFLog` listener pattern that `Cmd.Base` sets up for every command — a
 single-line live progress bar by default, the `--verbose` / `--json` /
 `--quiet` / `--log` alternatives, and an automatic plain-text fallback
 when stdout is redirected. On Windows the console is switched to the
