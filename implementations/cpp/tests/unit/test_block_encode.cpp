@@ -481,3 +481,168 @@ TEST(BlockEncodeRoundtripGps, SingleAndMulti) {
     encode_and_read({1, 2, 3}, {{47.0, 9.0, 100.0}, {47.5, 9.5, 200.0},
                                 {48.0, 10.0, 300.0}});
 }
+
+// ---------------------------------------------------------------------------
+// Task 6: byte-exact tests for encode_abs_timestamp_data(std::string_view)
+// ---------------------------------------------------------------------------
+
+TEST(BlockEncodeString, EmptyString_Frame) {
+    std::vector<std::uint8_t> out;
+    auto r = encode_abs_timestamp_data(out, /*ch=*/0, /*=2*/2,
+                                       /*ts=*/0LL, std::string_view{});
+    ASSERT_TRUE(r.has_value());
+
+    // 1 (ctrl) + 8 (ts) + 0 (empty payload) = 9. Frame = 13.
+    ASSERT_EQ(out.size(), 13u);
+    EXPECT_EQ(out[4], 0x08);                              // bcAbsTimeStampData, bit-7=0
+    EXPECT_TRUE(bytes_eq(out, 2, {0x09, 0x00}));          // len=9
+}
+
+TEST(BlockEncodeString, NonEmpty_NoTrailingZero) {
+    std::vector<std::uint8_t> out;
+    auto r = encode_abs_timestamp_data(out, 0, 2, 1LL,
+                                       std::string_view{"hello"});
+    ASSERT_TRUE(r.has_value());
+
+    // 1 (ctrl) + 8 (ts) + 5 (payload) = 14. Frame = 18.
+    ASSERT_EQ(out.size(), 18u);
+    // Last 5 bytes are the payload — verify exact bytes and no
+    // trailing 0x00 (spec rev 2026-05-24 OSF5 rule).
+    EXPECT_EQ(out[13], 'h');
+    EXPECT_EQ(out[14], 'e');
+    EXPECT_EQ(out[15], 'l');
+    EXPECT_EQ(out[16], 'l');
+    EXPECT_EQ(out[17], 'o');
+    // The byte AT position 18 would only exist if the encoder
+    // appended a sentinel. The vector size assertion above
+    // already rules that out, but make it explicit:
+    EXPECT_EQ(out.size(), 18u) << "no trailing 0x00 may be appended";
+}
+
+TEST(BlockEncodeString, PayloadEndingInZeroByteIsPreserved) {
+    // OSF5 is version-deterministic: even payloads that legitimately
+    // end in 0x00 must be passed through verbatim.
+    std::vector<std::uint8_t> out;
+    char const data[] = {'a', '\x00', 'b'};  // 3 bytes, middle is zero
+    auto r = encode_abs_timestamp_data(out, 0, 2, 1LL,
+                                       std::string_view{data, sizeof(data)});
+    ASSERT_TRUE(r.has_value());
+    // 1 (ctrl) + 8 (ts) + 3 (payload) = 12. Frame = 16.
+    ASSERT_EQ(out.size(), 16u);
+    EXPECT_EQ(out[13], 'a');
+    EXPECT_EQ(out[14], 0x00);
+    EXPECT_EQ(out[15], 'b');
+}
+
+// ---------------------------------------------------------------------------
+// Task 6: byte-exact tests for encode_abs_timestamp_data(BinarySample)
+// ---------------------------------------------------------------------------
+
+TEST(BlockEncodeBinary, NonEmpty_NoTrailingZero) {
+    std::vector<std::uint8_t> out;
+    std::uint8_t const data[] = {0xDE, 0xAD, 0xBE, 0xEF};
+    auto r = encode_abs_timestamp_data(out, 0, 2, 0LL,
+                                       BinarySample{data, sizeof(data)});
+    ASSERT_TRUE(r.has_value());
+
+    // 1 (ctrl) + 8 (ts) + 4 (payload) = 13. Frame = 17.
+    ASSERT_EQ(out.size(), 17u);
+    EXPECT_EQ(out[4], 0x08);                              // bcAbsTimeStampData, bit-7=0
+    EXPECT_TRUE(bytes_eq(out, 13, {0xDE, 0xAD, 0xBE, 0xEF}));
+}
+
+TEST(BlockEncodeBinary, FromVectorFactory) {
+    std::vector<std::uint8_t> out;
+    std::vector<std::uint8_t> v = {0x01, 0x02};
+    auto r = encode_abs_timestamp_data(out, 0, 2, 0LL,
+                                       BinarySample::from_vector(v));
+    ASSERT_TRUE(r.has_value());
+    ASSERT_EQ(out.size(), 15u);   // 2+2+11 = 15
+    EXPECT_EQ(out[13], 0x01);
+    EXPECT_EQ(out[14], 0x02);
+}
+
+// ---------------------------------------------------------------------------
+// Task 6: error-path tests for variable-length encoder
+// ---------------------------------------------------------------------------
+
+TEST(BlockEncodeVariable, BadSizeofLengthValueInvalidArgument) {
+    std::vector<std::uint8_t> out;
+    auto r = encode_abs_timestamp_data(out, 0, /*=5*/5, 0LL,
+                                       std::string_view{"x"});
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
+    EXPECT_TRUE(out.empty());
+}
+
+TEST(BlockEncodeVariable, OversizePayloadInvalidBlock) {
+    // sizeoflengthvalue=2 implies payload_length <= 65535.
+    // Body = 1 (ctrl) + 8 (ts) + payload-bytes. The boundary
+    // payload size that just trips is 65527.
+    std::vector<std::uint8_t> out;
+    std::string big(65527, 'x');
+    auto r = encode_abs_timestamp_data(out, 0, 2, 0LL,
+                                       std::string_view{big});
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::InvalidBlock);
+
+    // One byte less fits.
+    out.clear();
+    std::string ok(65526, 'x');
+    auto r2 = encode_abs_timestamp_data(out, 0, 2, 0LL,
+                                        std::string_view{ok});
+    EXPECT_TRUE(r2.has_value());
+}
+
+// ---------------------------------------------------------------------------
+// Task 6: roundtrip tests via BlockReader for variable-length encoder
+// ---------------------------------------------------------------------------
+
+TEST(BlockEncodeRoundtripVariable, StringSingleSample) {
+    std::vector<std::uint8_t> out;
+    auto r = encode_abs_timestamp_data(out, 0, 2, 42LL,
+                                       std::string_view{"hello"});
+    ASSERT_TRUE(r.has_value());
+
+    auto meta = one_channel_meta(osf::DataType::String,
+                                 osf::ChannelType::Timestamped, 2);
+    std::string s(reinterpret_cast<char const*>(out.data()), out.size());
+    std::istringstream in(s);
+    osf::BlockReader rdr(in, meta);
+    auto block_opt = rdr.next();
+    ASSERT_TRUE(block_opt.has_value());
+    ASSERT_TRUE(block_opt->has_value());
+    auto* ats = std::get_if<osf::AbsTimestampData>(&block_opt->value().kind);
+    ASSERT_NE(ats, nullptr);
+    auto* strs = std::get_if<std::vector<std::pair<std::int64_t,
+                                                   std::string>>>(&ats->samples);
+    ASSERT_NE(strs, nullptr);
+    ASSERT_EQ(strs->size(), 1u);
+    EXPECT_EQ((*strs)[0].first, 42);
+    EXPECT_EQ((*strs)[0].second, "hello");
+}
+
+TEST(BlockEncodeRoundtripVariable, BinarySingleSample) {
+    std::vector<std::uint8_t> out;
+    std::vector<std::uint8_t> data = {0x00, 0x01, 0x00, 0xFF, 0x00};
+    auto r = encode_abs_timestamp_data(out, 0, 2, 1LL,
+                                       BinarySample::from_vector(data));
+    ASSERT_TRUE(r.has_value());
+
+    auto meta = one_channel_meta(osf::DataType::Binary,
+                                 osf::ChannelType::Timestamped, 2);
+    std::string s(reinterpret_cast<char const*>(out.data()), out.size());
+    std::istringstream in(s);
+    osf::BlockReader rdr(in, meta);
+    auto block_opt = rdr.next();
+    ASSERT_TRUE(block_opt.has_value());
+    ASSERT_TRUE(block_opt->has_value());
+    auto* ats = std::get_if<osf::AbsTimestampData>(&block_opt->value().kind);
+    ASSERT_NE(ats, nullptr);
+    auto* bins = std::get_if<std::vector<std::pair<std::int64_t,
+                              std::vector<std::uint8_t>>>>(&ats->samples);
+    ASSERT_NE(bins, nullptr);
+    ASSERT_EQ(bins->size(), 1u);
+    EXPECT_EQ((*bins)[0].first, 1);
+    EXPECT_EQ((*bins)[0].second, data);  // including the 0x00 bytes
+}

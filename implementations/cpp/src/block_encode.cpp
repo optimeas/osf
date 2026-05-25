@@ -237,6 +237,51 @@ OSF_INSTANTIATE_TIMESTAMPED(double);
 
 #undef OSF_INSTANTIATE_TIMESTAMPED
 
+Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
+                                       std::uint16_t channel_index,
+                                       std::uint8_t sizeoflengthvalue,
+                                       std::int64_t timestamp_ns,
+                                       std::string_view sample) {
+    // Single-sample only; bit-7 = 0, no N-prefix, no trailing 0x00.
+    std::uint64_t const payload_len = 1u + 8u + sample.size();
+
+    auto begin = begin_frame(out, channel_index, sizeoflengthvalue, payload_len);
+    if (!begin) return tl::make_unexpected(begin.error());
+
+    out.reserve(out.size() + payload_len);
+    out.push_back(0x08);                     // bcAbsTimeStampData, bit-7 clear
+
+    std::uint8_t tsbuf[8];
+    write_le_i64(tsbuf, timestamp_ns);
+    out.insert(out.end(), std::begin(tsbuf), std::end(tsbuf));
+
+    // Payload bytes verbatim — OSF5 writer per spec rev 2026-05-24.
+    std::uint8_t const* p = reinterpret_cast<std::uint8_t const*>(sample.data());
+    out.insert(out.end(), p, p + sample.size());
+    return {};
+}
+
+Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
+                                       std::uint16_t channel_index,
+                                       std::uint8_t sizeoflengthvalue,
+                                       std::int64_t timestamp_ns,
+                                       BinarySample sample) {
+    std::uint64_t const payload_len = 1u + 8u + sample.size;
+
+    auto begin = begin_frame(out, channel_index, sizeoflengthvalue, payload_len);
+    if (!begin) return tl::make_unexpected(begin.error());
+
+    out.reserve(out.size() + payload_len);
+    out.push_back(0x08);                     // bcAbsTimeStampData, bit-7 clear
+
+    std::uint8_t tsbuf[8];
+    write_le_i64(tsbuf, timestamp_ns);
+    out.insert(out.end(), std::begin(tsbuf), std::end(tsbuf));
+
+    out.insert(out.end(), sample.data, sample.data + sample.size);
+    return {};
+}
+
 Result<void> encode_abs_timestamp_data_gps(std::vector<std::uint8_t>& out,
                                           std::uint16_t channel_index,
                                           std::uint8_t sizeoflengthvalue,
