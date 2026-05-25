@@ -20,7 +20,9 @@
 
 namespace {
 
+using osf::GpsLocation;
 using osf::detail::BinarySample;
+using osf::detail::encode_abs_timestamp_data_gps;
 using osf::detail::encode_continued_data;
 using osf::detail::encode_start_data;
 
@@ -399,4 +401,83 @@ TEST(BlockEncodeRoundtripAbsTs, MultiSampleInt32) {
     ASSERT_EQ(pairs->size(), 4u);
     EXPECT_EQ((*pairs)[2].first, 30);
     EXPECT_EQ((*pairs)[2].second, 3);
+}
+
+// ---------------------------------------------------------------------------
+// Task 5: byte-exact tests for encode_abs_timestamp_data_gps
+// ---------------------------------------------------------------------------
+
+TEST(BlockEncodeGps, SingleSample_Frame) {
+    std::vector<std::uint8_t> out;
+    std::int64_t const ts = 100;
+    GpsLocation const samples[] = {{47.5, 9.5, 400.0}};
+    auto r = encode_abs_timestamp_data_gps(out, 0, 2, &ts, samples, 1);
+    ASSERT_TRUE(r.has_value());
+
+    // 1 (ctrl) + 8 (ts) + 24 (3 doubles) = 33. Frame = 37 bytes.
+    ASSERT_EQ(out.size(), 37u);
+    EXPECT_EQ(out[4], 0x08);                                  // bcAbsTimeStampData, bit-7=0
+    EXPECT_TRUE(bytes_eq(out, 2, {0x21, 0x00}));              // len=33
+}
+
+TEST(BlockEncodeGps, MultiSample_Bit7Set) {
+    std::vector<std::uint8_t> out;
+    std::int64_t const tss[] = {1, 2};
+    GpsLocation const samples[] = {{47.0, 9.0, 100.0}, {48.0, 10.0, 200.0}};
+    auto r = encode_abs_timestamp_data_gps(out, 0, 2, tss, samples, 2);
+    ASSERT_TRUE(r.has_value());
+
+    // 1 (ctrl) + 4 (N) + 2 * 32 = 69. Frame = 73.
+    ASSERT_EQ(out.size(), 73u);
+    EXPECT_EQ(out[4], 0x88);                                  // bcAbsTimeStampData | bit-7
+    EXPECT_TRUE(bytes_eq(out, 5, {0x02, 0x00, 0x00, 0x00}));
+}
+
+// ---------------------------------------------------------------------------
+// Task 5: error-path + roundtrip tests for GPS encoder
+// ---------------------------------------------------------------------------
+
+TEST(BlockEncodeGps, ZeroCountInvalidArgument) {
+    std::vector<std::uint8_t> out;
+    std::int64_t ts = 0;
+    GpsLocation s{0, 0, 0};
+    auto r = encode_abs_timestamp_data_gps(out, 0, 2, &ts, &s, 0);
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
+    EXPECT_TRUE(out.empty());
+}
+
+TEST(BlockEncodeRoundtripGps, SingleAndMulti) {
+    auto encode_and_read = [](std::vector<std::int64_t> const& tss,
+                              std::vector<GpsLocation> const& samples) {
+        std::vector<std::uint8_t> out;
+        auto r = encode_abs_timestamp_data_gps(
+            out, 0, 2, tss.data(), samples.data(), samples.size());
+        EXPECT_TRUE(r.has_value());
+
+        auto meta = one_channel_meta(osf::DataType::GpsLocation,
+                                     osf::ChannelType::Timestamped, 2);
+        std::string s(reinterpret_cast<char const*>(out.data()), out.size());
+        std::istringstream in(s);
+        osf::BlockReader rdr(in, meta);
+        auto block_opt = rdr.next();
+        ASSERT_TRUE(block_opt.has_value());
+        ASSERT_TRUE(block_opt->has_value());
+        auto* ats = std::get_if<osf::AbsTimestampData>(&block_opt->value().kind);
+        ASSERT_NE(ats, nullptr);
+        auto* gps = std::get_if<std::vector<std::pair<std::int64_t, GpsLocation>>>(
+            &ats->samples);
+        ASSERT_NE(gps, nullptr);
+        ASSERT_EQ(gps->size(), samples.size());
+        for (std::size_t i = 0; i < samples.size(); ++i) {
+            EXPECT_EQ((*gps)[i].first, tss[i]);
+            EXPECT_DOUBLE_EQ((*gps)[i].second.latitude, samples[i].latitude);
+            EXPECT_DOUBLE_EQ((*gps)[i].second.longitude, samples[i].longitude);
+            EXPECT_DOUBLE_EQ((*gps)[i].second.altitude, samples[i].altitude);
+        }
+    };
+
+    encode_and_read({100}, {{47.5, 9.5, 400.0}});
+    encode_and_read({1, 2, 3}, {{47.0, 9.0, 100.0}, {47.5, 9.5, 200.0},
+                                {48.0, 10.0, 300.0}});
 }

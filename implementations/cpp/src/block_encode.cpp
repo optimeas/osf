@@ -237,4 +237,48 @@ OSF_INSTANTIATE_TIMESTAMPED(double);
 
 #undef OSF_INSTANTIATE_TIMESTAMPED
 
+Result<void> encode_abs_timestamp_data_gps(std::vector<std::uint8_t>& out,
+                                          std::uint16_t channel_index,
+                                          std::uint8_t sizeoflengthvalue,
+                                          std::int64_t const* timestamps_ns,
+                                          GpsLocation const* samples,
+                                          std::size_t count) {
+    if (count == 0) {
+        return tl::make_unexpected(Error{
+            Error::Code::InvalidArgument,
+            "encode_abs_timestamp_data_gps: count must be > 0"});
+    }
+    bool const multi = count > 1;
+    // Per-sample: 8 (ts) + 24 (lat/lon/alt) = 32 bytes.
+    std::uint64_t const payload_len =
+        1u + (multi ? 4u : 0u) + count * 32u;
+
+    auto begin = begin_frame(out, channel_index, sizeoflengthvalue, payload_len);
+    if (!begin) return tl::make_unexpected(begin.error());
+
+    std::uint8_t const ctrl = static_cast<std::uint8_t>(
+        0x08 | (multi ? 0x80 : 0x00));   // bcAbsTimeStampData = 8 per block.hpp
+    out.reserve(out.size() + payload_len);
+    out.push_back(ctrl);
+
+    if (multi) {
+        std::uint8_t buf4[4];
+        write_le_u32(buf4, static_cast<std::uint32_t>(count));
+        out.insert(out.end(), std::begin(buf4), std::end(buf4));
+    }
+
+    std::uint8_t buf8[8];
+    for (std::size_t i = 0; i < count; ++i) {
+        write_le_i64(buf8, timestamps_ns[i]);
+        out.insert(out.end(), std::begin(buf8), std::end(buf8));
+        write_le_f64(buf8, samples[i].latitude);
+        out.insert(out.end(), std::begin(buf8), std::end(buf8));
+        write_le_f64(buf8, samples[i].longitude);
+        out.insert(out.end(), std::begin(buf8), std::end(buf8));
+        write_le_f64(buf8, samples[i].altitude);
+        out.insert(out.end(), std::begin(buf8), std::end(buf8));
+    }
+    return {};
+}
+
 }  // namespace osf::detail
