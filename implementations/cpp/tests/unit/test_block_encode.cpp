@@ -22,6 +22,7 @@ namespace {
 
 using osf::GpsLocation;
 using osf::detail::BinarySample;
+using osf::detail::encode_abs_timestamp_data;
 using osf::detail::encode_abs_timestamp_data_gps;
 using osf::detail::encode_continued_data;
 using osf::detail::encode_start_data;
@@ -269,10 +270,6 @@ TEST(BlockEncodeRoundtrip, ContinuedDataDouble) {
 // Task 4: byte-exact tests for encode_abs_timestamp_data<T>
 // ---------------------------------------------------------------------------
 
-namespace {
-using osf::detail::encode_abs_timestamp_data;
-}  // namespace
-
 TEST(BlockEncodeAbsTs, Int32SingleSample_Bit7Clear) {
     std::vector<std::uint8_t> out;
     std::int64_t const ts = 42;
@@ -356,7 +353,18 @@ void roundtrip_abs_ts_one(osf::DataType dt, T value) {
     ASSERT_NE(pairs, nullptr);
     ASSERT_EQ(pairs->size(), 1u);
     EXPECT_EQ((*pairs)[0].first, ts);
-    EXPECT_EQ((*pairs)[0].second, value);
+    // Use the matcher appropriate for the storage type. Integral types
+    // round-trip bit-for-bit so plain equality is fine; floating-point
+    // types are compared with the GoogleTest macros that allow a
+    // 4-ULP tolerance — exact-equality on float/double is a maintenance
+    // hazard even when the literal happens to be representable.
+    if constexpr (std::is_same_v<T, float>) {
+        EXPECT_FLOAT_EQ((*pairs)[0].second, value);
+    } else if constexpr (std::is_same_v<T, double>) {
+        EXPECT_DOUBLE_EQ((*pairs)[0].second, value);
+    } else {
+        EXPECT_EQ((*pairs)[0].second, value);
+    }
 }
 
 }  // namespace
