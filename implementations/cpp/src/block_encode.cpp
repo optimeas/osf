@@ -177,4 +177,64 @@ OSF_INSTANTIATE_EQUIDISTANT(double);
 
 #undef OSF_INSTANTIATE_EQUIDISTANT
 
+template <typename T>
+Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
+                                       std::uint16_t channel_index,
+                                       std::uint8_t sizeoflengthvalue,
+                                       std::int64_t const* timestamps_ns,
+                                       T const* samples,
+                                       std::size_t count) {
+    if (count == 0) {
+        return tl::make_unexpected(Error{
+            Error::Code::InvalidArgument,
+            "encode_abs_timestamp_data: count must be > 0"});
+    }
+    bool const multi = count > 1;
+    // Per-pair size: i64 ts + one sample.
+    std::uint64_t const pair_bytes = 8u + sizeof(T);
+    std::uint64_t const payload_len =
+        1u + (multi ? 4u : 0u) + count * pair_bytes;
+
+    auto begin = begin_frame(out, channel_index, sizeoflengthvalue, payload_len);
+    if (!begin) return tl::make_unexpected(begin.error());
+
+    std::uint8_t const ctrl = static_cast<std::uint8_t>(
+        0x08 | (multi ? 0x80 : 0x00));   // bcAbsTimeStampData = 8 per block.hpp
+    out.reserve(out.size() + payload_len);
+    out.push_back(ctrl);
+
+    if (multi) {
+        std::uint8_t buf4[4];
+        write_le_u32(buf4, static_cast<std::uint32_t>(count));
+        out.insert(out.end(), std::begin(buf4), std::end(buf4));
+    }
+
+    std::uint8_t tsbuf[8];
+    for (std::size_t i = 0; i < count; ++i) {
+        write_le_i64(tsbuf, timestamps_ns[i]);
+        out.insert(out.end(), std::begin(tsbuf), std::end(tsbuf));
+        append_sample<T>(out, samples[i]);
+    }
+    return {};
+}
+
+#define OSF_INSTANTIATE_TIMESTAMPED(T)                                       \
+    template Result<void> encode_abs_timestamp_data<T>(                      \
+        std::vector<std::uint8_t>&, std::uint16_t, std::uint8_t,             \
+        std::int64_t const*, T const*, std::size_t)
+
+OSF_INSTANTIATE_TIMESTAMPED(bool);
+OSF_INSTANTIATE_TIMESTAMPED(std::int8_t);
+OSF_INSTANTIATE_TIMESTAMPED(std::int16_t);
+OSF_INSTANTIATE_TIMESTAMPED(std::int32_t);
+OSF_INSTANTIATE_TIMESTAMPED(std::int64_t);
+OSF_INSTANTIATE_TIMESTAMPED(std::uint8_t);
+OSF_INSTANTIATE_TIMESTAMPED(std::uint16_t);
+OSF_INSTANTIATE_TIMESTAMPED(std::uint32_t);
+OSF_INSTANTIATE_TIMESTAMPED(std::uint64_t);
+OSF_INSTANTIATE_TIMESTAMPED(float);
+OSF_INSTANTIATE_TIMESTAMPED(double);
+
+#undef OSF_INSTANTIATE_TIMESTAMPED
+
 }  // namespace osf::detail

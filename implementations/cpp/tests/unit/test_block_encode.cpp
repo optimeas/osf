@@ -262,3 +262,141 @@ TEST(BlockEncodeRoundtrip, ContinuedDataDouble) {
     EXPECT_DOUBLE_EQ((*dv)[0], 1.1);
     EXPECT_DOUBLE_EQ((*dv)[3], 4.4);
 }
+
+// ---------------------------------------------------------------------------
+// Task 4: byte-exact tests for encode_abs_timestamp_data<T>
+// ---------------------------------------------------------------------------
+
+namespace {
+using osf::detail::encode_abs_timestamp_data;
+}  // namespace
+
+TEST(BlockEncodeAbsTs, Int32SingleSample_Bit7Clear) {
+    std::vector<std::uint8_t> out;
+    std::int64_t const ts = 42;
+    std::int32_t const samples[] = {-1};
+    auto r = encode_abs_timestamp_data<std::int32_t>(
+        out, /*ch=*/2, /*=2*/2, &ts, samples, 1);
+    ASSERT_TRUE(r.has_value());
+
+    // 1 (ctrl) + 8 (ts) + 4 (i32) = 13 -> u16=0x000D. Frame = 2 + 2 + 13 = 17.
+    ASSERT_EQ(out.size(), 17u);
+    EXPECT_TRUE(bytes_eq(out, 0, {0x02, 0x00}));    // ci=2
+    EXPECT_TRUE(bytes_eq(out, 2, {0x0D, 0x00}));    // len=13
+    EXPECT_EQ(out[4], 0x08);                         // bcAbsTimeStampData, bit-7=0
+}
+
+TEST(BlockEncodeAbsTs, DoubleThreeSamples_Bit7Set) {
+    std::vector<std::uint8_t> out;
+    std::int64_t const tss[] = {1, 2, 3};
+    double const samples[] = {1.0, 2.0, 3.0};
+    auto r = encode_abs_timestamp_data<double>(out, 0, 2, tss, samples, 3);
+    ASSERT_TRUE(r.has_value());
+
+    // 1 (ctrl) + 4 (N) + 3 * (8 ts + 8 double) = 1 + 4 + 48 = 53.
+    // Frame = 2 + 2 + 53 = 57.
+    ASSERT_EQ(out.size(), 57u);
+    EXPECT_EQ(out[4], 0x88);                         // bcAbsTimeStampData | bit-7
+    EXPECT_TRUE(bytes_eq(out, 5, {0x03, 0x00, 0x00, 0x00}));  // N=3
+}
+
+TEST(BlockEncodeAbsTs, BoolSingleSample_OneByte) {
+    std::vector<std::uint8_t> out;
+    std::int64_t const ts = 0;
+    bool const samples[] = {true};
+    auto r = encode_abs_timestamp_data<bool>(out, 0, 2, &ts, samples, 1);
+    ASSERT_TRUE(r.has_value());
+
+    // 1 (ctrl) + 8 (ts) + 1 (bool) = 10 -> u16=0x000A. Frame = 14.
+    ASSERT_EQ(out.size(), 14u);
+    EXPECT_EQ(out[4], 0x08);                         // bcAbsTimeStampData, bit-7=0
+    EXPECT_EQ(out[13], 0x01);                        // true encoded as 0x01
+}
+
+// ---------------------------------------------------------------------------
+// Task 4: error-path tests for encode_abs_timestamp_data
+// ---------------------------------------------------------------------------
+
+TEST(BlockEncodeAbsTs, ZeroCountInvalidArgument) {
+    std::vector<std::uint8_t> out;
+    std::int64_t ts = 0;
+    std::int32_t s = 0;
+    auto r = encode_abs_timestamp_data<std::int32_t>(out, 0, 2, &ts, &s, 0);
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
+    EXPECT_TRUE(out.empty());
+}
+
+// ---------------------------------------------------------------------------
+// Task 4: roundtrip tests for all 11 supported numeric types
+// ---------------------------------------------------------------------------
+
+namespace {
+
+template <typename T>
+void roundtrip_abs_ts_one(osf::DataType dt, T value) {
+    std::vector<std::uint8_t> out;
+    std::int64_t const ts = 12345;
+    auto r = encode_abs_timestamp_data<T>(out, 0, 2, &ts, &value, 1);
+    ASSERT_TRUE(r.has_value()) << "encoder failed for " << static_cast<int>(dt);
+
+    auto meta = one_channel_meta(dt, osf::ChannelType::Timestamped, 2);
+    std::string s(reinterpret_cast<char const*>(out.data()), out.size());
+    std::istringstream in(s);
+    osf::BlockReader rdr(in, meta);
+    auto block_opt = rdr.next();
+    ASSERT_TRUE(block_opt.has_value());
+    ASSERT_TRUE(block_opt->has_value());
+    auto* ats = std::get_if<osf::AbsTimestampData>(&block_opt->value().kind);
+    ASSERT_NE(ats, nullptr);
+    auto* pairs = std::get_if<std::vector<std::pair<std::int64_t, T>>>(
+        &ats->samples);
+    ASSERT_NE(pairs, nullptr);
+    ASSERT_EQ(pairs->size(), 1u);
+    EXPECT_EQ((*pairs)[0].first, ts);
+    EXPECT_EQ((*pairs)[0].second, value);
+}
+
+}  // namespace
+
+TEST(BlockEncodeRoundtripAbsTs, AllNumericTypes) {
+    roundtrip_abs_ts_one<bool>(osf::DataType::Bool, true);
+    roundtrip_abs_ts_one<std::int8_t>(osf::DataType::Int8, -7);
+    roundtrip_abs_ts_one<std::int16_t>(osf::DataType::Int16, -2000);
+    roundtrip_abs_ts_one<std::int32_t>(osf::DataType::Int32, -2'000'000);
+    roundtrip_abs_ts_one<std::int64_t>(osf::DataType::Int64, -2'000'000'000LL);
+    roundtrip_abs_ts_one<std::uint8_t>(osf::DataType::UInt8, 200);
+    roundtrip_abs_ts_one<std::uint16_t>(osf::DataType::UInt16, 60000);
+    roundtrip_abs_ts_one<std::uint32_t>(osf::DataType::UInt32, 4'000'000'000u);
+    roundtrip_abs_ts_one<std::uint64_t>(osf::DataType::UInt64, 0xDEADBEEF'CAFEBABEull);
+}
+
+TEST(BlockEncodeRoundtripAbsTs, FloatDouble) {
+    roundtrip_abs_ts_one<float>(osf::DataType::Float, 3.14f);
+    roundtrip_abs_ts_one<double>(osf::DataType::Double, 2.71828);
+}
+
+TEST(BlockEncodeRoundtripAbsTs, MultiSampleInt32) {
+    std::vector<std::uint8_t> out;
+    std::int64_t const tss[] = {10, 20, 30, 40};
+    std::int32_t const samples[] = {1, 2, 3, 4};
+    auto r = encode_abs_timestamp_data<std::int32_t>(out, 0, 2, tss, samples, 4);
+    ASSERT_TRUE(r.has_value());
+
+    auto meta = one_channel_meta(osf::DataType::Int32,
+                                 osf::ChannelType::Timestamped, 2);
+    std::string s(reinterpret_cast<char const*>(out.data()), out.size());
+    std::istringstream in(s);
+    osf::BlockReader rdr(in, meta);
+    auto block_opt = rdr.next();
+    ASSERT_TRUE(block_opt.has_value());
+    ASSERT_TRUE(block_opt->has_value());
+    auto* ats = std::get_if<osf::AbsTimestampData>(&block_opt->value().kind);
+    ASSERT_NE(ats, nullptr);
+    auto* pairs = std::get_if<std::vector<std::pair<std::int64_t, std::int32_t>>>(
+        &ats->samples);
+    ASSERT_NE(pairs, nullptr);
+    ASSERT_EQ(pairs->size(), 4u);
+    EXPECT_EQ((*pairs)[2].first, 30);
+    EXPECT_EQ((*pairs)[2].second, 3);
+}
