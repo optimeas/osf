@@ -152,8 +152,6 @@ begin
   end;
   Builder := TOSFMetaCacheBuilder.Create;
   try
-    Builder.OnLog := HandleLog;
-    Builder.DebugEnabled := FVerbose;
     for F in Files do
     begin
       CachePath := TOSFMetaCache.CachePathFor(F);

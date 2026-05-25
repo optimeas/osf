@@ -39,18 +39,11 @@ type
     FLongitude: Double;
     FAltitude: Double;
 
-    // Logging - copied verbatim from TOSFLoggable. TPersistent is the
-    // required base class so the manager cannot inherit from TOSFLoggable.
-    FOnLog: TOSFLogEvent;
-    FDebugEnabled: Boolean;
-
     // Pass-through channel filter. Set before LoadFromFile / LoadFromStream
     // to cause the internal TOSFFile to skip blocks for channels not in the
     // list. The manager itself has no filter logic; it never sees blocks for
     // skipped channels and therefore creates no TOSFDataChannel for them.
     FChannelFilter: TArray<string>;
-    procedure Log(Level: TOSFLogLevel; const Msg: string); overload;
-    procedure Log(Level: TOSFLogLevel; const Fmt: string; const Args: array of const); overload;
 
     procedure CopyFrom(Source: TOSFDataManager);
     function GetChannelCount: Integer;
@@ -102,13 +95,6 @@ type
     property Longitude: Double read FLongitude;
     property Altitude: Double read FAltitude;
 
-    // Logging hook - emits informational, warning and (optionally) debug
-    // messages during LoadFromFile/LoadFromStream. The manager forwards its
-    // settings to the internal TOSFFile so log messages from both layers go
-    // through the same handler.
-    property DebugEnabled: Boolean read FDebugEnabled write FDebugEnabled;
-    property OnLog: TOSFLogEvent read FOnLog write FOnLog;
-
     // Pass-through channel filter. When non-empty, the next LoadFromFile or
     // LoadFromStream call forwards it to the internal TOSFFile, which skips
     // blocks for channels whose name is not in the list. Names are matched
@@ -119,7 +105,7 @@ type
   end;
 
 resourcestring
-  // Log messages emitted by the data manager via OnLog.
+  // Log messages emitted by the data manager via Logger.
   SOSFLogLoadingFile = 'Loading OSF file: %s';
   SOSFLogLoadedChannels = 'Loaded %d channels';
   SOSFLogChannelSummary = '  [%s]  %d samples  %s .. %s';
@@ -323,33 +309,7 @@ begin
   end;
 end;
 
-// ── TOSFDataManager - logging helpers (verbatim copy of TOSFLoggable.Log) ───
-
-procedure TOSFDataManager.Log(Level: TOSFLogLevel; const Msg: string);
-begin
-  if not Assigned(FOnLog) then
-    Exit;
-  if (Level = llDebug) and (not FDebugEnabled) then
-    Exit;
-  try
-    FOnLog(Level, Msg);
-  except
-    // Never let a buggy log handler propagate.
-  end;
-end;
-
-procedure TOSFDataManager.Log(Level: TOSFLogLevel; const Fmt: string; const Args: array of const);
-begin
-  if not Assigned(FOnLog) then
-    Exit;
-  if (Level = llDebug) and (not FDebugEnabled) then
-    Exit;
-  try
-    FOnLog(Level, Format(Fmt, Args));
-  except
-    // Never let a buggy log handler or a broken Format string propagate.
-  end;
-end;
+// (Logging now goes through the global Logger — see OSF.Log unit.)
 
 // ── TOSFDataManager - construction / lifecycle ──────────────────────────────
 
@@ -392,7 +352,7 @@ begin
   FLatitude := 0;
   FLongitude := 0;
   FAltitude := 0;
-  Log(llDebug, SOSFLogDataManagerCleared);
+  Logger.Write(SOSFLogDataManagerCleared, llDebug, 'TOSFDataManager');
 end;
 
 function TOSFDataManager.GetChannelCount: Integer;
@@ -465,7 +425,7 @@ begin
     if FChannels[I].Name = Name then
       Exit(FChannels[I]);
   Result := nil;
-  Log(llWarning, SOSFLogChannelNotFoundName, [Name]);
+  Logger.Write(SOSFLogChannelNotFoundName, [Name], llWarning, 'TOSFDataManager');
 end;
 
 function TOSFDataManager.ChannelByIndex(Index: Integer): TOSFDataChannel;
@@ -502,7 +462,7 @@ procedure TOSFDataManager.LoadFromFile(const FileName: string);
 var
   FS: TFileStream;
 begin
-  Log(llInfo, SOSFLogLoadingFile, [FileName]);
+  Logger.Write(SOSFLogLoadingFile, [FileName], llInfo, 'TOSFDataManager');
   FS := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
   try
     LoadFromStream(FS);
@@ -517,39 +477,27 @@ end;
 procedure TOSFDataManager.LoadFromStream(AStream: TStream);
 var
   Filer: TOSFFile;
-  TruncationSeen: Boolean;
   BlockCount: Integer;
-  UserOnLog: TOSFLogEvent;
 begin
   Clear;
-  TruncationSeen := False;
-  UserOnLog := FOnLog;
 
   Filer := TOSFFile.Create;
   try
-    Filer.DebugEnabled := FDebugEnabled;
     // Forward our channel filter to the filer so excluded blocks are skipped
-    // at the stream level before they ever reach the manager.
+    // at the stream level before they ever reach the manager. Filer log
+    // messages reach any registered listener directly via the global Logger
+    // — no forwarding needed. Truncation is read off Filer.TruncationSeen
+    // after the scan completes.
     Filer.ChannelFilter := FChannelFilter;
-    // Forward filer log events to the user's handler. The wrapper also watches
-    // for the filer's truncation warning so we can emit a summary at the end.
-    Filer.OnLog := procedure(Level: TOSFLogLevel; const Msg: string)
-      begin
-        if (Level = llWarning) and (System.Pos('Truncated', Msg) > 0) then
-          TruncationSeen := True;
-        if Assigned(UserOnLog) then
-          UserOnLog(Level, Msg);
-      end;
-
     Filer.OpenForRead(AStream);
     CopyFileMetadata(Filer);
     CreateChannelsFromFiler(Filer);
     BlockCount := ConsumeBlocks(Filer);
 
-    Log(llInfo, SOSFLogLoadedChannels, [FChannels.Count]);
+    Logger.Write(SOSFLogLoadedChannels, [FChannels.Count], llInfo, 'TOSFDataManager');
     LogChannelsSummary;
-    if TruncationSeen then
-      Log(llWarning, SOSFLogTruncatedFilePartial, [BlockCount]);
+    if Filer.TruncationSeen then
+      Logger.Write(SOSFLogTruncatedFilePartial, [BlockCount], llWarning, 'TOSFDataManager');
   finally
     Filer.Free;
   end;
@@ -562,17 +510,17 @@ var
   I: Integer;
   Ch: TOSFDataChannel;
 begin
-  // Skip the per-channel walk entirely if no log handler is attached so we
+  // Skip the per-channel walk entirely if no listener wants llDebug, so we
   // don't pay the FormatDateTime cost when nobody is listening.
-  if not Assigned(FOnLog) then
+  if not Logger.IsLevelActive(llDebug) then
     Exit;
 
   for I := 0 to FChannels.Count - 1 do
   begin
     Ch := FChannels[I];
-    Log(llDebug, SOSFLogChannelSummary, [Ch.Name, Ch.SampleCount, FormatDateTime(TS_FMT, Ch.StartTimeUtc), FormatDateTime(TS_FMT, Ch.EndTimeUtc)]);
+    Logger.Write(SOSFLogChannelSummary, [Ch.Name, Ch.SampleCount, FormatDateTime(TS_FMT, Ch.StartTimeUtc), FormatDateTime(TS_FMT, Ch.EndTimeUtc)], llDebug, 'TOSFDataManager');
     if Ch.HasDoublePrecisionLoss then
-      Log(llDebug, SOSFLogPrecisionLossInt64, [Ch.Name]);
+      Logger.Write(SOSFLogPrecisionLossInt64, [Ch.Name], llDebug, 'TOSFDataManager');
   end;
 end;
 
@@ -652,10 +600,11 @@ begin
         if Assigned(Channel.ChannelDef) and
            OSFDataTypeIsVariableLength(Channel.ChannelDef.DataType) and
            (Block.SampleCount > 1) then
-          Log(llWarning,
+          Logger.Write(
               'non-spec multi-sample variable-length bcAbsTimeStampData on ' +
               'channel %d (%s) - block skipped',
-              [Block.ChannelIndex, Channel.ChannelDef.Name])
+              [Block.ChannelIndex, Channel.ChannelDef.Name],
+              llWarning, 'TOSFDataManager')
         else
           DecodeAbsTimestampedBlock(FVersion, Channel, Block);
       end;

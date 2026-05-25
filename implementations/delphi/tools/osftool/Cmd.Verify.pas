@@ -29,8 +29,12 @@ type
     FWarnings: TList<string>;
     FErrors: TList<string>;
     FLastTsPerChannel: TDictionary<Word, Int64>;
-    procedure HandleFilerLog(ALevel: TOSFLogLevel; const AMsg: string);
     procedure CheckBlock(const ABlock: TOSFDataBlock; AFiler: TOSFFile);
+  protected
+    // Capture filer warnings into FWarnings before falling through to
+    // the base implementation (which writes them to stderr / JSON / log).
+    procedure OnLogMessage(const AMsg: string; ALevel: TOSFLogLevel;
+                           const ASender: string); override;
     procedure EmitHuman(const AFile: string; AVersion: TOSFVersion;
       AChannelCount: Integer);
     procedure EmitJson(const AFile: string; AVersion: TOSFVersion;
@@ -98,20 +102,18 @@ begin
   Print(SVerifyHelp);
 end;
 
-procedure TOsfVerifyCommand.HandleFilerLog(ALevel: TOSFLogLevel; const AMsg: string);
+procedure TOsfVerifyCommand.OnLogMessage(const AMsg: string;
+  ALevel: TOSFLogLevel; const ASender: string);
 begin
-  if ALevel = llWarning then
-  begin
+  if (ALevel = llWarning) and (FWarnings <> nil) then
     // The filer surfaces truncation-style problems via warning messages.
     // We mirror them into the warning list verbatim so the final report
-    // shows whatever the filer saw.
+    // shows whatever the filer saw. The TOSFFile.TruncationSeen flag is
+    // the authoritative truncation signal and is checked separately.
     FWarnings.Add(AMsg);
-    if (System.Pos('Truncated', AMsg) > 0) or (System.Pos('truncat', AMsg) > 0) then
-      Inc(FTruncatedCount);
-  end;
-  // Forward to the base log handler so --verbose still prints debug info
-  // to stderr.
-  HandleLog(ALevel, AMsg);
+  // Always forward to the base callback so the message reaches stderr,
+  // the JSON stream, or the log file as appropriate.
+  inherited;
 end;
 
 procedure TOsfVerifyCommand.CheckBlock(const ABlock: TOSFDataBlock; AFiler: TOSFFile);
@@ -261,8 +263,6 @@ begin
   FLastTsPerChannel := TDictionary<Word, Int64>.Create;
   Filer := TOSFFile.Create;
   try
-    Filer.OnLog := HandleFilerLog;
-    Filer.DebugEnabled := FVerbose;
     try
       Filer.OpenForRead(FileName);
     except
@@ -277,6 +277,8 @@ begin
 
     while Filer.ReadNextBlock(Block) do
       CheckBlock(Block, Filer);
+    if Filer.TruncationSeen then
+      Inc(FTruncatedCount);
 
     if FJson then
       EmitJson(FileName, Version, ChannelCount)

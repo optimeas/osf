@@ -34,8 +34,6 @@ type
 
   TOSFDemoGenerator = class
   private
-    FOnLog: TOSFLogEvent;
-
     procedure Log(Level: TOSFLogLevel; const Fmt: string; const Args: array of const);
 
     // Sets file metadata to the values defined in the brief. Called for
@@ -77,7 +75,6 @@ type
     procedure GenerateAll(const OutputDir: string;
                           Version: TOSFVersion;
                           SampleCount: Integer);
-    property OnLog: TOSFLogEvent read FOnLog write FOnLog;
   end;
 
 resourcestring
@@ -194,13 +191,7 @@ end;
 
 procedure TOSFDemoGenerator.Log(Level: TOSFLogLevel; const Fmt: string; const Args: array of const);
 begin
-  if not Assigned(FOnLog) then
-    Exit;
-  try
-    FOnLog(Level, Format(Fmt, Args));
-  except
-    // Never propagate from a buggy log handler or a broken Format string.
-  end;
+  Logger.Write(Fmt, Args, Level, 'TOSFDemoGenerator');
 end;
 
 procedure TOSFDemoGenerator.ConfigureMetadata(Filer: TOSFFile);

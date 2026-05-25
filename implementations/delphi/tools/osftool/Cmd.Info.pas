@@ -152,8 +152,6 @@ begin
   // still touches every block but never holds samples in memory).
   Builder := TOSFMetaCacheBuilder.Create;
   try
-    Builder.OnLog := HandleLog;
-    Builder.DebugEnabled := FVerbose;
     Cache := Builder.BuildFromFile(AFile);
     try
       AFirstNs := Cache.FirstTimestampNs;
@@ -257,8 +255,6 @@ begin
 
   Filer := TOSFFile.Create;
   try
-    Filer.OnLog := HandleLog;
-    Filer.DebugEnabled := FVerbose;
     try
       Filer.OpenForRead(FileName);
     except

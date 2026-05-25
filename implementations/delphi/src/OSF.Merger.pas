@@ -37,8 +37,7 @@ uses
   OSF.Filer,
   OSF.Data.Manager,
   OSF.Data.Channels,
-  OSF.Meta.Cache,
-  OSF.Progress;
+  OSF.Meta.Cache;
 
 type
   // Overlap policy applied per channel when two incoming samples carry the
@@ -52,7 +51,7 @@ type
     Cache: TOSFMetaCache;
   end;
 
-  TOSFMerger = class(TOSFLoggable)
+  TOSFMerger = class
   strict private
     FRootDirectory: string;
     FFileList: TArray<string>;
@@ -63,7 +62,6 @@ type
     FOutputVersion: TOSFVersion;
     FUseCache: Boolean;
     FScanResult: TArray<TOSFFileEntry>;
-    FReporter: IProgressReporter;
     FFileErrorCount: Integer;
     FFoundFileCount: Integer;
     procedure FreeScanCaches;
@@ -121,10 +119,6 @@ type
     // every Scan rebuilds them in memory. Default: True.
     property UseCache: Boolean read FUseCache write FUseCache;
 
-    // Optional structured-progress sink. When assigned, the merger emits
-    // phase events through it; when nil it falls back to the plain OnLog
-    // messages, so callers that need no progress display are unaffected.
-    property Reporter: IProgressReporter read FReporter write FReporter;
     // Count of input files dropped during Scan because they could not be
     // read. Valid after Scan; reset at the start of every Scan.
     property FileErrorCount: Integer read FFileErrorCount;
@@ -492,11 +486,9 @@ begin
   end;
 
   // No (or invalid) sidecar - build one in memory and (optionally) save it.
-  Log(llInfo, SOSFMergerLogScanBuildingCache, [ExtractFileName(AOsfFile)]);
+  Logger.Write(SOSFMergerLogScanBuildingCache, [ExtractFileName(AOsfFile)], llInfo, 'TOSFMerger');
   Builder := TOSFMetaCacheBuilder.Create;
   try
-    Builder.OnLog := OnLog;
-    Builder.DebugEnabled := DebugEnabled;
     Result := Builder.BuildFromFile(AOsfFile);
     if FUseCache then
     try
@@ -543,25 +535,20 @@ var
 begin
   FreeScanCaches;
   FFileErrorCount := 0;
-  if Assigned(FReporter) then
-    FReporter.ScanStarted(FRootDirectory);
 
   if Length(FFileList) > 0 then
     Sources := FFileList
   else
   begin
-    Log(llInfo, SOSFMergerLogScanRoot, [FRootDirectory]);
+    Logger.Write(SOSFMergerLogScanRoot, [FRootDirectory], llInfo, 'TOSFMerger');
     Sources := GatherInputFilesFromRoot;
   end;
   FFoundFileCount := Length(Sources);
-  Log(llInfo, SOSFMergerLogScanFound, [Length(Sources)]);
-  if Assigned(FReporter) then
-    FReporter.ScanFinished(Length(Sources));
+  Logger.Write(SOSFMergerLogScanFound, [Length(Sources)], llInfo, 'TOSFMerger');
 
-  // The sidecar phase is only surfaced when at least one cache has to be
-  // built - when every sidecar is already valid it stays invisible.
-  if Assigned(FReporter) then
-    FReporter.SidecarStarted(Length(Sources));
+  // The sidecar phase is surfaced as a progress sequence so a CLI / GUI
+  // can show a bar while caches are being built.
+  Logger.ProgressStart(Length(Sources), 'Reading file information');
 
   CacheCreated := 0;
   Kept := TList<TOSFFileEntry>.Create;
@@ -570,8 +557,7 @@ begin
     begin
       // A single broken file (corrupt metablock, truncation the builder
       // cannot recover from) must not kill the whole scan. Drop it and
-      // carry on - as a structured file error when a reporter is set,
-      // otherwise as a plain warning.
+      // carry on with a warning.
       Cache := nil;
       try
         if not TOSFMetaCache.IsValid(Sources[i]) then
@@ -580,20 +566,14 @@ begin
       except
         on E: Exception do
         begin
-          if Assigned(FReporter) then
-          begin
-            Inc(FFileErrorCount);
-            FReporter.FileError(I + 1, Sources[I],
-              E.ClassName + ': ' + E.Message);
-          end
-          else
-            Log(llWarning, 'Scan: skipping "%s" - %s: %s',
-              [ExtractFileName(Sources[I]), E.ClassName, E.Message]);
+          Inc(FFileErrorCount);
+          Logger.Write('Scan: skipping "%s" - %s: %s',
+            [ExtractFileName(Sources[I]), E.ClassName, E.Message],
+            llWarning, 'TOSFMerger');
           FreeAndNil(Cache);
         end;
       end;
-      if Assigned(FReporter) then
-        FReporter.SidecarProgress(I + 1, Length(Sources));
+      Logger.DoProgress(I + 1, ExtractFileName(Sources[I]));
       if Assigned(Cache) then
       begin
         if ShouldKeepFile(Cache) then
@@ -611,21 +591,20 @@ begin
     Kept.Free;
   end;
 
-  if Assigned(FReporter) then
-    FReporter.SidecarFinished(CacheCreated);
+  Logger.EndProgress(Format('Done. %d new sidecar files created.', [CacheCreated]));
 
   SortByFirstTimestamp(FScanResult);
 
-  Log(llInfo, SOSFMergerLogScanOverlap, [Length(FScanResult),
+  Logger.Write(SOSFMergerLogScanOverlap, [Length(FScanResult),
     FormatIso8601Utc(UnixNsToUtcDateTime(FIntervalStartNs)),
-    FormatIso8601Utc(UnixNsToUtcDateTime(FIntervalEndNs))]);
+    FormatIso8601Utc(UnixNsToUtcDateTime(FIntervalEndNs))], llInfo, 'TOSFMerger');
 
   Result := FScanResult;
 end;
 
 procedure TOSFMerger.LogChannelMismatch(const AName, AHaveType, AGotType: string);
 begin
-  Log(llWarning, SOSFMergerLogChannelMismatch, [AName, AHaveType, AGotType]);
+  Logger.Write(SOSFMergerLogChannelMismatch, [AName, AHaveType, AGotType], llWarning, 'TOSFMerger');
 end;
 
 // Adds all in-interval samples from a source channel to the matching merge
@@ -653,7 +632,6 @@ procedure TOSFMerger.WriteMergedToStream(AStream: TStream; const AOutputLabel: s
 var
   Entry: TOSFFileEntry;
   FileIndex: Integer;
-  FileSamples: Integer;
   Manager: TOSFDataManager;
   I: Integer;
   SrcChan: TOSFDataChannel;
@@ -673,29 +651,22 @@ begin
   Order := TList<string>.Create;
   try
     // ── Ingest every file in scan order ────────────────────────────────────
-    if Assigned(FReporter) then
-      FReporter.ReadStarted(Length(FScanResult));
+    Logger.ProgressStart(Length(FScanResult), 'Reading files...');
     for FileIndex := 0 to High(FScanResult) do
     begin
       Entry := FScanResult[FileIndex];
-      if Assigned(FReporter) then
-        FReporter.FileStarted(FileIndex + 1, Length(FScanResult), Entry.FilePath)
-      else
-        Log(llInfo, SOSFMergerLogMergingFile,
-          [FileIndex + 1, Length(FScanResult), ExtractFileName(Entry.FilePath)]);
+      Logger.Write(SOSFMergerLogMergingFile,
+        [FileIndex + 1, Length(FScanResult), ExtractFileName(Entry.FilePath)],
+        llInfo, 'TOSFMerger');
 
-      FileSamples := 0;
       Manager := TOSFDataManager.Create;
       try
-        Manager.OnLog := OnLog;
-        Manager.DebugEnabled := DebugEnabled;
         Manager.ChannelFilter := FChannelFilter;
         Manager.LoadFromFile(Entry.FilePath);
 
         for I := 0 to Manager.Channels.Count - 1 do
         begin
           SrcChan := Manager.Channels[I];
-          Inc(FileSamples, SrcChan.SampleCount);
           if not Assigned(SrcChan.ChannelDef) then
           begin
             // Defensive: a freshly loaded manager always wires defs, but
@@ -733,20 +704,17 @@ begin
               IngestChannel(Merge, SrcChan, FIntervalStartNs, FIntervalEndNs, FOverlapStrategy);
           end;
         end;
-        if Assigned(FReporter) then
-          FReporter.FileFinished(FileIndex + 1, Manager.Channels.Count, FileSamples);
+        Logger.DoProgress(FileIndex + 1, ExtractFileName(Entry.FilePath));
       finally
         Manager.Free;
       end;
     end;
+    Logger.EndProgress;
 
     // ── Write the merged result as one OSF file ───────────────────────────
-    if Assigned(FReporter) then
-      FReporter.WriteStarted(AOutputLabel);
+    Logger.Write('Writing output: %s', [AOutputLabel], llInfo, 'TOSFMerger');
     OutFiler := TOSFFile.Create;
     try
-      OutFiler.OnLog := OnLog;
-      OutFiler.DebugEnabled := DebugEnabled;
       OutFiler.CreateForWrite(AStream, False, FOutputVersion);
 
       // Reassign channel indices 0..N-1 in deterministic ingest order.
@@ -758,8 +726,7 @@ begin
       end;
       OutFiler.WriteHeader;
 
-      if Assigned(FReporter) then
-        FReporter.StartProgress('', 0, Order.Count);
+      Logger.ProgressStart(Order.Count, 'Writing merged channels');
 
       TotalSamples := 0;
       for I := 0 to Order.Count - 1 do
@@ -779,18 +746,13 @@ begin
           TotalSamples := TotalSamples + Length(Samples);
         end;
 
-        if Assigned(FReporter) then
-          FReporter.DoProgress('', I+1, Order.Count);
+        Logger.DoProgress(I + 1, Merge.Def.Name);
       end;
 
       OutFiler.Close;
 
-      if Assigned(FReporter) then
-        FReporter.EndProgress;
-
-      Log(llInfo, SOSFMergerLogMergeComplete, [Order.Count, TotalSamples]);
-      if Assigned(FReporter) then
-        FReporter.WriteFinished(AOutputLabel, AStream.Size);
+      Logger.EndProgress;
+      Logger.Write(SOSFMergerLogMergeComplete, [Order.Count, TotalSamples], llInfo, 'TOSFMerger');
     finally
       OutFiler.Free;
     end;
@@ -819,8 +781,6 @@ begin
     MS.Position := 0;
     Result := TOSFDataManager.Create;
     try
-      Result.OnLog := OnLog;
-      Result.DebugEnabled := DebugEnabled;
       Result.LoadFromStream(MS);
     except
       Result.Free;

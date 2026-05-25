@@ -304,11 +304,11 @@ var
   BytesWritten: Int64;
 begin
   Channels := ActiveChannels;
-  Log(llInfo, SOSFLogUnifiedStarted, [AFileName, Length(Channels)]);
+  Logger.Write(SOSFLogUnifiedStarted, [AFileName, Length(Channels)], llInfo, 'TOSFUnifiedCSVExporter');
   try
     Timeline := BuildTimeline(Channels);
     try
-      Log(llInfo, SOSFLogUnifiedTimeline, [Timeline.Count]);
+      Logger.Write(SOSFLogUnifiedTimeline, [Timeline.Count], llInfo, 'TOSFUnifiedCSVExporter');
 
       SetLength(Cursors, Length(Channels));
       for I := 0 to High(Cursors) do
@@ -355,14 +355,14 @@ begin
         Stream.Free;
       end;
 
-      Log(llInfo, SOSFLogUnifiedFinished, [AFileName, Rows, BytesWritten]);
+      Logger.Write(SOSFLogUnifiedFinished, [AFileName, Rows, BytesWritten], llInfo, 'TOSFUnifiedCSVExporter');
     finally
       Timeline.Free;
     end;
   except
     on E: Exception do
     begin
-      Log(llError, SOSFLogUnifiedFailed, [E.Message]);
+      Logger.Write(SOSFLogUnifiedFailed, [E.Message], llError, 'TOSFUnifiedCSVExporter');
       raise;
     end;
   end;

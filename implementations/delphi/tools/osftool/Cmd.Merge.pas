@@ -2,9 +2,11 @@
 // Copyright (c) 2026 Optimeas GmbH
 
 // "merge" verb. Thin wrapper around TOSFMerger; defaults pulled from
-// TOsfToolConfig when the corresponding flag is absent. Progress is
-// rendered through an IProgressReporter chosen from the output flags
-// (--quiet / --verbose / --json / --log) — see OSF.Progress.*.
+// TOsfToolConfig when the corresponding flag is absent. Progress and
+// log messages are rendered through the global Logger listener that
+// TBaseCommand registers for each command — output-mode flags
+// (--quiet / --verbose / --json / --log) drive the listener
+// configuration there, so this verb stays focused on the merge logic.
 unit Cmd.Merge;
 
 interface
@@ -21,6 +23,13 @@ uses
 
 type
   TOsfMergeCommand = class(TBaseCommand)
+  strict private
+    FWarnCount: Integer;
+    FErrCount: Integer;
+  protected
+    // Tally warnings + errors so the final summary line can report them.
+    procedure OnLogMessage(const AMsg: string; ALevel: TOSFLogLevel;
+                           const ASender: string); override;
   public
     function Name: string; override;
     function ShortDescription: string; override;
@@ -31,15 +40,7 @@ type
 implementation
 
 uses
-  System.Diagnostics,
-  OSF.Progress,
-  OSF.Progress.Console,
-  OSF.Progress.Quiet,
-  OSF.Progress.Verbose,
-  OSF.Progress.Json,
-  OSF.Progress.Fallback,
-  OSF.Progress.Live,
-  OSF.Progress.LogFile;
+  System.Diagnostics;
 
 resourcestring
   SMergeDesc = 'Merge OSF files from a directory over a time interval';
@@ -105,32 +106,17 @@ begin
   end;
 end;
 
-// Picks the reporter implementation matching the output flags, optionally
-// wrapped in the log-file decorator. Raises if the log file cannot be
-// created.
-function CreateReporter(AQuiet, AVerbose, AJson: Boolean;
-  const ALogPath: string): IProgressReporter;
-var
-  Base: IProgressReporter;
-begin
-  if AJson then
-    Base := TOSFJsonProgressReporter.Create
-  else if AQuiet then
-    Base := TOSFQuietProgressReporter.Create
-  else if AVerbose then
-    Base := TOSFVerboseProgressReporter.Create
-  else if IsConsoleTty then
-    Base := TOSFLiveProgressReporter.Create
-  else
-    Base := TOSFFallbackProgressReporter.Create;
-
-  if ALogPath <> '' then
-    Result := TOSFLogFileProgressReporter.Create(Base, ALogPath)
-  else
-    Result := Base;
-end;
-
 // ── TOsfMergeCommand ────────────────────────────────────────────────────────
+
+procedure TOsfMergeCommand.OnLogMessage(const AMsg: string;
+  ALevel: TOSFLogLevel; const ASender: string);
+begin
+  if ALevel = llWarning then
+    Inc(FWarnCount)
+  else if ALevel = llError then
+    Inc(FErrCount);
+  inherited;
+end;
 
 function TOsfMergeCommand.Name: string;
 begin
@@ -150,17 +136,16 @@ end;
 function TOsfMergeCommand.DoExecute: Integer;
 var
   Positionals: TArray<string>;
-  Root, OutputFile, StartStr, EndStr, LogPath: string;
+  Root, OutputFile, StartStr, EndStr: string;
   StartUtc, EndUtc: TDateTime;
   Channels: TArray<string>;
   Merger: TOSFMerger;
   Entries: TArray<TOSFFileEntry>;
   Cfg: TOsfToolConfig;
   I: Integer;
-  Quiet, Verbose, Json: Boolean;
-  Reporter: IProgressReporter;
   Watch: TStopwatch;
-  WarnCount, ErrCount: Integer;
+  DurationMs: Int64;
+  SummaryLine: string;
 begin
   Positionals := PositionalArgs(['--start', '--end', '--log']);
   if Length(Positionals) < 2 then
@@ -171,24 +156,21 @@ begin
   Root := Positionals[0];
   OutputFile := Positionals[1];
 
-  // Output-mode flags. --quiet/--verbose/--json arrive pre-parsed from the
-  // base class; -q / -v are merge-local short aliases.
-  Quiet := FQuiet or HasFlag('-q');
-  Verbose := FVerbose or HasFlag('-v');
-  Json := FJson;
-  LogPath := FlagValue('--log', '');
-
-  if Quiet and Verbose then
+  // The base class has already parsed --quiet / --verbose / --json /
+  // --log and set up listener filtering accordingly. Reject illegal
+  // combinations here (the base class does not enforce mutual
+  // exclusivity because some other commands accept all three).
+  if FQuiet and FVerbose then
   begin
     PrintErr(SMergeErrQuietVerbose);
     Exit(EXIT_BAD_ARGS);
   end;
-  if Quiet and Json then
+  if FQuiet and FJson then
   begin
     PrintErr(SMergeErrQuietJson);
     Exit(EXIT_BAD_ARGS);
   end;
-  if Verbose and Json then
+  if FVerbose and FJson then
   begin
     PrintErr(SMergeErrVerboseJson);
     Exit(EXIT_BAD_ARGS);
@@ -223,36 +205,12 @@ begin
   for I := 2 to High(Positionals) do
     Channels[I - 2] := Positionals[I];
 
-  // Build the reporter first — a bad --log path is reported here.
-  try
-    Reporter := CreateReporter(Quiet, Verbose, Json, LogPath);
-  except
-    on E: Exception do
-    begin
-      PrintErrf(SMergeErrLogFile, [LogPath, E.Message]);
-      Exit(EXIT_IO_ERROR);
-    end;
-  end;
-
-  WarnCount := 0;
-  ErrCount := 0;
+  FWarnCount := 0;
+  FErrCount := 0;
   Cfg := TOsfToolConfig.Create;
   Merger := TOSFMerger.Create;
   try
     Cfg.Load;
-    Merger.Reporter := Reporter;
-    // Bridge the merger's whole OnLog chain into the reporter's diagnostic
-    // stream, counting warnings and stray errors for the summary line.
-    Merger.OnLog :=
-      procedure(ALevel: TOSFLogLevel; const AMsg: string)
-      begin
-        if ALevel = llWarning then
-          Inc(WarnCount)
-        else if ALevel = llError then
-          Inc(ErrCount);
-        Reporter.Log(ALevel, AMsg);
-      end;
-    Merger.DebugEnabled := Verbose;
     Merger.RootDirectory := Root;
     Merger.SetInterval(StartUtc, EndUtc);
     Merger.ChannelFilter := Channels;
@@ -298,12 +256,16 @@ begin
       end;
     end;
 
-    Reporter.Summary(Length(Entries), Merger.FoundFileCount,
-      Watch.ElapsedMilliseconds, Merger.FileErrorCount + ErrCount, WarnCount);
+    DurationMs := Watch.ElapsedMilliseconds;
+    SummaryLine := Format(
+      'Done. Merged %d of %d files in %.1fs (%d errors, %d warnings).',
+      [Length(Entries), Merger.FoundFileCount, DurationMs / 1000.0,
+       Merger.FileErrorCount + FErrCount, FWarnCount],
+      TFormatSettings.Invariant);
+    Print(SummaryLine);
   finally
     Merger.Free;
     Cfg.Free;
-    Reporter := nil;
   end;
   Result := EXIT_OK;
 end;

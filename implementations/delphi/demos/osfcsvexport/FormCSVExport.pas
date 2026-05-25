@@ -53,11 +53,14 @@ type
     FLastExporter: TOSFCSVExporter;   // kept around so cbDebugClick can flip
                                        // its DebugEnabled mid-run without
                                        // having to re-create
+    FListener: TLoggerListener;
 
-    procedure HandleLog(Level: TOSFLogLevel; const Msg: string);
+    procedure HandleLog(const Msg: string; Level: TOSFLogLevel;
+                        const Sender: string);
     procedure DoLoadFile(const FileName: string);
     procedure DoExport(const FileName: string);
     procedure RefreshChannelList;
+    procedure UpdateListenerLevel;
 
     function  ChosenDecimalSeparator: Char;
   end;
@@ -72,7 +75,10 @@ implementation
 procedure TFormCSVExport.FormCreate(Sender: TObject);
 begin
   FDataManager := TOSFDataManager.Create;
-  FDataManager.OnLog := HandleLog;
+  FListener := TLoggerListener.Create;
+  FListener.MinLevel := llUser;
+  FListener.OnAddLogMessage := HandleLog;
+  Logger.RegisterListener(FListener);
 
   // Defaults per the brief.
   cbExcludeEmpty.Checked      := True;
@@ -107,16 +113,28 @@ end;
 procedure TFormCSVExport.FormDestroy(Sender: TObject);
 begin
   // FLastExporter is owned by DoExport's local lifetime — never destroy here.
+  Logger.UnregisterListener(FListener);
+  FListener.Free;
   FDataManager.Free;
 end;
 
-procedure TFormCSVExport.HandleLog(Level: TOSFLogLevel; const Msg: string);
+procedure TFormCSVExport.HandleLog(const Msg: string; Level: TOSFLogLevel;
+  const Sender: string);
 const
-  LevelStr: array[TOSFLogLevel] of string = ('DEBUG', 'INFO', 'WARNING', 'ERROR');
+  LevelStr: array[TOSFLogLevel] of string = ('DEBUG', 'INFO ', 'USER ', 'WARN ', 'ERROR');
 begin
-  mLog.Lines.Add(Format('[%-7s] %s', [LevelStr[Level], Msg]));
+  mLog.Lines.Add(Format('[%-5s] %s', [LevelStr[Level], Msg]));
   // Auto-scroll to bottom.
   mLog.Perform(WM_VSCROLL, SB_BOTTOM, 0);
+end;
+
+procedure TFormCSVExport.UpdateListenerLevel;
+begin
+  if Assigned(FListener) then
+    if cbDebug.Checked then
+      FListener.MinLevel := llDebug
+    else
+      FListener.MinLevel := llUser;
 end;
 
 // ── Loading ─────────────────────────────────────────────────────────────────
@@ -137,7 +155,7 @@ begin
   Screen.Cursor := crHourGlass;
   try
     FDataManager.Clear;
-    FDataManager.DebugEnabled := cbDebug.Checked;
+    UpdateListenerLevel;
     try
       FDataManager.LoadFromFile(FileName);
       edSourceFile.Text := FileName;
@@ -222,8 +240,6 @@ begin
   Screen.Cursor := crHourGlass;
   Exporter := TOSFCSVExporter.Create(FDataManager);
   try
-    Exporter.OnLog                := HandleLog;
-    Exporter.DebugEnabled         := cbDebug.Checked;
     Exporter.ExcludeEmptyChannels := cbExcludeEmpty.Checked;
     Exporter.AbsoluteTimestamps   := cbAbsoluteTimestamp.Checked;
     Exporter.DecimalSeparator     := ChosenDecimalSeparator;
@@ -253,9 +269,7 @@ end;
 
 procedure TFormCSVExport.cbDebugClick(Sender: TObject);
 begin
-  FDataManager.DebugEnabled := cbDebug.Checked;
-  if Assigned(FLastExporter) then
-    FLastExporter.DebugEnabled := cbDebug.Checked;
+  UpdateListenerLevel;
 end;
 
 procedure TFormCSVExport.miFileExitClick(Sender: TObject);

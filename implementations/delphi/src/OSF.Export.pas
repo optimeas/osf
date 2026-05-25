@@ -17,7 +17,7 @@ uses
   OSF.Data.Channels;
 
 type
-  TOSFExporter = class(TOSFLoggable)
+  TOSFExporter = class
   private
     FDataManager          : TOSFDataManager;
     FExcludeEmptyChannels : Boolean;
@@ -34,9 +34,9 @@ type
   public
     constructor Create(DataManager: TOSFDataManager);
 
-    // Drives DoExport with logging:
-    //   • Logs llInfo before and after a successful export.
-    //   • Logs llError on exception and re-raises so the caller can react.
+    // Drives DoExport with logging via the global Logger:
+    //   • llInfo before and after a successful export.
+    //   • llError on exception, then re-raises so the caller can react.
     procedure Export(const FileName: string);
 
     property DataManager: TOSFDataManager read FDataManager;
@@ -96,14 +96,14 @@ end;
 
 procedure TOSFExporter.Export(const FileName: string);
 begin
-  Log(llInfo, SOSFLogExportStarted, [FileName]);
+  Logger.Write(SOSFLogExportStarted, [FileName], llInfo, 'TOSFExporter');
   try
     DoExport(FileName);
-    Log(llInfo, SOSFLogExportFinished, [FileName]);
+    Logger.Write(SOSFLogExportFinished, [FileName], llInfo, 'TOSFExporter');
   except
     on E: Exception do
     begin
-      Log(llError, SOSFLogExportFailed, [FileName, E.Message]);
+      Logger.Write(SOSFLogExportFailed, [FileName, E.Message], llError, 'TOSFExporter');
       raise;
     end;
   end;

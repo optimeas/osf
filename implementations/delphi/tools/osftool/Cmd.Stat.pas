@@ -434,8 +434,6 @@ begin
 
   Mgr := TOSFDataManager.Create;
   try
-    Mgr.OnLog := HandleLog;
-    Mgr.DebugEnabled := FVerbose;
     Mgr.ChannelFilter := Channels;
     try
       Mgr.LoadFromFile(FileName);

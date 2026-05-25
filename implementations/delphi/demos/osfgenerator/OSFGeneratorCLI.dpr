@@ -30,15 +30,16 @@ const
   EXAMPLES_REL = '..\..\..\..\examples\generated';
   DEFAULT_SAMPLE_COUNT = 100;
 
-procedure StdoutLog(Level: TOSFLogLevel; const Msg: string);
+procedure StdoutLog(const Msg: string; Level: TOSFLogLevel; const Sender: string);
 const
-  LevelStr: array[TOSFLogLevel] of string = ('DEBUG', 'INFO', 'WARNING', 'ERROR');
+  LevelStr: array[TOSFLogLevel] of string = ('DEBUG', 'INFO ', 'USER ', 'WARN ', 'ERROR');
 begin
-  Writeln(Format('[%-7s] %s', [LevelStr[Level], Msg]));
+  Writeln(Format('[%-5s] %s', [LevelStr[Level], Msg]));
 end;
 
 var
   Gen: TOSFDemoGenerator;
+  Listener: TLoggerListener;
   OutDir: string;
   Samples: Integer;
 begin
@@ -62,13 +63,21 @@ begin
     Writeln('Samples per channel: ', Samples);
     Writeln;
 
-    Gen := TOSFDemoGenerator.Create;
+    Listener := TLoggerListener.Create;
     try
-      Gen.OnLog := StdoutLog;
-      Gen.GenerateAll(OutDir, osvOSF4, Samples);
-      Gen.GenerateAll(OutDir, osvOSF5, Samples);
+      Listener.MinLevel := llDebug;
+      Listener.OnAddLogMessage := StdoutLog;
+      Logger.RegisterListener(Listener);
+      Gen := TOSFDemoGenerator.Create;
+      try
+        Gen.GenerateAll(OutDir, osvOSF4, Samples);
+        Gen.GenerateAll(OutDir, osvOSF5, Samples);
+      finally
+        Gen.Free;
+      end;
     finally
-      Gen.Free;
+      Logger.UnregisterListener(Listener);
+      Listener.Free;
     end;
 
     Writeln;

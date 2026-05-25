@@ -194,10 +194,10 @@ begin
       Result[Cnt] := Ch;
       Inc(Cnt);
       if Ch.HasDoublePrecisionLoss then
-        Log(llWarning, SOSFLogCSVPrecision, [Ch.Name]);
+        Logger.Write(SOSFLogCSVPrecision, [Ch.Name], llWarning, 'TOSFCSVExporter');
     end
     else
-      Log(llDebug, SOSFLogCSVSkipEmpty, [Ch.Name]);
+      Logger.Write(SOSFLogCSVSkipEmpty, [Ch.Name], llDebug, 'TOSFCSVExporter');
   end;
   SetLength(Result, Cnt);
 end;
@@ -321,7 +321,7 @@ var
   RowsEmitted    : Integer;
 begin
   Active := CollectActive;
-  Log(llInfo, SOSFLogCSVStarted, [FileName, Length(Active)]);
+  Logger.Write(SOSFLogCSVStarted, [FileName, Length(Active)], llInfo, 'TOSFCSVExporter');
 
   // Find the longest channel so the data section ends after the last sample
   // of the longest channel; shorter channels emit empty cells beyond their end.
@@ -351,13 +351,13 @@ begin
         Inc(RowsEmitted);
       end;
 
-      Log(llInfo, SOSFLogCSVFinished, [FileName, RowsEmitted, FS.Size]);
+      Logger.Write(SOSFLogCSVFinished, [FileName, RowsEmitted, FS.Size], llInfo, 'TOSFCSVExporter');
     except
       on E: Exception do
       begin
         // CSV-specific failure log; the inherited Export wrapper logs the
         // generic 'Export failed: ...' message after we re-raise.
-        Log(llError, SOSFLogCSVFailed, [E.Message]);
+        Logger.Write(SOSFLogCSVFailed, [E.Message], llError, 'TOSFCSVExporter');
         raise;
       end;
     end;

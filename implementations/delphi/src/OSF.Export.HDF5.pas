@@ -435,8 +435,8 @@ begin
   DataType := Channel.OriginalDataType;
   if not IsSupported(DataType) then
   begin
-    Log(llWarning, SOSFLogHDF5UnsupportedType,
-      [Channel.Name, OSFDataTypeToString(DataType)]);
+    Logger.Write(SOSFLogHDF5UnsupportedType,
+      [Channel.Name, OSFDataTypeToString(DataType)], llWarning, 'TOSFHDF5Exporter');
     Exit;
   end;
 
@@ -486,7 +486,7 @@ var
 begin
   Active := ActiveChannels;
   FChannelsWritten := 0;
-  Log(llInfo, SOSFLogHDF5Started, [FileName, Length(Active)]);
+  Logger.Write(SOSFLogHDF5Started, [FileName, Length(Active)], llInfo, 'TOSFHDF5Exporter');
   try
     TH5Lib.EnsureLoaded(UTF8String(FLibraryDir));
     H5File := THdf5File.Create(UTF8String(FileName), H5F_ACC_TRUNC);
@@ -511,14 +511,14 @@ begin
             WriteChannel(H5File, Channel, Lcpl, Dcpl);
           except
             on E: Exception do
-              Log(llWarning, SOSFLogHDF5SkipChannel, [Channel.Name, E.Message]);
+              Logger.Write(SOSFLogHDF5SkipChannel, [Channel.Name, E.Message], llWarning, 'TOSFHDF5Exporter');
           end;
       finally
         Dcpl.Free;
         Lcpl.Free;
       end;
 
-      Log(llInfo, SOSFLogHDF5Finished, [FileName, FChannelsWritten]);
+      Logger.Write(SOSFLogHDF5Finished, [FileName, FChannelsWritten], llInfo, 'TOSFHDF5Exporter');
     finally
       H5File.Free;
     end;
@@ -527,7 +527,7 @@ begin
     begin
       // HDF5-specific failure log; the inherited Export wrapper adds the
       // generic 'Export failed: ...' message after we re-raise.
-      Log(llError, SOSFLogHDF5Failed, [E.Message]);
+      Logger.Write(SOSFLogHDF5Failed, [E.Message], llError, 'TOSFHDF5Exporter');
       raise;
     end;
   end;

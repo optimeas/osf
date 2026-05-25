@@ -106,7 +106,9 @@ type
     procedure cbDebugClick(Sender: TObject);
   strict private
     FDataManager: TOSFDataManager;
-    procedure HandleLog(Level: TOSFLogLevel; const Msg: string);
+    FListener: TLoggerListener;
+    procedure HandleLog(const Msg: string; Level: TOSFLogLevel;
+                        const Sender: string);
     procedure AppendLog(const Msg: string);
     function BuildMerger: TOSFMerger;
     function GetStartUtc: TDateTime;
@@ -133,6 +135,10 @@ procedure TFormMerger.FormCreate(Sender: TObject);
 begin
   Caption := 'OSF Merger ' + C_DEMO_VERSION;
   FDataManager := nil;
+  FListener := TLoggerListener.Create;
+  FListener.MinLevel := llUser;
+  FListener.OnAddLogMessage := HandleLog;
+  Logger.RegisterListener(FListener);
 
   // Sensible defaults for the time pickers: today 00:00 .. today 23:59.
   dtpStartDate.Date := Date;
@@ -156,6 +162,8 @@ end;
 
 procedure TFormMerger.FormDestroy(Sender: TObject);
 begin
+  Logger.UnregisterListener(FListener);
+  FreeAndNil(FListener);
   FreeAndNil(FDataManager);
 end;
 
@@ -172,9 +180,10 @@ begin
   mLog.Perform(WM_VSCROLL, SB_BOTTOM, 0);
 end;
 
-procedure TFormMerger.HandleLog(Level: TOSFLogLevel; const Msg: string);
+procedure TFormMerger.HandleLog(const Msg: string; Level: TOSFLogLevel;
+  const Sender: string);
 const
-  C_LEVEL: array[TOSFLogLevel] of string = ('DEBUG', 'INFO   ', 'WARNING', 'ERROR  ');
+  C_LEVEL: array[TOSFLogLevel] of string = ('DEBUG  ', 'INFO   ', 'USER   ', 'WARNING', 'ERROR  ');
 begin
   AppendLog(Format('[%s] %s', [C_LEVEL[Level], Msg]));
 end;
@@ -258,8 +267,11 @@ var
 begin
   Result := TOSFMerger.Create;
   try
-    Result.OnLog := HandleLog;
-    Result.DebugEnabled := cbDebug.Checked;
+    if Assigned(FListener) then
+      if cbDebug.Checked then
+        FListener.MinLevel := llDebug
+      else
+        FListener.MinLevel := llUser;
 
     if pcSource.ActivePage = tsDirectory then
       Result.RootDirectory := edRootDir.Text

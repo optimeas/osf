@@ -164,8 +164,6 @@ begin
 
   Merger := TOSFMerger.Create;
   try
-    Merger.OnLog := HandleLog;
-    Merger.DebugEnabled := FVerbose;
     Merger.FileList := [InputFile];
     // Interval: 1970-01-01 .. 2200-01-01 covers every realistic sample.
     Merger.SetInterval(EncodeDate(1970, 1, 1), EncodeDate(2200, 1, 1));

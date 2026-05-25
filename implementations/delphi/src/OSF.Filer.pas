@@ -86,16 +86,14 @@ type
     FChannelFilter: TArray<string>;
     FChannelIncluded: TDictionary<Word, Boolean>;
 
-    // Logging - copied verbatim from TOSFLoggable because TOSFFile already
-    // has an inheritance constraint and cannot subclass TOSFLoggable.
-    FOnLog: TOSFLogEvent;
-    FDebugEnabled: Boolean;
+    // True once a truncation has been detected during ReadNextBlock.
+    // Read by TOSFDataManager and TOSFMetaCacheBuilder after the scan
+    // completes; reset to False on every OpenForRead.
+    FTruncationSeen: Boolean;
     // Source filename, set by the file-based OpenForRead/CreateForWrite
     // overloads. Used purely for log message formatting; empty when the
     // user opened the filer on a raw stream.
     FSourceName: string;
-    procedure Log(Level: TOSFLogLevel; const Msg: string); overload;
-    procedure Log(Level: TOSFLogLevel; const Fmt: string; const Args: array of const); overload;
 
     // Magic header line + meta block dispatcher.
     procedure ReadMagicAndMeta;
@@ -247,10 +245,11 @@ type
     // called, the function returns True for every index.
     function IsChannelIncluded(ChannelIndex: Integer): Boolean;
 
-    // Logging hook - emit human-readable progress / diagnostic messages.
-    // Default: unassigned (silent). DebugEnabled gates llDebug messages.
-    property DebugEnabled: Boolean read FDebugEnabled write FDebugEnabled;
-    property OnLog: TOSFLogEvent read FOnLog write FOnLog;
+    // True once the reader has aborted a block mid-way because the
+    // stream ran out before the block was complete. Reset by each
+    // OpenForRead; consumed by higher layers (TOSFDataManager,
+    // TOSFMetaCacheBuilder) to report a partial-load condition.
+    property TruncationSeen: Boolean read FTruncationSeen;
 
     // Optional channel name filter for reads. When empty (the default), every
     // data block is delivered to ReadNextBlock callers - existing behaviour.
@@ -304,7 +303,7 @@ resourcestring
   SOSFTSBlockLengthMismatch = 'WriteTimestampedBlock: Timestamps and Values lengths must match';
   SOSFTSDoublesLengthMismatch = 'WriteTimestampedDoubles: Timestamps and Values lengths must match';
 
-  // Log messages - informational, debug and warning text emitted via OnLog.
+  // Log messages - informational, debug and warning text emitted via Logger.
   SOSFLogOpeningFile = 'Opening file for read: %s (%d bytes)';
   SOSFLogDetectedVersion = 'Detected version: %s, meta format: %s';
   SOSFLogChannelsDefined = 'Channels defined in meta block: %d';
@@ -612,33 +611,7 @@ begin
   end;
 end;
 
-// ── TOSFFile - logging helpers (verbatim copy of TOSFLoggable.Log) ───────────
-
-procedure TOSFFile.Log(Level: TOSFLogLevel; const Msg: string);
-begin
-  if not Assigned(FOnLog) then
-    Exit;
-  if (Level = llDebug) and (not FDebugEnabled) then
-    Exit;
-  try
-    FOnLog(Level, Msg);
-  except
-    // Never let a buggy log handler propagate.
-  end;
-end;
-
-procedure TOSFFile.Log(Level: TOSFLogLevel; const Fmt: string; const Args: array of const);
-begin
-  if not Assigned(FOnLog) then
-    Exit;
-  if (Level = llDebug) and (not FDebugEnabled) then
-    Exit;
-  try
-    FOnLog(Level, Format(Fmt, Args));
-  except
-    // Never let a buggy log handler or a broken Format string propagate.
-  end;
-end;
+// (Logging now goes through the global Logger — see OSF.Log unit.)
 
 // ── TOSFFile - channel filter ────────────────────────────────────────────────
 
@@ -712,7 +685,7 @@ begin
     Exit;
   SetLength(Sink, LenField);
   FStream.ReadBuffer(Sink[0], LenField);
-  Log(llDebug, SOSFLogChannelFilterSkip, [Channel.Name, LenField]);
+  Logger.Write(SOSFLogChannelFilterSkip, [Channel.Name, LenField], llDebug, 'TOSFFile');
 end;
 
 // ── TOSFFile - construction / lifecycle ───────────────────────────────────────
@@ -766,7 +739,7 @@ begin
   end;
   // Pre-format with Format() so we exercise the single-string Log overload -
   // the array-of-const overload is exercised by every other call site.
-  Log(llInfo, Format(SOSFLogFileClosed, [SourceStr, TotalBytes]));
+  Logger.Write(SOSFLogFileClosed, [SourceStr, TotalBytes], llInfo, 'TOSFFile');
 end;
 
 function TOSFFile.GetChannelCount: Integer;
@@ -841,7 +814,7 @@ begin
   FS := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
   try
     FSourceName := FileName;
-    Log(llInfo, SOSFLogOpeningFile, [FileName, FS.Size]);
+    Logger.Write(SOSFLogOpeningFile, [FileName, FS.Size], llInfo, 'TOSFFile');
   except
     FS.Free;
     raise;
@@ -861,6 +834,8 @@ var
 begin
   if FMode <> fmClosed then
     raise EOSFException.Create(SOSFFileAlreadyOpen);
+
+  FTruncationSeen := False;
 
   // Detect gzip on any seekable stream so callers handing us a raw
   // TFileStream (TOSFDataManager.LoadFromFile, the merger's per-file
@@ -883,9 +858,9 @@ begin
   if IsGzip then
   begin
     if FSourceName <> '' then
-      Log(llInfo, SOSFLogOSFZDetected, [FSourceName])
+      Logger.Write(SOSFLogOSFZDetected, [FSourceName], llInfo, 'TOSFFile')
     else
-      Log(llInfo, SOSFLogOSFZDetected, ['<stream>']);
+      Logger.Write(SOSFLogOSFZDetected, ['<stream>'], llInfo, 'TOSFFile');
     // FUnderlyingStream adopts AStream only if the caller asked us to.
     // The decompressor is always owned by us - it's our own construction.
     if AOwnsStream then
@@ -910,12 +885,12 @@ begin
   // channel list so ReadNextBlock filtering kicks in immediately.
   RebuildChannelFilterMap;
 
-  Log(llInfo, SOSFLogDetectedVersion, [VersionToLogString(FVersion), MetaFormatToLogString(FMetaFormat)]);
-  Log(llInfo, SOSFLogChannelsDefined, [FChannels.Count]);
+  Logger.Write(SOSFLogDetectedVersion, [VersionToLogString(FVersion), MetaFormatToLogString(FMetaFormat)], llInfo, 'TOSFFile');
+  Logger.Write(SOSFLogChannelsDefined, [FChannels.Count], llInfo, 'TOSFFile');
   for I := 0 to FChannels.Count - 1 do
   begin
     Ch := FChannels[I];
-    Log(llDebug, SOSFLogChannelEntry, [Ch.Index, Ch.Name, OSFDataTypeToString(Ch.DataType), BoolToLogString(Ch.IsEquidistant)]);
+    Logger.Write(SOSFLogChannelEntry, [Ch.Index, Ch.Name, OSFDataTypeToString(Ch.DataType), BoolToLogString(Ch.IsEquidistant)], llDebug, 'TOSFFile');
   end;
 end;
 
@@ -1183,9 +1158,12 @@ begin
     Result := ReadDataBlock(ChannelIndex, Block);
 
   if Result and (not Block.IsInfoBlock) then
-    Log(llDebug, SOSFLogBlockRead, [ChannelIndex, BlockTypeToLogString(Block.BlockType), Block.SampleCount, Length(Block.RawPayload)])
+    Logger.Write(SOSFLogBlockRead, [ChannelIndex, BlockTypeToLogString(Block.BlockType), Block.SampleCount, Length(Block.RawPayload)], llDebug, 'TOSFFile')
   else if (not Result) and (not Block.IsInfoBlock) then
-    Log(llWarning, SOSFLogTruncatedBlock, [StartOffset]);
+  begin
+    FTruncationSeen := True;
+    Logger.Write(SOSFLogTruncatedBlock, [StartOffset], llWarning, 'TOSFFile');
+  end;
 end;
 
 function TOSFFile.TryReadChannelIndex(out ChannelIndex: Word): Boolean;
@@ -1220,7 +1198,7 @@ begin
     TypeBits := Payload[0] and OSF_BLOCK_TYPE_MASK;
     if Integer(TypeBits) > Ord(bcAbsTimeStampData) then
     begin
-      Log(llWarning, SOSFLogUnknownBlockTypeInfo, [TypeBits]);
+      Logger.Write(SOSFLogUnknownBlockTypeInfo, [TypeBits], llWarning, 'TOSFFile');
       Exit(False);
     end;
     Block.BlockType := TBlockContent(TypeBits);
@@ -1242,7 +1220,7 @@ begin
   Channel := FindChannel(ChannelIndex);
   if not Assigned(Channel) then
   begin
-    Log(llWarning, SOSFLogUnknownChannelInBlock, [ChannelIndex]);
+    Logger.Write(SOSFLogUnknownChannelInBlock, [ChannelIndex], llWarning, 'TOSFFile');
     Exit(False);
   end;
 
@@ -1292,7 +1270,7 @@ begin
   TypeBits := CtrlByte and OSF_BLOCK_TYPE_MASK;
   if Integer(TypeBits) > Ord(bcAbsTimeStampData) then
   begin
-    Log(llWarning, SOSFLogUnknownBlockType, [TypeBits, Pos]);
+    Logger.Write(SOSFLogUnknownBlockType, [TypeBits, Pos], llWarning, 'TOSFFile');
     Exit;
   end;
   Block.BlockType := TBlockContent(TypeBits);
@@ -1607,7 +1585,7 @@ begin
   FStream.WriteBuffer(MetaBytes[0], Length(MetaBytes));
 
   FHeaderWritten := True;
-  Log(llInfo, SOSFLogWritingHeader, [VersionToLogString(FVersion), FChannels.Count]);
+  Logger.Write(SOSFLogWritingHeader, [VersionToLogString(FVersion), FChannels.Count], llInfo, 'TOSFFile');
 end;
 
 procedure TOSFFile.WriteDataBlock(Channel: TOSFChannelDef; const Payload: TBytes);
@@ -1659,7 +1637,7 @@ begin
     Channel.StartTimestampNs := FirstTimestampNs;
     Channel.LastTimestampNs := FirstTimestampNs;
   end;
-  Log(llDebug, SOSFLogWriteEquidistant, [ChannelIndex, N]);
+  Logger.Write(SOSFLogWriteEquidistant, [ChannelIndex, N], llDebug, 'TOSFFile');
 end;
 
 procedure TOSFFile.WriteTimestampedSample(ChannelIndex: Integer; TimestampNs: Int64; const Value: TBytes);
@@ -1707,7 +1685,7 @@ begin
 
   Channel.SampleCount := Channel.SampleCount + N;
   Channel.LastTimestampNs := Timestamps[N - 1];
-  Log(llDebug, SOSFLogWriteTimestamped, [ChannelIndex, N]);
+  Logger.Write(SOSFLogWriteTimestamped, [ChannelIndex, N], llDebug, 'TOSFFile');
 end;
 
 procedure TOSFFile.WriteTimestampedDoubles(ChannelIndex: Integer; const Timestamps: array of Int64; const Values: array of Double);

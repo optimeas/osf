@@ -257,8 +257,6 @@ begin
     if HasInterval then
     begin
       Merger := TOSFMerger.Create;
-      Merger.OnLog := HandleLog;
-      Merger.DebugEnabled := FVerbose;
       Merger.FileList := [InputFile];
       Merger.SetInterval(StartUtc, EndUtc);
       Merger.ChannelFilter := Channels;
@@ -276,8 +274,6 @@ begin
     else
     begin
       OwnedMgr := TOSFDataManager.Create;
-      OwnedMgr.OnLog := HandleLog;
-      OwnedMgr.DebugEnabled := FVerbose;
       OwnedMgr.ChannelFilter := Channels;
       try
         OwnedMgr.LoadFromFile(InputFile);
@@ -302,8 +298,6 @@ begin
     else
       Exporter := TOSFCSVExporter.Create(Mgr);
     try
-      Exporter.OnLog := HandleLog;
-      Exporter.DebugEnabled := FVerbose;
       Exporter.ExcludeEmptyChannels := HasFlag('--exclude-empty');
       // The two exporter classes do not share a property base so we
       // type-dispatch here. Property semantics are identical in both:

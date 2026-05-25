@@ -59,8 +59,10 @@ type
     procedure FormShow(Sender: TObject);
   private
     FDataManager: TOSFDataManager;
+    FListener: TLoggerListener;
 
-    procedure HandleManagerLog(Level: TOSFLogLevel; const Msg: string);
+    procedure HandleManagerLog(const Msg: string; Level: TOSFLogLevel;
+                               const Sender: string);
     procedure AppendLogLine(Level: TOSFLogLevel; const Msg: string);
     procedure LoadFile(const FileName: string);
     procedure PopulateChannelList;
@@ -118,8 +120,13 @@ resourcestring
 procedure TFormOSFViewer.FormCreate(Sender: TObject);
 begin
   FDataManager := TOSFDataManager.Create;
-  FDataManager.OnLog := HandleManagerLog;
-  FDataManager.DebugEnabled := cbDebug.Checked;
+  FListener := TLoggerListener.Create;
+  if cbDebug.Checked then
+    FListener.MinLevel := llDebug
+  else
+    FListener.MinLevel := llUser;
+  FListener.OnAddLogMessage := HandleManagerLog;
+  Logger.RegisterListener(FListener);
 
   Caption := WINDOW_TITLE_BASE;
   lblNoChart.Caption := SNoChartMessage;
@@ -131,6 +138,8 @@ end;
 
 procedure TFormOSFViewer.FormDestroy(Sender: TObject);
 begin
+  Logger.UnregisterListener(FListener);
+  FListener.Free;
   FDataManager.Free;
 end;
 
@@ -171,7 +180,11 @@ end;
 
 procedure TFormOSFViewer.cbDebugClick(Sender: TObject);
 begin
-  FDataManager.DebugEnabled := cbDebug.Checked;
+  if Assigned(FListener) then
+    if cbDebug.Checked then
+      FListener.MinLevel := llDebug
+    else
+      FListener.MinLevel := llUser;
 end;
 
 // ── Loading / list population ───────────────────────────────────────────────
@@ -368,7 +381,8 @@ end;
 
 // ── Logging ─────────────────────────────────────────────────────────────────
 
-procedure TFormOSFViewer.HandleManagerLog(Level: TOSFLogLevel; const Msg: string);
+procedure TFormOSFViewer.HandleManagerLog(const Msg: string; Level: TOSFLogLevel;
+  const Sender: string);
 begin
   AppendLogLine(Level, Msg);
 end;
@@ -384,6 +398,8 @@ begin
     llDebug:
       Prefix := SLogPrefixDebug;
     llInfo:
+      Prefix := SLogPrefixInfo;
+    llUser:
       Prefix := SLogPrefixInfo;
     llWarning:
       Prefix := SLogPrefixWarning;

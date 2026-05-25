@@ -104,7 +104,7 @@ type
   // Builds a TOSFMetaCache by streaming through an OSF file with TOSFFile
   // in read mode. Sample payloads are read (so the stream stays aligned)
   // but discarded — only timestamps and counts are kept.
-  TOSFMetaCacheBuilder = class(TOSFLoggable)
+  TOSFMetaCacheBuilder = class
   strict private
     procedure UpdateGlobalRange(ACache: TOSFMetaCache);
   public
@@ -614,7 +614,6 @@ var
   Filer: TOSFFile;
   Block: TOSFDataBlock;
   StatsMap: TDictionary<Integer, TChannelScanStats>;
-  TruncationSeen: Boolean;
   I: Integer;
   Def: TOSFChannelDef;
   Stats: TChannelScanStats;
@@ -631,19 +630,9 @@ begin
     ResolvedChannels := TList<TOSFCacheChannel>.Create;
     Filer := TOSFFile.Create;
     try
-      // Forward our log handler so any filer warnings (e.g. truncation)
-      // surface through the same sink.
-      TruncationSeen := False;
-      Filer.DebugEnabled := DebugEnabled;
-      Filer.OnLog := procedure(Level: TOSFLogLevel; const Msg: string)
-        begin
-          if (Level = llWarning) and (System.Pos('Truncated', Msg) > 0) then
-            TruncationSeen := True;
-          // Forward unconditionally; OnLog handles its own DebugEnabled gate.
-          if Assigned(OnLog) then
-            OnLog(Level, Msg);
-        end;
-
+      // Filer log messages reach any registered listener directly via
+      // the global Logger — no forwarding needed. Truncation is read
+      // off Filer.TruncationSeen after the scan completes.
       Filer.OpenForRead(AOsfFile);
 
       // Seed per-channel stats from the metablock so every declared channel
@@ -675,16 +664,18 @@ begin
       end;
 
       Result.Channels := ResolvedChannels.ToArray;
-      Result.Truncated := TruncationSeen;
+      Result.Truncated := Filer.TruncationSeen;
       UpdateGlobalRange(Result);
 
-      Log(llInfo, SOSFCacheLogBuilt, [
-        ExtractFileName(AOsfFile),
-        Length(Result.Channels),
-        FormatIso8601Utc(Result.FirstTimestampUtc),
-        FormatIso8601Utc(Result.LastTimestampUtc)]);
-      if TruncationSeen then
-        Log(llWarning, SOSFCacheLogTruncatedSource);
+      Logger.Write(SOSFCacheLogBuilt,
+        [ExtractFileName(AOsfFile),
+         Length(Result.Channels),
+         FormatIso8601Utc(Result.FirstTimestampUtc),
+         FormatIso8601Utc(Result.LastTimestampUtc)],
+        llInfo, 'TOSFMetaCacheBuilder');
+      if Filer.TruncationSeen then
+        Logger.Write(SOSFCacheLogTruncatedSource, llWarning,
+                              'TOSFMetaCacheBuilder');
     finally
       Filer.Free;
       ResolvedChannels.Free;
@@ -704,7 +695,8 @@ begin
   CachePath := TOSFMetaCache.CachePathFor(AOsfFile);
   if (not AForce) and TOSFMetaCache.IsValid(AOsfFile) then
   begin
-    Log(llDebug, SOSFCacheLogReused, [ExtractFileName(AOsfFile)]);
+    Logger.Write(SOSFCacheLogReused, [ExtractFileName(AOsfFile)],
+                          llDebug, 'TOSFMetaCacheBuilder');
     Exit;
   end;
   Cache := BuildFromFile(AOsfFile);

@@ -46,7 +46,8 @@ type
     FFileCount: Integer;
 
     function  ResolveDefaultOutputDir: string;
-    procedure HandleLog(Level: TOSFLogLevel; const Msg: string);
+    procedure HandleLog(const Msg: string; Level: TOSFLogLevel;
+                        const Sender: string);
     procedure RunGenerator(IncludeOSF4, IncludeOSF5: Boolean);
   end;
 
@@ -108,11 +109,12 @@ begin
   RunGenerator(False, True);
 end;
 
-procedure TFormGenerator.HandleLog(Level: TOSFLogLevel; const Msg: string);
+procedure TFormGenerator.HandleLog(const Msg: string; Level: TOSFLogLevel;
+  const Sender: string);
 const
-  LevelStr: array[TOSFLogLevel] of string = ('DEBUG', 'INFO', 'WARNING', 'ERROR');
+  LevelStr: array[TOSFLogLevel] of string = ('DEBUG', 'INFO ', 'USER ', 'WARN ', 'ERROR');
 begin
-  mLog.Lines.Add(Format('[%-7s] %s', [LevelStr[Level], Msg]));
+  mLog.Lines.Add(Format('[%-5s] %s', [LevelStr[Level], Msg]));
   // Auto-scroll to bottom.
   mLog.Perform(WM_VSCROLL, SB_BOTTOM, 0);
 
@@ -127,6 +129,7 @@ end;
 procedure TFormGenerator.RunGenerator(IncludeOSF4, IncludeOSF5: Boolean);
 var
   Gen     : TOSFDemoGenerator;
+  Listener: TLoggerListener;
   OutDir  : string;
   Samples : Integer;
 begin
@@ -147,10 +150,13 @@ begin
 
   btGenerate.Enabled := False;
   Screen.Cursor      := crHourGlass;
+  Listener := TLoggerListener.Create;
   try
+    Listener.MinLevel := llDebug;
+    Listener.OnAddLogMessage := HandleLog;
+    Logger.RegisterListener(Listener);
     Gen := TOSFDemoGenerator.Create;
     try
-      Gen.OnLog := HandleLog;
       if IncludeOSF4 then
         Gen.GenerateAll(OutDir, osvOSF4, Samples);
       if IncludeOSF5 then
@@ -159,6 +165,8 @@ begin
       Gen.Free;
     end;
   finally
+    Logger.UnregisterListener(Listener);
+    Listener.Free;
     Screen.Cursor      := crDefault;
     btGenerate.Enabled := True;
   end;

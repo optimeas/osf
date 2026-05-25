@@ -245,8 +245,6 @@ begin
   Cache := nil;
   Filer := TOSFFile.Create;
   try
-    Filer.OnLog := HandleLog;
-    Filer.DebugEnabled := FVerbose;
     try
       Filer.OpenForRead(FileName);
     except
@@ -269,8 +267,6 @@ begin
         begin
           Builder := TOSFMetaCacheBuilder.Create;
           try
-            Builder.OnLog := HandleLog;
-            Builder.DebugEnabled := FVerbose;
             FreeAndNil(Cache);
             Cache := Builder.BuildFromFile(FileName);
           finally
