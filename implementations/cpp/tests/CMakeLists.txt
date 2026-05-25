@@ -196,6 +196,28 @@ osf_set_warnings(test_manager)
 gtest_discover_tests(test_manager)
 
 # ---------------------------------------------------------------------------
+# test_block_encode — block-encoder primitive unit tests (Phase 7a).
+# ---------------------------------------------------------------------------
+
+add_executable(test_block_encode
+    unit/test_block_encode.cpp
+)
+
+target_link_libraries(test_block_encode PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+# Phase-7a encoder lives in src/ (non-public header).
+target_include_directories(test_block_encode PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src"
+)
+
+osf_set_warnings(test_block_encode)
+
+gtest_discover_tests(test_block_encode)
+
+# ---------------------------------------------------------------------------
 # test_header_examples — magic-header tests against reference files.
 # ---------------------------------------------------------------------------
 

@@ -88,6 +88,7 @@ target_include_directories(osf_headers SYSTEM INTERFACE
 # OUTPUT_NAME property keeps the produced file as libosf.a / osf.lib.
 add_library(osf_core
     src/block.cpp
+    src/block_encode.cpp
     src/data_channel.cpp
     src/error.cpp
     src/header.cpp
