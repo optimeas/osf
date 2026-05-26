@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Reader-comment correction in `src/reader.cpp`.** The note in
+  `parse_abs_ts_string_or_binary` that said *"per spec bit 7 should
+  be set; we tolerate clear bit as implicit N=1"* misread the spec.
+  Both bit-7 forms are valid; the canonical compact form for a
+  single sample is bit-7 = 0 with no `[u32 N]` prefix (saves four
+  bytes vs. the bit-7 = 1 + `u32 N=1` variant). The Phase 7a encoder
+  and the (now-fixed) Rust writer both emit the canonical form; the
+  reader still accepts either. Documentation-only — wire-format
+  behaviour unchanged; 192/192 ctest still green.
+
 ### Added
 
 - **Phase 7a — Private block-encoder layer.** Six encoder symbols

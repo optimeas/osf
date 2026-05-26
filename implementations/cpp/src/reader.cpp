@@ -246,8 +246,11 @@ Result<TimestampedPayload> parse_abs_ts_string_or_binary(
         n = static_cast<std::size_t>(raw);
         rest_off = 4;
     }
-    // !multi: per spec bit 7 should be set; we tolerate clear bit as
-    // implicit N=1, matching the Rust reference.
+    // !multi: bit-7 = 0 is the spec-canonical single-sample form
+    // (implicit N=1, 4 bytes shorter than the bit-7 = 1 variant
+    // with an explicit [u32 N] prefix). Both forms are valid; both
+    // the C++ Phase 7a encoder and the Rust writer emit the
+    // canonical bit-7 = 0 form, and either is accepted on input.
 
     std::size_t const rest_len = body_len - rest_off;
     std::uint8_t const* rest = body + rest_off;

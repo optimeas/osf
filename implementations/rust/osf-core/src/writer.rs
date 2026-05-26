@@ -347,10 +347,11 @@ fn autobump_size_of_length_value(channels: &mut [ChannelDef], data: &[ChannelDat
                     v.iter().map(Vec::len).max().unwrap_or(0)
                 });
                 let sample_bytes = s_max.max(b_max);
-                // Variable layout for one sample per block (OSF5, no
-                // trailing 0x00):
-                // [control][u32 N=1][i64 ts][bytes] = 13 + sample_bytes
-                13 + sample_bytes
+                // Variable layout for one sample per block in the
+                // spec-canonical compact form (bit-7 = 0, no [u32 N]
+                // prefix, OSF5 no trailing 0x00):
+                // [control][i64 ts][bytes] = 9 + sample_bytes
+                9 + sample_bytes
             }
             _ => 0,
         };
@@ -693,15 +694,15 @@ fn write_variable_one_binary<W: Write>(
     write_block(writer, channel, def.size_of_length_value, &payload)
 }
 
-/// Total payload bytes for a single-sample variable block (OSF5, no
-/// trailing 0x00): `[control][u32 N=1][i64 ts][bytes]`.
+/// Total payload bytes for a single-sample variable block in the
+/// spec-canonical compact form (bit-7 = 0, no `[u32 N]` prefix, OSF5
+/// no trailing 0x00): `[control][i64 ts][bytes]`.
 fn variable_payload_size(sample_bytes: usize) -> usize {
-    1 + 4 + 8 + sample_bytes
+    1 + 8 + sample_bytes
 }
 
 fn write_variable_header<W: Write>(w: &mut W, timestamp_ns: i64) -> Result<(), OsfError> {
-    binary_write::write_u8(w, CONTROL_ABS_TIMESTAMP | MULTI_SAMPLE_FLAG)?;
-    binary_write::write_u32(w, 1)?;
+    binary_write::write_u8(w, CONTROL_ABS_TIMESTAMP)?;
     binary_write::write_i64(w, timestamp_ns)?;
     Ok(())
 }
@@ -2130,6 +2131,86 @@ mod tests {
         assert_eq!(v["physicalunit"], "bar");
         assert_eq!(v["mimetype"], "application/octet-stream");
         assert_eq!(v["timeincrement"], 1_000_000);
+    }
+
+    /// Locate the data section in a written buffer: skip past the
+    /// `OSF5 <len>\n` header and the metablock JSON. Returns the
+    /// remaining bytes (the block stream).
+    fn data_section(bytes: &[u8]) -> &[u8] {
+        let newline = bytes.iter().position(|&x| x == b'\n').unwrap();
+        let header = std::str::from_utf8(&bytes[..newline]).unwrap();
+        let metablock_len: usize = header.split(' ').nth(1).unwrap().parse().unwrap();
+        &bytes[newline + 1 + metablock_len..]
+    }
+
+    #[test]
+    fn variable_string_single_sample_emits_canonical_bit7_clear() {
+        // Spec rev 2026-05-24: both bit-7 forms are valid for variable
+        // blocks. The spec-canonical (and shorter) form for a single
+        // sample is bit-7 = 0, no [u32 N=1] prefix, no trailing 0x00.
+        // Wire layout: [u16 channel][len][0x08 control][i64 ts][bytes].
+        let mut b = WriterBuilder::new();
+        let i = b
+            .add_channel(ChannelDef {
+                name: "msg".into(),
+                data_type: DataType::String,
+                size_of_length_value: 2,
+                ..Default::default()
+            })
+            .unwrap();
+        b.add_string_samples(i, &[12_345], &["hi".into()]).unwrap();
+
+        let bytes = write_to_vec(b);
+        let data = data_section(&bytes);
+
+        // Channel index (u16 LE).
+        assert_eq!(&data[0..2], &[0x00, 0x00], "channel index = 0");
+        // Payload length (u16 LE) = 1 (control) + 8 (ts) + 2 ("hi") = 11.
+        // Expanded form would be 1 + 4 (u32 N) + 8 + 2 = 15.
+        assert_eq!(
+            &data[2..4],
+            &[11, 0],
+            "payload length 11 (canonical) not 15 (expanded)"
+        );
+        assert_eq!(
+            data[4], 0x08,
+            "control byte: bit-7=0 canonical single-sample form, not 0x88"
+        );
+        let ts = i64::from_le_bytes(data[5..13].try_into().unwrap());
+        assert_eq!(ts, 12_345);
+        assert_eq!(&data[13..15], b"hi");
+        // Whole block consumed.
+        assert_eq!(data.len(), 15);
+    }
+
+    #[test]
+    fn variable_binary_single_sample_emits_canonical_bit7_clear() {
+        // Same rule as strings — binary single-sample blocks must use
+        // bit-7 = 0 with no [u32 N=1] prefix.
+        // Wire layout: [u16 channel][len][0x08 control][i64 ts][bytes].
+        let mut b = WriterBuilder::new();
+        let i = b
+            .add_channel(ChannelDef {
+                name: "blob".into(),
+                data_type: DataType::Binary,
+                size_of_length_value: 2,
+                ..Default::default()
+            })
+            .unwrap();
+        b.add_binary_samples(i, &[42], &[vec![0xDE, 0xAD, 0xBE, 0xEF]])
+            .unwrap();
+
+        let bytes = write_to_vec(b);
+        let data = data_section(&bytes);
+
+        assert_eq!(&data[0..2], &[0x00, 0x00]);
+        // 1 + 8 + 4 = 13 (canonical), expanded would be 17.
+        assert_eq!(&data[2..4], &[13, 0], "canonical payload length is 13");
+        assert_eq!(data[4], 0x08, "bit-7=0 canonical form, not 0x88");
+        let ts = i64::from_le_bytes(data[5..13].try_into().unwrap());
+        assert_eq!(ts, 42);
+        assert_eq!(&data[13..17], &[0xDE, 0xAD, 0xBE, 0xEF]);
+        assert_eq!(data.len(), 17);
     }
 
     #[test]

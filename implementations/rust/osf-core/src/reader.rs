@@ -705,8 +705,11 @@ fn parse_abs_timestamp_data(
     multi: bool,
     osf_version: OsfVersion,
 ) -> Result<TimestampedPayload, OsfError> {
-    // String / binary always require bit 7 set per spec; we tolerate
-    // bit-7-clear with a warn and treat it as N=1.
+    // String / binary: the spec accepts both forms — bit-7 = 0 with
+    // implicit N=1 (the canonical compact form, 4 bytes shorter) and
+    // bit-7 = 1 with an explicit [u32 N] prefix. The Rust writer and
+    // C++ Phase 7a encoder both emit the canonical bit-7 = 0 form for
+    // single-sample blocks. We accept either on input.
     if matches!(dt, DataType::String | DataType::Binary) {
         return parse_abs_timestamp_string_or_binary(body, dt, multi, osf_version);
     }
