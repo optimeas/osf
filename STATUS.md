@@ -727,28 +727,48 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 ---
 
-## Next session priorities (as of 2026-05-26)
+## Next session priorities (as of 2026-05-26, late)
 
 Current state — **C++ Phase 7a is complete** (commits
 `e839c66..a558768` on `main`; 192/192 ctest green; zero
-warnings) **and the Rust-writer spec-conformance fix +
-reader-comment correction landed in a same-day mini-session**
+warnings), **the Rust-writer spec-conformance fix +
+reader-comment correction landed** in commit `89b63f1`
 (Rust writer now emits the canonical bit-7 = 0 single-sample
 variable-length form, matching the C++ Phase 7a encoder
-bit-for-bit; both BACKLOG entries closed). Recommended sequence
-for upcoming sessions, in priority order:
+bit-for-bit; both BACKLOG entries closed), **and the C++
+Phase 7b architecture discussion is complete**. The pre-spec
+outline is committed at
+[`docs/superpowers/specs/2026-05-26-cpp-phase-7b-streaming-writer-outline.md`](docs/superpowers/specs/2026-05-26-cpp-phase-7b-streaming-writer-outline.md) —
+it captures the eleven architecture-Q decisions, the
+Doxygen-annotated header sketch for
+`include/osf/streaming_writer.hpp`, the implementation-step
+list (steps 0–6), the symbol inventory (23 public symbols,
+43 callable forms), and verbatim wording passages for the
+upcoming spec (compression-OOS section, validation-layering
+section, StreamingWriter-vs-BlockWriter-behavior-contract
+section, BinarySample-promote-commit-message). Recommended
+sequence for upcoming sessions:
 
-1. **C++ Phase 7b — `StreamingWriter`**. Embedded,
-   sample-by-sample, per-block `FileChannel.force(true)`
-   equivalent flush. Composes the
-   `osf::detail::encode_*` symbols delivered by Phase 7a.
-   See [DECISIONS.md §20](DECISIONS.md#20-c-implementation-architecture)
-   *Status (updated 2026-05-26)* for the architectural
-   handoff notes.
-2. **C++ Phase 7c — `BlockWriter`**. Analyst-style,
+1. **Phase 7b spec-writing mini-session.** Synthesises the
+   outline into the formal design spec at
+   `docs/superpowers/specs/2026-05-26-cpp-phase-7b-streaming-writer-design.md`
+   (analogous to Phase-7a's
+   `2026-05-25-cpp-phase-7a-block-encoder-design.md`).
+2. **Phase 7b plan-writing mini-session.** Breaks the
+   implementation-step list (steps 0–6 in the outline) into
+   atomic TaskCreate tasks with acceptance criteria.
+3. **Plan audit** before subagent dispatch (per the Phase-7a
+   tasks-4–6-audit pattern — grep-validation of all code
+   snippets against the real headers and spec).
+4. **Subagent dispatch** for the actual Phase-7b implementation
+   (implementer → code-quality-review → stop per task —
+   Phase-7a choreography).
+5. **C++ Phase 7c — `BlockWriter`**. Analyst-style,
    accumulates samples in memory, emits whole file in one
-   pass. Same encoder substrate as Phase 7b.
-3. **C++ Phase 7d — `StaleValueGuard`** (optional).
+   pass. Same encoder substrate as Phase 7b. Dual sink
+   (Path or memory) per the cross-sub-phase consistency
+   notes in the Phase-7b outline.
+6. **C++ Phase 7d — `StaleValueGuard`** (optional).
    100-second-repeat layer over `StreamingWriter` for
    timestamped channels.
 
