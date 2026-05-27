@@ -90,6 +90,7 @@ add_library(osf_core
     src/block.cpp
     src/block_encode.cpp
     src/data_channel.cpp
+    src/durable_file.cpp
     src/error.cpp
     src/header.cpp
     src/manager.cpp

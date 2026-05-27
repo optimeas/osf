@@ -218,6 +218,28 @@ osf_set_warnings(test_block_encode)
 gtest_discover_tests(test_block_encode)
 
 # ---------------------------------------------------------------------------
+# test_durable_file — POSIX/Win32 RAII file wrapper unit tests (Phase 7b).
+# ---------------------------------------------------------------------------
+
+add_executable(test_durable_file
+    unit/test_durable_file.cpp
+)
+
+target_link_libraries(test_durable_file PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+# Phase-7b DurableFile lives in src/ (non-public header).
+target_include_directories(test_durable_file PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src"
+)
+
+osf_set_warnings(test_durable_file)
+
+gtest_discover_tests(test_durable_file)
+
+# ---------------------------------------------------------------------------
 # test_header_examples — magic-header tests against reference files.
 # ---------------------------------------------------------------------------
 
