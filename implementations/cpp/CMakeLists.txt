@@ -98,6 +98,7 @@ add_library(osf_core
     src/metablock_xml.cpp
     src/reader.cpp
     src/stats.cpp
+    src/streaming_writer.cpp
     src/types.cpp
     third_party/pugixml/pugixml.cpp
 )

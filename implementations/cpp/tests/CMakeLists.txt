@@ -240,6 +240,23 @@ osf_set_warnings(test_durable_file)
 gtest_discover_tests(test_durable_file)
 
 # ---------------------------------------------------------------------------
+# test_streaming_writer — StreamingWriter lifecycle + write tests (Phase 7b).
+# ---------------------------------------------------------------------------
+
+add_executable(test_streaming_writer
+    unit/test_streaming_writer.cpp
+)
+
+target_link_libraries(test_streaming_writer PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_streaming_writer)
+
+gtest_discover_tests(test_streaming_writer)
+
+# ---------------------------------------------------------------------------
 # test_header_examples — magic-header tests against reference files.
 # ---------------------------------------------------------------------------
 
