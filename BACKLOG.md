@@ -167,6 +167,40 @@ was approved-with-nits; none are blockers for current call sites.
    or to the `close()` idempotency contract; both should land with
    matching test additions then.
 
+### C++ serialize_metablock_json policy harmonisation (post-Phase-7b)
+
+Phase-7b Task 2 (`implementations/cpp/src/metablock.cpp`, commit
+`e75cce2`) shipped with two code-quality observations parked to
+keep Task 2 verbatim with the plan.
+
+1. **`"file"` always emitted as `{}` even when every `FileInfo`
+   optional is unset, but `"infos"` is omitted when empty.** The
+   parser tolerates both forms (round-trip is correct), but the
+   asymmetry violates principle of least surprise. Pick a single
+   policy before Phase 7c `BlockWriter` reuses this helper: either
+   omit `"file"` when all `FileInfo` optionals are unset, or always
+   emit both (including `"infos": []`). A one-line comment near the
+   `if (!meta.infos.empty())` guard documenting the chosen rule
+   would also suffice.
+
+2. **`Info` with `DataType::Unsupported` silently round-trips to
+   `"double"`.** `Info` has no `data_type_raw` field unlike
+   `Channel`, so `info_to_json` calls `data_type_to_wire(...,
+   /*raw_fallback=*/"")` and lands on the `"double"` fallback. This
+   is a true round-trip loss for any `Info` whose datatype was
+   originally unknown. Document at the call site, or add a
+   `data_type_raw` to `Info` symmetric to `Channel` if round-trip
+   fidelity is required.
+
+Plus minor test-coverage gaps: no test sets `Channel::spectrum_type`
+to verify the helper's branch (the spectrum-type helper is
+exercised only by parser tests today), no `Info::physical_unit`
+populated in the infos round-trip test, no test for
+`serialize_metablock_json` on a `MetaBlock` with empty channels
+list. Defer trigger: Phase 7c `BlockWriter` brings up the helper's
+second consumer, OR a real-world OSF5 round-trip surfaces a missing
+field.
+
 ---
 
 ## How to add an entry
