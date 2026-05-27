@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <osf/binary_sample.hpp>
 #include <osf/block.hpp>
 #include <osf/data_channel.hpp>
 #include <osf/error.hpp>

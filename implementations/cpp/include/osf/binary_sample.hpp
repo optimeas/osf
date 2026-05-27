@@ -16,8 +16,7 @@
  * vector would die at statement end.
  */
 
-#ifndef OSF_BINARY_SAMPLE_HPP
-#define OSF_BINARY_SAMPLE_HPP
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -39,5 +38,3 @@ struct BinarySample {
 };
 
 }  // namespace osf
-
-#endif  // OSF_BINARY_SAMPLE_HPP
