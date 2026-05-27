@@ -61,7 +61,7 @@ Result<DurableFile> DurableFile::create(
         std::filesystem::path const& path) {
 #ifdef _WIN32
     HANDLE const h = CreateFileW(
-        path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, /*sa=*/nullptr,
+        path.c_str(), GENERIC_WRITE, /*shareMode=*/0, /*sa=*/nullptr,
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, /*template=*/nullptr);
     if (h == INVALID_HANDLE_VALUE) {
         DWORD const err = GetLastError();

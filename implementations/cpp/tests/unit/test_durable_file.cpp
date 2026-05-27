@@ -77,15 +77,19 @@ TEST(DurableFile, write_appends_bytes_in_order) {
 }
 
 TEST(DurableFile, force_commits_buffered_writes) {
-    // The strongest claim we can make portably: after force(), the
-    // bytes are readable from an independent stream. We do not try
-    // to simulate power loss.
+    // The strongest claim we can make portably under exclusive-lock
+    // semantics: after force()+close(), the bytes are readable from an
+    // independent stream. We do not try to simulate power loss, and we
+    // cannot disentangle force()'s contribution from close()'s, but the
+    // existence of the bytes after force() (regardless of what close()
+    // adds) is the necessary durability invariant.
     TempFileGuard g{make_temp_path()};
     auto r = DurableFile::create(g.path);
     ASSERT_TRUE(r.has_value());
     std::uint8_t const data[] = {0x42};
     ASSERT_TRUE(r->write(data, 1).has_value());
     ASSERT_TRUE(r->force().has_value());
+    ASSERT_TRUE(r->close().has_value());
 
     std::ifstream in{g.path, std::ios::binary};
     ASSERT_TRUE(in.good());
