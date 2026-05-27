@@ -126,6 +126,47 @@ Triggers for action: profiling on a representative workload shows
 the I/O path is the bottleneck; or a connector implementation
 explicitly needs random access into multi-GB OSF files.
 
+### C++ DurableFile hardening (post-Phase-7b)
+
+Phase-7b Task 1 (`implementations/cpp/src/durable_file.{hpp,cpp}`,
+commits `566709c`+`612d943`) shipped with three review observations
+deferred to keep Task 1 within scope. Code-quality review verdict
+was approved-with-nits; none are blockers for current call sites.
+
+1. **`std::strerror` on POSIX is not guaranteed thread-safe.** The
+   POSIX spec permits implementations to back it with a per-process
+   static buffer; concurrent calls from multiple threads can corrupt
+   each other's message. The current code path is exercised only on
+   error from a single-threaded writer, but the gap is real. Fix:
+   replace `last_errno_message` body with `strerror_r` (with
+   `__GLIBC__`-conditional handling because the GNU variant returns
+   `char*` and the XSI/POSIX variant returns `int`). Defer trigger:
+   a multi-threaded POSIX consumer enters the picture, or hardening
+   the writer for general-purpose POSIX use is prioritised.
+
+2. **`DurableFile::write(data, 0)` semantics are implicit.** The
+   `while (written < size)` loop makes a zero-length write a silent
+   no-op success. This is the right semantics — a no-op write should
+   not be an error — but it is undocumented and untested. Fix: add
+   a one-line clarification to the hpp Doxygen ("`size == 0` is a
+   no-op success") and a test in `test_durable_file.cpp`. The OSF
+   block encoder never produces zero-byte payloads (a block always
+   carries at least the control byte + length prefix), so a
+   regression here cannot reach `StreamingWriter` from inside the
+   library. Defer trigger: an external direct consumer of
+   `DurableFile` appears, or the contract becomes load-bearing.
+
+3. **Coverage gaps in `test_durable_file.cpp`.** Move-assignment
+   path (the `(void) close()` of the prior handle) is not exercised
+   by any test. `write` on a moved-from source object is not
+   asserted (the `is_open()` guard handles it correctly today, but
+   the contract is implicit). The `force_commits_buffered_writes`
+   test's name overstates what the body can verify under exclusive-
+   lock semantics — rename to `force_then_close_succeeds` or
+   similar. Defer trigger: any future change to the move semantics
+   or to the `close()` idempotency contract; both should land with
+   matching test additions then.
+
 ---
 
 ## How to add an entry
