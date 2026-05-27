@@ -30,6 +30,7 @@
 #ifndef OSF_DETAIL_BLOCK_ENCODE_HPP
 #define OSF_DETAIL_BLOCK_ENCODE_HPP
 
+#include "osf/binary_sample.hpp"
 #include "osf/block.hpp"      // GpsLocation
 #include "osf/error.hpp"      // Result<void>
 
@@ -40,25 +41,7 @@
 
 namespace osf::detail {
 
-/**
- * @brief Non-owning view over a binary payload, C++17 substitute for
- *        std::span<std::uint8_t const>. Explicit construction only;
- *        no implicit conversion from std::vector<std::uint8_t> to
- *        prevent the lifetime trap where a temporary vector would die
- *        at statement end.
- */
-struct BinarySample {
-    std::uint8_t const* data;
-    std::size_t         size;
-
-    constexpr BinarySample(std::uint8_t const* d, std::size_t s) noexcept
-        : data{d}, size{s} {}
-
-    /// Ergonomic factory for the common case of an owning vector.
-    static BinarySample from_vector(std::vector<std::uint8_t> const& v) noexcept {
-        return BinarySample{v.data(), v.size()};
-    }
-};
+using osf::BinarySample;
 
 // ── Equidistant numeric (float / double only per spec) ─────────────
 
