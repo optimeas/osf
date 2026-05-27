@@ -317,4 +317,136 @@ TEST(ParseMetablockJson, null_pointer_with_nonzero_size_rejected_as_invalid_arg)
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
 }
 
+// ---------------------------------------------------------------------
+// serialize_metablock_json round-trip tests
+// ---------------------------------------------------------------------
+
+TEST(SerializeMetablockJson, roundtrip_minimal_metablock) {
+    osf::MetaBlock m;
+    m.file_info.version = 5;
+    osf::Channel ch;
+    ch.index = 0;
+    ch.name = "Sensor/Temperature";
+    ch.data_type = osf::DataType::Double;
+    ch.channel_type = osf::ChannelType::Scalar;
+    ch.size_of_length_value = 2;
+    m.channels.push_back(ch);
+
+    auto const json_text = osf::serialize_metablock_json(m);
+    auto parsed = osf::parse_metablock_json(json_text);
+    ASSERT_TRUE(parsed.has_value()) << "round-trip parse failed: "
+                                    << parsed.error().message;
+    EXPECT_EQ(parsed->channels.size(), 1u);
+    EXPECT_EQ(parsed->channels[0].name, "Sensor/Temperature");
+    EXPECT_EQ(parsed->channels[0].data_type, osf::DataType::Double);
+    EXPECT_EQ(parsed->channels[0].channel_type, osf::ChannelType::Scalar);
+    EXPECT_EQ(parsed->channels[0].size_of_length_value, 2);
+}
+
+TEST(SerializeMetablockJson, roundtrip_full_channel_with_optional_fields) {
+    osf::MetaBlock m;
+    osf::Channel ch;
+    ch.index = 7;
+    ch.name = "Pressure";
+    ch.data_type = osf::DataType::Float;
+    ch.channel_type = osf::ChannelType::Equidistant;
+    ch.size_of_length_value = 4;
+    ch.time_increment_ns = 1'000'000;
+    ch.physical_unit = "bar";
+    ch.physical_dimension = "pressure";
+    ch.display_name = "Sensor Pressure";
+    ch.mime_type = "application/octet-stream";
+    ch.reference = "ref-42";
+    ch.comment = "calibrated 2026-04-01";
+    m.channels.push_back(ch);
+
+    auto const json_text = osf::serialize_metablock_json(m);
+    auto parsed = osf::parse_metablock_json(json_text);
+    ASSERT_TRUE(parsed.has_value()) << parsed.error().message;
+    ASSERT_EQ(parsed->channels.size(), 1u);
+    auto const& pch = parsed->channels[0];
+    EXPECT_EQ(pch.index, 7);
+    EXPECT_EQ(pch.name, "Pressure");
+    EXPECT_EQ(pch.data_type, osf::DataType::Float);
+    EXPECT_EQ(pch.channel_type, osf::ChannelType::Equidistant);
+    EXPECT_EQ(pch.size_of_length_value, 4);
+    EXPECT_EQ(pch.time_increment_ns, 1'000'000);
+    EXPECT_EQ(pch.physical_unit, "bar");
+    EXPECT_EQ(pch.physical_dimension, "pressure");
+    EXPECT_EQ(pch.display_name, "Sensor Pressure");
+    EXPECT_EQ(pch.mime_type, "application/octet-stream");
+    EXPECT_EQ(pch.reference, "ref-42");
+    EXPECT_EQ(pch.comment, "calibrated 2026-04-01");
+}
+
+TEST(SerializeMetablockJson, roundtrip_geolocation_in_file_info) {
+    osf::MetaBlock m;
+    m.file_info.creator = "test:1";
+    m.file_info.created_at_latitude  = 47.5;
+    m.file_info.created_at_longitude =  9.5;
+    m.file_info.created_at_altitude  = 400.0;
+    osf::Channel ch;
+    ch.index = 0;
+    ch.name = "a";
+    ch.data_type = osf::DataType::Double;
+    ch.channel_type = osf::ChannelType::Scalar;
+    ch.size_of_length_value = 2;
+    m.channels.push_back(ch);
+
+    auto const json_text = osf::serialize_metablock_json(m);
+    auto parsed = osf::parse_metablock_json(json_text);
+    ASSERT_TRUE(parsed.has_value()) << parsed.error().message;
+    EXPECT_EQ(parsed->file_info.creator, "test:1");
+    ASSERT_TRUE(parsed->file_info.created_at_latitude.has_value());
+    EXPECT_DOUBLE_EQ(*parsed->file_info.created_at_latitude, 47.5);
+    ASSERT_TRUE(parsed->file_info.created_at_longitude.has_value());
+    EXPECT_DOUBLE_EQ(*parsed->file_info.created_at_longitude, 9.5);
+    ASSERT_TRUE(parsed->file_info.created_at_altitude.has_value());
+    EXPECT_DOUBLE_EQ(*parsed->file_info.created_at_altitude, 400.0);
+}
+
+TEST(SerializeMetablockJson, roundtrip_gpslocation_channel) {
+    osf::MetaBlock m;
+    osf::Channel ch;
+    ch.index = 0;
+    ch.name = "GPS";
+    ch.data_type = osf::DataType::GpsLocation;
+    ch.channel_type = osf::ChannelType::Timestamped;
+    ch.size_of_length_value = 2;
+    m.channels.push_back(ch);
+
+    auto const json_text = osf::serialize_metablock_json(m);
+    auto parsed = osf::parse_metablock_json(json_text);
+    ASSERT_TRUE(parsed.has_value()) << parsed.error().message;
+    ASSERT_EQ(parsed->channels.size(), 1u);
+    EXPECT_EQ(parsed->channels[0].data_type, osf::DataType::GpsLocation);
+}
+
+TEST(SerializeMetablockJson, roundtrip_infos_present) {
+    osf::MetaBlock m;
+    m.infos.push_back(osf::Info{
+        /*name=*/"recording_session",
+        /*value=*/"42",
+        /*data_type=*/osf::DataType::String,
+        /*physical_unit=*/std::nullopt});
+    m.infos.push_back(osf::Info{
+        "battery_pct", "87", osf::DataType::Int32, std::nullopt});
+    osf::Channel ch;
+    ch.index = 0;
+    ch.name = "a";
+    ch.data_type = osf::DataType::Double;
+    ch.channel_type = osf::ChannelType::Scalar;
+    ch.size_of_length_value = 2;
+    m.channels.push_back(ch);
+
+    auto const json_text = osf::serialize_metablock_json(m);
+    auto parsed = osf::parse_metablock_json(json_text);
+    ASSERT_TRUE(parsed.has_value()) << parsed.error().message;
+    ASSERT_EQ(parsed->infos.size(), 2u);
+    EXPECT_EQ(parsed->infos[0].name, "recording_session");
+    EXPECT_EQ(parsed->infos[0].value, "42");
+    EXPECT_EQ(parsed->infos[1].name, "battery_pct");
+    EXPECT_EQ(parsed->infos[1].data_type, osf::DataType::Int32);
+}
+
 }  // namespace

@@ -189,4 +189,28 @@ struct MetaBlock {
 /// form; bytes are interpreted as the XML text.
 [[nodiscard]] Result<MetaBlock> parse_metablock_xml(std::string_view text);
 
+/// Serialise a `MetaBlock` into the OSF5 JSON wire form.
+///
+/// The output is the canonical OSF5 envelope:
+/// `{"osf": {"format": "osf5", "version": 5, "file": {...},
+/// "channels": [...], "infos": [...]}}`.
+/// Field naming and types match what `parse_metablock_json` consumes,
+/// so a round-trip (serialise → parse) preserves every populated field
+/// up to optional-field presence and JSON pretty-printing whitespace.
+///
+/// The writer is OSF5-only (DECISIONS §6), so this helper always emits
+/// `"osf5"` / `5` regardless of `meta.file_info.version`. Optional
+/// fields (`creator`, `created_utc`, the `created_at_*` triple,
+/// `reason`, `namespace_sep`, `tag`, `comment`, per-channel
+/// `mime_type`, `physical_unit`, …) are **omitted when unset** rather
+/// than written as JSON `null`.
+///
+/// Pretty-printed with two-space indentation so the metablock remains
+/// reasonably readable in a hex viewer.
+///
+/// Returns the JSON text. Serialization never fails for a
+/// well-formed `MetaBlock` — the function is total over its input
+/// domain.
+[[nodiscard]] std::string serialize_metablock_json(MetaBlock const& meta);
+
 }  // namespace osf

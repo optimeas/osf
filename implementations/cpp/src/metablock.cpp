@@ -329,4 +329,129 @@ Result<MetaBlock> parse_metablock_json(std::string_view text) {
         text.size());
 }
 
+namespace {
+
+using nlohmann::json;
+
+// Map a known DataType enum to its canonical wire spelling. For
+// Unsupported we fall back to the channel's raw spelling (preserved
+// from parse time for round-trip).
+std::string data_type_to_wire(DataType dt, std::string_view raw_fallback) {
+    switch (dt) {
+        case DataType::Bool:        return "bool";
+        case DataType::Int8:        return "int8";
+        case DataType::Int16:       return "int16";
+        case DataType::Int32:       return "int32";
+        case DataType::Int64:       return "int64";
+        case DataType::UInt8:       return "uint8";
+        case DataType::UInt16:      return "uint16";
+        case DataType::UInt32:      return "uint32";
+        case DataType::UInt64:      return "uint64";
+        case DataType::Float:       return "float";
+        case DataType::Double:      return "double";
+        case DataType::String:      return "string";
+        case DataType::Binary:      return "binary";
+        case DataType::ByteArray:   return "binary";   // canonical write form
+        case DataType::GpsLocation: return "gpslocation";
+        case DataType::Unsupported:
+            return std::string{raw_fallback.empty() ? "double" : raw_fallback};
+    }
+    return std::string{raw_fallback.empty() ? "double" : raw_fallback};
+}
+
+std::string channel_type_to_wire(ChannelType ct,
+                                 std::string_view raw_fallback) {
+    switch (ct) {
+        case ChannelType::Scalar:      return "scalar";
+        case ChannelType::Equidistant: return "equidistant";
+        case ChannelType::Timestamped: return "timestamped";
+        case ChannelType::Unsupported:
+            return std::string{raw_fallback.empty() ? "scalar"
+                                                    : raw_fallback};
+    }
+    return std::string{raw_fallback.empty() ? "scalar" : raw_fallback};
+}
+
+std::string spectrum_type_to_wire(SpectrumType st) {
+    switch (st) {
+        case SpectrumType::Amplitude:   return "amplitude";
+        case SpectrumType::RealImag:    return "realimag";
+        case SpectrumType::AmpPhaseRad: return "ampphaserad";
+        case SpectrumType::AmpPhaseDeg: return "ampphasedeg";
+    }
+    return "amplitude";
+}
+
+json file_info_to_json(FileInfo const& fi) {
+    json obj = json::object();
+    if (fi.created_utc)            obj["created_utc"]          = *fi.created_utc;
+    if (fi.creator)                obj["creator"]              = *fi.creator;
+    if (fi.tag)                    obj["tag"]                  = *fi.tag;
+    if (fi.reason)                 obj["reason"]               = *fi.reason;
+    if (fi.namespace_sep)          obj["namespacesep"]         = *fi.namespace_sep;
+    if (fi.comment)                obj["comment"]              = *fi.comment;
+    if (fi.created_at_latitude)    obj["created_at_latitude"]  = *fi.created_at_latitude;
+    if (fi.created_at_longitude)   obj["created_at_longitude"] = *fi.created_at_longitude;
+    if (fi.created_at_altitude)    obj["created_at_altitude"]  = *fi.created_at_altitude;
+    return obj;
+}
+
+json channel_to_json(Channel const& ch) {
+    json obj = json::object();
+    obj["index"]             = ch.index;
+    obj["name"]              = ch.name;
+    obj["channeltype"]       = channel_type_to_wire(ch.channel_type,
+                                                    ch.channel_type_raw);
+    obj["datatype"]          = data_type_to_wire(ch.data_type,
+                                                 ch.data_type_raw);
+    obj["sizeoflengthvalue"] = ch.size_of_length_value;
+
+    if (ch.time_increment_ns)   obj["timeincrement"]      = *ch.time_increment_ns;
+    if (ch.physical_unit)       obj["physicalunit"]       = *ch.physical_unit;
+    if (ch.physical_dimension)  obj["physicaldimension"]  = *ch.physical_dimension;
+    if (ch.display_name)        obj["displayname"]        = *ch.display_name;
+    if (ch.mime_type)           obj["mimetype"]           = *ch.mime_type;
+    if (ch.reference)           obj["reference"]          = *ch.reference;
+    if (ch.comment)             obj["comment"]            = *ch.comment;
+    if (ch.spectrum_type)       obj["spectrumtype"]       =
+        spectrum_type_to_wire(*ch.spectrum_type);
+    return obj;
+}
+
+json info_to_json(Info const& info) {
+    json obj = json::object();
+    obj["name"]     = info.name;
+    obj["value"]    = info.value;
+    obj["datatype"] = data_type_to_wire(info.data_type, /*raw_fallback=*/"");
+    if (info.physical_unit) obj["physicalunit"] = *info.physical_unit;
+    return obj;
+}
+
+}  // namespace
+
+std::string serialize_metablock_json(MetaBlock const& meta) {
+    json channels_arr = json::array();
+    for (auto const& ch : meta.channels) {
+        channels_arr.push_back(channel_to_json(ch));
+    }
+
+    json infos_arr = json::array();
+    for (auto const& info : meta.infos) {
+        infos_arr.push_back(info_to_json(info));
+    }
+
+    json envelope = json::object();
+    json inner    = json::object();
+    inner["format"]   = "osf5";
+    inner["version"]  = 5;
+    inner["file"]     = file_info_to_json(meta.file_info);
+    inner["channels"] = std::move(channels_arr);
+    if (!meta.infos.empty()) {
+        inner["infos"] = std::move(infos_arr);
+    }
+    envelope["osf"] = std::move(inner);
+
+    return envelope.dump(2);
+}
+
 }  // namespace osf
