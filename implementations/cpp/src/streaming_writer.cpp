@@ -62,6 +62,49 @@ constexpr DataType data_type_for() noexcept {
     else { static_assert(sizeof(T) == 0, "unsupported T"); return DataType::Unsupported; }
 }
 
+constexpr std::size_t MAX_PAYLOAD_FOR_SOV(std::uint8_t sov) noexcept {
+    // u16 length field: max payload = 65535
+    // u32 length field: soft-capped at i32::MAX - 1024 to avoid
+    // platform-dependent overflow on body-length conversion.
+    return (sov == 2)
+               ? std::size_t{0xFFFFu}
+               : static_cast<std::size_t>(0x7FFFFFFFu - 1024u);
+}
+
+// bcStartData multi-sample: payload = [u8 ctrl][i64 ts][f64 rate]
+// [u32 N][N * value_size]. Overhead = 21.
+std::size_t max_samples_per_start_block(std::size_t value_size,
+                                        std::uint8_t sov) noexcept {
+    constexpr std::size_t OVERHEAD = 1u + 8u + 8u + 4u;
+    std::size_t const max_payload = MAX_PAYLOAD_FOR_SOV(sov);
+    if (max_payload <= OVERHEAD) return 1;
+    std::size_t const samples = (max_payload - OVERHEAD) / value_size;
+    return (samples == 0) ? 1u : samples;
+}
+
+// bcContinuedData multi-sample: payload = [u8 ctrl][u32 N]
+// [N * value_size]. Overhead = 5.
+std::size_t max_samples_per_continued_block(std::size_t value_size,
+                                            std::uint8_t sov) noexcept {
+    constexpr std::size_t OVERHEAD = 1u + 4u;
+    std::size_t const max_payload = MAX_PAYLOAD_FOR_SOV(sov);
+    if (max_payload <= OVERHEAD) return 1;
+    std::size_t const samples = (max_payload - OVERHEAD) / value_size;
+    return (samples == 0) ? 1u : samples;
+}
+
+// bcAbsTimeStampData multi-sample: payload = [u8 ctrl][u32 N]
+// [N * (8 + value_size)]. Used by Task 5.
+std::size_t max_samples_per_timestamped_block(std::size_t value_size,
+                                              std::uint8_t sov) noexcept {
+    constexpr std::size_t OVERHEAD = 1u + 4u;
+    std::size_t const per_sample = 8u + value_size;
+    std::size_t const max_payload = MAX_PAYLOAD_FOR_SOV(sov);
+    if (max_payload <= OVERHEAD) return 1;
+    std::size_t const samples = (max_payload - OVERHEAD) / per_sample;
+    return (samples == 0) ? 1u : samples;
+}
+
 }  // namespace
 
 // ── Ctor / dtor / move ───────────────────────────────────────────────
@@ -400,20 +443,24 @@ std::optional<Error> StreamingWriter::require_variable_channel(
         Error::Code::InvalidArgument, #method ": not implemented yet"))
 
 Result<void> StreamingWriter::start_equidistant_segment(
-        std::uint16_t, std::int64_t, double, float const*, std::size_t) {
-    OSF_STUB_NOT_IMPLEMENTED(start_equidistant_segment);
+        std::uint16_t channel, std::int64_t start_ts, double rate,
+        float const* samples, std::size_t count) {
+    return start_equidistant_segment_impl<float>(channel, start_ts, rate,
+                                                  samples, count);
 }
 Result<void> StreamingWriter::start_equidistant_segment(
-        std::uint16_t, std::int64_t, double, double const*, std::size_t) {
-    OSF_STUB_NOT_IMPLEMENTED(start_equidistant_segment);
+        std::uint16_t channel, std::int64_t start_ts, double rate,
+        double const* samples, std::size_t count) {
+    return start_equidistant_segment_impl<double>(channel, start_ts, rate,
+                                                   samples, count);
 }
 Result<void> StreamingWriter::append_equidistant_samples(
-        std::uint16_t, float const*, std::size_t) {
-    OSF_STUB_NOT_IMPLEMENTED(append_equidistant_samples);
+        std::uint16_t channel, float const* samples, std::size_t count) {
+    return append_equidistant_samples_impl<float>(channel, samples, count);
 }
 Result<void> StreamingWriter::append_equidistant_samples(
-        std::uint16_t, double const*, std::size_t) {
-    OSF_STUB_NOT_IMPLEMENTED(append_equidistant_samples);
+        std::uint16_t channel, double const* samples, std::size_t count) {
+    return append_equidistant_samples_impl<double>(channel, samples, count);
 }
 
 Result<void> StreamingWriter::write_timestamped_gps_sample(
@@ -440,6 +487,125 @@ Result<void> StreamingWriter::write_timestamped_samples_impl(
 }
 
 #undef OSF_STUB_NOT_IMPLEMENTED
+
+// ── start_equidistant_segment_impl<T> / append_equidistant_samples_impl<T> ───
+
+template <typename T>
+Result<void> StreamingWriter::start_equidistant_segment_impl(
+        std::uint16_t channel, std::int64_t start_ts, double rate,
+        T const* samples, std::size_t count) {
+    if (count == 0) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "start_equidistant_segment: count must be > 0"));
+    }
+    if (!(rate > 0.0) || !std::isfinite(rate)) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "start_equidistant_segment: sample_rate_hz must be a "
+            "positive finite double"));
+    }
+    if (auto err = require_equidistant_channel(
+            channel, data_type_for<T>())) {
+        return tl::make_unexpected(*err);
+    }
+
+    auto const sov = sov_for(channel);
+    std::size_t const max_first =
+        max_samples_per_start_block(sizeof(T), sov);
+    std::size_t const max_cont =
+        max_samples_per_continued_block(sizeof(T), sov);
+
+    // First chunk as bcStartData.
+    std::size_t const first = std::min(count, max_first);
+    scratch_buffer_.clear();
+    if (auto enc = osf::detail::encode_start_data<T>(
+            scratch_buffer_, channel, sov, start_ts, rate,
+            samples, first); !enc) {
+        return enc;
+    }
+    if (auto wr = do_write_block(scratch_buffer_.data(),
+                                  scratch_buffer_.size()); !wr) {
+        return wr;
+    }
+    channel_states_[channel].segment_open = true;
+
+    // Remaining chunks as bcContinuedData.
+    std::size_t written = first;
+    while (written < count) {
+        std::size_t const chunk =
+            std::min(count - written, max_cont);
+        scratch_buffer_.clear();
+        if (auto enc = osf::detail::encode_continued_data<T>(
+                scratch_buffer_, channel, sov,
+                samples + written, chunk); !enc) {
+            return enc;
+        }
+        if (auto wr = do_write_block(scratch_buffer_.data(),
+                                      scratch_buffer_.size()); !wr) {
+            return wr;
+        }
+        written += chunk;
+    }
+    return {};
+}
+
+template <typename T>
+Result<void> StreamingWriter::append_equidistant_samples_impl(
+        std::uint16_t channel, T const* samples, std::size_t count) {
+    if (count == 0) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "append_equidistant_samples: count must be > 0"));
+    }
+    if (auto err = require_equidistant_channel(
+            channel, data_type_for<T>())) {
+        return tl::make_unexpected(*err);
+    }
+    if (!channel_states_[channel].segment_open) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidBlock,
+            "channel " + std::to_string(channel) +
+                ": append without start"));
+    }
+
+    auto const sov = sov_for(channel);
+    std::size_t const max_cont =
+        max_samples_per_continued_block(sizeof(T), sov);
+
+    std::size_t written = 0;
+    while (written < count) {
+        std::size_t const chunk =
+            std::min(count - written, max_cont);
+        scratch_buffer_.clear();
+        if (auto enc = osf::detail::encode_continued_data<T>(
+                scratch_buffer_, channel, sov,
+                samples + written, chunk); !enc) {
+            return enc;
+        }
+        if (auto wr = do_write_block(scratch_buffer_.data(),
+                                      scratch_buffer_.size()); !wr) {
+            return wr;
+        }
+        written += chunk;
+    }
+    return {};
+}
+
+// Explicit instantiations — float + double only per spec rev
+// 2026-05-04 equidistant restriction.
+template Result<void>
+StreamingWriter::start_equidistant_segment_impl<float>(
+    std::uint16_t, std::int64_t, double, float const*, std::size_t);
+template Result<void>
+StreamingWriter::start_equidistant_segment_impl<double>(
+    std::uint16_t, std::int64_t, double, double const*, std::size_t);
+template Result<void>
+StreamingWriter::append_equidistant_samples_impl<float>(
+    std::uint16_t, float const*, std::size_t);
+template Result<void>
+StreamingWriter::append_equidistant_samples_impl<double>(
+    std::uint16_t, double const*, std::size_t);
 
 // ── Explicit instantiations of write_timestamped_samples_impl<T> ─────
 // Task 5 will replace the stub above with the real body. This block
