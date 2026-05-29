@@ -269,6 +269,54 @@ write methods that exercise the same move/close paths through
 roundtrip tests; if no regression surfaces by Phase 7b close, the
 gaps can be filled with one focused commit.
 
+### C++ StreamingWriter equidistant API polish (post-Phase-7b)
+
+Phase-7b Task 4 (`implementations/cpp/{include/osf/streaming_writer.hpp,
+src/streaming_writer.cpp,tests/unit/test_streaming_writer.cpp}`,
+commit `2c78d53`) shipped with three plan-level cosmetic
+observations parked for post-Phase-7b attention. All originate
+in the plan code blocks at lines 2629–3287, not in implementer
+choices.
+
+1. **`MAX_PAYLOAD_FOR_SOV` is SHOUTY_CASE but is a `constexpr`
+   function, not a macro.** The convention in `streaming_writer.cpp`
+   is `lower_snake_case()` for functions and `UPPER_SNAKE_CASE`
+   for `constexpr std::size_t OVERHEAD` constants. A reader
+   could reasonably scan for macro-parenthesization traps.
+   Rename to `max_payload_for_sov()` in a follow-up. Plan-level
+   convention drift, not an implementer-introduced issue.
+
+2. **`make_double_channel` test helper declares
+   `ChannelType::Scalar` but resulting writer emits
+   `bcStartData` / `bcContinuedData` (equidistant) blocks** in
+   the byte-exact, chunking, pre-write, and double-roundtrip
+   tests. The float-roundtrip test (`test_streaming_writer.cpp`
+   line ~402) sets `Equidistant` correctly. Both currently
+   round-trip — the reader keys `EquidistantChannel` off the
+   block stream, not the metablock — but a strict reader could
+   legitimately reject the produced files because the
+   channel_type tag disagrees with the block kind. One-line fix
+   in the helper or split into `make_double_scalar_channel` /
+   `make_double_equidistant_channel`. Defer trigger: a downstream
+   OSF reader strictly validates channel_type / block_kind
+   agreement, or a spec rev tightens the rule.
+
+3. **Test name `metablock_json_starts_with_envelope` does not
+   match what the body asserts.** The test parses the metablock
+   JSON via `parse_metablock_json` and verifies parsed content
+   (channel name, creator) — it does not check any envelope
+   prefix. Rename to `metablock_json_parses_with_expected_content`
+   or similar. Cosmetic, plan-named.
+
+Plus a file-length observation: `streaming_writer.cpp` reached
+633 lines after Task 4 (was 467). Tasks 5 + 6 will add another
+~300 lines of timestamped-numeric / GPS / variable bodies,
+pushing past 900 lines. A per-write-family split
+(`streaming_writer_equidistant.cpp` / `_timestamped.cpp` /
+`_variable.cpp` sharing private state via an internal header)
+becomes attractive at that point. Not for Phase 7b — revisit
+once Tasks 5 + 6 land and the actual size is known.
+
 ---
 
 ## How to add an entry
