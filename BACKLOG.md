@@ -201,6 +201,74 @@ list. Defer trigger: Phase 7c `BlockWriter` brings up the helper's
 second consumer, OR a real-world OSF5 round-trip surfaces a missing
 field.
 
+### C++ StreamingWriter polish (post-Phase-7b)
+
+Phase-7b Task 3 (`implementations/cpp/{include/osf/streaming_writer.hpp,src/streaming_writer.cpp}`,
+commit `db273d9`) shipped with five observations from the
+code-quality review parked for post-Phase-7b attention.
+
+1. **`std::optional<DurableFile>` → `std::unique_ptr<DurableFile>`
+   deviation needs spec ratification.** The spec/plan called for
+   `std::optional<detail::DurableFile> durable_file_` with only a
+   forward declaration of `DurableFile` in the header. MSVC's
+   `std::optional<T>` eagerly evaluates `__is_trivially_destructible`
+   and rejects forward-declared `T`. The implementer correctly
+   switched to `unique_ptr` (which defers dtor instantiation to the
+   TU that sees the complete type). Add a footnote to spec §2 Q10
+   ratifying `unique_ptr<DurableFile>` as canonical for any public
+   header that forward-declares the private type. Phase 7c
+   (`BlockWriter`) and Phase 7d (`StaleValueGuard`) should adopt
+   the same pattern when they reach this design point.
+
+2. **`close()` Doxygen overstates the contract.** Header line for
+   `close()` says "Final flush + fsync + file-close" but the
+   implementation does NOT call `durable_file_->force()` before
+   `durable_file_->close()` in the Streaming branch. Practical
+   impact: zero — every preceding `do_write_block` already
+   `force()`'d its data, and `start()` `force()`'d the magic
+   header + metablock. So there is no unsynced data at close
+   time. Fix options: either add a defensive `force()` before
+   `close()` in the Streaming branch (cheap insurance, matches
+   the documented contract), or trim the Doxygen to "file-close
+   only — all data already durable from per-block fsync." Pick
+   one before Phase 7c writes documentation that propagates the
+   current ambiguity.
+
+3. **`start()` error message misleading for Broken state.** The
+   current message `"start: writer is past the Configure phase"`
+   is correct for a writer in Streaming or Closed state, but
+   confusing if the writer somehow reached Broken. Refine the
+   check to surface the sticky error when `state_ == Broken` —
+   matching the pattern used by `require_streaming_state()`.
+
+4. **`sov_for(channel)` silently returns 2 for out-of-range
+   channels.** The function is private and every caller goes
+   through a `require_*` helper that already validates channel
+   bounds. The fallback path is therefore dead code in a correct
+   caller sequence. Replace with `assert(channel < channels_.size())`
+   or convert to an internal-API contract (no fallback) for
+   clarity.
+
+5. **`OSF_STUB_NOT_IMPLEMENTED` macro uses `InvalidArgument`.** All
+   stub returns share the InvalidArgument code, which is
+   semantically "caller made a bad call." A stub that has not been
+   implemented is better served by a distinct code. Tasks 4-6
+   will replace the stubs with real implementations, so the
+   concern is short-lived. If a test accidentally exercises a
+   stub before its real body lands, the InvalidArgument error
+   could mask a genuine arg-validation bug. Trigger to act:
+   never — Tasks 4-6 close this naturally.
+
+Plus three test-coverage gaps for the lifecycle: no test for
+double-close from Configure (the dtor calls close() unconditionally
+which silently consumes the second-close's InvalidArgument), no
+test for move-ctor on a Streaming-state writer (the 14-member
+move is complex enough to deserve a dedicated test), and no
+self-move-assignment safety test. Defer trigger: Tasks 4-7 land
+write methods that exercise the same move/close paths through
+roundtrip tests; if no regression surfaces by Phase 7b close, the
+gaps can be filled with one focused commit.
+
 ---
 
 ## How to add an entry
