@@ -480,13 +480,46 @@ Result<void> StreamingWriter::write_timestamped_binary(
     OSF_STUB_NOT_IMPLEMENTED(write_timestamped_binary);
 }
 
+#undef OSF_STUB_NOT_IMPLEMENTED
+
+// ── write_timestamped_samples_impl<T> ────────────────────────────────
+
 template <typename T>
 Result<void> StreamingWriter::write_timestamped_samples_impl(
-        std::uint16_t, std::int64_t const*, T const*, std::size_t) {
-    OSF_STUB_NOT_IMPLEMENTED(write_timestamped_samples_impl);
-}
+        std::uint16_t channel, std::int64_t const* timestamps_ns,
+        T const* values, std::size_t count) {
+    if (count == 0) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "write_timestamped_samples: count must be > 0"));
+    }
+    if (auto err = require_timestamped_channel(
+            channel, data_type_for<T>())) {
+        return tl::make_unexpected(*err);
+    }
 
-#undef OSF_STUB_NOT_IMPLEMENTED
+    auto const sov = sov_for(channel);
+    std::size_t const max_per_block =
+        max_samples_per_timestamped_block(sizeof(T), sov);
+
+    std::size_t written = 0;
+    while (written < count) {
+        std::size_t const chunk =
+            std::min(count - written, max_per_block);
+        scratch_buffer_.clear();
+        if (auto enc = osf::detail::encode_abs_timestamp_data<T>(
+                scratch_buffer_, channel, sov,
+                timestamps_ns + written, values + written, chunk); !enc) {
+            return enc;
+        }
+        if (auto wr = do_write_block(scratch_buffer_.data(),
+                                      scratch_buffer_.size()); !wr) {
+            return wr;
+        }
+        written += chunk;
+    }
+    return {};
+}
 
 // ── start_equidistant_segment_impl<T> / append_equidistant_samples_impl<T> ───
 
