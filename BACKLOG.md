@@ -317,6 +317,55 @@ pushing past 900 lines. A per-write-family split
 becomes attractive at that point. Not for Phase 7b — revisit
 once Tasks 5 + 6 land and the actual size is known.
 
+### C++ StreamingWriter timestamped numeric API polish (post-Phase-7b)
+
+Phase-7b Task 5 (`implementations/cpp/{src/streaming_writer.cpp,
+tests/unit/test_streaming_writer.cpp}`, commit `f82d04c7`)
+shipped with three minor observations from the code-quality
+review parked for post-Phase-7b attention.
+
+1. **Long-run chunking tests assert `blocks_read > 1u` only.**
+   `test_streaming_writer.cpp` `timestamped_int32_long_run_with_chunking_roundtrips`
+   and `timestamped_double_long_run_with_chunking_roundtrips`
+   could pass even if a regression made the chunker emit just
+   two blocks (one huge + one tiny tail) instead of the
+   ~19 / ~25 the math actually guarantees. Tighten to
+   `EXPECT_GE(mgr->stats.blocks_read, 18u)` / `25u` respectively
+   — or, more durably, derive the expected count from
+   `count / max_per_block` and assert against that.
+
+2. **`OSF_STUB_NOT_IMPLEMENTED` macro region comment is stale.**
+   `streaming_writer.cpp` line ~439 says "write_* method stubs —
+   filled in by Tasks 4-6". After Task 5 only 4 stubs remain
+   (`write_timestamped_gps_sample/samples`, `write_timestamped_string`,
+   `write_timestamped_binary`). Refresh to "Tasks 4–5 done;
+   GPS + variable in Task 6." or remove once Task 6 closes the
+   region entirely.
+
+3. **No byte-exact tests for `int8_t` / `uint8_t` against the
+   `bool` baseline.** `bool` byte-encoding is locked down at
+   `test_streaming_writer.cpp:486-507` (asserts `0x01` / `0x00`,
+   defends against `int(bool)` widening). The other two 1-byte
+   numeric types flow through the same `append_sample<T>` path
+   in `block_encode.cpp` and are exercised by the encoder's
+   own tests, but the StreamingWriter integration is not directly
+   byte-asserted for them. Low risk — the encoder per-type tests
+   cover the wire format — but a one-paragraph test that drives
+   `write_timestamped_sample<int8_t>(0, 0LL, -1)` and asserts
+   the resulting frame would close the gap.
+
+Cosmetic items not parked separately: `~4093 samples` comment
+math at `test_streaming_writer.cpp:644` is off by 2 (actual
+math is 4095); the file-size watch on `streaming_writer.cpp`
+(now 666 lines after Task 5) is already covered by the Task-4
+entry above.
+
+Defer trigger: Phase 7c `BlockWriter` mirrors the
+`_impl<T>` template-impl-zone layout — a tightening pass on
+test assertions and stale stub comments could land together
+with that work, since `BlockWriter` will need the same chunking
+helpers and the same encoder symbols.
+
 ---
 
 ## How to add an entry
