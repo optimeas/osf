@@ -366,3 +366,24 @@ target_compile_definitions(test_manager_examples PRIVATE
 osf_set_warnings(test_manager_examples)
 
 gtest_discover_tests(test_manager_examples)
+
+# ---------------------------------------------------------------------------
+# test_streaming_writer_examples — cross-implementation roundtrip
+# (Phase 7b Cat-F + Cat-G).
+# ---------------------------------------------------------------------------
+
+add_executable(test_streaming_writer_examples
+    integration/test_streaming_writer_examples.cpp
+)
+
+target_link_libraries(test_streaming_writer_examples PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_compile_definitions(test_streaming_writer_examples PRIVATE
+    OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+
+osf_set_warnings(test_streaming_writer_examples)
+
+gtest_discover_tests(test_streaming_writer_examples)

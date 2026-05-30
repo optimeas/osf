@@ -249,6 +249,17 @@ private:
     [[nodiscard]] std::optional<Error> require_variable_channel(
         std::uint16_t channel, DataType expected);
 
+    // Private equidistant impl templates — definitions + explicit
+    // instantiations (for float and double) live in the .cpp.
+    template <typename T>
+    [[nodiscard]] Result<void> start_equidistant_segment_impl(
+        std::uint16_t channel, std::int64_t start_timestamp_ns,
+        double sample_rate_hz, T const* samples, std::size_t count);
+
+    template <typename T>
+    [[nodiscard]] Result<void> append_equidistant_samples_impl(
+        std::uint16_t channel, T const* samples, std::size_t count);
+
     // Private template — definition + explicit instantiations live
     // in the .cpp; this declaration is here so the public template
     // body can forward to it.
