@@ -428,6 +428,78 @@ Defer trigger: Phase 7c `BlockWriter` reuses the chunking
 infrastructure. All five items can land as one polish commit
 on top of Phase 7c.
 
+### C++ StreamingWriter cross-impl roundtrip polish (post-Phase-7b)
+
+Phase-7b Task 7 (`implementations/cpp/tests/integration/test_streaming_writer_examples.cpp`,
+commit `80475a7`) shipped with five observations from the code-
+quality review parked for post-Phase-7b attention. Two are real
+coverage / fidelity gaps; three are cosmetic.
+
+1. **Roundtrip helper docstring says "first/last sample equality"
+   but the implementation only compares sample-count + datatype.**
+   At `test_streaming_writer_examples.cpp:173`, the docstring on
+   `roundtrip_via_streaming_writer` claims per-channel
+   "sample-count + first/last sample equality"; the actual loop
+   at lines 271-283 only asserts count + datatype. A writer
+   regression that swapped samples within a channel or
+   off-by-one'd timestamps would pass the test today. Either
+   tighten the docstring or — preferred — add first + last
+   sample value comparison per channel. Real coverage gap.
+
+2. **`channel_type_from()` returns `Timestamped` for
+   `TimestampedChannel`, but the Delphi reference generator
+   always emits `channeltype: scalar` for non-equidistant
+   channels** (verified empirically against
+   `osf5_mixed_extended.osf`: temperature, counter, alarmflag,
+   message, position all carry `channeltype: scalar`). The
+   roundtrip test currently passes because the reader's state
+   machine keys off `data_type` not `channel_type` for
+   non-equidistant channels (`manager.cpp:215`), and the writer's
+   `require_*_channel` validators check the kind lock + datatype
+   only. But the written file diverges from the Delphi reference
+   on this metablock field. Decide: match the Delphi convention
+   (return `Scalar` uniformly for non-equidistant) or document
+   the divergence in the helper comment.
+
+3. **Truncation test comment mis-identifies the cut location.**
+   `test_streaming_writer_examples.cpp:331-333` says "Truncate 10
+   bytes off the end → last block is mid-payload." Re-doing the
+   math for the 21-byte single-sample timestamped-double frame
+   `[u16 ci=0][u16 len=17][0x08 ctrl][i64 ts][f64 sample]`:
+   bytes 11-20 of the last frame are bytes 11-12 of `ts` + all 8
+   bytes of `sample`. So the cut is mid-timestamp, not
+   mid-payload. Test outcome unchanged — reader detects the
+   length-prefix mismatch either way — but the comment should
+   say "mid-block" or "mid-timestamp" for accuracy.
+
+4. **ChannelMeta secondary fields silently dropped on roundtrip.**
+   The `ChannelDef` construction at `test_streaming_writer_examples.cpp:204-222`
+   copies `physical_unit` and `display_name` but omits
+   `physical_dimension`, `reference`, `comment`, `mime_type`,
+   `time_increment_ns`. For a *cross-impl roundtrip* test these
+   are user-visible metadata fields and their loss is invisible
+   to current assertions (count + dtype only). Either populate
+   them all from the source ChannelMeta or document the
+   intentional drop with a comment.
+
+5. **Plan-level lesson: `std::vector<T>::data()` is not generic
+   over `T`.** The plan's X-macro at lines 4402-4412 hits a
+   compile-time wall for `T=bool` because `std::vector<bool>` is
+   bit-packed and has no `data()` member. The implementer
+   correctly worked around with `std::unique_ptr<bool[]>` +
+   manual extraction at `test_streaming_writer_examples.cpp:101-110`,
+   but future implementation plans should pre-empt this pattern.
+   Future plan authors: when writing template / X-macro code that
+   does `std::vector<T>::data()`, either guard with
+   `static_assert(!std::is_same_v<T, bool>)` and provide a bool
+   specialization, or use `std::array` / hand-rolled buffers from
+   the start.
+
+Defer trigger: Phase 7c `BlockWriter` will introduce its own
+roundtrip integration tests with the same helper-shape pressure;
+items 1, 2, and 4 should land together as a single tightening
+commit there. Items 3 and 5 can land anytime.
+
 ---
 
 ## How to add an entry
