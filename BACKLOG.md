@@ -366,6 +366,68 @@ test assertions and stale stub comments could land together
 with that work, since `BlockWriter` will need the same chunking
 helpers and the same encoder symbols.
 
+### C++ StreamingWriter GPS + Variable API polish (post-Phase-7b)
+
+Phase-7b Task 6 (`implementations/cpp/{src/streaming_writer.cpp,
+tests/unit/test_streaming_writer.cpp}`, commit `e816ddd`)
+shipped with four minor observations from the code-quality
+review parked for post-Phase-7b attention.
+
+1. **Stale comment near the explicit-instantiation block.**
+   `streaming_writer.cpp` lines ~741–743 still say "Task 5
+   will replace the stub above with the real body. This block
+   stays — the explicit-instantiation list is the same." Task 5
+   already did this; the wording is post-merge stale. Refresh
+   to e.g. "Task 5 filled in the real body above; explicit-
+   instantiation list unchanged." Same flavour as the Task-5
+   stale-stubs-comment nit.
+
+2. **Magic number `24` for GPS wire size** at the
+   `max_samples_per_timestamped_block(/*value_size=*/24u, sov)`
+   call site for the GPS array path. The named-parameter comment
+   is good, but Phase 7c `BlockWriter` will plausibly recompute
+   the same chunking for GPS. Promote to
+   `constexpr std::size_t GPS_WIRE_SIZE = 24;` next to
+   `GpsLocation` (e.g. in `binary_sample.hpp` or `metablock.hpp`)
+   so both writer classes share the constant.
+
+3. **Magic number `9` for variable-block overhead**
+   (`variable_sample_capacity(sov)` = `MAX_PAYLOAD_FOR_SOV - 9`).
+   The comment at the call site documents the math
+   (`1 ctrl + 8 ts`), but the other three chunking helpers all
+   use a `constexpr std::size_t OVERHEAD = ...;` inside the
+   function body. Match the local convention with a named
+   constant (e.g. `VARIABLE_BLOCK_OVERHEAD_BYTES`) for consistency.
+
+4. **Asymmetric test coverage for the variable boundary case.**
+   `oversized_string_at_sov2_returns_invalid_block_with_capacity_message`
+   verifies BOTH the 65527-byte failure AND the 65526-byte
+   boundary success. `oversized_binary_at_sov2_returns_invalid_block`
+   verifies only the failure case. Tighten the binary test to
+   match: a 65526-byte vector at sov=2 should succeed.
+
+Plus a file-size promotion: `streaming_writer.cpp` reached
+764 lines after Task 6 (was 467 at Task 3, 633 after Task 4,
+666 after Task 5). The Task 4-5 BACKLOG entries called this
+a "watch"; the threshold is now in sight. Phase 7c lands
+`block_writer.cpp` as a separate TU which absorbs the writer
+pressure differently than a within-StreamingWriter split would.
+Recommendation: re-evaluate the split question after Phase 7c
+lands. If the answer is still "split", do it as a single
+mechanical commit (one source file per write-family, shared
+state via a private `streaming_writer_internal.hpp`).
+
+Plus a code-review observation worth a separate watch: two
+anonymous namespaces in the same TU (`streaming_writer.cpp`
+lines ~41-108 + ~517-527). Legal but unusual. Consider
+consolidating into a single anonymous namespace near the top
+of the file at the same time as the file-split or the magic-
+number cleanup.
+
+Defer trigger: Phase 7c `BlockWriter` reuses the chunking
+infrastructure. All five items can land as one polish commit
+on top of Phase 7c.
+
 ---
 
 ## How to add an entry
