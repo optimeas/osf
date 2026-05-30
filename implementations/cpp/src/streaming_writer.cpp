@@ -436,11 +436,11 @@ std::optional<Error> StreamingWriter::require_variable_channel(
     return std::nullopt;
 }
 
-// ── write_* method stubs — filled in by Tasks 4-6 ────────────────────
-
-#define OSF_STUB_NOT_IMPLEMENTED(method)                                      \
-    return tl::make_unexpected(make_error(                                    \
-        Error::Code::InvalidArgument, #method ": not implemented yet"))
+// ── Equidistant + Timestamped numeric forwarding methods ────────────
+//
+// The public non-template methods forward to the templated *_impl
+// bodies that live further down. The GPS + Variable methods are
+// non-template entry points with their own bodies.
 
 Result<void> StreamingWriter::start_equidistant_segment(
         std::uint16_t channel, std::int64_t start_ts, double rate,
@@ -463,24 +463,122 @@ Result<void> StreamingWriter::append_equidistant_samples(
     return append_equidistant_samples_impl<double>(channel, samples, count);
 }
 
-Result<void> StreamingWriter::write_timestamped_gps_sample(
-        std::uint16_t, std::int64_t, GpsLocation) {
-    OSF_STUB_NOT_IMPLEMENTED(write_timestamped_gps_sample);
-}
+// ── GPS array ─────────────────────────────────────────────────────
+
 Result<void> StreamingWriter::write_timestamped_gps_samples(
-        std::uint16_t, std::int64_t const*, GpsLocation const*, std::size_t) {
-    OSF_STUB_NOT_IMPLEMENTED(write_timestamped_gps_samples);
-}
-Result<void> StreamingWriter::write_timestamped_string(
-        std::uint16_t, std::int64_t, std::string_view) {
-    OSF_STUB_NOT_IMPLEMENTED(write_timestamped_string);
-}
-Result<void> StreamingWriter::write_timestamped_binary(
-        std::uint16_t, std::int64_t, BinarySample) {
-    OSF_STUB_NOT_IMPLEMENTED(write_timestamped_binary);
+        std::uint16_t channel, std::int64_t const* timestamps_ns,
+        GpsLocation const* values, std::size_t count) {
+    if (count == 0) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "write_timestamped_gps_samples: count must be > 0"));
+    }
+    if (auto err = require_timestamped_channel(
+            channel, DataType::GpsLocation)) {
+        return tl::make_unexpected(*err);
+    }
+
+    auto const sov = sov_for(channel);
+    // GPS wire-format per sample: 24 bytes (3 little-endian doubles
+    // for latitude, longitude, altitude per block.hpp:57-72).
+    std::size_t const max_per_block =
+        max_samples_per_timestamped_block(/*value_size=*/24u, sov);
+
+    std::size_t written = 0;
+    while (written < count) {
+        std::size_t const chunk =
+            std::min(count - written, max_per_block);
+        scratch_buffer_.clear();
+        if (auto enc = osf::detail::encode_abs_timestamp_data_gps(
+                scratch_buffer_, channel, sov,
+                timestamps_ns + written, values + written, chunk); !enc) {
+            return enc;
+        }
+        if (auto wr = do_write_block(scratch_buffer_.data(),
+                                      scratch_buffer_.size()); !wr) {
+            return wr;
+        }
+        written += chunk;
+    }
+    return {};
 }
 
-#undef OSF_STUB_NOT_IMPLEMENTED
+// ── GPS scalar — forwards to array ────────────────────────────────
+
+Result<void> StreamingWriter::write_timestamped_gps_sample(
+        std::uint16_t channel, std::int64_t timestamp_ns,
+        GpsLocation value) {
+    return write_timestamped_gps_samples(channel, &timestamp_ns,
+                                         &value, 1);
+}
+
+// ── Variable (string + binary) — single-sample per spec ──────────
+
+namespace {
+
+// Effective max sample size for a variable block at the given sov.
+// Body = 1 (ctrl) + 8 (ts) + sample-bytes; encoder enforces sov
+// via begin_frame. Effective sample max = MAX_PAYLOAD_FOR_SOV(sov) - 9.
+std::size_t variable_sample_capacity(std::uint8_t sov) noexcept {
+    std::size_t const max_payload = MAX_PAYLOAD_FOR_SOV(sov);
+    return (max_payload <= 9u) ? 0u : (max_payload - 9u);
+}
+
+}  // namespace
+
+Result<void> StreamingWriter::write_timestamped_string(
+        std::uint16_t channel, std::int64_t timestamp_ns,
+        std::string_view value) {
+    if (auto err = require_variable_channel(channel, DataType::String)) {
+        return tl::make_unexpected(*err);
+    }
+    auto const sov = sov_for(channel);
+    std::size_t const capacity = variable_sample_capacity(sov);
+    if (value.size() > capacity) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidBlock,
+            "channel " + std::to_string(channel) +
+                ": variable sample size " + std::to_string(value.size()) +
+                " bytes exceeds the maximum single-block payload (" +
+                std::to_string(capacity) + " bytes for sizeoflengthvalue=" +
+                std::to_string(sov) + "). Declare sizeoflengthvalue=4 at "
+                "add_channel() time for channels that may carry larger "
+                "payloads."));
+    }
+    scratch_buffer_.clear();
+    if (auto enc = osf::detail::encode_abs_timestamp_data(
+            scratch_buffer_, channel, sov, timestamp_ns, value); !enc) {
+        return enc;
+    }
+    return do_write_block(scratch_buffer_.data(), scratch_buffer_.size());
+}
+
+Result<void> StreamingWriter::write_timestamped_binary(
+        std::uint16_t channel, std::int64_t timestamp_ns,
+        BinarySample value) {
+    if (auto err = require_variable_channel(channel, DataType::Binary)) {
+        return tl::make_unexpected(*err);
+    }
+    auto const sov = sov_for(channel);
+    std::size_t const capacity = variable_sample_capacity(sov);
+    if (value.size > capacity) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidBlock,
+            "channel " + std::to_string(channel) +
+                ": variable sample size " + std::to_string(value.size) +
+                " bytes exceeds the maximum single-block payload (" +
+                std::to_string(capacity) + " bytes for sizeoflengthvalue=" +
+                std::to_string(sov) + "). Declare sizeoflengthvalue=4 at "
+                "add_channel() time for channels that may carry larger "
+                "payloads."));
+    }
+    scratch_buffer_.clear();
+    if (auto enc = osf::detail::encode_abs_timestamp_data(
+            scratch_buffer_, channel, sov, timestamp_ns, value); !enc) {
+        return enc;
+    }
+    return do_write_block(scratch_buffer_.data(), scratch_buffer_.size());
+}
 
 // ── write_timestamped_samples_impl<T> ────────────────────────────────
 

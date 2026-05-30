@@ -713,3 +713,217 @@ TEST(StreamingWriterPreWrite,
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
 }
+
+// ── Task 6: GPS + Variable API tests ─────────────────────────────────
+
+TEST(StreamingWriterRoundtrip, timestamped_gps_array_roundtrips) {
+    TempFileGuard g{make_temp_path()};
+    {
+        osf::StreamingWriter w{g.path};
+        osf::ChannelDef d;
+        d.name = "gps";
+        d.data_type = osf::DataType::GpsLocation;
+        d.channel_type = osf::ChannelType::Timestamped;
+        d.size_of_length_value = 2;
+        ASSERT_TRUE(w.add_channel(d).has_value());
+        ASSERT_TRUE(w.start().has_value());
+        std::int64_t const ts[]      = {100, 200, 300};
+        osf::GpsLocation const gps[] = {
+            {47.5, 9.5,  400.0},
+            {47.6, 9.6,  405.0},
+            {47.7, 9.7,  410.0},
+        };
+        ASSERT_TRUE(w.write_timestamped_gps_samples(
+            0, ts, gps, 3).has_value());
+        ASSERT_TRUE(w.close().has_value());
+    }
+    auto mgr = osf::DataManager::load_from_file(g.path);
+    ASSERT_TRUE(mgr.has_value());
+    auto const* ts_ch = std::get_if<osf::TimestampedChannel>(
+        mgr->channel("gps"));
+    ASSERT_NE(ts_ch, nullptr);
+    auto const pairs = osf::as_gps_flat(*ts_ch);
+    ASSERT_TRUE(pairs.has_value());
+    ASSERT_EQ(pairs->size(), 3u);
+    EXPECT_EQ((*pairs)[0].first, 100);
+    EXPECT_DOUBLE_EQ((*pairs)[0].second.latitude,  47.5);
+    EXPECT_DOUBLE_EQ((*pairs)[0].second.longitude,  9.5);
+    EXPECT_DOUBLE_EQ((*pairs)[0].second.altitude, 400.0);
+    EXPECT_DOUBLE_EQ((*pairs)[2].second.latitude,  47.7);
+    EXPECT_DOUBLE_EQ((*pairs)[2].second.altitude, 410.0);
+}
+
+TEST(StreamingWriterRoundtrip, timestamped_gps_single_sample_via_scalar_form) {
+    // The scalar form forwards to the array form with count=1;
+    // verify the on-disk payload is the canonical bit-7=0 single-sample
+    // form via DataManager roundtrip.
+    TempFileGuard g{make_temp_path()};
+    {
+        osf::StreamingWriter w{g.path};
+        osf::ChannelDef d;
+        d.name = "gps";
+        d.data_type = osf::DataType::GpsLocation;
+        d.channel_type = osf::ChannelType::Timestamped;
+        d.size_of_length_value = 2;
+        ASSERT_TRUE(w.add_channel(d).has_value());
+        ASSERT_TRUE(w.start().has_value());
+        ASSERT_TRUE(w.write_timestamped_gps_sample(
+            0, /*ts=*/42LL, {48.0, 10.0, 200.0}).has_value());
+        ASSERT_TRUE(w.close().has_value());
+    }
+    auto mgr = osf::DataManager::load_from_file(g.path);
+    ASSERT_TRUE(mgr.has_value());
+    auto const* ts_ch = std::get_if<osf::TimestampedChannel>(
+        mgr->channel("gps"));
+    ASSERT_NE(ts_ch, nullptr);
+    auto const pairs = osf::as_gps_flat(*ts_ch);
+    ASSERT_TRUE(pairs.has_value());
+    ASSERT_EQ(pairs->size(), 1u);
+    EXPECT_EQ((*pairs)[0].first, 42);
+    EXPECT_DOUBLE_EQ((*pairs)[0].second.latitude, 48.0);
+}
+
+TEST(StreamingWriterRoundtrip, timestamped_string_multiple_samples_roundtrip) {
+    TempFileGuard g{make_temp_path()};
+    {
+        osf::StreamingWriter w{g.path};
+        osf::ChannelDef d;
+        d.name = "log";
+        d.data_type = osf::DataType::String;
+        d.channel_type = osf::ChannelType::Timestamped;
+        d.size_of_length_value = 2;
+        ASSERT_TRUE(w.add_channel(d).has_value());
+        ASSERT_TRUE(w.start().has_value());
+        ASSERT_TRUE(w.write_timestamped_string(
+            0, 100LL, std::string_view{"alpha"}).has_value());
+        ASSERT_TRUE(w.write_timestamped_string(
+            0, 200LL, std::string_view{"beta"}).has_value());
+        ASSERT_TRUE(w.write_timestamped_string(
+            0, 300LL, std::string_view{"gamma"}).has_value());
+        ASSERT_TRUE(w.close().has_value());
+    }
+    auto mgr = osf::DataManager::load_from_file(g.path);
+    ASSERT_TRUE(mgr.has_value());
+    auto const* var = std::get_if<osf::VariableChannel>(
+        mgr->channel("log"));
+    ASSERT_NE(var, nullptr);
+    auto const strings = var->as_strings();
+    ASSERT_TRUE(strings.has_value());
+    ASSERT_EQ((*strings)->size(), 3u);
+    EXPECT_EQ((**strings)[0], "alpha");
+    EXPECT_EQ((**strings)[1], "beta");
+    EXPECT_EQ((**strings)[2], "gamma");
+    EXPECT_EQ(var->timestamps_ns[0], 100);
+    EXPECT_EQ(var->timestamps_ns[2], 300);
+}
+
+TEST(StreamingWriterRoundtrip,
+     timestamped_binary_with_sov4_large_blob_roundtrip) {
+    // 70 KB blob into a sov=4 channel — fits in a single block.
+    TempFileGuard g{make_temp_path()};
+    std::vector<std::uint8_t> blob(70'000, 0xAB);
+    blob[0]   = 0xDE;
+    blob[1]   = 0xAD;
+    blob.back() = 0xEF;
+    {
+        osf::StreamingWriter w{g.path};
+        osf::ChannelDef d;
+        d.name = "img";
+        d.data_type = osf::DataType::Binary;
+        d.channel_type = osf::ChannelType::Timestamped;
+        d.size_of_length_value = 4;
+        d.mime_type = "image/jpeg";
+        ASSERT_TRUE(w.add_channel(d).has_value());
+        ASSERT_TRUE(w.start().has_value());
+        ASSERT_TRUE(w.write_timestamped_binary(
+            0, 1234LL, osf::BinarySample::from_vector(blob)).has_value());
+        ASSERT_TRUE(w.close().has_value());
+    }
+    auto mgr = osf::DataManager::load_from_file(g.path);
+    ASSERT_TRUE(mgr.has_value());
+    auto const* var = std::get_if<osf::VariableChannel>(
+        mgr->channel("img"));
+    ASSERT_NE(var, nullptr);
+    auto const bins = var->as_binaries();
+    ASSERT_TRUE(bins.has_value());
+    ASSERT_EQ((*bins)->size(), 1u);
+    EXPECT_EQ((**bins)[0], blob);
+    EXPECT_EQ(var->timestamps_ns[0], 1234);
+}
+
+TEST(StreamingWriterChunking,
+     string_channel_emits_one_block_per_sample) {
+    // 5 strings → 5 separate bcAbsTimeStampData blocks (variable
+    // is single-sample only per spec). DataManager.stats.blocks_read
+    // should equal the count.
+    TempFileGuard g{make_temp_path()};
+    {
+        osf::StreamingWriter w{g.path};
+        osf::ChannelDef d;
+        d.name = "s";
+        d.data_type = osf::DataType::String;
+        d.channel_type = osf::ChannelType::Timestamped;
+        d.size_of_length_value = 2;
+        ASSERT_TRUE(w.add_channel(d).has_value());
+        ASSERT_TRUE(w.start().has_value());
+        for (std::int64_t i = 0; i < 5; ++i) {
+            ASSERT_TRUE(w.write_timestamped_string(
+                0, i, std::string_view{"x"}).has_value());
+        }
+        ASSERT_TRUE(w.close().has_value());
+    }
+    auto mgr = osf::DataManager::load_from_file(g.path);
+    ASSERT_TRUE(mgr.has_value());
+    EXPECT_EQ(mgr->stats.blocks_read, 5u);
+}
+
+TEST(StreamingWriterPreWrite,
+     oversized_string_at_sov2_returns_invalid_block_with_capacity_message) {
+    TempFileGuard g{make_temp_path()};
+    osf::StreamingWriter w{g.path};
+    osf::ChannelDef d;
+    d.name = "s";
+    d.data_type = osf::DataType::String;
+    d.channel_type = osf::ChannelType::Timestamped;
+    d.size_of_length_value = 2;
+    ASSERT_TRUE(w.add_channel(d).has_value());
+    ASSERT_TRUE(w.start().has_value());
+
+    // 65527-byte string trips the sov=2 single-block payload limit.
+    // Body = 1 (ctrl) + 8 (ts) + payload-bytes; max payload = 65535.
+    // Effective sample max = 65526; 65527 fails.
+    std::string const too_big(65527, 'x');
+    auto r = w.write_timestamped_string(
+        0, 0LL, std::string_view{too_big});
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::InvalidBlock);
+    // Capacity-aware error message per Spec §3.3.
+    EXPECT_NE(r.error().message.find("65526 bytes"), std::string::npos)
+        << "error message must quote the effective capacity 65526 bytes; "
+        << "got: " << r.error().message;
+
+    // The boundary case (65526 bytes) succeeds.
+    std::string const at_limit(65526, 'x');
+    ASSERT_TRUE(w.write_timestamped_string(
+        0, 1LL, std::string_view{at_limit}).has_value());
+}
+
+TEST(StreamingWriterPreWrite,
+     oversized_binary_at_sov2_returns_invalid_block) {
+    TempFileGuard g{make_temp_path()};
+    osf::StreamingWriter w{g.path};
+    osf::ChannelDef d;
+    d.name = "b";
+    d.data_type = osf::DataType::Binary;
+    d.channel_type = osf::ChannelType::Timestamped;
+    d.size_of_length_value = 2;
+    ASSERT_TRUE(w.add_channel(d).has_value());
+    ASSERT_TRUE(w.start().has_value());
+
+    std::vector<std::uint8_t> too_big(65527, 0xCD);
+    auto r = w.write_timestamped_binary(
+        0, 0LL, osf::BinarySample::from_vector(too_big));
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::InvalidBlock);
+    EXPECT_NE(r.error().message.find("65526 bytes"), std::string::npos);
+}
