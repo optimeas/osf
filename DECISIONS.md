@@ -514,29 +514,48 @@ reference file:
 Each phase produces a green build with passing tests against the
 reference files before the next phase begins.
 
-### Status (updated 2026-05-26)
+### Status (updated 2026-05-31)
 
 Phases 1–6 complete (skeleton, magic-header parser, OSF5 JSON
 metablock parser, OSF4 XML metablock parser, block-stream reader,
-typed `DataManager`). **Phase 7a complete (2026-05-26):** private
+typed `DataManager`). Phase 7a complete (2026-05-26): private
 block-encoder library at `src/block_encode.hpp/.cpp` in namespace
-`osf::detail`, composed by the future `StreamingWriter` (Phase 7b)
-and `BlockWriter` (Phase 7c). Six encoder symbols, 13 explicit
-template instantiations, 35 new GoogleTest cases bringing the
-ctest count to 192/192 green under MSVC `/W4 /permissive-`. The
-shared little-endian helper hub `src/binary_io.hpp` was introduced
-as a prerequisite refactor (reader-side helpers renamed for
-read/write symmetry, write-side counterparts added). Per spec
-rev 2026-05-24: string/binary blocks emit no trailing `0x00`,
-single-sample variable-length only, automatic bit-7 toggling by
-`count`. Two cross-implementation follow-up items are parked in
-`BACKLOG.md` (Rust writer's non-spec-canonical bit-7 toggling and
-the misleading bit-7 comment in both C++ and Rust readers).
+`osf::detail`, composed by `StreamingWriter` (Phase 7b) and
+`BlockWriter` (Phase 7c). Six encoder symbols, 13 explicit
+template instantiations, the shared little-endian helper hub
+`src/binary_io.hpp`. Per spec rev 2026-05-24: string/binary
+blocks emit no trailing `0x00`, single-sample variable-length
+only, automatic bit-7 toggling by `count`.
 
-Phase 7b and 7c arrive next: the `StreamingWriter` and
-`BlockWriter` classes compose the new encoder layer with their
-respective flush policies. Phase 7d (`StaleValueGuard`) is
-optional and follows.
+**Phase 7b complete (2026-05-31):** `osf::StreamingWriter` —
+embedded power-loss-safe streaming OSF5 writer at
+`include/osf/streaming_writer.hpp` / `src/streaming_writer.cpp`.
+Ships the full embedded write surface across four families:
+equidistant (`float` / `double` only per spec rev 2026-05-04),
+timestamped numeric (template + `static_assert` over 11 types),
+timestamped GPS (separate non-template entry points per the Q3.5
+architecture decision), and single-sample variable string /
+binary (per spec rev 2026-05-24, capacity-aware error messages
+per Spec §3.3). Per-block `DurableFile::force()` (via
+`FlushFileBuffers` on Windows, `fsync` on POSIX) provides
+power-loss safety; the reader's existing best-effort-on-
+truncation behaviour means files remain valid up to the last
+fsync'd block. Cross-implementation roundtrip suite at
+`tests/integration/test_streaming_writer_examples.cpp`
+exercises the writer against three `examples/generated/` OSF5
+files plus a reader-truncation regression via
+`std::filesystem::resize_file`. ctest moves from 192/192 to
+**245/245 green** in ~10 s, 0 warnings under MSVC
+`/W4 /permissive-`. Plan + design spec under
+`docs/superpowers/{plans,specs}/2026-05-26-cpp-phase-7b-streaming-writer-*.md`.
+18 minor polish items parked across four BACKLOG entries
+(`### C++ StreamingWriter ... polish (post-Phase-7b)`) for
+Phase 7c batch landing.
+
+Phase 7c (`BlockWriter`, analyst-style) arrives next — same
+encoder substrate as Phase 7b, dual sink (Path or memory) per
+the cross-sub-phase consistency notes in the Phase-7b spec §3.3.
+Phase 7d (`StaleValueGuard`) is optional and follows.
 
 ## 21. Java Implementation Architecture
 

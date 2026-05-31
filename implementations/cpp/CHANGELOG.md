@@ -20,6 +20,79 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 7b — `StreamingWriter`** (embedded streaming OSF5
+  writer) at `include/osf/streaming_writer.hpp` /
+  `src/streaming_writer.cpp` (764 lines). Public API ships
+  all four write families per Spec §2 Q4/Q5/Q6 + §3.3:
+  - **Equidistant** (Task 4): `start_equidistant_segment` +
+    `append_equidistant_samples` for `float` + `double` per
+    spec rev 2026-05-04. Two private template `_impl<T>`
+    bodies + 4 explicit instantiations. Three constexpr
+    chunking helpers in the anonymous namespace
+    (`MAX_PAYLOAD_FOR_SOV`, `max_samples_per_start_block` with
+    OVERHEAD=21, `max_samples_per_continued_block` with
+    OVERHEAD=5).
+  - **Timestamped numeric** (Task 5): `write_timestamped_sample<T>`
+    and `write_timestamped_samples<T>` templates with
+    `static_assert(IsTimestampedNumeric<T>::value, ...)` over
+    11 types (bool, int8/16/32/64, uint8/16/32/64, float,
+    double). Reuses `max_samples_per_timestamped_block` from
+    Task 4.
+  - **GPS** (Task 6): separate non-template
+    `write_timestamped_gps_sample` (scalar forwards to array)
+    and `write_timestamped_gps_samples` (array with chunking
+    via `max_samples_per_timestamped_block(/*value_size=*/24u,
+    sov)`).
+  - **Variable** (Task 6): `write_timestamped_string` and
+    `write_timestamped_binary` — single-sample only per OSF
+    spec rev 2026-05-24. New anonymous-namespace helper
+    `variable_sample_capacity(sov)` for the pre-encoder
+    capacity check; error message quotes exact effective
+    capacity per Spec §3.3 (`65526 bytes` for sov=2).
+  Power-loss safety via per-block `DurableFile::force()`
+  (Task 1, `FlushFileBuffers` on Windows, `fsync` on POSIX);
+  reader's existing best-effort-on-truncation behaviour means
+  the file remains readable up to the last successfully
+  fsync'd block.
+- **`DurableFile`** at `src/durable_file.{hpp,cpp}` (Task 1) —
+  RAII wrapper around the OS file handle with `write` /
+  `force` / `close`; cross-platform via `_Windows` /
+  `_Posix` builders.
+- **`serialize_metablock_json`** at `src/metablock.cpp`
+  (Task 2) — the inverse of `parse_metablock_json`; emits
+  the OSF5 metablock JSON the `StreamingWriter` writes in
+  `start()`. Round-trip pinned via 14 new tests.
+- **`BinarySample`** promoted to public header
+  `include/osf/binary_sample.hpp` (Task 0) — was private to
+  the Phase-7a encoder; the new `StreamingWriter` API needs
+  it on the public surface for the
+  `write_timestamped_binary(channel, ts, BinarySample)`
+  signature.
+- **Cross-implementation roundtrip integration test**
+  (Task 7) at
+  `tests/integration/test_streaming_writer_examples.cpp` (347
+  lines). Three Cat-F roundtrips on
+  `examples/generated/osf5_{equidistant,scalar_numeric,
+  mixed_extended}.osf` — load via `DataManager`, re-write
+  through `StreamingWriter`, reload, assert per-channel
+  count + datatype equality. One Cat-G truncation regression
+  via `std::filesystem::resize_file` cutting the last block
+  mid-frame; reader recovers 9 of 10 blocks and bumps
+  `stats.blocks_truncated` to 1.
+- **53 new GoogleTest cases** across Tasks 1-7 (DurableFile,
+  serialize_metablock_json, StreamingWriter skeleton +
+  equidistant + timestamped numeric + GPS + variable +
+  integration). Total ctest count moves from 192/192 to
+  **245/245 green** in ~10 s under MSVC `/W4 /permissive-`,
+  0 build warnings.
+- **Phase 7c (`BlockWriter`) and Phase 7d (`StaleValueGuard`)**
+  arrive next on the same encoder substrate. 18 minor polish
+  items parked across four BACKLOG entries
+  (`### C++ StreamingWriter ... polish (post-Phase-7b)`),
+  scheduled to land as a single tightening pass on top of
+  Phase 7c since the chunking helpers + encoder symbols
+  + roundtrip helper shape are all reused there.
+
 - **Phase 7a — Private block-encoder layer.** Six encoder symbols
   in `src/block_encode.hpp` / `.cpp`, namespace `osf::detail`,
   composed by the future `StreamingWriter` (Phase 7b) and

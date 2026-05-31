@@ -508,8 +508,8 @@ enough that the Arc-Channel optimisation is not needed yet.
 
 ## C++ implementation — current state
 
-Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Reader updated for the version-deterministic null-terminator rule on 2026-05-24. **Phase 7a (private block-encoder library) completed 2026-05-26.** Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
-Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, both OSF4 + OSF5 metablock parsers, the block-stream reader (with `ReaderStats`), the typed `DataManager`, and the OSF5 block-encoder primitives are in place. The user-facing `StreamingWriter` (Phase 7b) and `BlockWriter` (Phase 7c) classes compose this encoder layer and arrive next.
+Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Reader updated for the version-deterministic null-terminator rule on 2026-05-24. Phase 7a (private block-encoder library) completed 2026-05-26. **Phase 7b (`StreamingWriter` — embedded streaming OSF5 writer) completed 2026-05-31.** Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
+Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, both OSF4 + OSF5 metablock parsers, the block-stream reader (with `ReaderStats`), the typed `DataManager`, the OSF5 block-encoder primitives, and the user-facing `StreamingWriter` class are in place. The analyst-style `BlockWriter` (Phase 7c) and the optional `StaleValueGuard` layer (Phase 7d) arrive next.
 
 **Library targets:**
 
@@ -577,12 +577,12 @@ cmake --build build
 ctest --test-dir build
 ```
 
-**Build verification (local, 2026-05-26 after Phase 7a):**
+**Build verification (local, 2026-05-31 after Phase 7b):**
 
 - Toolchain: MSVC 19.50.35730, Visual Studio 18 generator, CMake 4.2.3.
 - `cmake -B build` configures with **0 CMake warnings** (CMP0135 set to NEW explicitly via `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE`).
-- `cmake --build` produces `osf.lib` plus sixteen test executables with **0 compile warnings** under `/W4 /permissive-` (the vendored `pugixml.cpp` is built with `/W0` since it is treated as binary-identical to upstream).
-- `ctest` reports **192/192 passed in ~7.2 s** (157 pre-Phase-7a baseline + 35 new Phase-7a tests in `test_block_encode.cpp` covering all 6 encoder symbols, byte-exact wire-format invariants, three error paths, and a roundtrip-via-BlockReader matrix over all 11 numeric data types plus GPS, string, and binary).
+- `cmake --build` produces `osf.lib` plus the test executables with **0 compile warnings** under `/W4 /permissive-` (the vendored `pugixml.cpp` is built with `/W0` since it is treated as binary-identical to upstream).
+- `ctest` reports **245/245 passed in ~10.2 s** (214 pre-Phase-7b baseline including DurableFile + serialize_metablock_json + StreamingWriter skeleton from Tasks 1–3 + 31 new Phase-7b feature tests across Tasks 4–7: 10 equidistant + 10 timestamped numeric + 7 GPS+variable + 4 cross-impl roundtrip / truncation regression).
 
 **Constraints:**
 
@@ -591,23 +591,23 @@ ctest --test-dir build
 
 **Pending:**
 
-Phase 7b: `StreamingWriter` (embedded, sample-by-sample,
-`FileChannel.force(true)`-equivalent per-block flush) that
-composes the new `osf::detail` encoder symbols delivered by
-Phase 7a. Phase 7c: `BlockWriter` (analyst-style, accumulates
-samples, emits whole file in one pass) on the same encoder
-substrate. Phase 7d: optional `StaleValueGuard` layer.
+Phase 7c: `BlockWriter` (analyst-style, accumulates samples,
+emits whole file in one pass) on the same encoder substrate
+as `StreamingWriter`. Phase 7d: optional `StaleValueGuard`
+layer (100-second-repeat-of-last-value over the streaming
+writer for timestamped channels).
 
 Then sequentially per §20 Implementation Order: transparent OSFZ
 decompression (Phase 8 — removes the current `DataManager`
 OSFZ-rejection stub), throwing convenience layer.
 
-Two cross-implementation findings from the Phase 7a final review
-are parked in `BACKLOG.md` for action before Phase 7b begins:
-the Rust writer's non-spec-canonical bit-7 toggling for
-single-sample variable-length blocks, and the misleading
-"spec requires bit-7 set" comment in both the C++ and Rust
-readers. See *Implementation Gaps and Conventions* in BACKLOG.md.
+Phase-7b code-quality reviews surfaced four batches of polish
+nits (per-task: `99c519a`, `7cbd86d`, `9fc0a06`, `16368aa` —
+18 minor items total). All deferred to Phase 7c for a single
+tightening pass since the chunking helpers, encoder symbols,
+and roundtrip helper shape will all be reused there. See
+*Implementation Gaps and Conventions* in BACKLOG.md, four
+`### C++ StreamingWriter ... polish (post-Phase-7b)` entries.
 
 The C ABI shared-library wrapper (Phase 11) is the deferred deliverable for cross-language consumption — Windows DLL / ActiveX/OCX, future bindings. It will land after the core C++ library reaches roundtrip validation and gets its own DECISIONS entry covering handle patterns, error codes, string ownership, and ABI stability guarantees.
 
@@ -727,59 +727,45 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 ---
 
-## Next session priorities (as of 2026-05-26, late)
+## Next session priorities (as of 2026-05-31)
 
-Current state — **C++ Phase 7a is complete** (commits
-`e839c66..a558768`, 192/192 ctest green), **the Rust-writer
-spec-conformance fix + reader-comment correction landed**
-(commit `89b63f1`), **the Phase 7b architecture discussion is
-complete** (pre-spec outline at
-[`...-outline.md`](docs/superpowers/specs/2026-05-26-cpp-phase-7b-streaming-writer-outline.md)
-in commit `b3fe4a3`), **the Phase 7b formal design spec is
-committed** (commit `a39c168`,
-[`...-design.md`](docs/superpowers/specs/2026-05-26-cpp-phase-7b-streaming-writer-design.md),
-2454 lines, 10 sections), **and the Phase 7b implementation
-plan is committed**
-([`...-plan.md`](docs/superpowers/plans/2026-05-26-cpp-phase-7b-streaming-writer-plan.md),
-5013 lines, 8 atomic tasks with cumulative test target 245).
+Current state — **C++ Phase 7b is complete**. Merge commit
+`0f8197d` brought 8 branch commits (4 feature + 4 BACKLOG
+polish) to main; 245/245 ctest green under MSVC
+`/W4 /permissive-`. The `StreamingWriter` public API at
+`include/osf/streaming_writer.hpp` ships all four write
+families (equidistant float/double, timestamped numeric for
+11 types, timestamped GPS, timestamped string/binary
+single-sample with capacity-aware errors) plus the
+power-loss-safe per-block `DurableFile::force()` flush from
+Task 1. The cross-implementation roundtrip suite at
+`tests/integration/test_streaming_writer_examples.cpp`
+exercises the writer against three `examples/generated/`
+files plus a reader-truncation regression.
+
 Recommended sequence:
 
-1. **Plan audit** (next session, fresh eyes recommended).
-   Three specific verifications to run before subagent
-   dispatch:
-   - `grep -n "as_.*_flat" implementations/cpp/include/osf/data_channel.hpp`
-     — verify the helper-naming the plan assumes
-     (`as_bools_flat`, `as_uint16_flat`, `as_gps_flat`, …)
-     matches what `data_channel.hpp` actually exports.
-     Phase-7a-Plan-Bug `37dcc50` (`.code()` vs `.code`) was
-     exactly this kind of naming drift.
-   - `ls examples/generated/` — verify the three Cat-F
-     filenames (`osf5_equidistant.osf`,
-     `osf5_scalar_numeric.osf`, `osf5_mixed_extended.osf`)
-     exist; substitute equivalents if not. Plan §Task-7
-     already documents the substitution protocol.
-   - Re-grep every header listed in the plan's
-     Cross-reference verification policy table (Plan lines
-     208–229) for drift since `a39c168`: `error.hpp`,
-     `block.hpp`, `metablock.hpp`, `reader.hpp`,
-     `manager.hpp`, `stats.hpp`, `data_channel.hpp`,
-     `types.hpp`. If drift is found, reconcile by editing
-     the plan; if no drift, mark the plan audit clean and
-     proceed.
-   Plus a Cat-E coverage spot-check: Spec §7 says "~10
-   size-class roundtrips"; plan distributes 10 + 5 + 3
-   across Tasks 4–6. Verify total Cat-E count and
-   per-datatype-size-class coverage. Detail, not a
-   show-stopper.
-2. **Subagent dispatch** for Phase-7b Tasks 0–7
-   (implementer → code-quality-review → stop per task —
-   Phase-7a choreography).
-3. **C++ Phase 7c — `BlockWriter`** (after Phase 7b green).
+1. **C++ Phase 7c — `BlockWriter`** (next immediate work).
    Analyst-style, accumulates samples in memory, emits whole
-   file at `close()`. Same encoder substrate as Phase 7b.
-   Dual sink (Path or memory) per the cross-sub-phase
-   consistency notes in the Phase-7b spec §3.3.
-4. **C++ Phase 7d — `StaleValueGuard`** (optional).
+   file at `close()`. Same encoder substrate as Phase 7b
+   (`osf::detail::encode_*` symbols + the chunking helpers
+   from `streaming_writer.cpp`). Dual sink (Path or memory)
+   per the cross-sub-phase consistency notes in the Phase-7b
+   spec §3.3. Will reuse the Phase-7b roundtrip test shape
+   from `test_streaming_writer_examples.cpp` — consider
+   factoring the `roundtrip_via_*_writer` helper into a
+   shared `tests/integration/roundtrip_helper.hpp` when
+   Phase 7c lands.
+2. **Phase-7b polish landing.** The 18 backlog items parked
+   across Tasks 4-7 (`### C++ StreamingWriter ... polish
+   (post-Phase-7b)` entries in BACKLOG.md) are scheduled to
+   land as a single tightening pass on top of Phase 7c —
+   chunking helpers and encoder symbols get reused there, so
+   naming-convention sweeps (GPS_WIRE_SIZE,
+   VARIABLE_BLOCK_OVERHEAD_BYTES, MAX_PAYLOAD_FOR_SOV →
+   max_payload_for_sov) and the make_double_channel
+   helper-channel-type fix can all batch.
+3. **C++ Phase 7d — `StaleValueGuard`** (optional).
    100-second-repeat layer over `StreamingWriter` for
    timestamped channels.
 
@@ -790,11 +776,11 @@ optionality). DECISIONS §21 already documents the new rules,
 but no Java code exists yet to enforce them — the scaffolding
 prompt would be the next concrete step on that track.
 
-The Phase 7a final code review (commits `e839c66..7cdb561`)
-delivered an approved-with-nits verdict; the two nits were
-addressed in `2fa703a` (style consolidation) and the three
-coverage extensions in `7cdb561`. No outstanding defect-level
-work from Phase 7a survives.
+The Phase 7b final cross-task review delivered a clean
+ready-to-merge verdict; documentation deltas (this STATUS
+update + CHANGELOG entries + DECISIONS §20 update) landed as
+the documented post-merge follow-up commit per the plan's
+Out-of-Scope §9.
 
 ---
 
