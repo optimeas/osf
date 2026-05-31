@@ -257,6 +257,23 @@ osf_set_warnings(test_streaming_writer)
 gtest_discover_tests(test_streaming_writer)
 
 # ---------------------------------------------------------------------------
+# test_block_writer — BlockWriter unit tests (Phase 7c).
+# ---------------------------------------------------------------------------
+
+add_executable(test_block_writer
+    unit/test_block_writer.cpp
+)
+
+target_link_libraries(test_block_writer PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_block_writer)
+
+gtest_discover_tests(test_block_writer)
+
+# ---------------------------------------------------------------------------
 # test_writer_common — shared writer infrastructure unit tests (Phase 7c).
 # ---------------------------------------------------------------------------
 

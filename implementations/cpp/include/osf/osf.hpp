@@ -11,6 +11,7 @@
 
 #include <osf/binary_sample.hpp>
 #include <osf/block.hpp>
+#include <osf/block_writer.hpp>
 #include <osf/data_channel.hpp>
 #include <osf/error.hpp>
 #include <osf/header.hpp>
@@ -18,5 +19,6 @@
 #include <osf/metablock.hpp>
 #include <osf/reader.hpp>
 #include <osf/stats.hpp>
+#include <osf/streaming_writer.hpp>
 #include <osf/types.hpp>
 #include <osf/version.hpp>
