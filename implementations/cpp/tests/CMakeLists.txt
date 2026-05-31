@@ -257,6 +257,27 @@ osf_set_warnings(test_streaming_writer)
 gtest_discover_tests(test_streaming_writer)
 
 # ---------------------------------------------------------------------------
+# test_writer_common — shared writer infrastructure unit tests (Phase 7c).
+# ---------------------------------------------------------------------------
+
+add_executable(test_writer_common
+    unit/test_writer_common.cpp
+)
+
+target_link_libraries(test_writer_common PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_include_directories(test_writer_common PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src"
+)
+
+osf_set_warnings(test_writer_common)
+
+gtest_discover_tests(test_writer_common)
+
+# ---------------------------------------------------------------------------
 # test_header_examples — magic-header tests against reference files.
 # ---------------------------------------------------------------------------
 

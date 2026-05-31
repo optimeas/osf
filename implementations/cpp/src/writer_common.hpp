@@ -12,8 +12,14 @@
 #ifndef OSF_DETAIL_WRITER_COMMON_HPP
 #define OSF_DETAIL_WRITER_COMMON_HPP
 
+#include "osf/metablock.hpp"
+#include "osf/streaming_writer.hpp"   // ChannelDef
+
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
 
 namespace osf::detail {
 
@@ -53,6 +59,27 @@ std::size_t max_samples_per_timestamped_block(std::size_t value_size,
 
 // Effective max sample size for a single-sample variable block.
 std::size_t variable_sample_capacity(std::uint8_t sov) noexcept;
+
+// Writer-controllable file-info fields. `created_utc` and `version`
+// are set by build_metablock at assembly time, not carried here.
+struct FileInfoDraft {
+    std::optional<std::string> creator;
+    std::optional<std::string> tag;
+    std::optional<std::string> reason;
+    std::optional<double>      created_at_latitude;
+    std::optional<double>      created_at_longitude;
+    std::optional<double>      created_at_altitude;
+    std::optional<std::string> namespace_sep;
+    std::optional<std::string> comment;
+};
+
+// Assemble an OSF5 (version 5) MetaBlock from writer state. Channel
+// indices are assigned sequentially 0..N. channeltype is normalised to
+// the Delphi reference convention: `equidistant` for equidistant
+// channels, `scalar` for every other kind (timestamped numeric, GPS,
+// string, binary). Caller serialises via serialize_metablock_json.
+MetaBlock build_metablock(FileInfoDraft const& fi,
+                          std::vector<ChannelDef> const& channels);
 
 }  // namespace osf::detail
 

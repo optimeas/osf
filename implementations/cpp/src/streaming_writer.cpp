@@ -193,33 +193,16 @@ Result<void> StreamingWriter::start() {
     durable_file_ = std::make_unique<detail::DurableFile>(std::move(*df));
 
     // Build the MetaBlock from configuration state.
-    MetaBlock meta;
-    meta.file_info.version = 5;
-    meta.file_info.creator             = creator_;
-    meta.file_info.tag                 = tag_;
-    meta.file_info.reason              = reason_;
-    meta.file_info.created_at_latitude  = created_at_latitude_;
-    meta.file_info.created_at_longitude = created_at_longitude_;
-    meta.file_info.created_at_altitude  = created_at_altitude_;
-    meta.file_info.namespace_sep       = namespace_sep_;
-    meta.file_info.comment             = comment_;
-    for (std::size_t i = 0; i < channels_.size(); ++i) {
-        ChannelDef const& d = channels_[i];
-        Channel ch;
-        ch.index = static_cast<std::uint16_t>(i);
-        ch.name  = d.name;
-        ch.data_type = d.data_type;
-        ch.channel_type = d.channel_type;
-        ch.size_of_length_value = d.size_of_length_value;
-        ch.time_increment_ns = d.time_increment_ns;
-        ch.physical_unit = d.physical_unit;
-        ch.physical_dimension = d.physical_dimension;
-        ch.display_name = d.display_name;
-        ch.mime_type = d.mime_type;
-        ch.reference = d.reference;
-        ch.comment = d.comment;
-        meta.channels.push_back(std::move(ch));
-    }
+    detail::FileInfoDraft fi;
+    fi.creator = creator_;
+    fi.tag = tag_;
+    fi.reason = reason_;
+    fi.created_at_latitude = created_at_latitude_;
+    fi.created_at_longitude = created_at_longitude_;
+    fi.created_at_altitude = created_at_altitude_;
+    fi.namespace_sep = namespace_sep_;
+    fi.comment = comment_;
+    MetaBlock meta = detail::build_metablock(fi, channels_);
 
     // Serialize the metablock and build the magic-header line.
     std::string const json_body = serialize_metablock_json(meta);
