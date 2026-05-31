@@ -242,11 +242,12 @@ TEST(BlockWriter, TimestampedBoolByteExact) {
         // Multi-sample: ctrl(1) + N(4) + [ts(8)+val(1)] * 2 = 1+4+18 = 23
         // Frame: sov(2) + channel(2) + payload = 2+2+23 = 27
         ASSERT_EQ(bs.size(), 27u);
-        // val byte for sample 0 (true) is at offset 4+1+4+8 = 17 within block_stream
-        // Frame layout: [len_lo][len_hi][ch_lo][ch_hi] [ctrl] [N*4LE] [ts0*8LE] [val0]
-        EXPECT_EQ(bs[17], 0x01u);  // true
-        // val byte for sample 1 (false) is at offset 17 + 8 + 1 = 26
-        EXPECT_EQ(bs[26], 0x00u);  // false
+        // Frame layout: [u16 len][u16 channel][u8 ctrl][u32 N][N × (i64 ts + 1-byte value)]
+        constexpr std::size_t kHeader    = 2 + 2 + 1 + 4;  // len + channel + ctrl + N
+        constexpr std::size_t kPerSample = 8 + 1;           // i64 ts + value byte
+        // value byte of sample i is at: kHeader + i*kPerSample + 8
+        EXPECT_EQ(bs[kHeader + 0 * kPerSample + 8], 0x01u);  // true  (== bs[17])
+        EXPECT_EQ(bs[kHeader + 1 * kPerSample + 8], 0x00u);  // false (== bs[26])
     }
 
     // int8_t: -1 should encode as 0xFF
@@ -266,7 +267,10 @@ TEST(BlockWriter, TimestampedBoolByteExact) {
         auto bs = extract_block_stream(out.str());
         // Single-sample: ctrl(1)+ts(8)+val(1)=10; frame=14
         ASSERT_EQ(bs.size(), 14u);
-        EXPECT_EQ(bs[13], 0xFFu);  // -1 as int8
+        // Single-sample frame layout: [u16 len][u16 channel][u8 ctrl][i64 ts][value]
+        // (no N field — multi-sample bit is clear)
+        constexpr std::size_t kSingleVal = 2 + 2 + 1 + 8;  // len + channel + ctrl + ts (== 13)
+        EXPECT_EQ(bs[kSingleVal], 0xFFu);  // -1 as int8 (== bs[13])
     }
 
     // uint8_t: 200 should encode as 0xC8
@@ -286,7 +290,10 @@ TEST(BlockWriter, TimestampedBoolByteExact) {
         auto bs = extract_block_stream(out.str());
         // Single-sample: ctrl(1)+ts(8)+val(1)=10; frame=14
         ASSERT_EQ(bs.size(), 14u);
-        EXPECT_EQ(bs[13], 0xC8u);  // 200
+        // Single-sample frame layout: [u16 len][u16 channel][u8 ctrl][i64 ts][value]
+        // (no N field — multi-sample bit is clear)
+        constexpr std::size_t kSingleVal2 = 2 + 2 + 1 + 8;  // len + channel + ctrl + ts (== 13)
+        EXPECT_EQ(bs[kSingleVal2], 0xC8u);  // 200 (== bs[13])
     }
 }
 

@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <memory>
 #include <type_traits>
 #include <utility>
 
@@ -118,6 +119,10 @@ Result<void> encode_continued_from_values(
 // Append T values into the correct NumericValues alternative — creating it
 // if still default-constructed (holds std::vector<double> by default).
 //
+// Precondition: the caller (add_timestamped_samples_impl) has already
+// verified datatype_lock == data_type_for<T>(), so the variant either
+// is empty/default (first append → create) or already holds vector<T>.
+//
 // Note: std::vector<bool> does not support pointer-range insert from
 // `bool const*` directly in all implementations; we push_back element by
 // element for that case.
@@ -148,9 +153,8 @@ void append_timestamped_values(NumericValues& nv, T const* values, std::size_t c
 // (GPS support is Task 6).
 //
 // Special case: std::vector<bool> has no .data() member (proxy-reference
-// specialisation). We copy the slice into a contiguous uint8 buffer and
-// use reinterpret_cast<bool const*> — safe because sizeof(bool)==1 on all
-// MSVC/GCC/Clang targets and the encoder only tests `v ? 1 : 0`.
+// specialisation). We materialise a genuine bool[] so the glvalue type
+// matches the object type — no strict-aliasing violation.
 Result<void> encode_abs_ts_from_values(
         std::vector<std::uint8_t>& buf,
         std::uint16_t ci, std::uint8_t sov,
@@ -158,13 +162,14 @@ Result<void> encode_abs_ts_from_values(
         NumericValues const& v, std::size_t offset, std::size_t count) {
     // Handle std::vector<bool> before the generic visit (no .data()).
     if (auto const* bv = std::get_if<std::vector<bool>>(&v)) {
-        std::vector<std::uint8_t> tmp(count);
-        for (std::size_t i = 0; i < count; ++i) {
-            tmp[i] = (*bv)[offset + i] ? std::uint8_t{1} : std::uint8_t{0};
-        }
+        // std::vector<bool> has no .data() (proxy-reference specialisation);
+        // materialise a genuine bool[] so encode_abs_timestamp_data<bool>
+        // reads bool objects (no strict-aliasing violation).
+        std::unique_ptr<bool[]> tmp(new bool[count]);
+        for (std::size_t i = 0; i < count; ++i)
+            tmp[i] = (*bv)[offset + i];
         return osf::detail::encode_abs_timestamp_data<bool>(
-            buf, ci, sov, ts,
-            reinterpret_cast<bool const*>(tmp.data()), count);
+            buf, ci, sov, ts, tmp.get(), count);
     }
     return std::visit([&](auto const& vec) -> Result<void> {
         using T = typename std::decay_t<decltype(vec)>::value_type;
