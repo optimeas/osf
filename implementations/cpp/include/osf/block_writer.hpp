@@ -86,6 +86,17 @@ public:
         std::uint16_t channel, std::int64_t start_ts_ns, double rate_hz,
         double const* samples, std::size_t count);
 
+    // ── Timestamped numeric accumulation — template, 11 instantiations ─
+
+    template <typename T>
+    [[nodiscard]] Result<void> add_timestamped_sample(
+        std::uint16_t channel, std::int64_t timestamp_ns, T value);
+
+    template <typename T>
+    [[nodiscard]] Result<void> add_timestamped_samples(
+        std::uint16_t channel, std::int64_t const* timestamps_ns,
+        T const* values, std::size_t count);
+
     // ── Emit ───────────────────────────────────────────────────────────
 
     [[nodiscard]] Result<void> write_to_file(std::filesystem::path path) const;
@@ -93,6 +104,10 @@ public:
 
 private:
     struct ChannelData;   // fully defined in block_writer.cpp
+
+    // Type trait: which T are supported by add_timestamped_*<T>.
+    template <typename T>
+    struct IsTimestampedNumeric : std::false_type {};
 
     // Header-local mirror of detail::FileInfoDraft — avoids pulling the
     // private writer_common.hpp into this public header.
@@ -112,6 +127,14 @@ private:
         std::uint16_t channel, std::int64_t start_ts_ns, double rate_hz,
         T const* samples, std::size_t count);
 
+    // Private template — definition + explicit instantiations live
+    // in the .cpp; this declaration is here so the public template
+    // body can forward to it.
+    template <typename T>
+    [[nodiscard]] Result<void> add_timestamped_samples_impl(
+        std::uint16_t channel, std::int64_t const* timestamps_ns,
+        T const* values, std::size_t count);
+
     void autobump_size_of_length_value(std::vector<ChannelDef>& defs) const;
 
     [[nodiscard]] Result<void> emit_channel(std::ostream& out,
@@ -126,5 +149,44 @@ private:
     std::vector<ChannelData>                          channel_data_;
     std::unordered_map<std::string, std::uint16_t>    name_to_index_;
 };
+
+// ── IsTimestampedNumeric specializations ─────────────────────────────
+
+template <> struct BlockWriter::IsTimestampedNumeric<bool>          : std::true_type {};
+template <> struct BlockWriter::IsTimestampedNumeric<std::int8_t>   : std::true_type {};
+template <> struct BlockWriter::IsTimestampedNumeric<std::int16_t>  : std::true_type {};
+template <> struct BlockWriter::IsTimestampedNumeric<std::int32_t>  : std::true_type {};
+template <> struct BlockWriter::IsTimestampedNumeric<std::int64_t>  : std::true_type {};
+template <> struct BlockWriter::IsTimestampedNumeric<std::uint8_t>  : std::true_type {};
+template <> struct BlockWriter::IsTimestampedNumeric<std::uint16_t> : std::true_type {};
+template <> struct BlockWriter::IsTimestampedNumeric<std::uint32_t> : std::true_type {};
+template <> struct BlockWriter::IsTimestampedNumeric<std::uint64_t> : std::true_type {};
+template <> struct BlockWriter::IsTimestampedNumeric<float>         : std::true_type {};
+template <> struct BlockWriter::IsTimestampedNumeric<double>        : std::true_type {};
+
+// ── Public template bodies — thin forward to the private _impl ───────
+
+template <typename T>
+Result<void> BlockWriter::add_timestamped_sample(
+        std::uint16_t channel, std::int64_t timestamp_ns, T value) {
+    static_assert(IsTimestampedNumeric<T>::value,
+                  "T must be one of: bool, int8_t..int64_t, "
+                  "uint8_t..uint64_t, float, double. Use "
+                  "add_timestamped_gps_sample for GpsLocation, "
+                  "add_string/binary for variable-length data.");
+    return add_timestamped_samples_impl<T>(channel, &timestamp_ns, &value, 1);
+}
+
+template <typename T>
+Result<void> BlockWriter::add_timestamped_samples(
+        std::uint16_t channel, std::int64_t const* timestamps_ns,
+        T const* values, std::size_t count) {
+    static_assert(IsTimestampedNumeric<T>::value,
+                  "T must be one of: bool, int8_t..int64_t, "
+                  "uint8_t..uint64_t, float, double. Use "
+                  "add_timestamped_gps_samples for GpsLocation, "
+                  "add_timestamped_string/binary for variable-length data.");
+    return add_timestamped_samples_impl<T>(channel, timestamps_ns, values, count);
+}
 
 }  // namespace osf

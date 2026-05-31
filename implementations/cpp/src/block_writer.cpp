@@ -72,14 +72,11 @@ constexpr DataType data_type_for() noexcept {
 }
 
 // Returns the per-sample byte size for the active NumericValues alternative.
-// Only Float and Double are valid for equidistant channels; returns 0 for
-// any other alternative (defensive — should never occur).
+// Returns sizeof(T) for all numeric alternatives and GpsLocation (== 24).
 std::size_t numeric_value_size(NumericValues const& v) noexcept {
     return std::visit([](auto const& vec) -> std::size_t {
         using T = typename std::decay_t<decltype(vec)>::value_type;
-        if constexpr (std::is_same_v<T, float>)  return 4;
-        else if constexpr (std::is_same_v<T, double>) return 8;
-        else return sizeof(T);
+        return sizeof(T);
     }, v);
 }
 
@@ -116,6 +113,77 @@ Result<void> encode_continued_from_values(
     // Defensive: equidistant channels only store float/double
     return tl::make_unexpected(
         Error{Error::Code::InvalidBlock, "encode_continued_from_values: non-float/double NumericValues"});
+}
+
+// Append T values into the correct NumericValues alternative — creating it
+// if still default-constructed (holds std::vector<double> by default).
+//
+// Note: std::vector<bool> does not support pointer-range insert from
+// `bool const*` directly in all implementations; we push_back element by
+// element for that case.
+template <typename T>
+void append_timestamped_values(NumericValues& nv, T const* values, std::size_t count) {
+    if (auto* vec = std::get_if<std::vector<T>>(&nv)) {
+        if constexpr (std::is_same_v<T, bool>) {
+            vec->reserve(vec->size() + count);
+            for (std::size_t i = 0; i < count; ++i) vec->push_back(values[i]);
+        } else {
+            vec->insert(vec->end(), values, values + count);
+        }
+    } else {
+        // Replace default (or empty-wrong-type) with the correct alternative.
+        if constexpr (std::is_same_v<T, bool>) {
+            std::vector<bool> tmp;
+            tmp.reserve(count);
+            for (std::size_t i = 0; i < count; ++i) tmp.push_back(values[i]);
+            nv = std::move(tmp);
+        } else {
+            nv = std::vector<T>(values, values + count);
+        }
+    }
+}
+
+// Dispatch encode_abs_timestamp_data<T> from a NumericValues slice
+// [offset, offset+count). Returns InvalidBlock for the GPS alternative
+// (GPS support is Task 6).
+//
+// Special case: std::vector<bool> has no .data() member (proxy-reference
+// specialisation). We copy the slice into a contiguous uint8 buffer and
+// use reinterpret_cast<bool const*> — safe because sizeof(bool)==1 on all
+// MSVC/GCC/Clang targets and the encoder only tests `v ? 1 : 0`.
+Result<void> encode_abs_ts_from_values(
+        std::vector<std::uint8_t>& buf,
+        std::uint16_t ci, std::uint8_t sov,
+        std::int64_t const* ts,
+        NumericValues const& v, std::size_t offset, std::size_t count) {
+    // Handle std::vector<bool> before the generic visit (no .data()).
+    if (auto const* bv = std::get_if<std::vector<bool>>(&v)) {
+        std::vector<std::uint8_t> tmp(count);
+        for (std::size_t i = 0; i < count; ++i) {
+            tmp[i] = (*bv)[offset + i] ? std::uint8_t{1} : std::uint8_t{0};
+        }
+        return osf::detail::encode_abs_timestamp_data<bool>(
+            buf, ci, sov, ts,
+            reinterpret_cast<bool const*>(tmp.data()), count);
+    }
+    return std::visit([&](auto const& vec) -> Result<void> {
+        using T = typename std::decay_t<decltype(vec)>::value_type;
+        if constexpr (std::is_same_v<T, GpsLocation>) {
+            // GPS is Task 6 — not yet implemented.
+            return tl::make_unexpected(
+                Error{Error::Code::InvalidBlock,
+                      "encode_abs_ts_from_values: GPS not yet implemented (Task 6)"});
+        } else if constexpr (std::is_same_v<T, bool>) {
+            // Handled above; this branch is unreachable but needed for
+            // the constexpr-else chain.
+            return tl::make_unexpected(
+                Error{Error::Code::InvalidBlock,
+                      "encode_abs_ts_from_values: bool fallthrough (unreachable)"});
+        } else {
+            return osf::detail::encode_abs_timestamp_data<T>(
+                buf, ci, sov, ts, vec.data() + offset, count);
+        }
+    }, v);
 }
 
 }  // namespace
@@ -236,6 +304,47 @@ Result<void> BlockWriter::add_equidistant_segment_impl(
     return {};
 }
 
+// ── add_timestamped_samples_impl<T> ─────────────────────────────────
+
+template <typename T>
+Result<void> BlockWriter::add_timestamped_samples_impl(
+        std::uint16_t channel, std::int64_t const* timestamps_ns,
+        T const* values, std::size_t count) {
+    if (count == 0) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "add_timestamped_samples: count must be > 0"));
+    }
+    if (channel >= channels_.size()) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "add_timestamped_samples: channel index out of range"));
+    }
+
+    auto& cd = channel_data_[channel];
+
+    // Kind-lock: once a channel has timestamped data it stays timestamped.
+    if (cd.kind != ChannelData::Kind::Empty &&
+        cd.kind != ChannelData::Kind::Timestamped) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidBlock,
+            "channel " + std::to_string(channel) + ": mixed block types"));
+    }
+
+    // Datatype must match what was declared at add_channel time.
+    constexpr DataType expected = data_type_for<T>();
+    if (cd.datatype_lock != expected) {
+        return tl::make_unexpected(make_error(
+            Error::Code::DataTypeMismatch,
+            "channel " + std::to_string(channel) + ": datatype mismatch"));
+    }
+
+    cd.kind = ChannelData::Kind::Timestamped;
+    cd.ts_ns.insert(cd.ts_ns.end(), timestamps_ns, timestamps_ns + count);
+    append_timestamped_values<T>(cd.ts_values, values, count);
+    return {};
+}
+
 // ── Public add_equidistant_segment overloads ─────────────────────────
 
 Result<void> BlockWriter::add_equidistant_segment(
@@ -309,7 +418,28 @@ Result<void> BlockWriter::emit_channel(std::ostream& out,
         return {};
     }
 
-    // Timestamped / Variable kinds land in Tasks 5-6.
+    if (cd.kind == ChannelData::Kind::Timestamped) {
+        std::size_t const value_size = numeric_value_size(cd.ts_values);
+        std::size_t const total      = cd.ts_ns.size();
+        std::size_t const max_per    =
+            osf::detail::max_samples_per_timestamped_block(value_size, sov);
+        std::size_t written = 0;
+        while (written < total) {
+            std::size_t const chunk = std::min(total - written, max_per);
+            buf.clear();
+            if (auto e = encode_abs_ts_from_values(buf, ci, sov,
+                    cd.ts_ns.data() + written,
+                    cd.ts_values, written, chunk); !e) {
+                return e;
+            }
+            if (auto w = write_block_bytes(out, buf); !w) return w;
+            written += chunk;
+        }
+        return {};
+    }
+
+    // Empty: declared channel with no samples — emit no blocks.
+    // Variable kind lands in Task 6.
     return {};
 }
 
@@ -382,5 +512,24 @@ template Result<void> BlockWriter::add_equidistant_segment_impl<float>(
     std::uint16_t, std::int64_t, double, float const*, std::size_t);
 template Result<void> BlockWriter::add_equidistant_segment_impl<double>(
     std::uint16_t, std::int64_t, double, double const*, std::size_t);
+
+// All 11 numeric types for timestamped.
+#define OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL(T)                               \
+    template Result<void> BlockWriter::add_timestamped_samples_impl<T>(      \
+        std::uint16_t, std::int64_t const*, T const*, std::size_t)
+
+OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL(bool);
+OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL(std::int8_t);
+OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL(std::int16_t);
+OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL(std::int32_t);
+OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL(std::int64_t);
+OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL(std::uint8_t);
+OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL(std::uint16_t);
+OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL(std::uint32_t);
+OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL(std::uint64_t);
+OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL(float);
+OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL(double);
+
+#undef OSF_INSTANTIATE_BW_TIMESTAMPED_IMPL
 
 }  // namespace osf
