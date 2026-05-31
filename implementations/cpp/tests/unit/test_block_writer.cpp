@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
+#include "osf/binary_sample.hpp"
+#include "osf/block.hpp"
 #include "osf/block_writer.hpp"
 #include "osf/data_channel.hpp"
 #include "osf/manager.hpp"
@@ -10,6 +12,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -295,6 +298,200 @@ TEST(BlockWriter, TimestampedBoolByteExact) {
         constexpr std::size_t kSingleVal2 = 2 + 2 + 1 + 8;  // len + channel + ctrl + ts (== 13)
         EXPECT_EQ(bs[kSingleVal2], 0xC8u);  // 200 (== bs[13])
     }
+}
+
+// ── Task 6: GPS timestamped ───────────────────────────────────────────
+
+TEST(BlockWriter, GpsRoundtrips) {
+    osf::BlockWriter w;
+    auto idx = w.add_channel([] {
+        osf::ChannelDef d; d.name = "gps"; d.data_type = osf::DataType::GpsLocation;
+        d.channel_type = osf::ChannelType::Timestamped; d.size_of_length_value = 2;
+        return d;
+    }());
+    ASSERT_TRUE(idx.has_value());
+
+    std::vector<std::int64_t> ts{1000, 2000};
+    std::vector<osf::GpsLocation> gps{
+        {47.1, 8.2, 450.0},
+        {47.2, 8.3, 451.5}
+    };
+    ASSERT_TRUE(w.add_timestamped_gps_samples(*idx, ts.data(), gps.data(), gps.size()).has_value());
+
+    std::ostringstream out;
+    ASSERT_TRUE(w.write_to(out).has_value());
+
+    std::string bytes = out.str();
+    std::istringstream in(bytes, std::ios::binary);
+    auto mgr = osf::DataManager::load_from_stream(in);
+    ASSERT_TRUE(mgr.has_value());
+    auto const* ch = mgr->channel("gps");
+    ASSERT_NE(ch, nullptr);
+    auto const* ts_ch = std::get_if<osf::TimestampedChannel>(ch);
+    ASSERT_NE(ts_ch, nullptr);
+    auto flat = osf::as_gps_flat(*ts_ch);
+    ASSERT_TRUE(flat.has_value());
+    ASSERT_EQ(flat->size(), 2u);
+    EXPECT_DOUBLE_EQ((*flat)[0].second.latitude,  47.1);
+    EXPECT_DOUBLE_EQ((*flat)[0].second.longitude, 8.2);
+    EXPECT_DOUBLE_EQ((*flat)[0].second.altitude,  450.0);
+    EXPECT_DOUBLE_EQ((*flat)[1].second.latitude,  47.2);
+    EXPECT_DOUBLE_EQ((*flat)[1].second.altitude,  451.5);
+}
+
+// ── Task 6: String variable ───────────────────────────────────────────
+
+TEST(BlockWriter, StringRoundtrips) {
+    osf::BlockWriter w;
+    auto idx = w.add_channel([] {
+        osf::ChannelDef d; d.name = "str"; d.data_type = osf::DataType::String;
+        d.channel_type = osf::ChannelType::Scalar; d.size_of_length_value = 2;
+        return d;
+    }());
+    ASSERT_TRUE(idx.has_value());
+
+    std::vector<std::int64_t> ts{10, 20};
+    std::vector<std::string_view> svs{"alpha", "bravo"};
+    ASSERT_TRUE(w.add_string_samples(*idx, ts.data(), svs.data(), svs.size()).has_value());
+
+    std::ostringstream out;
+    ASSERT_TRUE(w.write_to(out).has_value());
+
+    std::string bytes = out.str();
+    std::istringstream in(bytes, std::ios::binary);
+    auto mgr = osf::DataManager::load_from_stream(in);
+    ASSERT_TRUE(mgr.has_value());
+    auto const* ch = mgr->channel("str");
+    ASSERT_NE(ch, nullptr);
+    auto const* var_ch = std::get_if<osf::VariableChannel>(ch);
+    ASSERT_NE(var_ch, nullptr);
+    auto strs = var_ch->as_strings();
+    ASSERT_TRUE(strs.has_value());
+    ASSERT_EQ((*strs)->size(), 2u);
+    EXPECT_EQ((**strs)[0], "alpha");
+    EXPECT_EQ((**strs)[1], "bravo");
+}
+
+// ── Task 6: Binary variable ───────────────────────────────────────────
+
+TEST(BlockWriter, BinaryRoundtrips) {
+    osf::BlockWriter w;
+    auto idx = w.add_channel([] {
+        osf::ChannelDef d; d.name = "bin"; d.data_type = osf::DataType::Binary;
+        d.channel_type = osf::ChannelType::Scalar; d.size_of_length_value = 2;
+        return d;
+    }());
+    ASSERT_TRUE(idx.has_value());
+
+    std::vector<std::uint8_t> v0{0x01, 0x02, 0x03};
+    std::vector<std::uint8_t> v1{0xAA, 0xBB};
+    std::vector<std::int64_t> ts{100, 200};
+    std::vector<osf::BinarySample> bins{
+        osf::BinarySample::from_vector(v0),
+        osf::BinarySample::from_vector(v1)
+    };
+    ASSERT_TRUE(w.add_binary_samples(*idx, ts.data(), bins.data(), bins.size()).has_value());
+
+    std::ostringstream out;
+    ASSERT_TRUE(w.write_to(out).has_value());
+
+    std::string bytes = out.str();
+    std::istringstream in(bytes, std::ios::binary);
+    auto mgr = osf::DataManager::load_from_stream(in);
+    ASSERT_TRUE(mgr.has_value());
+    auto const* ch = mgr->channel("bin");
+    ASSERT_NE(ch, nullptr);
+    auto const* var_ch = std::get_if<osf::VariableChannel>(ch);
+    ASSERT_NE(var_ch, nullptr);
+    auto bins_out = var_ch->as_binaries();
+    ASSERT_TRUE(bins_out.has_value());
+    ASSERT_EQ((*bins_out)->size(), 2u);
+    EXPECT_EQ((**bins_out)[0], v0);
+    EXPECT_EQ((**bins_out)[1], v1);
+}
+
+// ── Task 6: Variable auto-bump sov 2->4 ──────────────────────────────
+
+TEST(BlockWriter, VariableAutoBumpsSovWhenSampleExceedsU16) {
+    osf::BlockWriter w;
+    auto idx = w.add_channel([] {
+        osf::ChannelDef d; d.name = "big"; d.data_type = osf::DataType::String;
+        d.channel_type = osf::ChannelType::Scalar; d.size_of_length_value = 2;
+        return d;
+    }());
+    ASSERT_TRUE(idx.has_value());
+
+    // 70000-byte string exceeds the u16 length field capacity (max payload 65535)
+    std::string big(70000, 'X');
+    std::string_view sv{big};
+    std::int64_t ts0 = 1000;
+    ASSERT_TRUE(w.add_string_sample(*idx, ts0, sv).has_value());
+
+    std::ostringstream out;
+    ASSERT_TRUE(w.write_to(out).has_value());
+
+    std::string bytes = out.str();
+    std::istringstream in(bytes, std::ios::binary);
+    auto mgr = osf::DataManager::load_from_stream(in);
+    ASSERT_TRUE(mgr.has_value());
+    auto const* ch = mgr->channel("big");
+    ASSERT_NE(ch, nullptr);
+    // sov must have been bumped to 4
+    EXPECT_EQ(osf::channel_meta(*ch).size_of_length_value, 4u);
+}
+
+// ── Task 6: Binary boundary — exactly at sov=2 capacity (65526) ──────
+
+TEST(BlockWriter, BinaryBoundary65526SucceedsAtSov2) {
+    // max_payload_for_sov(2) == 65535; VARIABLE_BLOCK_OVERHEAD_BYTES == 9
+    // => capacity == 65526 bytes; at exactly capacity no bump is needed.
+    osf::BlockWriter w;
+    auto idx = w.add_channel([] {
+        osf::ChannelDef d; d.name = "boundary"; d.data_type = osf::DataType::Binary;
+        d.channel_type = osf::ChannelType::Scalar; d.size_of_length_value = 2;
+        return d;
+    }());
+    ASSERT_TRUE(idx.has_value());
+
+    std::vector<std::uint8_t> payload(65526, 0xAB);
+    osf::BinarySample bs = osf::BinarySample::from_vector(payload);
+    std::int64_t ts0 = 500;
+    ASSERT_TRUE(w.add_binary_sample(*idx, ts0, bs).has_value());
+
+    std::ostringstream out;
+    ASSERT_TRUE(w.write_to(out).has_value());
+
+    std::string bytes = out.str();
+    std::istringstream in(bytes, std::ios::binary);
+    auto mgr = osf::DataManager::load_from_stream(in);
+    ASSERT_TRUE(mgr.has_value());
+    auto const* ch = mgr->channel("boundary");
+    ASSERT_NE(ch, nullptr);
+    // sov must stay at 2 (no bump needed at exactly capacity)
+    EXPECT_EQ(osf::channel_meta(*ch).size_of_length_value, 2u);
+    auto const* var_ch = std::get_if<osf::VariableChannel>(ch);
+    ASSERT_NE(var_ch, nullptr);
+    auto bins_out = var_ch->as_binaries();
+    ASSERT_TRUE(bins_out.has_value());
+    ASSERT_EQ((*bins_out)->size(), 1u);
+    EXPECT_EQ((**bins_out)[0].size(), 65526u);
+}
+
+// ── Task 6: String datatype mismatch rejected ─────────────────────────
+
+TEST(BlockWriter, StringDatatypeMismatchRejected) {
+    osf::BlockWriter w;
+    auto idx = w.add_channel([] {
+        osf::ChannelDef d; d.name = "i32"; d.data_type = osf::DataType::Int32;
+        d.channel_type = osf::ChannelType::Timestamped; d.size_of_length_value = 2;
+        return d;
+    }());
+    ASSERT_TRUE(idx.has_value());
+    std::string_view sv{"hello"};
+    std::int64_t ts0 = 10;
+    auto r = w.add_string_sample(*idx, ts0, sv);
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::DataTypeMismatch);
 }
 
 }  // namespace

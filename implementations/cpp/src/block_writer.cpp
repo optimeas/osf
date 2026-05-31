@@ -148,9 +148,19 @@ void append_timestamped_values(NumericValues& nv, T const* values, std::size_t c
     }
 }
 
+// Append GpsLocation values into the GpsLocation alternative of NumericValues.
+// Switches from default (vector<double>) to vector<GpsLocation> on first call.
+void append_gps_values(NumericValues& nv, GpsLocation const* values, std::size_t count) {
+    if (auto* vec = std::get_if<std::vector<GpsLocation>>(&nv)) {
+        vec->insert(vec->end(), values, values + count);
+    } else {
+        // Replace default or wrong-alternative with vector<GpsLocation>.
+        nv = std::vector<GpsLocation>(values, values + count);
+    }
+}
+
 // Dispatch encode_abs_timestamp_data<T> from a NumericValues slice
-// [offset, offset+count). Returns InvalidBlock for the GPS alternative
-// (GPS support is Task 6).
+// [offset, offset+count).
 //
 // Special case: std::vector<bool> has no .data() member (proxy-reference
 // specialisation). We materialise a genuine bool[] so the glvalue type
@@ -174,10 +184,8 @@ Result<void> encode_abs_ts_from_values(
     return std::visit([&](auto const& vec) -> Result<void> {
         using T = typename std::decay_t<decltype(vec)>::value_type;
         if constexpr (std::is_same_v<T, GpsLocation>) {
-            // GPS is Task 6 — not yet implemented.
-            return tl::make_unexpected(
-                Error{Error::Code::InvalidBlock,
-                      "encode_abs_ts_from_values: GPS not yet implemented (Task 6)"});
+            return osf::detail::encode_abs_timestamp_data_gps(
+                buf, ci, sov, ts, vec.data() + offset, count);
         } else if constexpr (std::is_same_v<T, bool>) {
             // Handled above; this branch is unreachable but needed for
             // the constexpr-else chain.
@@ -364,11 +372,154 @@ Result<void> BlockWriter::add_equidistant_segment(
     return add_equidistant_segment_impl<double>(channel, start_ts_ns, rate_hz, samples, count);
 }
 
+// ── add_timestamped_gps_samples / _sample ───────────────────────────
+
+Result<void> BlockWriter::add_timestamped_gps_samples(
+        std::uint16_t channel, std::int64_t const* timestamps_ns,
+        GpsLocation const* values, std::size_t count) {
+    if (count == 0) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "add_timestamped_gps_samples: count must be > 0"));
+    }
+    if (channel >= channels_.size()) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "add_timestamped_gps_samples: channel index out of range"));
+    }
+
+    auto& cd = channel_data_[channel];
+
+    // Kind-lock: once a channel has timestamped data it stays timestamped.
+    if (cd.kind != ChannelData::Kind::Empty &&
+        cd.kind != ChannelData::Kind::Timestamped) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidBlock,
+            "channel " + std::to_string(channel) + ": mixed block types"));
+    }
+    // Datatype must be GpsLocation.
+    if (cd.datatype_lock != DataType::GpsLocation) {
+        return tl::make_unexpected(make_error(
+            Error::Code::DataTypeMismatch,
+            "channel " + std::to_string(channel) + ": datatype mismatch"));
+    }
+
+    cd.kind = ChannelData::Kind::Timestamped;
+    cd.ts_ns.insert(cd.ts_ns.end(), timestamps_ns, timestamps_ns + count);
+    append_gps_values(cd.ts_values, values, count);
+    return {};
+}
+
+Result<void> BlockWriter::add_timestamped_gps_sample(
+        std::uint16_t channel, std::int64_t timestamp_ns, GpsLocation value) {
+    return add_timestamped_gps_samples(channel, &timestamp_ns, &value, 1);
+}
+
+// ── add_string_samples / _sample ────────────────────────────────────
+
+Result<void> BlockWriter::add_string_samples(
+        std::uint16_t channel, std::int64_t const* timestamps_ns,
+        std::string_view const* values, std::size_t count) {
+    if (count == 0) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "add_string_samples: count must be > 0"));
+    }
+    if (channel >= channels_.size()) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "add_string_samples: channel index out of range"));
+    }
+
+    auto& cd = channel_data_[channel];
+
+    // Kind-lock: once a channel has variable data it stays variable.
+    if (cd.kind != ChannelData::Kind::Empty &&
+        cd.kind != ChannelData::Kind::Variable) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidBlock,
+            "channel " + std::to_string(channel) + ": mixed block types"));
+    }
+    // Datatype must be String.
+    if (cd.datatype_lock != DataType::String) {
+        return tl::make_unexpected(make_error(
+            Error::Code::DataTypeMismatch,
+            "channel " + std::to_string(channel) + ": datatype mismatch"));
+    }
+
+    cd.kind = ChannelData::Kind::Variable;
+    cd.ts_ns.insert(cd.ts_ns.end(), timestamps_ns, timestamps_ns + count);
+    for (std::size_t i = 0; i < count; ++i) {
+        cd.strings.emplace_back(values[i]);
+    }
+    return {};
+}
+
+Result<void> BlockWriter::add_string_sample(
+        std::uint16_t channel, std::int64_t timestamp_ns, std::string_view value) {
+    return add_string_samples(channel, &timestamp_ns, &value, 1);
+}
+
+// ── add_binary_samples / _sample ────────────────────────────────────
+
+Result<void> BlockWriter::add_binary_samples(
+        std::uint16_t channel, std::int64_t const* timestamps_ns,
+        BinarySample const* values, std::size_t count) {
+    if (count == 0) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "add_binary_samples: count must be > 0"));
+    }
+    if (channel >= channels_.size()) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidArgument,
+            "add_binary_samples: channel index out of range"));
+    }
+
+    auto& cd = channel_data_[channel];
+
+    // Kind-lock: once a channel has variable data it stays variable.
+    if (cd.kind != ChannelData::Kind::Empty &&
+        cd.kind != ChannelData::Kind::Variable) {
+        return tl::make_unexpected(make_error(
+            Error::Code::InvalidBlock,
+            "channel " + std::to_string(channel) + ": mixed block types"));
+    }
+    // Datatype must be Binary.
+    if (cd.datatype_lock != DataType::Binary) {
+        return tl::make_unexpected(make_error(
+            Error::Code::DataTypeMismatch,
+            "channel " + std::to_string(channel) + ": datatype mismatch"));
+    }
+
+    cd.kind = ChannelData::Kind::Variable;
+    cd.ts_ns.insert(cd.ts_ns.end(), timestamps_ns, timestamps_ns + count);
+    for (std::size_t i = 0; i < count; ++i) {
+        cd.binaries.emplace_back(values[i].data, values[i].data + values[i].size);
+    }
+    return {};
+}
+
+Result<void> BlockWriter::add_binary_sample(
+        std::uint16_t channel, std::int64_t timestamp_ns, BinarySample value) {
+    return add_binary_samples(channel, &timestamp_ns, &value, 1);
+}
+
 // ── autobump_size_of_length_value ───────────────────────────────────
 
 void BlockWriter::autobump_size_of_length_value(std::vector<ChannelDef>& defs) const {
-    // Variable auto-bump lands in Task 6.
-    (void) defs;
+    for (std::size_t i = 0; i < defs.size(); ++i) {
+        if (defs[i].size_of_length_value == 4) continue;
+        ChannelData const& cd = channel_data_[i];
+        if (cd.kind != ChannelData::Kind::Variable) continue;
+        std::size_t max_sample = 0;
+        for (auto const& s : cd.strings)  max_sample = std::max(max_sample, s.size());
+        for (auto const& b : cd.binaries) max_sample = std::max(max_sample, b.size());
+        if (osf::detail::VARIABLE_BLOCK_OVERHEAD_BYTES + max_sample
+                > osf::detail::max_payload_for_sov(2)) {
+            defs[i].size_of_length_value = 4;
+        }
+    }
 }
 
 // ── write_block_bytes ────────────────────────────────────────────────
@@ -443,8 +594,46 @@ Result<void> BlockWriter::emit_channel(std::ostream& out,
         return {};
     }
 
+    if (cd.kind == ChannelData::Kind::Variable) {
+        // Variable: one block per sample (no chunking — spec).
+        std::size_t const capacity = osf::detail::variable_sample_capacity(sov);
+        for (std::size_t i = 0; i < cd.ts_ns.size(); ++i) {
+            buf.clear();
+            if (!cd.strings.empty()) {
+                std::string_view sv = cd.strings[i];
+                if (sv.size() > capacity) {
+                    return tl::make_unexpected(make_error(
+                        Error::Code::InvalidBlock,
+                        "channel " + std::to_string(ci) +
+                        ": variable string sample size " + std::to_string(sv.size()) +
+                        " exceeds capacity " + std::to_string(capacity) +
+                        " for sizeoflengthvalue=" + std::to_string(sov)));
+                }
+                if (auto e = osf::detail::encode_abs_timestamp_data(
+                        buf, ci, sov, cd.ts_ns[i], sv); !e) {
+                    return e;
+                }
+            } else {
+                BinarySample bs{cd.binaries[i].data(), cd.binaries[i].size()};
+                if (bs.size > capacity) {
+                    return tl::make_unexpected(make_error(
+                        Error::Code::InvalidBlock,
+                        "channel " + std::to_string(ci) +
+                        ": variable binary sample size " + std::to_string(bs.size) +
+                        " exceeds capacity " + std::to_string(capacity) +
+                        " for sizeoflengthvalue=" + std::to_string(sov)));
+                }
+                if (auto e = osf::detail::encode_abs_timestamp_data(
+                        buf, ci, sov, cd.ts_ns[i], bs); !e) {
+                    return e;
+                }
+            }
+            if (auto w = write_block_bytes(out, buf); !w) return w;
+        }
+        return {};
+    }
+
     // Empty: declared channel with no samples — emit no blocks.
-    // Variable kind lands in Task 6.
     return {};
 }
 

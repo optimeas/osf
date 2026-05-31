@@ -97,6 +97,30 @@ public:
         std::uint16_t channel, std::int64_t const* timestamps_ns,
         T const* values, std::size_t count);
 
+    // ── Timestamped GPS accumulation ───────────────────────────────────
+
+    [[nodiscard]] Result<void> add_timestamped_gps_sample(
+        std::uint16_t channel, std::int64_t timestamp_ns, GpsLocation value);
+    [[nodiscard]] Result<void> add_timestamped_gps_samples(
+        std::uint16_t channel, std::int64_t const* timestamps_ns,
+        GpsLocation const* values, std::size_t count);
+
+    // ── Variable accumulation (string + binary) ────────────────────────
+
+    [[nodiscard]] Result<void> add_string_sample(
+        std::uint16_t channel, std::int64_t timestamp_ns,
+        std::string_view value);
+    [[nodiscard]] Result<void> add_string_samples(
+        std::uint16_t channel, std::int64_t const* timestamps_ns,
+        std::string_view const* values, std::size_t count);
+
+    [[nodiscard]] Result<void> add_binary_sample(
+        std::uint16_t channel, std::int64_t timestamp_ns,
+        BinarySample value);
+    [[nodiscard]] Result<void> add_binary_samples(
+        std::uint16_t channel, std::int64_t const* timestamps_ns,
+        BinarySample const* values, std::size_t count);
+
     // ── Emit ───────────────────────────────────────────────────────────
 
     [[nodiscard]] Result<void> write_to_file(std::filesystem::path path) const;
