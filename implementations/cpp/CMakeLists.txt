@@ -99,6 +99,7 @@ add_library(osf_core
     src/reader.cpp
     src/stats.cpp
     src/streaming_writer.cpp
+    src/writer_common.cpp
     src/types.cpp
     third_party/pugixml/pugixml.cpp
 )
