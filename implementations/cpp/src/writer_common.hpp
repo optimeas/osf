@@ -62,6 +62,7 @@ std::size_t variable_sample_capacity(std::uint8_t sov) noexcept;
 
 // Writer-controllable file-info fields. `created_utc` and `version`
 // are set by build_metablock at assembly time, not carried here.
+// Must stay field-compatible with BlockWriter::FileInfoFields (block_writer.hpp).
 struct FileInfoDraft {
     std::optional<std::string> creator;
     std::optional<std::string> tag;

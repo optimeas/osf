@@ -77,6 +77,15 @@ public:
     [[nodiscard]] std::optional<std::uint16_t>
     channel_index(std::string_view name) const;
 
+    // ── Equidistant accumulation ───────────────────────────────────────
+
+    [[nodiscard]] Result<void> add_equidistant_segment(
+        std::uint16_t channel, std::int64_t start_ts_ns, double rate_hz,
+        float const* samples, std::size_t count);
+    [[nodiscard]] Result<void> add_equidistant_segment(
+        std::uint16_t channel, std::int64_t start_ts_ns, double rate_hz,
+        double const* samples, std::size_t count);
+
     // ── Emit ───────────────────────────────────────────────────────────
 
     [[nodiscard]] Result<void> write_to_file(std::filesystem::path path) const;
@@ -97,6 +106,20 @@ private:
         std::optional<double> created_at_longitude;
         std::optional<double> created_at_altitude;
     };
+
+    template <typename T>
+    [[nodiscard]] Result<void> add_equidistant_segment_impl(
+        std::uint16_t channel, std::int64_t start_ts_ns, double rate_hz,
+        T const* samples, std::size_t count);
+
+    void autobump_size_of_length_value(std::vector<ChannelDef>& defs) const;
+
+    [[nodiscard]] Result<void> emit_channel(std::ostream& out,
+        std::vector<std::uint8_t>& buf, std::uint16_t ci, std::uint8_t sov,
+        ChannelData const& cd) const;
+
+    [[nodiscard]] Result<void> write_block_bytes(std::ostream& out,
+        std::vector<std::uint8_t> const& buf) const;
 
     FileInfoFields                                    file_info_;
     std::vector<ChannelDef>                           channels_;
