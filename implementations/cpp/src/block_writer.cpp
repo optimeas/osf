@@ -6,6 +6,7 @@
 #include "block_encode.hpp"           // osf::detail::encode_start_data, encode_continued_data
 #include "writer_common.hpp"          // osf::detail chunking helpers + FileInfoDraft + build_metablock
 #include "osf/data_channel.hpp"       // NumericValues, numeric_values_len
+#include "osf/manager.hpp"            // DataManager (from_manager)
 #include "osf/metablock.hpp"          // serialize_metablock_json
 
 #include <algorithm>
@@ -599,6 +600,7 @@ Result<void> BlockWriter::emit_channel(std::ostream& out,
         std::size_t const capacity = osf::detail::variable_sample_capacity(sov);
         for (std::size_t i = 0; i < cd.ts_ns.size(); ++i) {
             buf.clear();
+            // strings is non-empty iff datatype_lock == String; a Binary channel never populates strings (datatype-lock enforced at accumulation).
             if (!cd.strings.empty()) {
                 std::string_view sv = cd.strings[i];
                 if (sv.size() > capacity) {
@@ -646,7 +648,7 @@ Result<void> BlockWriter::write_to(std::ostream& out) const {
             "write_to: no channels declared"));
     }
 
-    // Local copy of defs for auto-bump (Variable auto-bump lands in Task 6).
+    // Local copy of defs — autobump_size_of_length_value may promote Variable channels to sov=4.
     std::vector<ChannelDef> defs = channels_;
     autobump_size_of_length_value(defs);
 
@@ -697,6 +699,157 @@ Result<void> BlockWriter::write_to_file(std::filesystem::path path) const {
             "write_to_file: cannot open " + path.string()));
     }
     return write_to(f);
+}
+
+// ── from_manager helpers (anonymous namespace) ───────────────────────
+
+namespace {
+
+/// Build a ChannelDef from a typed DataChannel read by the DataManager.
+/// Mirrors channel_def_from_manager_channel in the Rust writer.rs reference.
+osf::ChannelDef channel_def_from_dc(osf::DataChannel const& dc) {
+    osf::ChannelMeta const& meta = osf::channel_meta(dc);
+    osf::ChannelDef def;
+    def.name                   = osf::channel_name(dc);
+    def.data_type              = osf::channel_data_type(dc);
+    def.channel_type           = meta.channel_type;
+    def.size_of_length_value   = meta.size_of_length_value;
+    def.physical_unit          = osf::channel_physical_unit(dc);
+    def.physical_dimension     = meta.physical_dimension;
+    def.display_name           = osf::channel_display_name(dc);
+    def.reference              = meta.reference;
+    def.comment                = meta.comment;
+    def.time_increment_ns      = meta.time_increment_ns;
+    // mime_type is only carried by VariableChannel — mirror the Rust special-case.
+    if (auto const* var = std::get_if<osf::VariableChannel>(&dc)) {
+        def.mime_type = var->mime_type;
+    }
+    return def;
+}
+
+/// Copy all samples from a typed DataChannel into the builder.
+/// Mirrors copy_channel_data in the Rust writer.rs reference.
+osf::Result<void> copy_dc_data(osf::BlockWriter& b,
+                                osf::DataChannel const& dc,
+                                std::uint16_t target_idx) {
+    if (auto const* eq = std::get_if<osf::EquidistantChannel>(&dc)) {
+        // Equidistant: one add_equidistant_segment per segment; slice the
+        // flat NumericValues by [start_index, start_index+sample_count).
+        for (auto const& seg : eq->segments) {
+            if (seg.sample_count == 0) continue;
+            if (auto const* fv = std::get_if<std::vector<float>>(&eq->samples)) {
+                if (auto r = b.add_equidistant_segment(target_idx,
+                        seg.start_timestamp_ns, seg.sample_rate_hz,
+                        fv->data() + seg.start_index, seg.sample_count); !r)
+                    return r;
+            } else if (auto const* dv = std::get_if<std::vector<double>>(&eq->samples)) {
+                if (auto r = b.add_equidistant_segment(target_idx,
+                        seg.start_timestamp_ns, seg.sample_rate_hz,
+                        dv->data() + seg.start_index, seg.sample_count); !r)
+                    return r;
+            } else {
+                return tl::make_unexpected(osf::Error{
+                    osf::Error::Code::InvalidBlock,
+                    "copy_dc_data: equidistant channel '" + eq->name +
+                    "' has non-float/double samples"});
+            }
+        }
+        return {};
+    }
+
+    if (auto const* ts = std::get_if<osf::TimestampedChannel>(&dc)) {
+        // Timestamped numeric: dispatch on each NumericValues alternative.
+        std::size_t const n = ts->timestamps_ns.size();
+        if (n == 0) return {};
+        auto const* ts_ptr = ts->timestamps_ns.data();
+
+        return std::visit([&](auto const& vec) -> osf::Result<void> {
+            using T = typename std::decay_t<decltype(vec)>::value_type;
+            if constexpr (std::is_same_v<T, osf::GpsLocation>) {
+                return b.add_timestamped_gps_samples(target_idx, ts_ptr, vec.data(), n);
+            } else if constexpr (std::is_same_v<T, bool>) {
+                // std::vector<bool> has no .data() (proxy-reference specialisation);
+                // materialise a genuine bool[] so add_timestamped_samples<bool>
+                // reads bool objects without UB.
+                std::unique_ptr<bool[]> tmp(new bool[n]);
+                for (std::size_t i = 0; i < n; ++i) tmp[i] = vec[i];
+                return b.add_timestamped_samples<bool>(target_idx, ts_ptr, tmp.get(), n);
+            } else {
+                return b.add_timestamped_samples<T>(target_idx, ts_ptr, vec.data(), n);
+            }
+        }, ts->values);
+    }
+
+    if (auto const* var = std::get_if<osf::VariableChannel>(&dc)) {
+        std::size_t const n = var->timestamps_ns.size();
+        if (n == 0) return {};
+        auto const* ts_ptr = var->timestamps_ns.data();
+
+        if (var->data_type == osf::DataType::String) {
+            // Build a std::string_view array pointing into the stored strings.
+            auto strs_r = var->as_strings();
+            if (!strs_r) return tl::make_unexpected(strs_r.error());
+            std::vector<std::string_view> svs;
+            svs.reserve(n);
+            for (auto const& s : **strs_r) svs.emplace_back(s);
+            return b.add_string_samples(target_idx, ts_ptr, svs.data(), n);
+        } else {
+            // Binary channel: build BinarySample views into the stored vectors.
+            auto bins_r = var->as_binaries();
+            if (!bins_r) return tl::make_unexpected(bins_r.error());
+            std::vector<osf::BinarySample> bsv;
+            bsv.reserve(n);
+            for (auto const& bv : **bins_r)
+                bsv.push_back(osf::BinarySample{bv.data(), bv.size()});
+            return b.add_binary_samples(target_idx, ts_ptr, bsv.data(), n);
+        }
+    }
+
+    // Unknown variant — defensive; DataChannel is a closed variant set.
+    return tl::make_unexpected(osf::Error{
+        osf::Error::Code::InvalidBlock,
+        "copy_dc_data: unknown DataChannel variant"});
+}
+
+}  // namespace (from_manager helpers)
+
+// ── BlockWriter::from_manager ────────────────────────────────────────
+
+Result<BlockWriter> BlockWriter::from_manager(DataManager const& mgr) {
+    BlockWriter b;
+
+    // Copy writer-controllable file-info (NOT version/created_utc).
+    b.file_info_.creator               = mgr.meta.file_info.creator;
+    b.file_info_.tag                   = mgr.meta.file_info.tag;
+    b.file_info_.reason                = mgr.meta.file_info.reason;
+    b.file_info_.created_at_latitude   = mgr.meta.file_info.created_at_latitude;
+    b.file_info_.created_at_longitude  = mgr.meta.file_info.created_at_longitude;
+    b.file_info_.created_at_altitude   = mgr.meta.file_info.created_at_altitude;
+    b.file_info_.namespace_sep         = mgr.meta.file_info.namespace_sep;
+    b.file_info_.comment               = mgr.meta.file_info.comment;
+
+    for (DataChannel const& dc : mgr.channels()) {
+        ChannelDef def = channel_def_from_dc(dc);
+        auto idx = b.add_channel(def);
+        if (!idx) return tl::make_unexpected(idx.error());
+        if (auto r = copy_dc_data(b, dc, *idx); !r)
+            return tl::make_unexpected(r.error());
+    }
+    return b;
+}
+
+// ── Free convenience functions ───────────────────────────────────────
+
+Result<void> write_to_file(DataManager const& mgr, std::filesystem::path path) {
+    auto w = BlockWriter::from_manager(mgr);
+    if (!w) return tl::make_unexpected(w.error());
+    return w->write_to_file(std::move(path));
+}
+
+Result<void> write_to(DataManager const& mgr, std::ostream& out) {
+    auto w = BlockWriter::from_manager(mgr);
+    if (!w) return tl::make_unexpected(w.error());
+    return w->write_to(out);
 }
 
 // ── Explicit instantiations ──────────────────────────────────────────

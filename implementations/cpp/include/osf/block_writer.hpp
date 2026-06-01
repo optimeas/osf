@@ -126,6 +126,15 @@ public:
     [[nodiscard]] Result<void> write_to_file(std::filesystem::path path) const;
     [[nodiscard]] Result<void> write_to(std::ostream& out) const;
 
+    // ── Round-trip / copy ──────────────────────────────────────────────
+
+    /// Build a BlockWriter from a loaded DataManager: copies file-info
+    /// (creator, tag, reason, location, namespace_sep, comment) and every
+    /// typed channel (equidistant segments, timestamped numeric/GPS,
+    /// string/binary). Always emits OSF5 (DECISIONS §6), even when the
+    /// source manager came from an OSF4 file.
+    [[nodiscard]] static Result<BlockWriter> from_manager(DataManager const& mgr);
+
 private:
     struct ChannelData;   // fully defined in block_writer.cpp
 
@@ -212,5 +221,17 @@ Result<void> BlockWriter::add_timestamped_samples(
                   "add_timestamped_string/binary for variable-length data.");
     return add_timestamped_samples_impl<T>(channel, timestamps_ns, values, count);
 }
+
+// ── Free convenience functions ────────────────────────────────────────
+// Both build a BlockWriter via BlockWriter::from_manager and immediately
+// emit. Always writes OSF5 (DECISIONS §6).
+
+/// Load \p mgr into a BlockWriter and write the result to \p path.
+[[nodiscard]] Result<void> write_to_file(DataManager const& mgr,
+                                         std::filesystem::path path);
+
+/// Load \p mgr into a BlockWriter and write the result to \p out.
+[[nodiscard]] Result<void> write_to(DataManager const& mgr,
+                                    std::ostream& out);
 
 }  // namespace osf

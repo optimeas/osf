@@ -494,4 +494,149 @@ TEST(BlockWriter, StringDatatypeMismatchRejected) {
     EXPECT_EQ(r.error().code, osf::Error::Code::DataTypeMismatch);
 }
 
+// ── Task 7: from_manager round-trip ──────────────────────────────────
+
+/// Helper: build a BlockWriter source with one equidistant double channel,
+/// one timestamped int32 channel, and one string channel; emit it to a
+/// DataManager.
+static osf::DataManager make_mixed_manager() {
+    osf::BlockWriter src;
+    src.set_creator("task7-test");
+
+    // Equidistant double channel
+    auto eq_idx = src.add_channel([] {
+        osf::ChannelDef d;
+        d.name = "eq_dbl";
+        d.data_type = osf::DataType::Double;
+        d.channel_type = osf::ChannelType::Equidistant;
+        d.size_of_length_value = 2;
+        d.physical_unit = "m/s";
+        return d;
+    }());
+    EXPECT_TRUE(eq_idx.has_value());
+    std::vector<double> eq_vals{1.0, 2.0, 3.0};
+    EXPECT_TRUE(src.add_equidistant_segment(*eq_idx, 1000, 100.0,
+        eq_vals.data(), eq_vals.size()).has_value());
+
+    // Timestamped int32 channel
+    auto ts_idx = src.add_channel([] {
+        osf::ChannelDef d;
+        d.name = "ts_i32";
+        d.data_type = osf::DataType::Int32;
+        d.channel_type = osf::ChannelType::Timestamped;
+        d.size_of_length_value = 2;
+        return d;
+    }());
+    EXPECT_TRUE(ts_idx.has_value());
+    std::vector<std::int64_t> ts{10, 20, 30, 40};
+    std::vector<std::int32_t> v{-1, 0, 42, 100};
+    EXPECT_TRUE(src.add_timestamped_samples<std::int32_t>(*ts_idx, ts.data(), v.data(), 4).has_value());
+
+    // String variable channel
+    auto str_idx = src.add_channel([] {
+        osf::ChannelDef d;
+        d.name = "str_chan";
+        d.data_type = osf::DataType::String;
+        d.channel_type = osf::ChannelType::Scalar;
+        d.size_of_length_value = 2;
+        return d;
+    }());
+    EXPECT_TRUE(str_idx.has_value());
+    std::vector<std::int64_t> str_ts{100, 200};
+    std::vector<std::string_view> svs{"hello", "world"};
+    EXPECT_TRUE(src.add_string_samples(*str_idx, str_ts.data(), svs.data(), svs.size()).has_value());
+
+    std::ostringstream oss;
+    auto wr = src.write_to(oss);
+    EXPECT_TRUE(wr.has_value());
+
+    std::string bytes = oss.str();
+    std::istringstream in(bytes, std::ios::binary);
+    auto mgr = osf::DataManager::load_from_stream(in);
+    EXPECT_TRUE(mgr.has_value());
+    return std::move(*mgr);
+}
+
+TEST(BlockWriter, FromManagerRoundtripsMixedChannels) {
+    auto mgr = make_mixed_manager();
+
+    // Round-trip through from_manager
+    auto bw = osf::BlockWriter::from_manager(mgr);
+    ASSERT_TRUE(bw.has_value());
+
+    std::ostringstream oss2;
+    ASSERT_TRUE(bw->write_to(oss2).has_value());
+
+    std::string bytes2 = oss2.str();
+    std::istringstream in2(bytes2, std::ios::binary);
+    auto mgr2 = osf::DataManager::load_from_stream(in2);
+    ASSERT_TRUE(mgr2.has_value());
+
+    // Same number of channels
+    ASSERT_EQ(mgr2->channels().size(), 3u);
+
+    // Equidistant double channel
+    auto const* eq_ch = mgr2->channel("eq_dbl");
+    ASSERT_NE(eq_ch, nullptr);
+    EXPECT_EQ(osf::channel_data_type(*eq_ch), osf::DataType::Double);
+    auto const* eq = std::get_if<osf::EquidistantChannel>(eq_ch);
+    ASSERT_NE(eq, nullptr);
+    ASSERT_EQ(eq->segments.size(), 1u);
+    EXPECT_EQ(eq->segments[0].sample_count, 3u);
+    auto flat = osf::as_doubles_flat(*eq);
+    ASSERT_TRUE(flat.has_value());
+    ASSERT_EQ(flat->size(), 3u);
+    EXPECT_DOUBLE_EQ((*flat)[0], 1.0);
+    EXPECT_DOUBLE_EQ((*flat)[2], 3.0);
+
+    // Timestamped int32 channel
+    auto const* ts_ch = mgr2->channel("ts_i32");
+    ASSERT_NE(ts_ch, nullptr);
+    EXPECT_EQ(osf::channel_data_type(*ts_ch), osf::DataType::Int32);
+    auto const* ts = std::get_if<osf::TimestampedChannel>(ts_ch);
+    ASSERT_NE(ts, nullptr);
+    EXPECT_EQ(ts->timestamps_ns.size(), 4u);
+    auto flat32 = osf::as_int32_flat(*ts);
+    ASSERT_TRUE(flat32.has_value());
+    ASSERT_EQ(flat32->size(), 4u);
+    EXPECT_EQ((*flat32)[0].second, -1);
+    EXPECT_EQ((*flat32)[3].second, 100);
+
+    // String variable channel
+    auto const* str_ch = mgr2->channel("str_chan");
+    ASSERT_NE(str_ch, nullptr);
+    EXPECT_EQ(osf::channel_data_type(*str_ch), osf::DataType::String);
+    auto const* var = std::get_if<osf::VariableChannel>(str_ch);
+    ASSERT_NE(var, nullptr);
+    auto strs = var->as_strings();
+    ASSERT_TRUE(strs.has_value());
+    ASSERT_EQ((*strs)->size(), 2u);
+    EXPECT_EQ((**strs)[0], "hello");
+    EXPECT_EQ((**strs)[1], "world");
+}
+
+TEST(BlockWriter, FreeWriteToRoundtrips) {
+    auto mgr = make_mixed_manager();
+
+    std::ostringstream oss;
+    auto r = osf::write_to(mgr, oss);
+    ASSERT_TRUE(r.has_value());
+
+    std::string bytes = oss.str();
+    std::istringstream in(bytes, std::ios::binary);
+    auto mgr2 = osf::DataManager::load_from_stream(in);
+    ASSERT_TRUE(mgr2.has_value());
+
+    EXPECT_EQ(mgr2->channels().size(), 3u);
+    EXPECT_NE(mgr2->channel("eq_dbl"),  nullptr);
+    EXPECT_NE(mgr2->channel("ts_i32"),  nullptr);
+    EXPECT_NE(mgr2->channel("str_chan"), nullptr);
+    EXPECT_EQ(osf::channel_data_type(*mgr2->channel("eq_dbl")),  osf::DataType::Double);
+    EXPECT_EQ(osf::channel_data_type(*mgr2->channel("ts_i32")),  osf::DataType::Int32);
+    EXPECT_EQ(osf::channel_data_type(*mgr2->channel("str_chan")), osf::DataType::String);
+    EXPECT_EQ(osf::channel_sample_count(*mgr2->channel("eq_dbl")),  3u);
+    EXPECT_EQ(osf::channel_sample_count(*mgr2->channel("ts_i32")),  4u);
+    EXPECT_EQ(osf::channel_sample_count(*mgr2->channel("str_chan")), 2u);
+}
+
 }  // namespace
