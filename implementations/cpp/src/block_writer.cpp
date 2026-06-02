@@ -18,7 +18,7 @@
 
 namespace osf {
 
-// ── ChannelData — real typed storage (Task 4) ─────────────────────────
+// ── ChannelData — per-channel accumulated samples ─────────────────────
 
 struct BlockWriter::ChannelData {
     enum class Kind { Empty, Equidistant, Timestamped, Variable } kind = Kind::Empty;
@@ -31,7 +31,9 @@ struct BlockWriter::ChannelData {
     };
     std::vector<EqSegment> eq_segments;
 
-    // Timestamped (Task 5/6) + Variable (Task 6) storage added later.
+    // Timestamped numeric + GPS storage (ts_ns + ts_values) and variable
+    // string/binary storage. Only the fields for this channel's locked
+    // Kind are populated.
     std::vector<std::int64_t> ts_ns;
     NumericValues             ts_values;
     std::vector<std::string>  strings;

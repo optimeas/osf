@@ -40,7 +40,8 @@
 
 namespace osf {
 
-// Forward declaration — from_manager is a later task.
+// Forward declaration for the from_manager parameter and the free
+// osf::write_to / write_to_file(DataManager const&, …) convenience functions.
 class DataManager;
 
 // ── BlockWriter ───────────────────────────────────────────────────────
