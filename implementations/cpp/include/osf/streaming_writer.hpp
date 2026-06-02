@@ -158,7 +158,8 @@ public:
     [[nodiscard]] Result<void> start();
 
     /**
-     * @brief Final flush + fsync + file-close.
+     * @brief File-close. All data is already durable from the per-block
+     *        fsync in each write; close() does not re-flush.
      *
      * Safe from any state. From Broken returns the original sticky
      * error after best-effort file-close. After close(), all write_*

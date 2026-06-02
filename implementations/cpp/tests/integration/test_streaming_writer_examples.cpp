@@ -308,7 +308,11 @@ TEST_F(StreamingWriterExamples,
 
     // Each single-sample timestamped-double block frame is 21 bytes:
     //   [u16 ci][u16 len=17][0x08 ctrl][i64 ts][f64 sample]
-    // Truncate 10 bytes off the end → last block is mid-payload.
+    //   bytes 0-1: ci, 2-3: len, 4: ctrl, 5-12: i64 ts, 13-20: f64
+    // Truncating 10 bytes leaves 11 bytes of the last frame: the header
+    // (5 bytes) + only 6 of the 8 timestamp bytes.  The cut falls inside
+    // the i64 timestamp field (the last 2 timestamp bytes and the entire
+    // f64 sample are gone).
     auto const original_size = std::filesystem::file_size(g.path);
     ASSERT_GT(original_size, 10u);
     std::filesystem::resize_file(g.path, original_size - 10);

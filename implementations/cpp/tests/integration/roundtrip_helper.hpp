@@ -53,7 +53,7 @@ inline std::string dt_str(osf::DataType dt) {
 
 // ── Equidistant first/last value comparison ───────────────────────────
 
-#define OSF_CMP_EQ_FLAT(SUFFIX, TYPE)                                          \
+#define OSF_CMP_EQ_FLAT(SUFFIX)                                                \
     if (auto va = osf::as_##SUFFIX##_flat(a); va.has_value()) {               \
         auto vb = osf::as_##SUFFIX##_flat(b);                                  \
         if (!vb.has_value()) {                                                 \
@@ -85,8 +85,8 @@ inline ::testing::AssertionResult compare_equidistant(
         std::string const& name,
         osf::EquidistantChannel const& a,
         osf::EquidistantChannel const& b) {
-    OSF_CMP_EQ_FLAT(doubles, double)
-    OSF_CMP_EQ_FLAT(floats,  float)
+    OSF_CMP_EQ_FLAT(doubles)
+    OSF_CMP_EQ_FLAT(floats)
     // Equidistant GPS is rare but theoretically valid.
     // as_gps_flat(EquidistantChannel) returns Result<vector<GpsLocation>>
     // (no timestamp pairs — equidistant channels use segment start_ts).

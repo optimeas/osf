@@ -9,6 +9,7 @@
 #include "osf/metablock.hpp"          // FileInfo, Channel, MetaBlock, serialize_metablock_json
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstring>
 #include <sstream>
@@ -174,6 +175,9 @@ Result<std::uint16_t> StreamingWriter::add_channel(ChannelDef def) {
 // ── start / close ────────────────────────────────────────────────────
 
 Result<void> StreamingWriter::start() {
+    if (state_ == State::Broken) {
+        return tl::make_unexpected(*sticky_error_);
+    }
     if (state_ != State::Configure) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
@@ -291,9 +295,8 @@ Result<void> StreamingWriter::do_write_block(std::uint8_t const* data,
 // ── require_* helpers ────────────────────────────────────────────────
 
 std::uint8_t StreamingWriter::sov_for(std::uint16_t channel) const noexcept {
-    return (channel < channels_.size())
-               ? channels_[channel].size_of_length_value
-               : std::uint8_t{2};
+    assert(channel < channels_.size());
+    return channels_[channel].size_of_length_value;
 }
 
 std::optional<Error> StreamingWriter::require_streaming_state() const {
@@ -669,8 +672,8 @@ StreamingWriter::append_equidistant_samples_impl<double>(
     std::uint16_t, double const*, std::size_t);
 
 // ── Explicit instantiations of write_timestamped_samples_impl<T> ─────
-// Task 5 will replace the stub above with the real body. This block
-// stays — the explicit-instantiation list is the same.
+// Explicit instantiations for the 11 numeric types supported by the
+// write_timestamped_sample / write_timestamped_samples public API.
 
 #define OSF_INSTANTIATE_TIMESTAMPED_IMPL(T)                                  \
     template Result<void>                                                    \
