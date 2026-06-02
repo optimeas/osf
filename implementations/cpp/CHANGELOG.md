@@ -6,8 +6,71 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 7c — `BlockWriter`** (analyst-style OSF5 writer) at
+  `include/osf/block_writer.hpp` / `src/block_writer.cpp`. Accumulates
+  every channel kind in memory and emits the complete file at
+  `write_to_file(path)` / `write_to(std::ostream&)` (const /
+  non-consuming — a builder can be emitted to several sinks). Mirrors
+  the `StreamingWriter` template surface:
+  - `add_equidistant_segment` (`float` / `double`), the
+    `add_timestamped_sample<T>` / `add_timestamped_samples<T>`
+    template over 11 numeric types, non-template GPS
+    (`add_timestamped_gps_sample/samples`), and single-sample
+    `add_string_*` / `add_binary_*`.
+  - **Variable `sizeoflengthvalue` auto-bump 2 → 4** before the
+    metablock is written (the structural asymmetry to `StreamingWriter`,
+    which cannot bump — its metablock is already on disk). Mirrors the
+    Rust `writer.rs` autobump; strict `>` boundary (a 65526-byte sample
+    stays sov=2, 65527 bumps).
+  - `BlockWriter::from_manager(DataManager const&)` plus free
+    `osf::write_to_file` / `osf::write_to(DataManager const&, …)` for the
+    round-trip / copy workflow — always OSF5 even from an OSF4 source
+    (DECISIONS §6). Mirrors the Rust `from_manager` path.
+  Per-channel storage is a `ChannelData` variant
+  (`Empty / Equidistant / Timestamped / Variable`), the C++ mirror of
+  Rust's `WriterBuilder::ChannelData`.
+- **`src/writer_common.{hpp,cpp}`** — private writer infrastructure
+  shared by both `StreamingWriter` and `BlockWriter`: the block-payload
+  chunking helpers (`max_payload_for_sov`, `max_samples_per_*_block`,
+  `variable_sample_capacity`), the sizing constants `GPS_WIRE_SIZE = 24`
+  / `VARIABLE_BLOCK_OVERHEAD_BYTES = 9`, and `build_metablock`
+  (extracted from `StreamingWriter::start()`'s inline assembly).
+- **`tests/integration/roundtrip_helper.hpp`** — a shared
+  `roundtrip_managers_equal` comparing two loaded `DataManager`s by
+  channel count + per-channel name / datatype / sample-count **and
+  first/last materialised sample value**. Used by both the new
+  `test_block_writer_examples.cpp` (round-trips every `osf5_*.osf`
+  through `from_manager`) and the refactored
+  `test_streaming_writer_examples.cpp` (closing the prior
+  count+datatype-only coverage gap).
+- **New unit tests** `tests/unit/test_block_writer.cpp` (builder
+  mechanics, all write families, auto-bump, from_manager) and
+  `tests/unit/test_writer_common.cpp` (metablock channeltype
+  normalisation), plus three `StreamingWriter` lifecycle tests
+  (double-close, move-construct, self-move). Total ctest **245 → 271
+  green**, 0 warnings under `/W4 /permissive-`.
+
 ### Changed
 
+- **`channeltype` normalisation in `build_metablock`.** Both writers
+  now emit `channeltype: scalar` for every non-equidistant channel
+  (timestamped numeric, GPS, string, binary) and `equidistant` only for
+  equidistant channels, matching the Delphi reference generator. Folds
+  the parked BACKLOG Task-7 #2 nit; `StreamingWriter` output converges
+  to the reference on this field (round-trip behaviour unchanged — the
+  reader keys non-equidistant channels off `datatype`).
+- **18 parked Phase-7b polish nits folded in** alongside Phase 7c
+  (the four `### C++ StreamingWriter … polish (post-Phase-7b)` BACKLOG
+  entries): `MAX_PAYLOAD_FOR_SOV` → `max_payload_for_sov`, the two
+  sizing constants promoted, `make_double_channel` split into
+  scalar/equidistant test helpers, `sov_for` assert, `start()`
+  Broken-state error surfacing, tightened long-run chunking assertions,
+  and stale-comment / truncation-math cleanups. A strict-aliasing UB in
+  the `BlockWriter` `std::vector<bool>` emit path (a `reinterpret_cast`
+  to `bool const*`) was caught in review and fixed with a genuine
+  `bool[]` materialisation.
 - **Reader-comment correction in `src/reader.cpp`.** The note in
   `parse_abs_ts_string_or_binary` that said *"per spec bit 7 should
   be set; we tolerate clear bit as implicit N=1"* misread the spec.

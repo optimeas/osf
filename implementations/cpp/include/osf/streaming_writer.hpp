@@ -16,9 +16,9 @@
  *   - StreamingWriter (this class) — embedded; per-block flush via OS
  *     fsync. Constant memory footprint regardless of recording length.
  *     Compression is intentionally out of scope.
- *   - BlockWriter (Phase 7c, future) — analyst-style; accumulates
- *     samples in memory, emits the complete file at close(). Path or
- *     memory-sink output.
+ *   - BlockWriter (Phase 7c) — analyst-style; accumulates samples in
+ *     memory, emits the complete file at write_to() / write_to_file().
+ *     Path or memory (std::ostream) sink.
  *
  * Compression is intentionally out of scope. The StreamingWriter writes
  * raw .osf files. Compression to .osfz (gzip) is left to the
@@ -158,7 +158,8 @@ public:
     [[nodiscard]] Result<void> start();
 
     /**
-     * @brief Final flush + fsync + file-close.
+     * @brief File-close. All data is already durable from the per-block
+     *        fsync in each write; close() does not re-flush.
      *
      * Safe from any state. From Broken returns the original sticky
      * error after best-effort file-close. After close(), all write_*

@@ -508,8 +508,8 @@ enough that the Arc-Channel optimisation is not needed yet.
 
 ## C++ implementation — current state
 
-Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Reader updated for the version-deterministic null-terminator rule on 2026-05-24. Phase 7a (private block-encoder library) completed 2026-05-26. **Phase 7b (`StreamingWriter` — embedded streaming OSF5 writer) completed 2026-05-31.** Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
-Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, both OSF4 + OSF5 metablock parsers, the block-stream reader (with `ReaderStats`), the typed `DataManager`, the OSF5 block-encoder primitives, and the user-facing `StreamingWriter` class are in place. The analyst-style `BlockWriter` (Phase 7c) and the optional `StaleValueGuard` layer (Phase 7d) arrive next.
+Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Reader updated for the version-deterministic null-terminator rule on 2026-05-24. Phase 7a (private block-encoder library) completed 2026-05-26. Phase 7b (`StreamingWriter` — embedded streaming OSF5 writer) completed 2026-05-31. **Phase 7c (`BlockWriter` — analyst-style OSF5 writer) completed 2026-06-02.** Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
+Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, both OSF4 + OSF5 metablock parsers, the block-stream reader (with `ReaderStats`), the typed `DataManager`, the OSF5 block-encoder primitives, and **both** user-facing writer classes (`StreamingWriter` + `BlockWriter`) are in place — the two-writer OSF5 write surface of DECISIONS §7 is now fully realised. The optional `StaleValueGuard` layer (Phase 7d) arrives next.
 
 **Library targets:**
 
@@ -543,6 +543,12 @@ Standalone C++17 implementation, parallel to the Rust core — not a port from C
 | `src/reader.cpp` | `BlockReader` implementation. Byte-by-byte little-endian decoders (`le_u16` / `le_u32` / `le_u64` plus signed/float overloads); `PayloadCursor` walks an in-memory payload returning `std::optional<T>` on overflow; per-control-kind typed parsers (`parse_start_data`, `parse_continued_data`, `parse_abs_timestamp_data` with the spec-mandated string/binary equal-length-segments path, `parse_continued_rel_stamp_data`); `record_skip` / `skip_block` for the forward-compat skip path with capture-or-drain selector; `consume_trailer` for the 0xFFFF info block + 40-byte magic trailer. `BlockReader::Iterator` is a single-pass input iterator that fetches the next block on increment and compares equal to `EndSentinel` once `next()` returned `std::nullopt`. |
 | `src/data_channel.cpp` | `numeric_values_len` / `_empty` / `_data_type` / `_empty_for` via `std::visit`; `EquidistantChannel::samples_vector` walks the segments and computes per-sample timestamps via `segment_timestamp`; `TimestampedChannel::samples_vector` zips parallel vectors; `VariableChannel::samples_vector` plus `as_strings` / `as_binaries`. Twelve `OSF_DEFINE_FLAT_ACCESSORS` macro expansions produce `as_*_flat` overloads with the `DataTypeMismatch` path. |
 | `src/manager.cpp` | `DataManager::load_from_file` / `load_from_stream` plus the internal builder state machine. Helpers (`numeric_payload_data_type`, `timestamped_payload_data_type`, `rel_timestamped_payload_data_type`, `extend_numeric`, `segment_last_timestamp`) derive the channel-side data type and append payload values. `ChannelBuilder` is a tagged struct with one allocation field per state (`eq_samples` + `eq_segments`; `ts_timestamps_ns` + `ts_values`; `var_strings` xor `var_binaries`). `apply_block_kind` dispatches by `BlockKind` variant; `apply_start` / `apply_continued` / `apply_abs_timestamped` / `apply_rel_timestamped` are the per-block transitions; `finalize_builder` returns the typed `DataChannel` or `std::nullopt` for Unsupported. `parse_header_and_metablock` does the OSFZ peek + magic-header + metablock parse. |
+| `src/block_encode.{hpp,cpp}` | Phase 7a private encoder (`osf::detail::encode_*`): `encode_start_data<T>` / `encode_continued_data<T>` (float/double), `encode_abs_timestamp_data<T>` (11 numeric), `encode_abs_timestamp_data_gps`, single-sample string/binary overloads. Emits the full `[u16 ci][len][payload]` frame, bit-7 = 0 for count==1, no trailing `0x00` (OSF5). Composed by both writers |
+| `src/durable_file.{hpp,cpp}` | Phase 7b RAII file wrapper (`write` / `force` / `close`); `FlushFileBuffers` on Windows, `fsync` on POSIX. Used only by `StreamingWriter` |
+| `include/osf/binary_sample.hpp` | `osf::BinarySample` non-owning byte view (C++17 `std::span` substitute); the variable-length write APIs take it |
+| `src/writer_common.{hpp,cpp}` | **Phase 7c** private writer infrastructure shared by both writers: chunking helpers (`max_payload_for_sov`, `max_samples_per_{start,continued,timestamped}_block`, `variable_sample_capacity`), sizing constants (`GPS_WIRE_SIZE = 24`, `VARIABLE_BLOCK_OVERHEAD_BYTES = 9`), `FileInfoDraft`, and `build_metablock` (assembles the OSF5 metablock; normalises `channeltype` to `scalar` for non-equidistant channels) |
+| `include/osf/streaming_writer.hpp` + `src/streaming_writer.cpp` | Phase 7b embedded streaming writer (encode → write → fsync per block; constant memory). `ChannelDef`, config setters, `add_channel`, `start()` / `close()`, the four write families. Cannot auto-bump `sizeoflengthvalue` (metablock already on disk) |
+| `include/osf/block_writer.hpp` + `src/block_writer.cpp` | **Phase 7c** analyst-style writer: accumulates a per-channel `ChannelData` variant in memory, emits the whole file at `write_to_file(path)` / `write_to(ostream&)` (const). Same template surface as `StreamingWriter`; **does** auto-bump variable `sizeoflengthvalue` 2 → 4. `from_manager(DataManager const&)` + free `osf::write_to_file` / `osf::write_to(DataManager, …)` for round-trip / copy |
 | `tests/CMakeLists.txt` | GoogleTest via `FetchContent`; pinned to v1.15.2 by tarball URL + SHA256; `gtest_force_shared_crt=ON` for /MD parity; `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE` for CMP0135 NEW behaviour; `OSF_EXAMPLES_DIR` define for integration tests |
 | `tests/integration/test_header_examples.cpp` | Four integration tests against `examples/`: `motorbike.osf` and `steam_loco.osf` parse as Osf4; `weather_station.osfz` rejects until Phase 8; the 17 generated files in `examples/generated/` all parse with version per filename prefix |
 | `tests/integration/test_metablock_examples.cpp` | Three integration tests against the OSF5 reference files in `examples/generated/`: snapshot check on `osf5_equidistant.osf`; every `osf5_*.osf` parses with non-empty channels and valid `sizeoflengthvalue`; `osf5_gpslocation.osf` actually declares a `GpsLocation` channel |
@@ -577,12 +583,12 @@ cmake --build build
 ctest --test-dir build
 ```
 
-**Build verification (local, 2026-05-31 after Phase 7b):**
+**Build verification (local, 2026-06-02 after Phase 7c):**
 
 - Toolchain: MSVC 19.50.35730, Visual Studio 18 generator, CMake 4.2.3.
 - `cmake -B build` configures with **0 CMake warnings** (CMP0135 set to NEW explicitly via `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE`).
 - `cmake --build` produces `osf.lib` plus the test executables with **0 compile warnings** under `/W4 /permissive-` (the vendored `pugixml.cpp` is built with `/W0` since it is treated as binary-identical to upstream).
-- `ctest` reports **245/245 passed in ~10.2 s** (214 pre-Phase-7b baseline including DurableFile + serialize_metablock_json + StreamingWriter skeleton from Tasks 1–3 + 31 new Phase-7b feature tests across Tasks 4–7: 10 equidistant + 10 timestamped numeric + 7 GPS+variable + 4 cross-impl roundtrip / truncation regression).
+- `ctest` reports **271/271 passed in ~11.6 s** (245 post-Phase-7b baseline + 26 new Phase-7c tests: BlockWriter builder mechanics + all write families + auto-bump + from_manager, the `writer_common` metablock-normalisation unit test, the `osf5_*.osf` cross-impl round-trip suite via `roundtrip_helper.hpp`, and three new `StreamingWriter` lifecycle tests). From-scratch clean rebuild confirmed.
 
 **Constraints:**
 
@@ -591,23 +597,23 @@ ctest --test-dir build
 
 **Pending:**
 
-Phase 7c: `BlockWriter` (analyst-style, accumulates samples,
-emits whole file in one pass) on the same encoder substrate
-as `StreamingWriter`. Phase 7d: optional `StaleValueGuard`
-layer (100-second-repeat-of-last-value over the streaming
-writer for timestamped channels).
+Phase 7d (optional): `StaleValueGuard` — a 100-second-repeat-of-last-value
+layer over `StreamingWriter` for timestamped channels, decoupled from the
+writer itself.
 
 Then sequentially per §20 Implementation Order: transparent OSFZ
 decompression (Phase 8 — removes the current `DataManager`
-OSFZ-rejection stub), throwing convenience layer.
+OSFZ-rejection stub), throwing convenience layer (Phase 9), CI
+integration (Phase 10), C ABI wrapper (Phase 11).
 
-Phase-7b code-quality reviews surfaced four batches of polish
-nits (per-task: `99c519a`, `7cbd86d`, `9fc0a06`, `16368aa` —
-18 minor items total). All deferred to Phase 7c for a single
-tightening pass since the chunking helpers, encoder symbols,
-and roundtrip helper shape will all be reused there. See
-*Implementation Gaps and Conventions* in BACKLOG.md, four
-`### C++ StreamingWriter ... polish (post-Phase-7b)` entries.
+The 18 polish nits from the Phase-7b code-quality reviews were all
+folded in during Phase 7c (the four `### C++ StreamingWriter … polish
+(post-Phase-7b)` BACKLOG entries are now closed). One Phase-7c review
+also caught and fixed a strict-aliasing UB in the `BlockWriter`
+`std::vector<bool>` emit path before merge. A known divergence from the
+Rust reference remains parked: neither C++ writer emits the
+`created_utc` file-info field (pre-existing since Phase 7b; the
+serialiser omits null optionals, which is valid OSF5).
 
 The C ABI shared-library wrapper (Phase 11) is the deferred deliverable for cross-language consumption — Windows DLL / ActiveX/OCX, future bindings. It will land after the core C++ library reaches roundtrip validation and gets its own DECISIONS entry covering handle patterns, error codes, string ownership, and ABI stability guarantees.
 

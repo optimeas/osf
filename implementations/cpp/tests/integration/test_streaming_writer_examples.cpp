@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
+#include "roundtrip_helper.hpp"
+
 #include <gtest/gtest.h>
 
 #include <osf/binary_sample.hpp>
@@ -170,7 +172,8 @@ osf::ChannelType channel_type_from(osf::DataChannel const& ch) {
 }
 
 // Round-trip: load src → write all channels via StreamingWriter →
-// reload → assert per-channel sample-count + first/last sample equality.
+// reload → assert channel count + per-channel name/datatype/sample-count
+// AND first/last sample values (via roundtrip_managers_equal).
 ::testing::AssertionResult roundtrip_via_streaming_writer(
         std::filesystem::path const& src) {
     auto src_mgr = osf::DataManager::load_from_file(src);
@@ -257,32 +260,7 @@ osf::ChannelType channel_type_from(osf::DataChannel const& ch) {
         return ::testing::AssertionFailure()
             << "load output failed: " << out_mgr.error().message;
     }
-    if (src_mgr->channels().size() != out_mgr->channels().size()) {
-        return ::testing::AssertionFailure()
-            << "channel count mismatch: src " << src_mgr->channels().size()
-            << " vs out " << out_mgr->channels().size();
-    }
-    for (auto const& src_ch : src_mgr->channels()) {
-        auto const* out_ch = out_mgr->channel(osf::channel_name(src_ch));
-        if (!out_ch) {
-            return ::testing::AssertionFailure()
-                << "missing channel " << osf::channel_name(src_ch);
-        }
-        if (osf::channel_data_type(src_ch) !=
-            osf::channel_data_type(*out_ch)) {
-            return ::testing::AssertionFailure()
-                << "datatype mismatch for " << osf::channel_name(src_ch);
-        }
-        if (osf::channel_sample_count(src_ch) !=
-            osf::channel_sample_count(*out_ch)) {
-            return ::testing::AssertionFailure()
-                << "sample-count mismatch for "
-                << osf::channel_name(src_ch) << ": src "
-                << osf::channel_sample_count(src_ch) << " vs out "
-                << osf::channel_sample_count(*out_ch);
-        }
-    }
-    return ::testing::AssertionSuccess();
+    return osf_test::roundtrip_managers_equal(*src_mgr, *out_mgr);
 }
 
 }  // namespace
@@ -330,7 +308,11 @@ TEST_F(StreamingWriterExamples,
 
     // Each single-sample timestamped-double block frame is 21 bytes:
     //   [u16 ci][u16 len=17][0x08 ctrl][i64 ts][f64 sample]
-    // Truncate 10 bytes off the end → last block is mid-payload.
+    //   bytes 0-1: ci, 2-3: len, 4: ctrl, 5-12: i64 ts, 13-20: f64
+    // Truncating 10 bytes leaves 11 bytes of the last frame: the header
+    // (5 bytes) + only 6 of the 8 timestamp bytes.  The cut falls inside
+    // the i64 timestamp field (the last 2 timestamp bytes and the entire
+    // f64 sample are gone).
     auto const original_size = std::filesystem::file_size(g.path);
     ASSERT_GT(original_size, 10u);
     std::filesystem::resize_file(g.path, original_size - 10);

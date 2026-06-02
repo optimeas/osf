@@ -89,6 +89,7 @@ target_include_directories(osf_headers SYSTEM INTERFACE
 add_library(osf_core
     src/block.cpp
     src/block_encode.cpp
+    src/block_writer.cpp
     src/data_channel.cpp
     src/durable_file.cpp
     src/error.cpp
@@ -99,6 +100,7 @@ add_library(osf_core
     src/reader.cpp
     src/stats.cpp
     src/streaming_writer.cpp
+    src/writer_common.cpp
     src/types.cpp
     third_party/pugixml/pugixml.cpp
 )

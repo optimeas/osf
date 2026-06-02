@@ -42,11 +42,22 @@ struct TempFileGuard {
     }
 };
 
-osf::ChannelDef make_double_channel(std::string name) {
+// Scalar (timestamped / lifecycle) double channel.
+osf::ChannelDef make_double_scalar_channel(std::string name) {
     osf::ChannelDef d;
     d.name = std::move(name);
     d.data_type = osf::DataType::Double;
     d.channel_type = osf::ChannelType::Scalar;
+    d.size_of_length_value = 2;
+    return d;
+}
+
+// Equidistant double channel (bcStartData / bcContinuedData blocks).
+osf::ChannelDef make_double_equidistant_channel(std::string name) {
+    osf::ChannelDef d;
+    d.name = std::move(name);
+    d.data_type = osf::DataType::Double;
+    d.channel_type = osf::ChannelType::Equidistant;
     d.size_of_length_value = 2;
     return d;
 }
@@ -94,9 +105,9 @@ TEST(StreamingWriterLifecycle, start_fails_without_channels) {
 TEST(StreamingWriterLifecycle, add_channel_after_start_returns_error) {
     TempFileGuard g{make_temp_path()};
     osf::StreamingWriter w{g.path};
-    ASSERT_TRUE(w.add_channel(make_double_channel("a")).has_value());
+    ASSERT_TRUE(w.add_channel(make_double_scalar_channel("a")).has_value());
     ASSERT_TRUE(w.start().has_value());
-    auto r = w.add_channel(make_double_channel("b"));
+    auto r = w.add_channel(make_double_scalar_channel("b"));
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
 }
@@ -104,7 +115,7 @@ TEST(StreamingWriterLifecycle, add_channel_after_start_returns_error) {
 TEST(StreamingWriterLifecycle, write_before_start_returns_error) {
     TempFileGuard g{make_temp_path()};
     osf::StreamingWriter w{g.path};
-    ASSERT_TRUE(w.add_channel(make_double_channel("a")).has_value());
+    ASSERT_TRUE(w.add_channel(make_double_scalar_channel("a")).has_value());
     auto r = w.write_timestamped_sample<double>(0, /*ts=*/0, /*v=*/1.0);
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
@@ -113,7 +124,7 @@ TEST(StreamingWriterLifecycle, write_before_start_returns_error) {
 TEST(StreamingWriterLifecycle, double_start_returns_error) {
     TempFileGuard g{make_temp_path()};
     osf::StreamingWriter w{g.path};
-    ASSERT_TRUE(w.add_channel(make_double_channel("a")).has_value());
+    ASSERT_TRUE(w.add_channel(make_double_scalar_channel("a")).has_value());
     ASSERT_TRUE(w.start().has_value());
     auto r = w.start();
     ASSERT_FALSE(r.has_value());
@@ -133,7 +144,7 @@ TEST(StreamingWriterLifecycle, destructor_closes_unfinished_writer_safely) {
     TempFileGuard g{make_temp_path()};
     {
         osf::StreamingWriter w{g.path};
-        ASSERT_TRUE(w.add_channel(make_double_channel("a")).has_value());
+        ASSERT_TRUE(w.add_channel(make_double_scalar_channel("a")).has_value());
         ASSERT_TRUE(w.start().has_value());
         // Let w go out of scope without explicit close().
     }
@@ -177,9 +188,9 @@ TEST(StreamingWriterPreWrite, add_channel_rejects_unsupported_data_type) {
 TEST(StreamingWriterPreWrite, add_channel_returns_sequential_indices) {
     TempFileGuard g{make_temp_path()};
     osf::StreamingWriter w{g.path};
-    auto r0 = w.add_channel(make_double_channel("a"));
-    auto r1 = w.add_channel(make_double_channel("b"));
-    auto r2 = w.add_channel(make_double_channel("c"));
+    auto r0 = w.add_channel(make_double_scalar_channel("a"));
+    auto r1 = w.add_channel(make_double_scalar_channel("b"));
+    auto r2 = w.add_channel(make_double_scalar_channel("c"));
     ASSERT_TRUE(r0.has_value()); EXPECT_EQ(*r0, 0u);
     ASSERT_TRUE(r1.has_value()); EXPECT_EQ(*r1, 1u);
     ASSERT_TRUE(r2.has_value()); EXPECT_EQ(*r2, 2u);
@@ -190,7 +201,7 @@ TEST(StreamingWriterPreWrite, add_channel_returns_sequential_indices) {
 TEST(StreamingWriterByteExact, magic_header_is_OSF5_with_metablock_length) {
     TempFileGuard g{make_temp_path()};
     osf::StreamingWriter w{g.path};
-    ASSERT_TRUE(w.add_channel(make_double_channel("a")).has_value());
+    ASSERT_TRUE(w.add_channel(make_double_scalar_channel("a")).has_value());
     ASSERT_TRUE(w.start().has_value());
     ASSERT_TRUE(w.close().has_value());
 
@@ -203,11 +214,11 @@ TEST(StreamingWriterByteExact, magic_header_is_OSF5_with_metablock_length) {
                                        wf.magic_line.size() - 6))));
 }
 
-TEST(StreamingWriterByteExact, metablock_json_starts_with_envelope) {
+TEST(StreamingWriterByteExact, metablock_json_parses_with_expected_content) {
     TempFileGuard g{make_temp_path()};
     osf::StreamingWriter w{g.path};
     w.set_creator("test:1");
-    ASSERT_TRUE(w.add_channel(make_double_channel("Sensor/T")).has_value());
+    ASSERT_TRUE(w.add_channel(make_double_scalar_channel("Sensor/T")).has_value());
     ASSERT_TRUE(w.start().has_value());
     ASSERT_TRUE(w.close().has_value());
 
@@ -222,7 +233,7 @@ TEST(StreamingWriterByteExact, metablock_json_starts_with_envelope) {
 TEST(StreamingWriterByteExact, first_bcStartData_block_layout_for_double) {
     TempFileGuard g{make_temp_path()};
     osf::StreamingWriter w{g.path};
-    ASSERT_TRUE(w.add_channel(make_double_channel("a")).has_value());
+    ASSERT_TRUE(w.add_channel(make_double_equidistant_channel("a")).has_value());
     ASSERT_TRUE(w.start().has_value());
 
     double const samples[] = {1.5};
@@ -253,7 +264,7 @@ TEST(StreamingWriterChunking,
     // 5 + 8N <= 65535  →  N <= 8191. So 100k samples → 13+ blocks.
     TempFileGuard g{make_temp_path()};
     osf::StreamingWriter w{g.path};
-    ASSERT_TRUE(w.add_channel(make_double_channel("a")).has_value());
+    ASSERT_TRUE(w.add_channel(make_double_equidistant_channel("a")).has_value());
     ASSERT_TRUE(w.start().has_value());
 
     std::vector<double> samples(100'000);
@@ -279,15 +290,16 @@ TEST(StreamingWriterChunking,
     EXPECT_EQ(flat->size(), 100'000u);
     EXPECT_DOUBLE_EQ((*flat)[0], 0.0);
     EXPECT_DOUBLE_EQ((*flat)[99'999], 99'999.0);
-    // Block count assertion: the writer emitted more than one block.
-    EXPECT_GT(mgr->stats.blocks_read, 1u);
+    // Block count lower bound: 1 bcStartData (8189 samples, overhead=21)
+    // + ceiling(91811 / 8191) = 12 bcContinuedData = 13 total.
+    EXPECT_GE(mgr->stats.blocks_read, 13u);
 }
 
 TEST(StreamingWriterChunking,
      two_segments_on_same_channel_emit_two_bcStartData) {
     TempFileGuard g{make_temp_path()};
     osf::StreamingWriter w{g.path};
-    ASSERT_TRUE(w.add_channel(make_double_channel("a")).has_value());
+    ASSERT_TRUE(w.add_channel(make_double_equidistant_channel("a")).has_value());
     ASSERT_TRUE(w.start().has_value());
 
     double const s1[] = {1.0, 2.0, 3.0};
@@ -314,7 +326,7 @@ TEST(StreamingWriterChunking,
 TEST(StreamingWriterPreWrite, append_without_start_returns_invalid_block) {
     TempFileGuard g{make_temp_path()};
     osf::StreamingWriter w{g.path};
-    ASSERT_TRUE(w.add_channel(make_double_channel("a")).has_value());
+    ASSERT_TRUE(w.add_channel(make_double_equidistant_channel("a")).has_value());
     ASSERT_TRUE(w.start().has_value());
 
     double const s[] = {1.0};
@@ -331,7 +343,7 @@ TEST(StreamingWriterPreWrite,
      equidistant_rate_zero_or_nan_returns_invalid_argument) {
     TempFileGuard g{make_temp_path()};
     osf::StreamingWriter w{g.path};
-    ASSERT_TRUE(w.add_channel(make_double_channel("a")).has_value());
+    ASSERT_TRUE(w.add_channel(make_double_equidistant_channel("a")).has_value());
     ASSERT_TRUE(w.start().has_value());
 
     double const s[] = {1.0};
@@ -354,7 +366,7 @@ TEST(StreamingWriterPreWrite,
      equidistant_float_overload_on_double_channel_returns_datatype_mismatch) {
     TempFileGuard g{make_temp_path()};
     osf::StreamingWriter w{g.path};
-    ASSERT_TRUE(w.add_channel(make_double_channel("a")).has_value());
+    ASSERT_TRUE(w.add_channel(make_double_equidistant_channel("a")).has_value());
     ASSERT_TRUE(w.start().has_value());
 
     float const s[] = {1.0f};
@@ -370,7 +382,7 @@ TEST(StreamingWriterRoundtrip,
     TempFileGuard g{make_temp_path()};
     {
         osf::StreamingWriter w{g.path};
-        ASSERT_TRUE(w.add_channel(make_double_channel("eq")).has_value());
+        ASSERT_TRUE(w.add_channel(make_double_equidistant_channel("eq")).has_value());
         ASSERT_TRUE(w.start().has_value());
         std::vector<double> s = {1.5, 2.5, 3.5, 4.5, 5.5};
         ASSERT_TRUE(w.start_equidistant_segment(
@@ -606,7 +618,8 @@ TEST(StreamingWriterRoundtrip,
     EXPECT_EQ((*pairs)[0].second, 0);
     EXPECT_EQ((*pairs)[99'999].first, 1000 + 99'999 * 10);
     EXPECT_EQ((*pairs)[99'999].second, 99'999);
-    EXPECT_GT(mgr->stats.blocks_read, 1u);   // chunking happened
+    // Lower bound: ceil(100000 / 5460) = 19 blocks (sov=2, int32, overhead=5, per-sample=12).
+    EXPECT_GE(mgr->stats.blocks_read, 19u);
 }
 
 TEST(StreamingWriterRoundtrip, timestamped_uint64_roundtrips) {
@@ -672,7 +685,8 @@ TEST(StreamingWriterRoundtrip,
     ASSERT_TRUE(pairs.has_value());
     ASSERT_EQ(pairs->size(), 100'000u);
     EXPECT_DOUBLE_EQ((*pairs)[99'999].second, 99'999.0 * 0.5);
-    EXPECT_GT(mgr->stats.blocks_read, 1u);
+    // Lower bound: ceil(100000 / 4095) = 25 blocks (sov=2, double, overhead=5, per-sample=16).
+    EXPECT_GE(mgr->stats.blocks_read, 25u);
 }
 
 // Cat-B pre-write error paths
@@ -926,4 +940,91 @@ TEST(StreamingWriterPreWrite,
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidBlock);
     EXPECT_NE(r.error().message.find("65526 bytes"), std::string::npos);
+}
+
+// ── Task 9 — Additional lifecycle tests ──────────────────────────────
+
+TEST(StreamingWriterLifecycle, double_close_from_configure_is_safe) {
+    // First close() from Configure: returns success (no file was opened).
+    // Second close(): writer is now in Closed state; returns
+    // InvalidArgument "close: writer already closed".
+    TempFileGuard g{make_temp_path()};
+    osf::StreamingWriter w{g.path};
+    auto r1 = w.close();
+    EXPECT_TRUE(r1.has_value());
+    EXPECT_FALSE(std::filesystem::exists(g.path));
+
+    auto r2 = w.close();
+    ASSERT_FALSE(r2.has_value());
+    EXPECT_EQ(r2.error().code, osf::Error::Code::InvalidArgument);
+    EXPECT_NE(r2.error().message.find("already closed"), std::string::npos);
+}
+
+TEST(StreamingWriterLifecycle,
+     move_construct_streaming_writer_preserves_usability) {
+    // Configure + start a writer, write one block, then move-construct
+    // a second writer from it. Continue writing through the moved-to
+    // instance, close it, and verify the data round-trips cleanly.
+    // The moved-from instance must be safely destructible (it is in
+    // the Closed state after the move).
+    TempFileGuard g{make_temp_path()};
+    {
+        osf::StreamingWriter w1{g.path};
+        ASSERT_TRUE(w1.add_channel(make_double_scalar_channel("mv")).has_value());
+        ASSERT_TRUE(w1.start().has_value());
+        ASSERT_TRUE(w1.write_timestamped_sample<double>(
+            0, /*ts=*/10LL, /*v=*/1.0).has_value());
+
+        osf::StreamingWriter w2{std::move(w1)};
+        // w1 is now in Closed state — safe to let it go out of scope.
+        // w2 owns the file; continue writing.
+        ASSERT_TRUE(w2.write_timestamped_sample<double>(
+            0, /*ts=*/20LL, /*v=*/2.0).has_value());
+        ASSERT_TRUE(w2.close().has_value());
+        // w1 destructor runs at end of block — must not crash.
+    }
+
+    auto mgr = osf::DataManager::load_from_file(g.path);
+    ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
+    auto const* ts_ch = std::get_if<osf::TimestampedChannel>(
+        mgr->channel("mv"));
+    ASSERT_NE(ts_ch, nullptr);
+    auto const pairs = osf::as_doubles_flat(*ts_ch);
+    ASSERT_TRUE(pairs.has_value());
+    ASSERT_EQ(pairs->size(), 2u);
+    EXPECT_EQ((*pairs)[0].first,  10);
+    EXPECT_DOUBLE_EQ((*pairs)[0].second, 1.0);
+    EXPECT_EQ((*pairs)[1].first,  20);
+    EXPECT_DOUBLE_EQ((*pairs)[1].second, 2.0);
+}
+
+TEST(StreamingWriterLifecycle, self_move_assignment_is_safe) {
+    // Self-move-assignment must not corrupt the writer. Use a reference
+    // alias to avoid the -Wself-move compiler warning under /W4.
+    TempFileGuard g{make_temp_path()};
+    osf::StreamingWriter w{g.path};
+    ASSERT_TRUE(w.add_channel(make_double_scalar_channel("sm")).has_value());
+    ASSERT_TRUE(w.start().has_value());
+    ASSERT_TRUE(w.write_timestamped_sample<double>(
+        0, /*ts=*/5LL, /*v=*/42.0).has_value());
+
+    // Self-move via reference alias (suppresses -Wself-move).
+    {
+        osf::StreamingWriter& ref = w;
+        w = std::move(ref);
+    }
+
+    // Writer remains usable after self-assignment.
+    ASSERT_TRUE(w.write_timestamped_sample<double>(
+        0, /*ts=*/6LL, /*v=*/43.0).has_value());
+    ASSERT_TRUE(w.close().has_value());
+
+    auto mgr = osf::DataManager::load_from_file(g.path);
+    ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
+    auto const* ts_ch = std::get_if<osf::TimestampedChannel>(
+        mgr->channel("sm"));
+    ASSERT_NE(ts_ch, nullptr);
+    auto const pairs = osf::as_doubles_flat(*ts_ch);
+    ASSERT_TRUE(pairs.has_value());
+    EXPECT_EQ(pairs->size(), 2u);
 }

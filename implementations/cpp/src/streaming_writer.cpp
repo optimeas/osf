@@ -5,9 +5,11 @@
 
 #include "block_encode.hpp"           // osf::detail::encode_*
 #include "durable_file.hpp"           // osf::detail::DurableFile
+#include "writer_common.hpp"          // osf::detail chunking helpers + constants
 #include "osf/metablock.hpp"          // FileInfo, Channel, MetaBlock, serialize_metablock_json
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstring>
 #include <sstream>
@@ -60,49 +62,6 @@ constexpr DataType data_type_for() noexcept {
     else if constexpr (std::is_same_v<T, float>)         return DataType::Float;
     else if constexpr (std::is_same_v<T, double>)        return DataType::Double;
     else { static_assert(sizeof(T) == 0, "unsupported T"); return DataType::Unsupported; }
-}
-
-constexpr std::size_t MAX_PAYLOAD_FOR_SOV(std::uint8_t sov) noexcept {
-    // u16 length field: max payload = 65535
-    // u32 length field: soft-capped at i32::MAX - 1024 to avoid
-    // platform-dependent overflow on body-length conversion.
-    return (sov == 2)
-               ? std::size_t{0xFFFFu}
-               : static_cast<std::size_t>(0x7FFFFFFFu - 1024u);
-}
-
-// bcStartData multi-sample: payload = [u8 ctrl][i64 ts][f64 rate]
-// [u32 N][N * value_size]. Overhead = 21.
-std::size_t max_samples_per_start_block(std::size_t value_size,
-                                        std::uint8_t sov) noexcept {
-    constexpr std::size_t OVERHEAD = 1u + 8u + 8u + 4u;
-    std::size_t const max_payload = MAX_PAYLOAD_FOR_SOV(sov);
-    if (max_payload <= OVERHEAD) return 1;
-    std::size_t const samples = (max_payload - OVERHEAD) / value_size;
-    return (samples == 0) ? 1u : samples;
-}
-
-// bcContinuedData multi-sample: payload = [u8 ctrl][u32 N]
-// [N * value_size]. Overhead = 5.
-std::size_t max_samples_per_continued_block(std::size_t value_size,
-                                            std::uint8_t sov) noexcept {
-    constexpr std::size_t OVERHEAD = 1u + 4u;
-    std::size_t const max_payload = MAX_PAYLOAD_FOR_SOV(sov);
-    if (max_payload <= OVERHEAD) return 1;
-    std::size_t const samples = (max_payload - OVERHEAD) / value_size;
-    return (samples == 0) ? 1u : samples;
-}
-
-// bcAbsTimeStampData multi-sample: payload = [u8 ctrl][u32 N]
-// [N * (8 + value_size)]. Used by Task 5.
-std::size_t max_samples_per_timestamped_block(std::size_t value_size,
-                                              std::uint8_t sov) noexcept {
-    constexpr std::size_t OVERHEAD = 1u + 4u;
-    std::size_t const per_sample = 8u + value_size;
-    std::size_t const max_payload = MAX_PAYLOAD_FOR_SOV(sov);
-    if (max_payload <= OVERHEAD) return 1;
-    std::size_t const samples = (max_payload - OVERHEAD) / per_sample;
-    return (samples == 0) ? 1u : samples;
 }
 
 }  // namespace
@@ -216,6 +175,9 @@ Result<std::uint16_t> StreamingWriter::add_channel(ChannelDef def) {
 // ── start / close ────────────────────────────────────────────────────
 
 Result<void> StreamingWriter::start() {
+    if (state_ == State::Broken) {
+        return tl::make_unexpected(*sticky_error_);
+    }
     if (state_ != State::Configure) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
@@ -235,33 +197,16 @@ Result<void> StreamingWriter::start() {
     durable_file_ = std::make_unique<detail::DurableFile>(std::move(*df));
 
     // Build the MetaBlock from configuration state.
-    MetaBlock meta;
-    meta.file_info.version = 5;
-    meta.file_info.creator             = creator_;
-    meta.file_info.tag                 = tag_;
-    meta.file_info.reason              = reason_;
-    meta.file_info.created_at_latitude  = created_at_latitude_;
-    meta.file_info.created_at_longitude = created_at_longitude_;
-    meta.file_info.created_at_altitude  = created_at_altitude_;
-    meta.file_info.namespace_sep       = namespace_sep_;
-    meta.file_info.comment             = comment_;
-    for (std::size_t i = 0; i < channels_.size(); ++i) {
-        ChannelDef const& d = channels_[i];
-        Channel ch;
-        ch.index = static_cast<std::uint16_t>(i);
-        ch.name  = d.name;
-        ch.data_type = d.data_type;
-        ch.channel_type = d.channel_type;
-        ch.size_of_length_value = d.size_of_length_value;
-        ch.time_increment_ns = d.time_increment_ns;
-        ch.physical_unit = d.physical_unit;
-        ch.physical_dimension = d.physical_dimension;
-        ch.display_name = d.display_name;
-        ch.mime_type = d.mime_type;
-        ch.reference = d.reference;
-        ch.comment = d.comment;
-        meta.channels.push_back(std::move(ch));
-    }
+    detail::FileInfoDraft fi;
+    fi.creator = creator_;
+    fi.tag = tag_;
+    fi.reason = reason_;
+    fi.created_at_latitude = created_at_latitude_;
+    fi.created_at_longitude = created_at_longitude_;
+    fi.created_at_altitude = created_at_altitude_;
+    fi.namespace_sep = namespace_sep_;
+    fi.comment = comment_;
+    MetaBlock meta = detail::build_metablock(fi, channels_);
 
     // Serialize the metablock and build the magic-header line.
     std::string const json_body = serialize_metablock_json(meta);
@@ -350,9 +295,8 @@ Result<void> StreamingWriter::do_write_block(std::uint8_t const* data,
 // ── require_* helpers ────────────────────────────────────────────────
 
 std::uint8_t StreamingWriter::sov_for(std::uint16_t channel) const noexcept {
-    return (channel < channels_.size())
-               ? channels_[channel].size_of_length_value
-               : std::uint8_t{2};
+    assert(channel < channels_.size());
+    return channels_[channel].size_of_length_value;
 }
 
 std::optional<Error> StreamingWriter::require_streaming_state() const {
@@ -479,10 +423,11 @@ Result<void> StreamingWriter::write_timestamped_gps_samples(
     }
 
     auto const sov = sov_for(channel);
-    // GPS wire-format per sample: 24 bytes (3 little-endian doubles
-    // for latitude, longitude, altitude per block.hpp:57-72).
+    // GPS wire-format per sample: GPS_WIRE_SIZE bytes (3 little-endian
+    // doubles for latitude, longitude, altitude per block.hpp:57-72).
     std::size_t const max_per_block =
-        max_samples_per_timestamped_block(/*value_size=*/24u, sov);
+        osf::detail::max_samples_per_timestamped_block(
+            /*value_size=*/osf::detail::GPS_WIRE_SIZE, sov);
 
     std::size_t written = 0;
     while (written < count) {
@@ -514,18 +459,6 @@ Result<void> StreamingWriter::write_timestamped_gps_sample(
 
 // ── Variable (string + binary) — single-sample per spec ──────────
 
-namespace {
-
-// Effective max sample size for a variable block at the given sov.
-// Body = 1 (ctrl) + 8 (ts) + sample-bytes; encoder enforces sov
-// via begin_frame. Effective sample max = MAX_PAYLOAD_FOR_SOV(sov) - 9.
-std::size_t variable_sample_capacity(std::uint8_t sov) noexcept {
-    std::size_t const max_payload = MAX_PAYLOAD_FOR_SOV(sov);
-    return (max_payload <= 9u) ? 0u : (max_payload - 9u);
-}
-
-}  // namespace
-
 Result<void> StreamingWriter::write_timestamped_string(
         std::uint16_t channel, std::int64_t timestamp_ns,
         std::string_view value) {
@@ -533,7 +466,7 @@ Result<void> StreamingWriter::write_timestamped_string(
         return tl::make_unexpected(*err);
     }
     auto const sov = sov_for(channel);
-    std::size_t const capacity = variable_sample_capacity(sov);
+    std::size_t const capacity = osf::detail::variable_sample_capacity(sov);
     if (value.size() > capacity) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidBlock,
@@ -560,7 +493,7 @@ Result<void> StreamingWriter::write_timestamped_binary(
         return tl::make_unexpected(*err);
     }
     auto const sov = sov_for(channel);
-    std::size_t const capacity = variable_sample_capacity(sov);
+    std::size_t const capacity = osf::detail::variable_sample_capacity(sov);
     if (value.size > capacity) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidBlock,
@@ -598,7 +531,7 @@ Result<void> StreamingWriter::write_timestamped_samples_impl(
 
     auto const sov = sov_for(channel);
     std::size_t const max_per_block =
-        max_samples_per_timestamped_block(sizeof(T), sov);
+        osf::detail::max_samples_per_timestamped_block(sizeof(T), sov);
 
     std::size_t written = 0;
     while (written < count) {
@@ -643,9 +576,9 @@ Result<void> StreamingWriter::start_equidistant_segment_impl(
 
     auto const sov = sov_for(channel);
     std::size_t const max_first =
-        max_samples_per_start_block(sizeof(T), sov);
+        osf::detail::max_samples_per_start_block(sizeof(T), sov);
     std::size_t const max_cont =
-        max_samples_per_continued_block(sizeof(T), sov);
+        osf::detail::max_samples_per_continued_block(sizeof(T), sov);
 
     // First chunk as bcStartData.
     std::size_t const first = std::min(count, max_first);
@@ -702,7 +635,7 @@ Result<void> StreamingWriter::append_equidistant_samples_impl(
 
     auto const sov = sov_for(channel);
     std::size_t const max_cont =
-        max_samples_per_continued_block(sizeof(T), sov);
+        osf::detail::max_samples_per_continued_block(sizeof(T), sov);
 
     std::size_t written = 0;
     while (written < count) {
@@ -739,8 +672,8 @@ StreamingWriter::append_equidistant_samples_impl<double>(
     std::uint16_t, double const*, std::size_t);
 
 // ── Explicit instantiations of write_timestamped_samples_impl<T> ─────
-// Task 5 will replace the stub above with the real body. This block
-// stays — the explicit-instantiation list is the same.
+// Explicit instantiations for the 11 numeric types supported by the
+// write_timestamped_sample / write_timestamped_samples public API.
 
 #define OSF_INSTANTIATE_TIMESTAMPED_IMPL(T)                                  \
     template Result<void>                                                    \

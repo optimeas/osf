@@ -257,6 +257,44 @@ osf_set_warnings(test_streaming_writer)
 gtest_discover_tests(test_streaming_writer)
 
 # ---------------------------------------------------------------------------
+# test_block_writer — BlockWriter unit tests (Phase 7c).
+# ---------------------------------------------------------------------------
+
+add_executable(test_block_writer
+    unit/test_block_writer.cpp
+)
+
+target_link_libraries(test_block_writer PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_block_writer)
+
+gtest_discover_tests(test_block_writer)
+
+# ---------------------------------------------------------------------------
+# test_writer_common — shared writer infrastructure unit tests (Phase 7c).
+# ---------------------------------------------------------------------------
+
+add_executable(test_writer_common
+    unit/test_writer_common.cpp
+)
+
+target_link_libraries(test_writer_common PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_include_directories(test_writer_common PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src"
+)
+
+osf_set_warnings(test_writer_common)
+
+gtest_discover_tests(test_writer_common)
+
+# ---------------------------------------------------------------------------
 # test_header_examples — magic-header tests against reference files.
 # ---------------------------------------------------------------------------
 
@@ -384,6 +422,35 @@ target_link_libraries(test_streaming_writer_examples PRIVATE
 target_compile_definitions(test_streaming_writer_examples PRIVATE
     OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
 
+# roundtrip_helper.hpp lives in the integration/ source dir.
+target_include_directories(test_streaming_writer_examples PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/integration")
+
 osf_set_warnings(test_streaming_writer_examples)
 
 gtest_discover_tests(test_streaming_writer_examples)
+
+# ---------------------------------------------------------------------------
+# test_block_writer_examples — BlockWriter cross-implementation roundtrip
+# (Phase 7c Cat-A + Cat-B).
+# ---------------------------------------------------------------------------
+
+add_executable(test_block_writer_examples
+    integration/test_block_writer_examples.cpp
+)
+
+target_link_libraries(test_block_writer_examples PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_compile_definitions(test_block_writer_examples PRIVATE
+    OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+
+# roundtrip_helper.hpp lives in the integration/ source dir.
+target_include_directories(test_block_writer_examples PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/integration")
+
+osf_set_warnings(test_block_writer_examples)
+
+gtest_discover_tests(test_block_writer_examples)

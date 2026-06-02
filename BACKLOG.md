@@ -201,304 +201,50 @@ list. Defer trigger: Phase 7c `BlockWriter` brings up the helper's
 second consumer, OR a real-world OSF5 round-trip surfaces a missing
 field.
 
-### C++ StreamingWriter polish (post-Phase-7b)
+### C++ StreamingWriter polish — RESOLVED in Phase 7c (2026-06-02)
 
-Phase-7b Task 3 (`implementations/cpp/{include/osf/streaming_writer.hpp,src/streaming_writer.cpp}`,
-commit `db273d9`) shipped with five observations from the
-code-quality review parked for post-Phase-7b attention.
+The five `### C++ StreamingWriter … polish (post-Phase-7b)` batches
+(Tasks 3–7 code-quality reviews, 18 minor items) were folded in during
+the Phase-7c `BlockWriter` work:
 
-1. **`std::optional<DurableFile>` → `std::unique_ptr<DurableFile>`
-   deviation needs spec ratification.** The spec/plan called for
-   `std::optional<detail::DurableFile> durable_file_` with only a
-   forward declaration of `DurableFile` in the header. MSVC's
-   `std::optional<T>` eagerly evaluates `__is_trivially_destructible`
-   and rejects forward-declared `T`. The implementer correctly
-   switched to `unique_ptr` (which defers dtor instantiation to the
-   TU that sees the complete type). Add a footnote to spec §2 Q10
-   ratifying `unique_ptr<DurableFile>` as canonical for any public
-   header that forward-declares the private type. Phase 7c
-   (`BlockWriter`) and Phase 7d (`StaleValueGuard`) should adopt
-   the same pattern when they reach this design point.
+- `MAX_PAYLOAD_FOR_SOV` → `max_payload_for_sov` and the `GPS_WIRE_SIZE`
+  / `VARIABLE_BLOCK_OVERHEAD_BYTES` constants promoted to the shared
+  `src/writer_common.hpp` (commit `1e37499`).
+- `channeltype` normalised to the Delphi `scalar`-for-non-equidistant
+  convention in the shared `build_metablock` (`336103f`).
+- `close()` doxygen accuracy, `start()` Broken-state error surfacing,
+  `sov_for` assert, `make_double_channel` split into scalar/equidistant
+  helpers, test rename, tightened long-run chunking assertions
+  (derived bounds 13/19/25), stale-comment + truncation-math cleanups,
+  and three StreamingWriter lifecycle tests (double-close,
+  move-construct, self-move) (`77a5dc2`).
+- The shared `tests/integration/roundtrip_helper.hpp` now compares
+  first/last sample values, closing the cross-impl value-comparison gap
+  (`8691163`).
 
-2. **`close()` Doxygen overstates the contract.** Header line for
-   `close()` says "Final flush + fsync + file-close" but the
-   implementation does NOT call `durable_file_->force()` before
-   `durable_file_->close()` in the Streaming branch. Practical
-   impact: zero — every preceding `do_write_block` already
-   `force()`'d its data, and `start()` `force()`'d the magic
-   header + metablock. So there is no unsynced data at close
-   time. Fix options: either add a defensive `force()` before
-   `close()` in the Streaming branch (cheap insurance, matches
-   the documented contract), or trim the Doxygen to "file-close
-   only — all data already durable from per-block fsync." Pick
-   one before Phase 7c writes documentation that propagates the
-   current ambiguity.
+The `streaming_writer.cpp` file-split question was re-evaluated and
+**declined** — the new `block_writer.cpp` TU plus the `writer_common`
+extraction relieved the size pressure that motivated the watch.
 
-3. **`start()` error message misleading for Broken state.** The
-   current message `"start: writer is past the Configure phase"`
-   is correct for a writer in Streaming or Closed state, but
-   confusing if the writer somehow reached Broken. Refine the
-   check to surface the sticky error when `state_ == Broken` —
-   matching the pattern used by `require_streaming_state()`.
+**Residual minor items (low-risk, parked):**
 
-4. **`sov_for(channel)` silently returns 2 for out-of-range
-   channels.** The function is private and every caller goes
-   through a `require_*` helper that already validates channel
-   bounds. The fallback path is therefore dead code in a correct
-   caller sequence. Replace with `assert(channel < channels_.size())`
-   or convert to an internal-API contract (no fallback) for
-   clarity.
+1. StreamingWriter `int8_t` / `uint8_t` byte-exact tests (Task-5 #3)
+   and the `oversized_binary_at_sov2` boundary-success case (Task-6 #4)
+   were added for `BlockWriter` (`test_block_writer.cpp`) but not
+   mirrored into `test_streaming_writer.cpp`. The Phase-7a encoder
+   per-type tests already cover the wire format, so the gap is cosmetic.
+2. The StreamingWriter cross-impl roundtrip `ChannelDef` construction
+   in `test_streaming_writer_examples.cpp` still copies only
+   `physical_unit` + `display_name` from the source ChannelMeta,
+   dropping `physical_dimension` / `reference` / `comment` /
+   `mime_type` / `time_increment_ns` (Task-7 #4). Invisible to current
+   assertions. (BlockWriter's `from_manager` copies these correctly.)
+3. Neither C++ writer emits the `created_utc` file-info field
+   (pre-existing since Phase 7b; the serialiser omits null optionals,
+   which is valid OSF5). Add if a future spec rev requires it.
 
-5. **`OSF_STUB_NOT_IMPLEMENTED` macro uses `InvalidArgument`.** All
-   stub returns share the InvalidArgument code, which is
-   semantically "caller made a bad call." A stub that has not been
-   implemented is better served by a distinct code. Tasks 4-6
-   will replace the stubs with real implementations, so the
-   concern is short-lived. If a test accidentally exercises a
-   stub before its real body lands, the InvalidArgument error
-   could mask a genuine arg-validation bug. Trigger to act:
-   never — Tasks 4-6 close this naturally.
-
-Plus three test-coverage gaps for the lifecycle: no test for
-double-close from Configure (the dtor calls close() unconditionally
-which silently consumes the second-close's InvalidArgument), no
-test for move-ctor on a Streaming-state writer (the 14-member
-move is complex enough to deserve a dedicated test), and no
-self-move-assignment safety test. Defer trigger: Tasks 4-7 land
-write methods that exercise the same move/close paths through
-roundtrip tests; if no regression surfaces by Phase 7b close, the
-gaps can be filled with one focused commit.
-
-### C++ StreamingWriter equidistant API polish (post-Phase-7b)
-
-Phase-7b Task 4 (`implementations/cpp/{include/osf/streaming_writer.hpp,
-src/streaming_writer.cpp,tests/unit/test_streaming_writer.cpp}`,
-commit `2c78d53`) shipped with three plan-level cosmetic
-observations parked for post-Phase-7b attention. All originate
-in the plan code blocks at lines 2629–3287, not in implementer
-choices.
-
-1. **`MAX_PAYLOAD_FOR_SOV` is SHOUTY_CASE but is a `constexpr`
-   function, not a macro.** The convention in `streaming_writer.cpp`
-   is `lower_snake_case()` for functions and `UPPER_SNAKE_CASE`
-   for `constexpr std::size_t OVERHEAD` constants. A reader
-   could reasonably scan for macro-parenthesization traps.
-   Rename to `max_payload_for_sov()` in a follow-up. Plan-level
-   convention drift, not an implementer-introduced issue.
-
-2. **`make_double_channel` test helper declares
-   `ChannelType::Scalar` but resulting writer emits
-   `bcStartData` / `bcContinuedData` (equidistant) blocks** in
-   the byte-exact, chunking, pre-write, and double-roundtrip
-   tests. The float-roundtrip test (`test_streaming_writer.cpp`
-   line ~402) sets `Equidistant` correctly. Both currently
-   round-trip — the reader keys `EquidistantChannel` off the
-   block stream, not the metablock — but a strict reader could
-   legitimately reject the produced files because the
-   channel_type tag disagrees with the block kind. One-line fix
-   in the helper or split into `make_double_scalar_channel` /
-   `make_double_equidistant_channel`. Defer trigger: a downstream
-   OSF reader strictly validates channel_type / block_kind
-   agreement, or a spec rev tightens the rule.
-
-3. **Test name `metablock_json_starts_with_envelope` does not
-   match what the body asserts.** The test parses the metablock
-   JSON via `parse_metablock_json` and verifies parsed content
-   (channel name, creator) — it does not check any envelope
-   prefix. Rename to `metablock_json_parses_with_expected_content`
-   or similar. Cosmetic, plan-named.
-
-Plus a file-length observation: `streaming_writer.cpp` reached
-633 lines after Task 4 (was 467). Tasks 5 + 6 will add another
-~300 lines of timestamped-numeric / GPS / variable bodies,
-pushing past 900 lines. A per-write-family split
-(`streaming_writer_equidistant.cpp` / `_timestamped.cpp` /
-`_variable.cpp` sharing private state via an internal header)
-becomes attractive at that point. Not for Phase 7b — revisit
-once Tasks 5 + 6 land and the actual size is known.
-
-### C++ StreamingWriter timestamped numeric API polish (post-Phase-7b)
-
-Phase-7b Task 5 (`implementations/cpp/{src/streaming_writer.cpp,
-tests/unit/test_streaming_writer.cpp}`, commit `f82d04c7`)
-shipped with three minor observations from the code-quality
-review parked for post-Phase-7b attention.
-
-1. **Long-run chunking tests assert `blocks_read > 1u` only.**
-   `test_streaming_writer.cpp` `timestamped_int32_long_run_with_chunking_roundtrips`
-   and `timestamped_double_long_run_with_chunking_roundtrips`
-   could pass even if a regression made the chunker emit just
-   two blocks (one huge + one tiny tail) instead of the
-   ~19 / ~25 the math actually guarantees. Tighten to
-   `EXPECT_GE(mgr->stats.blocks_read, 18u)` / `25u` respectively
-   — or, more durably, derive the expected count from
-   `count / max_per_block` and assert against that.
-
-2. **`OSF_STUB_NOT_IMPLEMENTED` macro region comment is stale.**
-   `streaming_writer.cpp` line ~439 says "write_* method stubs —
-   filled in by Tasks 4-6". After Task 5 only 4 stubs remain
-   (`write_timestamped_gps_sample/samples`, `write_timestamped_string`,
-   `write_timestamped_binary`). Refresh to "Tasks 4–5 done;
-   GPS + variable in Task 6." or remove once Task 6 closes the
-   region entirely.
-
-3. **No byte-exact tests for `int8_t` / `uint8_t` against the
-   `bool` baseline.** `bool` byte-encoding is locked down at
-   `test_streaming_writer.cpp:486-507` (asserts `0x01` / `0x00`,
-   defends against `int(bool)` widening). The other two 1-byte
-   numeric types flow through the same `append_sample<T>` path
-   in `block_encode.cpp` and are exercised by the encoder's
-   own tests, but the StreamingWriter integration is not directly
-   byte-asserted for them. Low risk — the encoder per-type tests
-   cover the wire format — but a one-paragraph test that drives
-   `write_timestamped_sample<int8_t>(0, 0LL, -1)` and asserts
-   the resulting frame would close the gap.
-
-Cosmetic items not parked separately: `~4093 samples` comment
-math at `test_streaming_writer.cpp:644` is off by 2 (actual
-math is 4095); the file-size watch on `streaming_writer.cpp`
-(now 666 lines after Task 5) is already covered by the Task-4
-entry above.
-
-Defer trigger: Phase 7c `BlockWriter` mirrors the
-`_impl<T>` template-impl-zone layout — a tightening pass on
-test assertions and stale stub comments could land together
-with that work, since `BlockWriter` will need the same chunking
-helpers and the same encoder symbols.
-
-### C++ StreamingWriter GPS + Variable API polish (post-Phase-7b)
-
-Phase-7b Task 6 (`implementations/cpp/{src/streaming_writer.cpp,
-tests/unit/test_streaming_writer.cpp}`, commit `e816ddd`)
-shipped with four minor observations from the code-quality
-review parked for post-Phase-7b attention.
-
-1. **Stale comment near the explicit-instantiation block.**
-   `streaming_writer.cpp` lines ~741–743 still say "Task 5
-   will replace the stub above with the real body. This block
-   stays — the explicit-instantiation list is the same." Task 5
-   already did this; the wording is post-merge stale. Refresh
-   to e.g. "Task 5 filled in the real body above; explicit-
-   instantiation list unchanged." Same flavour as the Task-5
-   stale-stubs-comment nit.
-
-2. **Magic number `24` for GPS wire size** at the
-   `max_samples_per_timestamped_block(/*value_size=*/24u, sov)`
-   call site for the GPS array path. The named-parameter comment
-   is good, but Phase 7c `BlockWriter` will plausibly recompute
-   the same chunking for GPS. Promote to
-   `constexpr std::size_t GPS_WIRE_SIZE = 24;` next to
-   `GpsLocation` (e.g. in `binary_sample.hpp` or `metablock.hpp`)
-   so both writer classes share the constant.
-
-3. **Magic number `9` for variable-block overhead**
-   (`variable_sample_capacity(sov)` = `MAX_PAYLOAD_FOR_SOV - 9`).
-   The comment at the call site documents the math
-   (`1 ctrl + 8 ts`), but the other three chunking helpers all
-   use a `constexpr std::size_t OVERHEAD = ...;` inside the
-   function body. Match the local convention with a named
-   constant (e.g. `VARIABLE_BLOCK_OVERHEAD_BYTES`) for consistency.
-
-4. **Asymmetric test coverage for the variable boundary case.**
-   `oversized_string_at_sov2_returns_invalid_block_with_capacity_message`
-   verifies BOTH the 65527-byte failure AND the 65526-byte
-   boundary success. `oversized_binary_at_sov2_returns_invalid_block`
-   verifies only the failure case. Tighten the binary test to
-   match: a 65526-byte vector at sov=2 should succeed.
-
-Plus a file-size promotion: `streaming_writer.cpp` reached
-764 lines after Task 6 (was 467 at Task 3, 633 after Task 4,
-666 after Task 5). The Task 4-5 BACKLOG entries called this
-a "watch"; the threshold is now in sight. Phase 7c lands
-`block_writer.cpp` as a separate TU which absorbs the writer
-pressure differently than a within-StreamingWriter split would.
-Recommendation: re-evaluate the split question after Phase 7c
-lands. If the answer is still "split", do it as a single
-mechanical commit (one source file per write-family, shared
-state via a private `streaming_writer_internal.hpp`).
-
-Plus a code-review observation worth a separate watch: two
-anonymous namespaces in the same TU (`streaming_writer.cpp`
-lines ~41-108 + ~517-527). Legal but unusual. Consider
-consolidating into a single anonymous namespace near the top
-of the file at the same time as the file-split or the magic-
-number cleanup.
-
-Defer trigger: Phase 7c `BlockWriter` reuses the chunking
-infrastructure. All five items can land as one polish commit
-on top of Phase 7c.
-
-### C++ StreamingWriter cross-impl roundtrip polish (post-Phase-7b)
-
-Phase-7b Task 7 (`implementations/cpp/tests/integration/test_streaming_writer_examples.cpp`,
-commit `80475a7`) shipped with five observations from the code-
-quality review parked for post-Phase-7b attention. Two are real
-coverage / fidelity gaps; three are cosmetic.
-
-1. **Roundtrip helper docstring says "first/last sample equality"
-   but the implementation only compares sample-count + datatype.**
-   At `test_streaming_writer_examples.cpp:173`, the docstring on
-   `roundtrip_via_streaming_writer` claims per-channel
-   "sample-count + first/last sample equality"; the actual loop
-   at lines 271-283 only asserts count + datatype. A writer
-   regression that swapped samples within a channel or
-   off-by-one'd timestamps would pass the test today. Either
-   tighten the docstring or — preferred — add first + last
-   sample value comparison per channel. Real coverage gap.
-
-2. **`channel_type_from()` returns `Timestamped` for
-   `TimestampedChannel`, but the Delphi reference generator
-   always emits `channeltype: scalar` for non-equidistant
-   channels** (verified empirically against
-   `osf5_mixed_extended.osf`: temperature, counter, alarmflag,
-   message, position all carry `channeltype: scalar`). The
-   roundtrip test currently passes because the reader's state
-   machine keys off `data_type` not `channel_type` for
-   non-equidistant channels (`manager.cpp:215`), and the writer's
-   `require_*_channel` validators check the kind lock + datatype
-   only. But the written file diverges from the Delphi reference
-   on this metablock field. Decide: match the Delphi convention
-   (return `Scalar` uniformly for non-equidistant) or document
-   the divergence in the helper comment.
-
-3. **Truncation test comment mis-identifies the cut location.**
-   `test_streaming_writer_examples.cpp:331-333` says "Truncate 10
-   bytes off the end → last block is mid-payload." Re-doing the
-   math for the 21-byte single-sample timestamped-double frame
-   `[u16 ci=0][u16 len=17][0x08 ctrl][i64 ts][f64 sample]`:
-   bytes 11-20 of the last frame are bytes 11-12 of `ts` + all 8
-   bytes of `sample`. So the cut is mid-timestamp, not
-   mid-payload. Test outcome unchanged — reader detects the
-   length-prefix mismatch either way — but the comment should
-   say "mid-block" or "mid-timestamp" for accuracy.
-
-4. **ChannelMeta secondary fields silently dropped on roundtrip.**
-   The `ChannelDef` construction at `test_streaming_writer_examples.cpp:204-222`
-   copies `physical_unit` and `display_name` but omits
-   `physical_dimension`, `reference`, `comment`, `mime_type`,
-   `time_increment_ns`. For a *cross-impl roundtrip* test these
-   are user-visible metadata fields and their loss is invisible
-   to current assertions (count + dtype only). Either populate
-   them all from the source ChannelMeta or document the
-   intentional drop with a comment.
-
-5. **Plan-level lesson: `std::vector<T>::data()` is not generic
-   over `T`.** The plan's X-macro at lines 4402-4412 hits a
-   compile-time wall for `T=bool` because `std::vector<bool>` is
-   bit-packed and has no `data()` member. The implementer
-   correctly worked around with `std::unique_ptr<bool[]>` +
-   manual extraction at `test_streaming_writer_examples.cpp:101-110`,
-   but future implementation plans should pre-empt this pattern.
-   Future plan authors: when writing template / X-macro code that
-   does `std::vector<T>::data()`, either guard with
-   `static_assert(!std::is_same_v<T, bool>)` and provide a bool
-   specialization, or use `std::array` / hand-rolled buffers from
-   the start.
-
-Defer trigger: Phase 7c `BlockWriter` will introduce its own
-roundtrip integration tests with the same helper-shape pressure;
-items 1, 2, and 4 should land together as a single tightening
-commit there. Items 3 and 5 can land anytime.
+Defer trigger: a strict downstream OSF reader that validates these
+metadata fields, or a future StreamingWriter-focused session.
 
 ---
 
