@@ -639,4 +639,84 @@ TEST(BlockWriter, FreeWriteToRoundtrips) {
     EXPECT_EQ(osf::channel_sample_count(*mgr2->channel("str_chan")), 2u);
 }
 
+// ── Task 8 Step 5: multi-segment from_manager ────────────────────────
+
+/// Build a BlockWriter with a double equidistant channel, call
+/// add_equidistant_segment TWICE (two distinct segments with different
+/// start timestamps), emit, reload, from_manager, re-emit, reload again,
+/// and assert the equidistant channel in mgr2 has 5 total samples with
+/// both original start timestamps preserved.
+TEST(BlockWriter, FromManagerPreservesMultipleEquidistantSegments) {
+    osf::BlockWriter w;
+    auto idx = w.add_channel([] {
+        osf::ChannelDef d;
+        d.name = "eq_multi";
+        d.data_type = osf::DataType::Double;
+        d.channel_type = osf::ChannelType::Equidistant;
+        d.size_of_length_value = 2;
+        return d;
+    }());
+    ASSERT_TRUE(idx.has_value());
+
+    // Segment 1: start=0 ns, rate=100 Hz, 3 samples {1, 2, 3}
+    std::vector<double> seg1{1.0, 2.0, 3.0};
+    ASSERT_TRUE(w.add_equidistant_segment(
+        *idx, /*start_ns=*/0, /*rate_hz=*/100.0,
+        seg1.data(), seg1.size()).has_value());
+
+    // Segment 2: start=1 000 000 000 ns (= 1 s), rate=100 Hz, 2 samples {10, 20}
+    std::vector<double> seg2{10.0, 20.0};
+    ASSERT_TRUE(w.add_equidistant_segment(
+        *idx, /*start_ns=*/1'000'000'000LL, /*rate_hz=*/100.0,
+        seg2.data(), seg2.size()).has_value());
+
+    // Emit first time.
+    std::ostringstream oss1;
+    ASSERT_TRUE(w.write_to(oss1).has_value());
+
+    // Reload → mgr1.
+    std::istringstream in1(oss1.str(), std::ios::binary);
+    auto mgr1 = osf::DataManager::load_from_stream(in1);
+    ASSERT_TRUE(mgr1.has_value());
+
+    // from_manager → re-emit → mgr2.
+    auto bw2 = osf::BlockWriter::from_manager(*mgr1);
+    ASSERT_TRUE(bw2.has_value());
+
+    std::ostringstream oss2;
+    ASSERT_TRUE(bw2->write_to(oss2).has_value());
+
+    std::istringstream in2(oss2.str(), std::ios::binary);
+    auto mgr2 = osf::DataManager::load_from_stream(in2);
+    ASSERT_TRUE(mgr2.has_value());
+
+    auto const* ch = mgr2->channel("eq_multi");
+    ASSERT_NE(ch, nullptr);
+    auto const* eq = std::get_if<osf::EquidistantChannel>(ch);
+    ASSERT_NE(eq, nullptr);
+
+    // 5 total samples across both segments.
+    EXPECT_EQ(osf::channel_sample_count(*ch), 5u);
+
+    // Two segments preserved.
+    ASSERT_EQ(eq->segments.size(), 2u);
+
+    // Segment start timestamps preserved.
+    EXPECT_EQ(eq->segments[0].start_timestamp_ns, 0LL);
+    EXPECT_EQ(eq->segments[1].start_timestamp_ns, 1'000'000'000LL);
+
+    // Sample counts preserved.
+    EXPECT_EQ(eq->segments[0].sample_count, 3u);
+    EXPECT_EQ(eq->segments[1].sample_count, 2u);
+
+    // Spot-check values.
+    auto flat = osf::as_doubles_flat(*eq);
+    ASSERT_TRUE(flat.has_value());
+    ASSERT_EQ(flat->size(), 5u);
+    EXPECT_DOUBLE_EQ((*flat)[0], 1.0);
+    EXPECT_DOUBLE_EQ((*flat)[2], 3.0);
+    EXPECT_DOUBLE_EQ((*flat)[3], 10.0);
+    EXPECT_DOUBLE_EQ((*flat)[4], 20.0);
+}
+
 }  // namespace
