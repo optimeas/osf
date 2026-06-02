@@ -514,7 +514,7 @@ reference file:
 Each phase produces a green build with passing tests against the
 reference files before the next phase begins.
 
-### Status (updated 2026-05-31)
+### Status (updated 2026-06-02)
 
 Phases 1–6 complete (skeleton, magic-header parser, OSF5 JSON
 metablock parser, OSF4 XML metablock parser, block-stream reader,
@@ -548,14 +548,45 @@ files plus a reader-truncation regression via
 **245/245 green** in ~10 s, 0 warnings under MSVC
 `/W4 /permissive-`. Plan + design spec under
 `docs/superpowers/{plans,specs}/2026-05-26-cpp-phase-7b-streaming-writer-*.md`.
-18 minor polish items parked across four BACKLOG entries
-(`### C++ StreamingWriter ... polish (post-Phase-7b)`) for
-Phase 7c batch landing.
 
-Phase 7c (`BlockWriter`, analyst-style) arrives next — same
-encoder substrate as Phase 7b, dual sink (Path or memory) per
-the cross-sub-phase consistency notes in the Phase-7b spec §3.3.
-Phase 7d (`StaleValueGuard`) is optional and follows.
+**Phase 7c complete (2026-06-02):** `osf::BlockWriter` — analyst-style
+OSF5 writer at `include/osf/block_writer.hpp` / `src/block_writer.cpp`.
+Accumulates a per-channel `ChannelData` variant in memory (the C++
+mirror of Rust's `WriterBuilder::ChannelData`) and emits the whole file
+at `write_to_file(path)` / `write_to(std::ostream&)` — both `const` and
+non-consuming. Same template write surface as `StreamingWriter`, plus
+`from_manager(DataManager const&)` and free `osf::write_to_file` /
+`osf::write_to(DataManager const&, …)` for the round-trip / copy path
+(always OSF5 even from an OSF4 source, DECISIONS §6). The key
+behavioural asymmetry vs. `StreamingWriter` (Spec §3.3): BlockWriter
+**auto-bumps** a variable channel's `sizeoflengthvalue` 2 → 4 before
+writing the metablock, since the metablock is only emitted at the end.
+The two-writer OSF5 write surface of §7 is now fully realised. Both
+writers share `src/writer_common.{hpp,cpp}` (chunking helpers, sizing
+constants, and `build_metablock`, which normalises `channeltype` to
+`scalar` for non-equidistant channels per the Delphi reference). ctest
+moves from 245/245 to **271/271 green** (~11.6 s, 0 warnings under MSVC
+`/W4 /permissive-`, from-scratch clean rebuild verified). The 18 parked
+Phase-7b polish nits were folded in (the four `### C++ StreamingWriter
+… polish (post-Phase-7b)` BACKLOG entries are closed; see the
+consolidated BACKLOG entry for the few cosmetic residuals). Plan +
+design spec under
+`docs/superpowers/{plans,specs}/2026-05-31-cpp-phase-7c-block-writer*.md`.
+
+**Convention ratified in Phase 7c:** a public header that forward-
+declares a private implementation type and holds it in a member
+container (`std::vector<ChannelData> channel_data_;` with `struct
+ChannelData;` only declared in the header, defined in the `.cpp`) MUST
+declare all special members in the header and define them out-of-line
+in the `.cpp` (after the type is complete) — never `= default` them in
+the header, since MSVC's `std::vector`/`std::optional` eagerly
+instantiate the destructor against the incomplete type. This is the
+same constraint that drove `std::unique_ptr<DurableFile>` over
+`std::optional<DurableFile>` in `StreamingWriter` (Phase 7b).
+
+Phase 7d (`StaleValueGuard`, a 100-second-repeat layer over
+`StreamingWriter` for timestamped channels) is optional and follows;
+then Phase 8 (transparent OSFZ decompression).
 
 ## 21. Java Implementation Architecture
 
