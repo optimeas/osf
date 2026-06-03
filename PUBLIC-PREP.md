@@ -155,3 +155,55 @@ Manual on GitHub. Pre-checks:
 When pausing mid-phase: leave a `wip(...)` commit on this branch or
 note the in-progress checklist item in this file. The next session
 picks up by reading this file from the worktree's `PUBLIC-PREP.md`.
+
+### 2026-06-03 — Phase 1 complete (pause)
+
+**Status: Phase 1 (Repo cleanup) is done.** Working tree clean,
+everything pushed to `origin/prep-public-release`. Six commits this
+session (`408ce5c`..`cdd6978`):
+
+1. `408ce5c` — dropped MicroPython placeholder + swept all refs
+2. `e096aa1` — root README implementation table refresh (status legend,
+   quickstart pointer)
+3. `38de872` — untracked `docs/superpowers/` (`.gitignore` +
+   `git rm --cached`; files stay on disk; also gitignored `.vscode/`)
+4. `202eb6d` — MIT SPDX headers on the 12 files that lacked them
+   (6 `.dpr` + 6 `.py`)
+5. `41ac7da` — removed `examples/Testdata Train OSFZ/` (348 files) from
+   the working tree
+6. `cdd6978` — refreshed stale C++ + examples READMEs (+ root README
+   C++ row)
+
+All Phase-1 checkboxes above are ticked. Audit came back clean (no
+customer names / IPs / hostnames in history or source).
+
+**Two hard blockers before the public flip (Phase 4) — NOT yet done:**
+
+- **⚠ Train-data history purge.** `Testdata Train OSFZ` is foreign data
+  NOT cleared for publication. It is gone from the working tree but
+  still in git history → would be retrievable in the public repo. Must
+  run `git filter-repo --path "examples/Testdata Train OSFZ"
+  --invert-paths` + force-push **after** the parallel C++/Java tracks
+  settle and merge (the rewrite changes every later SHA). This is the
+  gating item — *do not flip to public before it is done.*
+- **Sequencing.** Because of the above, "publish right after the audit"
+  is not possible; the purge (and the C++/Java track merges) come first.
+
+**Parallel-track note (discovered this session):** the C++ track has
+advanced past the CLAUDE.md snapshot — `phase-10-ci` branch has Phases
+8 (OSFZ read) + 9 (throwing layer) merged and Phase 10 (CI) in
+progress. The refreshed C++ README describes that public end-state.
+Their `cpp/README.md` on `phase-10-ci` is still the stale "phase 1
+skeleton" — when their work merges, prefer this branch's version (no
+conflict expected; they didn't touch it).
+
+**Next session — pick up with EITHER:**
+- **Phase 2** (Docusaurus integration prep — layout/frontmatter audit,
+  i18n decision), or
+- **Phase 3** (per-implementation + examples documentation — user's
+  stated next priority: document the existing implementations with
+  links to the runnable examples, then cross-link docs ↔ repo), or
+- wait for the C++/Java tracks to settle, then do the Train history
+  purge + flip prep.
+
+Decision pending from the user on which of these to start with.
