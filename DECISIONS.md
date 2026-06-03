@@ -514,7 +514,7 @@ reference file:
 Each phase produces a green build with passing tests against the
 reference files before the next phase begins.
 
-### Status (updated 2026-06-02)
+### Status (updated 2026-06-03)
 
 Phases 1–6 complete (skeleton, magic-header parser, OSF5 JSON
 metablock parser, OSF4 XML metablock parser, block-stream reader,
@@ -584,9 +584,24 @@ instantiate the destructor against the incomplete type. This is the
 same constraint that drove `std::unique_ptr<DurableFile>` over
 `std::optional<DurableFile>` in `StreamingWriter` (Phase 7b).
 
-Phase 7d (`StaleValueGuard`, a 100-second-repeat layer over
-`StreamingWriter` for timestamped channels) is optional and follows;
-then Phase 8 (transparent OSFZ decompression).
+**Phase 7d complete (2026-06-03):** `osf::StaleValueGuard` — the optional
+freshness layer over `StreamingWriter` for timestamped channels at
+`include/osf/stale_value_guard.hpp` / `src/stale_value_guard.cpp`.
+Re-emits the last value of idle channels so their on-disk trace stays
+fresh (the optiMEAS 100-second-repeat convention), disambiguating
+*channel still at this value* from *recording stopped*. No Rust/Delphi
+reference exists — from-scratch C++ design: a write-through wrapper around
+a caller-owned `StreamingWriter` that forwards each timestamped write and
+caches the channel's last `(timestamp, value)`; a pull-based `poll(now_ns)`
+re-emits the cached value of any channel idle `>= repeat_interval_ns`
+(default 100 s) stamped at `now_ns`, at most once per poll (no backfill, no
+internal clock, no background thread — deterministic and embedded-friendly).
+Numeric (11 types) + `GpsLocation` only; string/binary excluded by design.
+Channels auto-track on first write-through; channel-type validation is
+delegated to the writer. 12 new GoogleTest cases take ctest from 271 to
+**283/283 green** (0 warnings under MSVC `/W4 /permissive-`). Phase 7 is
+complete; **Phase 8 (transparent OSFZ decompression on read)** is next —
+it removes the current `DataManager` OSFZ-rejection stub.
 
 ## 21. Java Implementation Architecture
 

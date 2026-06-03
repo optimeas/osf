@@ -8,6 +8,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 7d — `StaleValueGuard`** (optional freshness layer) at
+  `include/osf/stale_value_guard.hpp` / `src/stale_value_guard.cpp`.
+  Re-emits the last value of idle timestamped channels so their on-disk
+  trace stays "fresh" (the optiMEAS 100-second-repeat convention), which
+  disambiguates *channel still at this value* from *recording stopped*.
+  No Rust/Delphi reference — from-scratch C++ design:
+  - Write-through wrapper around a caller-owned `StreamingWriter`:
+    forwards each timestamped write and, on success, caches the channel's
+    last `(timestamp, value)`. Decoupled — owns no file handle, never
+    touches writer internals.
+  - Pull-based `poll(now_ns)` re-emits the cached value of any channel
+    idle `>= repeat_interval_ns` (default `100'000'000'000` = 100 s),
+    stamped at `now_ns`, **at most once per poll** (keeps the trace fresh,
+    no backfill). No internal clock, no background thread — deterministic
+    and embedded-friendly.
+  - Numeric (11 types) + `GpsLocation` only; `string` / `binary` excluded
+    by design. Channels auto-track on first successful write-through;
+    channel-type validation is delegated to the writer. Control surface:
+    `is_tracked` / `forget` / `clear` / `repeat_interval_ns`.
+  Header-defined class (in-header numeric template bodies; GPS writes,
+  `poll`, `reemit` via `std::visit`, and control methods in the `.cpp`).
+  12 new GoogleTest cases bring the C++ ctest count from 271 to
+  **283/283 green**, 0 warnings under MSVC `/W4 /permissive-`. The
+  two-writer OSF5 write surface of DECISIONS §7 plus this guard complete
+  Phase 7; Phase 8 (transparent OSFZ decompression on read) is next.
 - **Phase 7c — `BlockWriter`** (analyst-style OSF5 writer) at
   `include/osf/block_writer.hpp` / `src/block_writer.cpp`. Accumulates
   every channel kind in memory and emits the complete file at

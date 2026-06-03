@@ -274,6 +274,23 @@ osf_set_warnings(test_block_writer)
 gtest_discover_tests(test_block_writer)
 
 # ---------------------------------------------------------------------------
+# test_stale_value_guard — StaleValueGuard unit tests (Phase 7d).
+# ---------------------------------------------------------------------------
+
+add_executable(test_stale_value_guard
+    unit/test_stale_value_guard.cpp
+)
+
+target_link_libraries(test_stale_value_guard PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+osf_set_warnings(test_stale_value_guard)
+
+gtest_discover_tests(test_stale_value_guard)
+
+# ---------------------------------------------------------------------------
 # test_writer_common — shared writer infrastructure unit tests (Phase 7c).
 # ---------------------------------------------------------------------------
 
