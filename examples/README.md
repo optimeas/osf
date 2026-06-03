@@ -1,41 +1,54 @@
 # OSF — Example Files
 
-This directory contains sample `.osf` files used to verify reader correctness across all language implementations. Files are organized into two subdirectories with different sources and purposes.
+This directory contains real and synthetic OSF files used to learn the
+format and to verify reader correctness across all language
+implementations. There are two kinds of files: **generated reference
+files** (synthetic, one feature per file) and **field samples** (real
+recordings from optiMEAS measurement devices).
 
-## Directory Structure
+## `generated/` — synthetic reference files
 
-| Directory | Source | Purpose |
+Produced by the Delphi reference implementation (regenerate with the
+headless `OSFGeneratorCLI`, see the repo `CLAUDE.md`). Each file targets
+one feature so a correct reader can be validated piece by piece — for
+every feature there is an OSF4 (XML-header) and an OSF5 (JSON-header)
+variant.
+
+| File (OSF4 / OSF5) | Demonstrates |
+|---|---|
+| `osf4_equidistant.osf` / `osf5_equidistant.osf` | Equidistant (fixed-rate) channel |
+| `osf4_scalar_numeric.osf` / `osf5_scalar_numeric.osf` | Time-stamped floating-point scalar channels |
+| `osf4_scalar_int64.osf` / `osf5_scalar_int64.osf` | Signed 64-bit integer scalar channel |
+| `osf4_scalar_unsigned.osf` / `osf5_scalar_unsigned.osf` | Unsigned integer scalar channels |
+| `osf4_gpslocation.osf` / `osf5_gpslocation.osf` | GPS-location channel |
+| `osf4_timestamped_string.osf` / `osf5_timestamped_string.osf` | Time-stamped `string` payloads |
+| `osf4_timestamped_binary.osf` / `osf5_timestamped_binary.osf` | Time-stamped `binary` blob payloads |
+| `osf4_mixed.osf` / `osf5_mixed.osf` | Several channel types in one file |
+| — / `osf5_mixed_extended.osf` | Extended mixed-channel OSF5 file |
+
+17 files in total (8 OSF4 + 9 OSF5). A correct reader must parse all of
+them without error. These files are the cross-implementation read
+fixtures; the OSF4/OSF5 pairing also exercises the version-deterministic
+rules (e.g. the `string`/`binary` null-terminator handling).
+
+## Field samples — real recordings
+
+Real data from optiMEAS devices. They cover what synthetic files cannot:
+large channel counts, real timestamp patterns, and abrupt stream
+endings. Readers are expected to read them without crashing and return
+whatever data is present.
+
+| Path | Format | Description |
 |---|---|---|
-| `generated/` | Delphi reference implementation | Correctness testing against the OSF specification |
-| `field/` | Real optiMEAS field devices | Robustness testing against real-world data |
+| `motorbike.osf` | OSF4 | 81 channels of motorbike telemetry — speeds, temperatures, GPS, system status |
+| `steam_loco.osf` (+ `.csv`) | OSF4 | 123 channels from a steam-locomotive recording (`.csv` is a reference export of the same data) |
+| `weather_station.osfz` | OSF4, gzip | 28 channels, gzip-compressed OSFZ — exercises transparent decompression on read |
+| `Testdata Motorbike/` | OSFZ | Multi-day motorbike recordings in daily subdirectories (`YYYYMMDD/YYYYMMDD_HHMMSS.osfz`) — robustness/bulk read testing |
 
-### `generated/`
+## Quick start
 
-Reference files produced by the Delphi implementation. Each file targets a specific feature or edge case defined in the OSF specification. A correct reader must parse all files in this directory without error.
-
-Planned files:
-
-| File | Format | Description |
-|---|---|---|
-| `equidistant_scalar.osf5` | OSF5 | Single equidistant channel, 1 kHz, float32 scalar — the minimal case |
-| `timestamped_scalar.osf5` | OSF5 | Single time-stamped channel with irregular sample intervals |
-| `multi_channel.osf5` | OSF5 | Mixed equidistant channels at different sample rates (1 Hz, 100 Hz, 10 kHz) |
-| `vector_channel.osf5` | OSF5 | Equidistant vector channel (3-axis accelerometer, shape [3]) |
-| `matrix_channel.osf5` | OSF5 | Matrix channel (e.g., a camera frame or FFT spectrogram slice) |
-| `binary_blob.osf5` | OSF5 | Binary blob channel with image and audio MIME types |
-| `all_data_types.osf5` | OSF5 | One channel per OSF5 data type — completeness test |
-| `truncated.osf5` | OSF5 | Intentionally truncated file — readers must return partial data without crashing |
-| `legacy_osf4.osf` | OSF4 | OSF4 file with XML header for backward-compatibility testing |
-| `legacy_osf4_trailer.osf` | OSF4 | OSF4 file with a complete trailer block |
-
-Each generated file is accompanied by a `.json` sidecar describing the expected decoded content (channel list, sample count, first/last values), so test harnesses can validate reader output without hard-coding expected values in source code.
-
-### `field/`
-
-Real recordings from optiMEAS measurement devices. These files cover edge cases that synthetic data cannot — abrupt stream endings, large channel counts, mixed data types, and real-world timestamp patterns.
-
-Field files will be added as they become available. They are not accompanied by sidecar files; implementations are expected to read them without crashing and return whatever data is present.
-
-## Status
-
-Example files have not been added yet. Generated files will be produced once the Delphi reference implementation reaches a stable state. Field files will follow from optiMEAS device recordings.
+The fastest way to open any of these is the Python package — see the
+[root README Quick Start](../README.md#quick-start-python) and the
+runnable scripts in
+[`implementations/python/examples/`](../implementations/python/examples/),
+several of which load `motorbike.osf`.

@@ -42,9 +42,13 @@ to keep all three isolated.
   - [x] Badges still valid post-public-flip (License + osfdata are
         static shields.io badges; CI badge renders once public —
         `github.com/optimeas/osf` is the canonical URL)
-  - Note: the **per-implementation** C++ README badge still says
-    "phase 1: skeleton" — stale, but per-impl READMEs are Phase 3.
-    Should be fixed before the public flip regardless (flagged).
+  - [x] Fixed two stale READMEs ahead of the flip (would otherwise be
+        a poor public first impression): `implementations/cpp/README.md`
+        (badge "phase 1: skeleton" → status/tests + accurate
+        done/pending list) and `examples/README.md` (claimed "files not
+        added yet" + a nonexistent `field/` dir → real generated/ +
+        field-sample inventory; verified each sample's actual format via
+        magic header — all the bundled `.osf`/`.osfz` are OSF4).
 
 - [x] **Pre-public audit.**
   - [x] `git log --all` scan for customer names, internal hostnames,
