@@ -291,6 +291,27 @@ osf_set_warnings(test_stale_value_guard)
 gtest_discover_tests(test_stale_value_guard)
 
 # ---------------------------------------------------------------------------
+# test_throwing — opt-in throwing convenience layer unit tests (Phase 9).
+# Includes integration/roundtrip_helper.hpp for the write round-trips.
+# ---------------------------------------------------------------------------
+
+add_executable(test_throwing
+    unit/test_throwing.cpp
+)
+
+target_link_libraries(test_throwing PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_include_directories(test_throwing PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/integration")
+
+osf_set_warnings(test_throwing)
+
+gtest_discover_tests(test_throwing)
+
+# ---------------------------------------------------------------------------
 # test_writer_common — shared writer infrastructure unit tests (Phase 7c).
 # ---------------------------------------------------------------------------
 
