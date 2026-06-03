@@ -98,6 +98,7 @@ add_library(osf_core
     src/metablock.cpp
     src/metablock_xml.cpp
     src/reader.cpp
+    src/stale_value_guard.cpp
     src/stats.cpp
     src/streaming_writer.cpp
     src/writer_common.cpp
