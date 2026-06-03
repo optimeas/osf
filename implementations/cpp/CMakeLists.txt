@@ -83,12 +83,47 @@ target_include_directories(osf_headers SYSTEM INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pugixml"
 )
 
+# ---------------------------------------------------------------------------
+# zlib — transparent OSFZ (gzip / zlib) decompression on read (Phase 8).
+#
+#   OSF_USE_SYSTEM_ZLIB=ON  -> find_package(ZLIB) (system / vcpkg).
+#   OSF_USE_SYSTEM_ZLIB=OFF -> FetchContent zlib 1.3.1 (pinned tarball +
+#                              SHA256).
+#
+# zlib is a PRIVATE dependency of osf_core (used only in
+# src/compression.cpp; never exposed in a public header — DecompressingIStream
+# hides z_stream behind a PIMPL). OSF_ZLIB_TARGET / OSF_ZLIB_INCLUDE_DIRS are
+# also consumed by the compression test targets in tests/CMakeLists.txt.
+# ---------------------------------------------------------------------------
+
+set(OSF_ZLIB_INCLUDE_DIRS "")
+if(OSF_USE_SYSTEM_ZLIB)
+    find_package(ZLIB REQUIRED)
+    set(OSF_ZLIB_TARGET ZLIB::ZLIB)
+else()
+    include(FetchContent)
+    FetchContent_Declare(
+        zlib
+        URL      https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
+        URL_HASH SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
+        DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+    )
+    set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(zlib)
+    # zlib 1.3.1 uses directory-scoped include_directories(), so the
+    # zlibstatic target carries no interface include dirs — surface them
+    # explicitly for osf_core and the compression tests.
+    set(OSF_ZLIB_TARGET zlibstatic)
+    set(OSF_ZLIB_INCLUDE_DIRS "${zlib_SOURCE_DIR}" "${zlib_BINARY_DIR}")
+endif()
+
 # osf::osf — core library. Static by default, shared if BUILD_SHARED_LIBS=ON.
 # The internal target name is osf_core (consistent with osf_headers); the
 # OUTPUT_NAME property keeps the produced file as libosf.a / osf.lib.
 add_library(osf_core
     src/block.cpp
     src/block_encode.cpp
+    src/compression.cpp
     src/block_writer.cpp
     src/data_channel.cpp
     src/durable_file.cpp
@@ -112,6 +147,10 @@ set_target_properties(osf_core PROPERTIES
 )
 
 target_link_libraries(osf_core PUBLIC osf::headers)
+target_link_libraries(osf_core PRIVATE ${OSF_ZLIB_TARGET})
+if(OSF_ZLIB_INCLUDE_DIRS)
+    target_include_directories(osf_core PRIVATE ${OSF_ZLIB_INCLUDE_DIRS})
+endif()
 
 osf_set_warnings(osf_core)
 

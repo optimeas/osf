@@ -547,28 +547,20 @@ TEST(DataManager, channel_lookup_by_name_and_index) {
 }
 
 // ---------------------------------------------------------------------
-// OSFZ rejection stub.
+// OSFZ: a malformed / truncated compressed stream fails gracefully.
+// The Phase-8 decompressor yields best-effort EOF on a truncated gzip
+// member, then the header parse fails — no hang, no crash, and no
+// leftover Phase-8 rejection-stub message.
 // ---------------------------------------------------------------------
 
-TEST(DataManager, gzip_input_is_rejected_with_phase8_note) {
+TEST(DataManager, truncated_gzip_input_fails_gracefully) {
     std::stringstream ss(
         std::string{"\x1F\x8B\x08\x00\x00\x00\x00\x00", 8},
         std::ios::in | std::ios::binary);
     auto mgr = osf::DataManager::load_from_stream(ss);
     ASSERT_FALSE(mgr.has_value());
-    EXPECT_EQ(mgr.error().code, osf::Error::Code::IoError);
-    EXPECT_NE(mgr.error().message.find("Phase 8"), std::string::npos)
-        << mgr.error().message;
-}
-
-TEST(DataManager, zlib_input_is_rejected_with_phase8_note) {
-    std::stringstream ss(
-        std::string{"\x78\x9C\x00\x00\x00\x00\x00\x00", 8},
-        std::ios::in | std::ios::binary);
-    auto mgr = osf::DataManager::load_from_stream(ss);
-    ASSERT_FALSE(mgr.has_value());
-    EXPECT_EQ(mgr.error().code, osf::Error::Code::IoError);
-    EXPECT_NE(mgr.error().message.find("Phase 8"), std::string::npos)
+    EXPECT_EQ(mgr.error().message.find("Phase 8"), std::string::npos)
+        << "the Phase-8 rejection stub should be gone: "
         << mgr.error().message;
 }
 
