@@ -125,7 +125,7 @@ osf/
 │   ├── motorbike.osf                — real field sample
 │   ├── steam_loco.osf + .csv        — real field sample
 │   ├── weather_station.osfz         — real gzip-OSFZ field sample
-│   ├── Testdata Train OSFZ/         — one week of OSF4-OSFZ field recordings (346 files, daily dirs)
+│   ├── Testdata Motorbike/          — real OSFZ motorbike field recordings (daily dirs)
 │   └── generated/                   — 17 reference files (from OSFGenerator)
 ├── dataformats/
 │   └── hdf5/                        — language-agnostic HDF5 spec, knowledge base, DLL install scripts
@@ -761,7 +761,7 @@ Recommended sequence:
    (`MaybeCompressed<R>` + `detect_and_wrap`). `OSF_USE_SYSTEM_ZLIB`
    (default OFF) is already declared in CMake for this phase;
    pick a vendored vs. system zlib strategy. Unblocks the
-   `weather_station.osfz` and `Testdata Train OSFZ/` field
+   `weather_station.osfz` and `Testdata Motorbike/` field
    samples through the C++ reader.
 2. **Phase 9 — throwing convenience layer**, then Phase 10
    (CI: extend `ci.yml` path filter to `implementations/cpp/**`

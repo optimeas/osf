@@ -46,17 +46,27 @@ to keep all three isolated.
     "phase 1: skeleton" — stale, but per-impl READMEs are Phase 3.
     Should be fixed before the public flip regardless (flagged).
 
-- [ ] **Pre-public audit.**
-  - [ ] `git log --all` scan for customer names, internal hostnames,
-        Optimeas-internal paths in commit messages
-  - [ ] `git grep` across HEAD for the same in source/docs
-  - [ ] `.claude/`, `.vscode/`, `.idea/` — gitignored already? double-check
-  - [ ] Field-data samples under `examples/` — confirm Optimeas owns
-        the data and it can go public (`examples/Testdata Train OSFZ/`
-        is 346 files of real recordings — explicit OK needed)
-  - [ ] No `TODO: remove before publishing` markers left
-  - [ ] License headers on every source file (MIT SPDX per relicense
-        2026-05-20); third-party vendored code keeps upstream license
+- [x] **Pre-public audit.**
+  - [x] `git log --all` scan for customer names, internal hostnames,
+        Optimeas-internal paths in commit messages — clean (only
+        Burkhard + GitHub as authors; "internal" only as a tech term;
+        one config-path doc with a `<u>` placeholder)
+  - [x] `git grep` across HEAD for the same in source/docs — clean
+        (only external emails are Claude's Co-Author trailer + the
+        vendored third-party copyright holders, which stay)
+  - [x] `.claude/`, `.vscode/`, `.idea/` — gitignored (`.claude/` +
+        `.idea/` already; `.vscode/` added this pass; none tracked)
+  - [x] Field-data samples under `examples/` — **Decision:** Testdata
+        Train OSFZ (348 files) is NOT cleared for publication (foreign
+        data). Removed from the working tree this pass; **MUST also be
+        purged from git history before the flip** (see Phase 4). The
+        rest stays: Optimeas owns motorbike.osf / steam_loco.osf /
+        weather_station.osfz / `Testdata Motorbike/` / `generated/`.
+  - [x] No `TODO: remove before publishing` markers left (FIXME/HACK
+        hits were prose / binary false-positives)
+  - [x] License headers on every source file (MIT SPDX per relicense
+        2026-05-20) — added to the 12 files that lacked them (6 .dpr +
+        6 .py); third-party vendored code keeps upstream license
   - [x] `docs/superpowers/plans/`, `docs/superpowers/specs/` — internal
         planning artifacts. **Decision:** `.gitignore` + `git rm
         --cached` (files stay on disk for ongoing C++/Java superpowers
@@ -115,6 +125,16 @@ here must be **drop-in copyable** into that site's `docs/` tree.
 
 Manual on GitHub. Pre-checks:
 
+- [ ] **⚠ MANDATORY — purge unreleased field data from git history.**
+      `examples/Testdata Train OSFZ/` (348 files) was removed from the
+      working tree but is **not authorized for publication** and is
+      still retrievable from history until rewritten. Run a history
+      purge (e.g. `git filter-repo --path "examples/Testdata Train OSFZ"
+      --invert-paths`) and force-push **after** the parallel C++ /
+      Java tracks have settled and merged — the rewrite changes every
+      subsequent SHA and would otherwise break those worktrees.
+      Coordinate the rewrite as one of the last steps before the flip.
+      (Double-check no other unreleased data slipped in before running.)
 - [ ] All previous phases merged to `main`
 - [ ] CI green on `main`
 - [ ] CHANGELOG version-bumped + dated
