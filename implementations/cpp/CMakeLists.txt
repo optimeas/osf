@@ -27,6 +27,7 @@ option(OSF_BUILD_TESTS      "Build unit and integration tests"        ON)
 option(OSF_BUILD_EXAMPLES   "Build example executables"               ON)
 option(OSF_BUILD_C_API      "Build the C ABI shared library wrapper"  OFF)
 option(OSF_USE_SYSTEM_ZLIB  "Prefer system zlib over FetchContent"    OFF)
+option(OSF_WARNINGS_AS_ERRORS "Treat compiler warnings as errors"     OFF)
 
 # ---------------------------------------------------------------------------
 # Compiler warnings
