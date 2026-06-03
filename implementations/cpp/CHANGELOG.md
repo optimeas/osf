@@ -8,6 +8,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 8 — transparent OSFZ decompression on read** at
+  `include/osf/compression.hpp` / `src/compression.cpp`. Removes the
+  `DataManager` OSFZ-rejection stub: gzip- and zlib-wrapped OSF files now
+  load transparently (deployed optiMEAS devices emit gzip-OSFZ —
+  `weather_station.osfz`, the Train OSFZ field recordings; older tooling
+  used raw zlib). Mirrors the Rust `compression` module
+  (`detect_and_wrap` / `MaybeCompressed<R>`):
+  - `osf::DecompressingIStream` — a `std::istream` over a source stream
+    that classifies by the leading two bytes (gzip `0x1F 0x8B`, zlib
+    `0x78 {01,5E,9C,DA}`, else plain) and **inflates on demand** via a
+    custom `std::streambuf` (constant-memory streaming, no whole-file
+    buffering). Auto gzip/zlib header detection via
+    `inflateInit2(MAX_WBITS | 32)`; best-effort EOF on truncation. The
+    `z_stream` is hidden behind a PIMPL so the public header stays
+    zlib-free. Plus the non-consuming `detect_compression(std::istream&)`.
+  - `DataManager::load_from_file` / `load_from_stream` wrap their input in
+    a `DecompressingIStream` before the magic-header parse and populate
+    `ReaderStats::compressed` + `compression_format`. The low-level
+    `parse_magic_header` deliberately stays non-decompressing.
+  - zlib provisioning honours the declared `OSF_USE_SYSTEM_ZLIB` option:
+    default fetches zlib **1.3.1** via FetchContent (pinned tarball +
+    SHA256); `ON` uses `find_package(ZLIB)`. zlib is a PRIVATE dependency
+    of `osf_core`.
+  `tests/unit/test_compression.cpp` (detection + round-trips incl. a
+  256 KiB multi-chunk case) and `tests/integration/test_compression_examples.cpp`
+  (gzip+zlib re-wrap of `steam_loco.osf` matches plain via
+  `roundtrip_managers_equal`; `weather_station.osfz` loads). ctest 283 →
+  **294/294 green**, 0 warnings under MSVC `/W4 /permissive-`. Phase 9
+  (throwing convenience layer) is next.
 - **Phase 7d — `StaleValueGuard`** (optional freshness layer) at
   `include/osf/stale_value_guard.hpp` / `src/stale_value_guard.cpp`.
   Re-emits the last value of idle timestamped channels so their on-disk

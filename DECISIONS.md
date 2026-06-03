@@ -600,8 +600,28 @@ Numeric (11 types) + `GpsLocation` only; string/binary excluded by design.
 Channels auto-track on first write-through; channel-type validation is
 delegated to the writer. 12 new GoogleTest cases take ctest from 271 to
 **283/283 green** (0 warnings under MSVC `/W4 /permissive-`). Phase 7 is
-complete; **Phase 8 (transparent OSFZ decompression on read)** is next —
-it removes the current `DataManager` OSFZ-rejection stub.
+complete.
+
+**Phase 8 complete (2026-06-03):** transparent OSFZ (gzip / zlib)
+decompression on read at `include/osf/compression.hpp` /
+`src/compression.cpp` — removes the `DataManager` OSFZ-rejection stub.
+Mirrors the Rust `compression` module (`detect_and_wrap` /
+`MaybeCompressed<R>`): `osf::DecompressingIStream` is a `std::istream`
+over a source stream that classifies by the leading two bytes (gzip
+`0x1F 0x8B`, zlib `0x78 {01,5E,9C,DA}`, else plain) and inflates on
+demand through a custom `std::streambuf` (constant-memory streaming, no
+whole-file buffering; auto gzip/zlib header detection via
+`inflateInit2(MAX_WBITS | 32)`; best-effort EOF on truncation; the
+`z_stream` is hidden behind a PIMPL so the public header is zlib-free).
+`DataManager::load_from_file` / `load_from_stream` wrap their input
+before the magic-header parse and populate `ReaderStats::compressed` /
+`compression_format`; the low-level `parse_magic_header` stays
+non-decompressing by design. zlib provisioning honours the
+`OSF_USE_SYSTEM_ZLIB` option — default FetchContent zlib 1.3.1 (pinned
+tarball + SHA256), `ON` uses `find_package(ZLIB)`; zlib is a PRIVATE
+dependency of `osf_core`. ctest 283 → **294/294 green** (0 warnings
+under MSVC `/W4 /permissive-`). **Phase 9 (throwing convenience layer)**
+is next, then Phase 10 (CI) and Phase 11 (C ABI wrapper).
 
 ## 21. Java Implementation Architecture
 
