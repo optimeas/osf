@@ -34,20 +34,22 @@ See [`docs/en/`](docs/en/) for the full specification. German version available 
 
 ## Implementations
 
-The Rust foundation and the Python bindings are usable today. Other language implementations follow the same architecture and are in various states of planning.
+The Delphi reference implementation, the Rust foundation, and the Python bindings are usable today; the C++ implementation is in active development. The remaining languages follow the same architecture and are planned. Status legend: ✅ usable · 🚧 in active development · 📋 planned.
 
 | Language | Platform | Status |
 |----------|----------|--------|
-| [Delphi](implementations/delphi/) | Windows desktop, industrial | ✅ Reference implementation; generates the test files in [`examples/generated/`](examples/generated/). |
-| [Rust](implementations/rust/) | Systems, embedded, foundation for bindings | ✅ Read + write + OSFZ decompression; full OSF4/OSF5 support. |
+| [Delphi](implementations/delphi/) | Windows desktop, industrial | ✅ Reference implementation; full OSF4/OSF5 reader + writer. Generates the test files in [`examples/generated/`](examples/generated/). |
+| [Rust](implementations/rust/) (`osf-core`) | Systems, embedded, foundation for bindings | ✅ Read + write + OSFZ decompression; full OSF4/OSF5 support. |
 | [Python](implementations/python/) (`osfdata`) | Analytics, NumPy integration | ✅ Pre-release v0.1.0 on [TestPyPI](https://test.pypi.org/project/osfdata/). Built on the Rust foundation via PyO3. |
+| [C++](implementations/cpp/) | Industrial measurement, embedded + desktop | 🚧 In active development. Full OSF4/OSF5 reader, typed `DataManager`, and both OSF5 writers (streaming + block). OSFZ-on-read and the C ABI wrapper are pending. |
 | [C](implementations/c/) | Embedded + desktop | 📋 Planned. |
-| [C++](implementations/cpp/) | Industrial measurement, Qt | 📋 Planned. |
 | [C#](implementations/csharp/) | Windows desktop, automation | 📋 Planned. |
-| [Java](implementations/java/) | Enterprise + Android | 📋 Planned. |
+| [Java](implementations/java/) | Enterprise + Android | 📋 Planned; architecture decided ([DECISIONS.md §21](DECISIONS.md)). |
 | [Swift](implementations/swift/) | iOS / macOS / iPadOS / watchOS | 📋 Planned. |
 | [MATLAB](implementations/matlab/) | Engineering analysis (reader) | 📋 Planned. |
 | [JavaScript](implementations/javascript/) | Browser + Node.js | 📋 Planned. |
+
+**Which one should I try first?** For reading and analyzing OSF data today, the Python package is the fastest path — see [Quick Start](#quick-start-python) below. For native integration, use [Rust](implementations/rust/) (the foundation for the bindings) or the [Delphi](implementations/delphi/) reference implementation.
 
 See [`DECISIONS.md`](DECISIONS.md) for the architectural rationale and implementation priority order.
 

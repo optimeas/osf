@@ -31,13 +31,20 @@ to keep all three isolated.
   - [x] Spec / docs sweeps (`docs/{en,de}/...`) — no matches
   - [x] Commit: `chore: drop MicroPython implementation placeholder`
 
-- [ ] **README.md refresh.**
-  - [ ] Implementation status table reflects reality (C++ in active
-        development past Phase 7c, Java just started, not "Planned")
-  - [ ] "Why OSF?" intact, but tone-check for public-facing audience
-  - [ ] Add quickstart pointers (which implementation to try first)
-  - [ ] Badges still valid post-public-flip (CI badge URL stays the
-        same — `github.com/optimeas/osf` is already the canonical URL)
+- [x] **README.md refresh.**
+  - [x] Implementation status table reflects reality (C++ now 🚧 in
+        active development; Java 📋 planned/architecture-decided; added
+        a ✅/🚧/📋 legend)
+  - [x] "Why OSF?" intact, but tone-check for public-facing audience
+        (reads fine for public; left as-is)
+  - [x] Add quickstart pointers (which implementation to try first —
+        new "Which one should I try first?" note + anchor to Quick Start)
+  - [x] Badges still valid post-public-flip (License + osfdata are
+        static shields.io badges; CI badge renders once public —
+        `github.com/optimeas/osf` is the canonical URL)
+  - Note: the **per-implementation** C++ README badge still says
+    "phase 1: skeleton" — stale, but per-impl READMEs are Phase 3.
+    Should be fixed before the public flip regardless (flagged).
 
 - [ ] **Pre-public audit.**
   - [ ] `git log --all` scan for customer names, internal hostnames,
