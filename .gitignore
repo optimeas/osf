@@ -52,3 +52,16 @@ implementations/python/examples.zip
 # Generated documentation PDFs (docs/scripts/docs-to-pdf.py).
 # The Markdown sources under docs/ are the single source of truth.
 docs/pdf-out/
+
+# VS Code workspace metadata.
+.vscode/
+
+# Internal superpowers planning/spec artefacts (per-phase agent plans).
+# These are session-local development scaffolding, not public docs:
+# they carry local machine paths and "for agentic workers" framing and
+# would otherwise render as pages in the public Docusaurus site. Kept
+# on disk for ongoing C++/Java work but untracked so they never reach
+# the public repo; already-committed copies remain in git history.
+# NOTE: when syncing docs/ to the external Docusaurus site, exclude
+# superpowers/ in the copy step (gitignored files are still on disk).
+docs/superpowers/

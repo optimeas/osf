@@ -544,8 +544,8 @@ exercises the writer against three `examples/generated/` OSF5
 files plus a reader-truncation regression via
 `std::filesystem::resize_file`. ctest moves from 192/192 to
 **245/245 green** in ~10 s, 0 warnings under MSVC
-`/W4 /permissive-`. Plan + design spec under
-`docs/superpowers/{plans,specs}/2026-05-26-cpp-phase-7b-streaming-writer-*.md`.
+`/W4 /permissive-`. (Internal per-phase plan + design-spec artefacts
+are kept in git history, not in the tree.)
 
 **Phase 7c complete (2026-06-02):** `osf::BlockWriter` — analyst-style
 OSF5 writer at `include/osf/block_writer.hpp` / `src/block_writer.cpp`.
@@ -567,9 +567,9 @@ moves from 245/245 to **271/271 green** (~11.6 s, 0 warnings under MSVC
 `/W4 /permissive-`, from-scratch clean rebuild verified). The 18 parked
 Phase-7b polish nits were folded in (the four `### C++ StreamingWriter
 … polish (post-Phase-7b)` BACKLOG entries are closed; see the
-consolidated BACKLOG entry for the few cosmetic residuals). Plan +
-design spec under
-`docs/superpowers/{plans,specs}/2026-05-31-cpp-phase-7c-block-writer*.md`.
+consolidated BACKLOG entry for the few cosmetic residuals). (Internal
+per-phase plan + design-spec artefacts are kept in git history, not in
+the tree.)
 
 **Convention ratified in Phase 7c:** a public header that forward-
 declares a private implementation type and holds it in a member

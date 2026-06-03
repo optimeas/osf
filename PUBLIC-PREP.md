@@ -57,9 +57,14 @@ to keep all three isolated.
   - [ ] No `TODO: remove before publishing` markers left
   - [ ] License headers on every source file (MIT SPDX per relicense
         2026-05-20); third-party vendored code keeps upstream license
-  - [ ] `docs/superpowers/plans/`, `docs/superpowers/specs/` — these
-        are internal planning artifacts. Decide: keep, move out of
-        `docs/`, or remove from history.
+  - [x] `docs/superpowers/plans/`, `docs/superpowers/specs/` — internal
+        planning artifacts. **Decision:** `.gitignore` + `git rm
+        --cached` (files stay on disk for ongoing C++/Java superpowers
+        work, untracked so they never reach the public repo; copies
+        remain in git history). Not a full history purge — content is
+        low-sensitivity (local paths, no secrets/customer data).
+        Dangling refs in CHANGELOG.md + DECISIONS.md reworded. Docusaurus
+        copy step must exclude `superpowers/` (noted in `.gitignore`).
 
 ## Phase 2 — Docusaurus integration prep
 
