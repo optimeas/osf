@@ -297,18 +297,20 @@ Result<void> BlockWriter::add_equidistant_segment_impl(
             "channel " + std::to_string(channel) + ": mixed block types"));
     }
 
-    // Datatype must match what was declared at add_channel time AND be Float/Double.
+    // Datatype must match what was declared at add_channel time AND be
+    // Float/Double. The Float/Double restriction is a compile-time
+    // invariant: this template is only instantiated for float/double (the
+    // public add_equidistant_segment overloads), so the runtime branch
+    // would be dead code — a static_assert documents it without tripping
+    // MSVC C4127 (constant conditional) under /WX.
     constexpr DataType expected = data_type_for<T>();
+    static_assert(expected == DataType::Float || expected == DataType::Double,
+                  "add_equidistant_segment_impl is only valid for "
+                  "Float and Double");
     if (cd.datatype_lock != expected) {
         return tl::make_unexpected(make_error(
             Error::Code::DataTypeMismatch,
             "channel " + std::to_string(channel) + ": datatype mismatch"));
-    }
-    if (expected != DataType::Float && expected != DataType::Double) {
-        return tl::make_unexpected(make_error(
-            Error::Code::InvalidArgument,
-            "add_equidistant_segment: equidistant channels support "
-            "Float and Double only"));
     }
 
     cd.kind = ChannelData::Kind::Equidistant;

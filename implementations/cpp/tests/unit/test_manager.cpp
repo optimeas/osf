@@ -63,11 +63,6 @@ void put_f32(std::vector<std::uint8_t>& dst, float v) {
         dst.push_back(static_cast<std::uint8_t>((bits >> (8 * i)) & 0xFF));
 }
 
-void put_bytes(std::vector<std::uint8_t>& dst,
-               std::initializer_list<std::uint8_t> bs) {
-    dst.insert(dst.end(), bs);
-}
-
 // Wrap header + metablock JSON + block bytes into a single stream.
 std::stringstream make_osf5_stream(std::string const& metablock_json,
                                    std::vector<std::uint8_t> const& blocks) {
