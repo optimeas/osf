@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <osf/block.hpp>
+#include <osf/compression.hpp>
 #include <osf/header.hpp>
 #include <osf/reader.hpp>
 #include <osf/types.hpp>
@@ -580,32 +581,10 @@ struct HeaderAndMetablock {
 };
 
 Result<HeaderAndMetablock> parse_header_and_metablock(std::istream& in) {
-    // Peek at the first two bytes to detect OSFZ. OSFZ support
-    // arrives in Phase 8; until then we surface a clear error
-    // rather than running the magic-header parser on compressed
-    // bytes.
-    int const b0 = in.peek();
-    if (b0 != EOF) {
-        in.get();
-        int const b1 = in.peek();
-        in.unget();
-        std::uint8_t const u0 = static_cast<std::uint8_t>(b0);
-        std::uint8_t const u1 = (b1 == EOF) ? 0 : static_cast<std::uint8_t>(b1);
-        bool const is_gzip = (u0 == 0x1F && u1 == 0x8B);
-        bool const is_zlib = (u0 == 0x78 &&
-                              (u1 == 0x01 || u1 == 0x5E ||
-                               u1 == 0x9C || u1 == 0xDA));
-        if (is_gzip || is_zlib) {
-            return tl::make_unexpected(Error{
-                Error::Code::IoError,
-                std::string{"OSFZ-compressed input detected ("} +
-                    (is_gzip ? "gzip" : "zlib") +
-                    "); transparent decompression arrives in Phase 8. "
-                    "Decompress the file with `gunzip` or pipe through "
-                    "zlib before opening."});
-        }
-    }
-
+    // OSFZ (gzip / zlib) decompression is applied transparently before
+    // this point (build_from_stream_impl wraps the source in a
+    // DecompressingIStream), so `in` is always a plain OSF byte stream
+    // here.
     auto hdr = parse_magic_header(in);
     if (!hdr) return tl::make_unexpected(std::move(hdr).error());
 
@@ -652,10 +631,18 @@ Result<HeaderAndMetablock> parse_header_and_metablock(std::istream& in) {
 Result<DataManager> build_from_stream_impl(std::istream& stream,
                                            std::uint64_t file_size,
                                            bool have_file_size) {
-    auto hm = parse_header_and_metablock(stream);
+    // Transparent OSFZ (gzip / zlib) decompression: detection is by the
+    // leading two bytes; a plain OSF stream passes through verbatim. The
+    // rest of the read stack consumes the decompressed bytes unchanged.
+    DecompressingIStream input(stream);
+
+    auto hm = parse_header_and_metablock(input);
     if (!hm) return tl::make_unexpected(std::move(hm).error());
 
-    BlockReader reader(stream, hm->meta);
+    BlockReader reader(input, hm->meta);
+    // file_size is telemetry only (BlockReader does not use it); the
+    // value is the source file size, which for OSFZ is the compressed
+    // size — still the meaningful "file size" to report.
     if (have_file_size) reader.with_file_size(file_size);
 
     // Seed builders.
@@ -705,6 +692,8 @@ Result<DataManager> build_from_stream_impl(std::istream& stream,
     mgr.stats = reader.stats();
     mgr.stats.header_size_bytes    = hm->header_line_bytes;
     mgr.stats.metablock_size_bytes = hm->metablock_bytes;
+    mgr.stats.compressed           = input.is_compressed();
+    mgr.stats.compression_format   = input.format();
 
     mgr.channels_.reserve(builders.size());
     for (auto& b : builders) {

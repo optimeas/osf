@@ -471,3 +471,56 @@ target_include_directories(test_block_writer_examples PRIVATE
 osf_set_warnings(test_block_writer_examples)
 
 gtest_discover_tests(test_block_writer_examples)
+
+# ---------------------------------------------------------------------------
+# test_compression — DecompressingIStream + detect_compression unit tests
+# (Phase 8). Links zlib directly to build compressed fixtures.
+# ---------------------------------------------------------------------------
+
+add_executable(test_compression
+    unit/test_compression.cpp
+)
+
+target_link_libraries(test_compression PRIVATE
+    osf::osf
+    GTest::gtest_main
+    ${OSF_ZLIB_TARGET}
+)
+
+if(OSF_ZLIB_INCLUDE_DIRS)
+    target_include_directories(test_compression PRIVATE ${OSF_ZLIB_INCLUDE_DIRS})
+endif()
+
+osf_set_warnings(test_compression)
+
+gtest_discover_tests(test_compression)
+
+# ---------------------------------------------------------------------------
+# test_compression_examples — transparent OSFZ decompression against real
+# files (Phase 8). Links zlib directly to re-compress reference files.
+# ---------------------------------------------------------------------------
+
+add_executable(test_compression_examples
+    integration/test_compression_examples.cpp
+)
+
+target_link_libraries(test_compression_examples PRIVATE
+    osf::osf
+    GTest::gtest_main
+    ${OSF_ZLIB_TARGET}
+)
+
+target_compile_definitions(test_compression_examples PRIVATE
+    OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+
+# roundtrip_helper.hpp lives in the integration/ source dir.
+target_include_directories(test_compression_examples PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/integration")
+
+if(OSF_ZLIB_INCLUDE_DIRS)
+    target_include_directories(test_compression_examples PRIVATE ${OSF_ZLIB_INCLUDE_DIRS})
+endif()
+
+osf_set_warnings(test_compression_examples)
+
+gtest_discover_tests(test_compression_examples)

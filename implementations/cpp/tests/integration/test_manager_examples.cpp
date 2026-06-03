@@ -162,15 +162,15 @@ TEST_F(ManagerExamplesTest, steam_loco_osf_loads_clean) {
 }
 
 // ---------------------------------------------------------------------
-// OSFZ stub: weather_station.osfz must produce a clear Phase-8 error.
+// OSFZ: weather_station.osfz loads transparently (Phase 8).
 // ---------------------------------------------------------------------
 
-TEST_F(ManagerExamplesTest, weather_station_osfz_is_rejected_with_phase8_note) {
+TEST_F(ManagerExamplesTest, weather_station_osfz_loads_transparently) {
     auto path = examples_dir() / "weather_station.osfz";
     if (!std::filesystem::exists(path)) GTEST_SKIP() << "weather_station.osfz missing";
     auto mgr = osf::DataManager::load_from_file(path);
-    ASSERT_FALSE(mgr.has_value());
-    EXPECT_EQ(mgr.error().code, osf::Error::Code::IoError);
-    EXPECT_NE(mgr.error().message.find("Phase 8"), std::string::npos)
-        << mgr.error().message;
+    ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
+    EXPECT_TRUE(mgr->stats.compressed);
+    EXPECT_EQ(mgr->stats.compression_format, osf::CompressionFormat::Gzip);
+    EXPECT_FALSE(mgr->channels().empty());
 }
