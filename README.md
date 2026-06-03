@@ -44,7 +44,6 @@ The Rust foundation and the Python bindings are usable today. Other language imp
 | [C](implementations/c/) | Embedded + desktop | 📋 Planned. |
 | [C++](implementations/cpp/) | Industrial measurement, Qt | 📋 Planned. |
 | [C#](implementations/csharp/) | Windows desktop, automation | 📋 Planned. |
-| [MicroPython](implementations/micropython/) | ESP32, RP2040 | 📋 Planned. |
 | [Java](implementations/java/) | Enterprise + Android | 📋 Planned. |
 | [Swift](implementations/swift/) | iOS / macOS / iPadOS / watchOS | 📋 Planned. |
 | [MATLAB](implementations/matlab/) | Engineering analysis (reader) | 📋 Planned. |

@@ -688,7 +688,7 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
   accounts).
 - Pandas convenience layer (Session 7b): build a DataFrame from a
   `DataManager`, one column per channel, optional time alignment.
-- Other language implementations (C, C++, C#, MicroPython, …) will
+- Other language implementations (C, C++, C#, …) will
   reuse the same per-package CHANGELOG + Trusted Publishing pattern.
 
 ---

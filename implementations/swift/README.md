@@ -24,6 +24,6 @@ iOS, macOS, iPadOS, and watchOS applications in the Apple ecosystem. Intended fo
 
 ## Notes
 
-Embedded or bare-metal Apple targets are not in scope. For embedded use cases, use the C or MicroPython implementations instead.
+Embedded or bare-metal Apple targets are not in scope. For embedded use cases, use the C implementation instead.
 
-The writer targets the embedded-style streaming mode defined in the project decisions: iPhone and Apple Watch write sample by sample without buffering all data in RAM, matching the same pattern as C and MicroPython on microcontrollers. Mac and iPad use the reader and do not require the streaming writer.
+The writer targets the embedded-style streaming mode defined in the project decisions: iPhone and Apple Watch write sample by sample without buffering all data in RAM, matching the same pattern as C on microcontrollers. Mac and iPad use the reader and do not require the streaming writer.

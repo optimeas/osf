@@ -64,7 +64,6 @@ osf/
 | C++ | Industrial measurement, Qt ecosystem | ✅ | ✅ | Planned | Builds on C implementation |
 | C# / .NET | Windows desktop, industrial automation | ✅ | ✅ | Planned | Relevant for Beckhoff, Siemens environments |
 | Python | Data analytics, scripting | ✅ | ✅ | Planned | Reader + Block Writer; NumPy + pandas integration; AI/ML entry point |
-| MicroPython | Embedded only | — | ✅ | Planned | Writer only; minimal footprint; targets ESP32, RP2040 |
 | Java | Enterprise, Android | ✅ | ✅ | Planned | |
 | Swift | iOS / macOS / iPadOS / watchOS | ✅ | ✅ | Planned | Reader on Mac/iPad/iPhone; Writer for sensor data on iPhone/Watch |
 | Rust | Systems programming, embedded | ✅ | ✅ | Planned | Growing relevance in embedded and cloud |
@@ -105,7 +104,7 @@ The format version is detected automatically:
 
 | Platform | Read | Write |
 |---|---|---|
-| Embedded (C, MicroPython, Swift/Watch) | In-memory (all formats) | Streaming |
+| Embedded (C, Swift/Watch) | In-memory (all formats) | Streaming |
 | Desktop / Server (others) | In-memory (all formats) | Block |
 | **C++** (both worlds) | In-memory (all formats) | Streaming + Block (two writer classes) |
 
@@ -268,9 +267,8 @@ The `infos` block accepts arbitrary key-value pairs and is written unchanged if 
 6. **Rust** — systems + embedded, growing community
 7. **Java** — enterprise + Android
 8. **Swift** — Apple ecosystem; field measurement and analysis apps
-9. **MicroPython** — embedded, after C is stable
-10. **JavaScript/TypeScript** — web and Node.js
-11. **MATLAB** — reader only, engineering niche
+9. **JavaScript/TypeScript** — web and Node.js
+10. **MATLAB** — reader only, engineering niche
 
 Integrations (Arrow, PyTorch, TensorFlow, MCP, LangChain) follow after the Python implementation is stable.
 

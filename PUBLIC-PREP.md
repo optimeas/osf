@@ -20,13 +20,16 @@ to keep all three isolated.
 
 ## Phase 1 — Repo cleanup (do first, mergeable independently)
 
-- [ ] **Remove the MicroPython implementation.**
-  - [ ] `implementations/micropython/` (placeholder dir, no code yet)
-  - [ ] Row in `README.md` "Implementations" table
-  - [ ] Any reference in `DECISIONS.md` priority order
-  - [ ] Any mention in `STATUS.md` / `BACKLOG.md` / `CHANGELOG.md`
-  - [ ] Spec / docs sweeps (`docs/{en,de}/...`)
-  - [ ] Commit: `chore: drop MicroPython implementation placeholder`
+- [x] **Remove the MicroPython implementation.**
+  - [x] `implementations/micropython/` (placeholder dir, no code yet)
+  - [x] Row in `README.md` "Implementations" table
+  - [x] Any reference in `DECISIONS.md` priority order (also §6 impl
+        table + §7 streaming/block platform table; items renumbered)
+  - [x] Any mention in `STATUS.md` / `BACKLOG.md` / `CHANGELOG.md`
+        (STATUS list + new CHANGELOG `Removed` entry; BACKLOG had none;
+        also `implementations/swift/README.md` cross-reference)
+  - [x] Spec / docs sweeps (`docs/{en,de}/...`) — no matches
+  - [x] Commit: `chore: drop MicroPython implementation placeholder`
 
 - [ ] **README.md refresh.**
   - [ ] Implementation status table reflects reality (C++ in active
