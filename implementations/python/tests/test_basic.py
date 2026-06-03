@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Optimeas GmbH
+
 """Basic smoke tests for the osfdata Python bindings.
 
 Run with::

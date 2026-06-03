@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Optimeas GmbH
+
 r"""
 Example 04 - Compute the analyses from example 03, then save them as OSF5.
 

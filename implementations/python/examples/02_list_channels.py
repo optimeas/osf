@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Optimeas GmbH
+
 r"""
 Example 02 - List all channels in an OSF file.
 

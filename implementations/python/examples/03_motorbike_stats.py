@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Optimeas GmbH
+
 r"""
 Example 03 - Compute statistics on motorbike telemetry data.
 

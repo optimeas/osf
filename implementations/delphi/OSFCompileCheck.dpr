@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
+
 program OSFCompileCheck;
 
 {$APPTYPE CONSOLE}

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Optimeas GmbH
+
 """OSF — Python bindings for the Open Streaming Format.
 
 Distribution name on PyPI is ``osfdata``; the import name is ``osf``.
