@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 10 — CI integration.** The C++ implementation now builds and
+  tests on every change via GitHub Actions (DECISIONS §20). `.github/workflows/ci.yml`
+  gains `implementations/cpp/**` in its push + pull_request path filters
+  (C++ changes previously triggered no CI run) and a `test-cpp` job that
+  configures, builds, and runs ctest across a **ubuntu-latest / macos-14
+  / windows-latest** matrix, gating the `summary` job. The build runs
+  with **warnings-as-errors** via the new opt-in CMake option
+  `OSF_WARNINGS_AS_ERRORS` (default OFF; CI sets it ON), wired into
+  `osf_set_warnings` as `/WX` (MSVC) / `-Werror` (GCC/Clang/AppleClang).
+  This is the first time the code is compiled under GCC and AppleClang
+  (it had only ever been MSVC-built); two warnings-as-errors hits were
+  cleared in the process — a dead Float/Double runtime check in
+  `block_writer.cpp` (MSVC C4127, replaced with a `static_assert`) and an
+  unused test helper in `test_manager.cpp` (`-Werror=unused-function`).
+  All three OS legs green (304/304 ctest each).
+
+### Changed
+
+- New CMake option `OSF_WARNINGS_AS_ERRORS` (default OFF) — promotes
+  compiler warnings to errors for OSF targets only (vendored `pugixml.cpp`
+  and the FetchContent `zlib` / `googletest` targets are unaffected).
+  Local dev builds stay lenient; CI enables it.
+
 - **Phase 9 — throwing convenience layer** at
   `include/osf/throwing.hpp` (header-only, opt-in). Exposes the
   `Result`-based core API as exception-throwing functions for consumers
