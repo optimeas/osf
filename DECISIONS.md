@@ -620,8 +620,22 @@ non-decompressing by design. zlib provisioning honours the
 `OSF_USE_SYSTEM_ZLIB` option — default FetchContent zlib 1.3.1 (pinned
 tarball + SHA256), `ON` uses `find_package(ZLIB)`; zlib is a PRIVATE
 dependency of `osf_core`. ctest 283 → **294/294 green** (0 warnings
-under MSVC `/W4 /permissive-`). **Phase 9 (throwing convenience layer)**
-is next, then Phase 10 (CI) and Phase 11 (C ABI wrapper).
+under MSVC `/W4 /permissive-`).
+
+**Phase 9 complete (2026-06-03):** opt-in, header-only throwing
+convenience layer at `include/osf/throwing.hpp` (the §20 sketch above).
+`osf::Exception : std::runtime_error` carries the `osf::Error` (`what()`
+= message or category name; `code()` / `error()` expose the structured
+detail). `osf::throwing::unwrap(Result<T>)` returns the value or throws —
+works on **any** core `Result`, including the writer methods
+(`unwrap(w.start())`), so the layer needs no per-method writer wrappers
+(confirmed scope). Free `osf::throwing::load(path)` / `load(istream&)` →
+`DataManager` and `write_to_file(mgr, path)` / `write_to(mgr, ostream&)`
+→ `void` (OSF5, §6). Header-only, **not** part of the `osf/osf.hpp`
+umbrella and **not** compiled into the library — consumers who never
+include it pull in no extra machinery. ctest 294 → **304/304 green**
+(0 warnings under MSVC `/W4 /permissive-`). **Phase 10 (CI integration)**
+is next, then Phase 11 (C ABI wrapper).
 
 ## 21. Java Implementation Architecture
 

@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 9 — throwing convenience layer** at
+  `include/osf/throwing.hpp` (header-only, opt-in). Exposes the
+  `Result`-based core API as exception-throwing functions for consumers
+  who prefer RAII-style error propagation, per DECISIONS §20:
+  - `osf::Exception : std::runtime_error` — carries the `osf::Error`;
+    `what()` is the error message (or the stable category name when
+    empty); `code()` / `error()` expose the structured detail. In
+    namespace `osf`.
+  - `osf::throwing::unwrap(Result<T>)` — returns the value or throws
+    `osf::Exception`. Works on **any** core `Result`, including the writer
+    methods (`unwrap(w.start())`, `unwrap(w.add_channel(def))`), which
+    keeps the layer thin — no per-method writer wrappers.
+  - `osf::throwing::load(path)` / `load(std::istream&)` → `DataManager`;
+    `osf::throwing::write_to_file(mgr, path)` / `write_to(mgr, ostream&)`
+    → `void` (OSF5, DECISIONS §6).
+  Header-only and **not** part of the `osf/osf.hpp` umbrella and **not**
+  compiled into the `osf` library — consumers who never include it pull
+  in no extra machinery. 10 new GoogleTest cases bring the C++ ctest
+  count from 294 to **304/304 green**, 0 warnings under MSVC
+  `/W4 /permissive-`. Phase 10 (CI integration) is next.
 - **Phase 8 — transparent OSFZ decompression on read** at
   `include/osf/compression.hpp` / `src/compression.cpp`. Removes the
   `DataManager` OSFZ-rejection stub: gzip- and zlib-wrapped OSF files now
