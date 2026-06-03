@@ -634,8 +634,21 @@ works on **any** core `Result`, including the writer methods
 → `void` (OSF5, §6). Header-only, **not** part of the `osf/osf.hpp`
 umbrella and **not** compiled into the library — consumers who never
 include it pull in no extra machinery. ctest 294 → **304/304 green**
-(0 warnings under MSVC `/W4 /permissive-`). **Phase 10 (CI integration)**
-is next, then Phase 11 (C ABI wrapper).
+(0 warnings under MSVC `/W4 /permissive-`).
+
+**Phase 10 complete (2026-06-03):** CI integration. `.github/workflows/ci.yml`
+now covers the C++ implementation — `implementations/cpp/**` joined the
+push + pull_request path filters (C++ changes previously triggered no CI
+run), and a `test-cpp` job configures + builds + runs ctest across a
+**ubuntu-latest / macos-14 / windows-latest** matrix with
+warnings-as-errors, gating the `summary` job. New opt-in CMake option
+`OSF_WARNINGS_AS_ERRORS` (default OFF; CI sets it ON) wires `/WX` (MSVC)
+/ `-Werror` (GCC/Clang/AppleClang) into `osf_set_warnings`. This is the
+first GCC/AppleClang build of the code (previously MSVC-only); two hits
+were cleared — a dead Float/Double check in `block_writer.cpp` (MSVC
+C4127 → `static_assert`) and an unused test helper. All three OS legs
+green (304/304 ctest each), full CI run green. **Phase 11 (C ABI
+wrapper)** is the last remaining phase.
 
 ## 21. Java Implementation Architecture
 

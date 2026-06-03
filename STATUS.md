@@ -508,8 +508,8 @@ enough that the Arc-Channel optimisation is not needed yet.
 
 ## C++ implementation — current state
 
-Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Reader updated for the version-deterministic null-terminator rule on 2026-05-24. Phase 7a (private block-encoder library) completed 2026-05-26. Phase 7b (`StreamingWriter` — embedded streaming OSF5 writer) completed 2026-05-31. Phase 7c (`BlockWriter` — analyst-style OSF5 writer) completed 2026-06-02. Phase 7d (`StaleValueGuard` — optional freshness layer) completed 2026-06-03. Phase 8 (transparent OSFZ decompression on read) completed 2026-06-03. **Phase 9 (throwing convenience layer) completed 2026-06-03.** Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
-Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, both OSF4 + OSF5 metablock parsers, the block-stream reader (with `ReaderStats`), the typed `DataManager`, the OSF5 block-encoder primitives, **both** user-facing writer classes (`StreamingWriter` + `BlockWriter`), the optional `StaleValueGuard` freshness layer, transparent OSFZ (gzip/zlib) decompression on read, and the opt-in throwing convenience layer are all in place. **Phase 10 (CI integration)** arrives next.
+Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Reader updated for the version-deterministic null-terminator rule on 2026-05-24. Phase 7a (private block-encoder library) completed 2026-05-26. Phase 7b (`StreamingWriter` — embedded streaming OSF5 writer) completed 2026-05-31. Phase 7c (`BlockWriter` — analyst-style OSF5 writer) completed 2026-06-02. Phase 7d (`StaleValueGuard` — optional freshness layer) completed 2026-06-03. Phase 8 (transparent OSFZ decompression on read) completed 2026-06-03. Phase 9 (throwing convenience layer) completed 2026-06-03. **Phase 10 (CI integration) completed 2026-06-03.** Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
+Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, both OSF4 + OSF5 metablock parsers, the block-stream reader (with `ReaderStats`), the typed `DataManager`, the OSF5 block-encoder primitives, **both** user-facing writer classes (`StreamingWriter` + `BlockWriter`), the optional `StaleValueGuard` freshness layer, transparent OSFZ (gzip/zlib) decompression on read, and the opt-in throwing convenience layer are all in place — and CI now builds + tests them on Linux/macOS/Windows. **Phase 11 (C ABI wrapper)** is the last remaining phase.
 
 **Library targets:**
 
@@ -590,12 +590,23 @@ cmake --build build
 ctest --test-dir build
 ```
 
-**Build verification (local, 2026-06-03 after Phase 9):**
+**Build verification (2026-06-03 after Phase 10):**
 
-- Toolchain: MSVC 19.50.35730, Visual Studio 18 generator, CMake 4.2.3.
-- `cmake -B build` configures with **0 CMake warnings** (CMP0135 set to NEW explicitly via `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE`). zlib 1.3.1 comes via FetchContent (local-extract workaround `FETCHCONTENT_SOURCE_DIR_ZLIB` for the host's HTTPS-FetchContent failure, same pattern as googletest).
-- `cmake --build` produces `osf.lib` plus the test executables with **0 compile warnings** under `/W4 /permissive-` for OSF code (the vendored `pugixml.cpp` and the FetchContent zlib build with their own warning settings).
-- `ctest` reports **304/304 passed** (294 post-Phase-8 baseline + 10 new Phase-9 `test_throwing` tests). The throwing layer is header-only and opt-in — `grep` confirms no production source or the `osf.hpp` umbrella references `throwing.hpp`, so `osf_core` is built without it. From-scratch clean rebuild confirmed.
+- **CI (GitHub Actions)** now builds + tests the C++ implementation on
+  every change. The `test-cpp` job (ubuntu-latest / macos-14 /
+  windows-latest) configures, builds, and runs ctest with
+  `-D OSF_WARNINGS_AS_ERRORS=ON` (`/WX` / `-Werror`). All three legs
+  green — **304/304 ctest each** — and the full CI run (Rust + C++ +
+  wheels + sdist + summary) is green. This is the first GCC/AppleClang
+  build of the C++ code; FetchContent fetches googletest + zlib over
+  HTTPS on the runners (no local-extract workaround needed there).
+- Local (MSVC 19.50.35730, Visual Studio 18, CMake 4.2.3): `ctest`
+  reports **304/304 passed** with 0 warnings under `/W4 /permissive-`.
+  zlib 1.3.1 comes via FetchContent with the local-extract workaround
+  (`FETCHCONTENT_SOURCE_DIR_ZLIB`) for the host's HTTPS-FetchContent
+  failure (the CI's MSVC is *older* than the local one, so the local
+  `/WX` build is not a complete proxy for the Windows CI leg — verify
+  Windows on CI).
 
 **Constraints:**
 
@@ -604,11 +615,12 @@ ctest --test-dir build
 
 **Pending:**
 
-Phases 1–9 are complete (both writers, the optional `StaleValueGuard`,
-transparent OSFZ read, and the opt-in throwing layer). Next, sequentially
-per §20 Implementation Order: CI integration (Phase 10 — extend
-`ci.yml`'s path filter to `implementations/cpp/**` plus a
-Linux/macOS/Windows job matrix), then the C ABI wrapper (Phase 11).
+Phases 1–10 are complete (both writers, the optional `StaleValueGuard`,
+transparent OSFZ read, the opt-in throwing layer, and CI on
+Linux/macOS/Windows). The last remaining phase is **Phase 11 — the C ABI
+wrapper** (Windows DLL / ActiveX-OCX, future bindings); it gets its own
+DECISIONS entry covering handle patterns, error codes, string ownership,
+and ABI stability, and is gated behind the `OSF_BUILD_C_API` option.
 
 The 18 polish nits from the Phase-7b code-quality reviews were all
 folded in during Phase 7c (the four `### C++ StreamingWriter … polish
@@ -630,10 +642,15 @@ CI integration (Phase 10) will extend `ci.yml`'s path filter to `implementations
 GitHub Actions workflows live in `.github/workflows/`:
 
 - `ci.yml` — runs on every push to `main`, every PR, and on
-  `workflow_dispatch`. Three job groups: `test-rust` (cargo test +
-  clippy), `build-wheels` (4-platform matrix via maturin-action +
-  per-wheel pytest run), `build-sdist`. A `summary` job aggregates
-  results for branch-protection gating.
+  `workflow_dispatch`. Job groups: `test-rust` (cargo test + clippy),
+  **`test-cpp`** (Phase 10 — configure + build + ctest on
+  ubuntu-latest / macos-14 / windows-latest with warnings-as-errors),
+  `build-wheels` (4-platform matrix via maturin-action + per-wheel
+  pytest run), `build-sdist`. A `summary` job aggregates results for
+  branch-protection gating. The push + pull_request path filters cover
+  `implementations/{python,rust,cpp}/**`, `examples/**`, and
+  `.github/workflows/**` (the Delphi tree is still uncovered — no hosted
+  Delphi toolchain).
 - `release.yml` — triggered by `v*`-tag pushes. Same wheel + sdist
   matrix; the `publish-testpypi` job uploads to TestPyPI via
   Trusted Publishing (OIDC, no API tokens).
@@ -739,32 +756,28 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 ## Next session priorities (as of 2026-06-03)
 
-Current state — **C++ Phase 9 is complete**. Phases 1–9 are
-all in place; **304/304 ctest green** under MSVC `/W4 /permissive-`.
-Phase 9 (this session) added the opt-in, header-only throwing
-convenience layer at `include/osf/throwing.hpp`:
-`osf::Exception : std::runtime_error` wraps an `osf::Error`;
-`osf::throwing::unwrap(Result<T>)` returns the value or throws
-(works on any core `Result`, incl. writer methods — so no
-per-method wrappers); free `throwing::load` / `write_to_file` /
-`write_to`. Not in the `osf.hpp` umbrella and not compiled into
-the library — consumers who never include it pull in nothing
-extra.
+Current state — **C++ Phase 10 is complete**. Phases 1–10 are
+all in place; **304/304 ctest green** locally (MSVC `/W4 /permissive-`)
+and on CI across ubuntu-latest / macos-14 / windows-latest with
+warnings-as-errors. Phase 10 (this session) wired the C++ build into
+GitHub Actions: `.github/workflows/ci.yml` gained `implementations/cpp/**`
+in its path filters and a `test-cpp` matrix job (gating `summary`), and
+a new opt-in CMake option `OSF_WARNINGS_AS_ERRORS` (default OFF; CI ON)
+drives `/WX` / `-Werror`. The first GCC/AppleClang build surfaced two
+hits, both fixed (a C4127 dead branch in `block_writer.cpp` → static_assert,
+an unused test helper).
 
 Recommended sequence:
 
-1. **C++ Phase 10 — CI integration** (next immediate work).
-   Extend `.github/workflows/ci.yml`: add `implementations/cpp/**`
-   to the path filter (the current filter does not cover the C++
-   or Delphi trees — see "CI" under Conventions) and add a
-   Linux / macOS / Windows job matrix that configures, builds,
-   and runs ctest. The FetchContent zlib 1.3.1 + googletest deps
-   fetch cleanly on CI runners with working HTTPS (no
-   local-extract workaround needed there). Per §20 Implementation
-   Order.
-2. **Phase 11 — C ABI wrapper** (Windows DLL / ActiveX-OCX,
-   future bindings). Gets its own DECISIONS entry covering handle
-   patterns, error codes, string ownership, and ABI stability.
+1. **C++ Phase 11 — C ABI wrapper** (next immediate work, the last §20
+   phase). A C-callable shared-library surface (Windows DLL / ActiveX-OCX,
+   future-binding foundation) behind the existing `OSF_BUILD_C_API` option
+   (default OFF). Needs its own DECISIONS entry first, covering handle
+   patterns (opaque `osf_manager_t*` etc.), C error codes mirroring
+   `Error::Code`, string-ownership conventions (who frees), and ABI
+   stability guarantees. Then a `c_api/` subtree (header + impl wrapping
+   `DataManager` / the writers) gated by `OSF_BUILD_C_API`, with CI
+   building it on the matrix.
 
 Parallel work: **Java sync** if the Java implementation has
 not yet absorbed the spec rev 2026-05-24 updates
@@ -773,10 +786,10 @@ optionality). DECISIONS §21 already documents the new rules,
 but no Java code exists yet to enforce them — the scaffolding
 prompt would be the next concrete step on that track.
 
-The Phase 9 work landed on branch `phase-9-throwing` (feature
-commit + this documentation commit); documentation deltas (this
-STATUS update + CHANGELOG entries + DECISIONS §20 update)
-accompany the merge to `main`.
+The Phase 10 work landed on branch `phase-10-ci` (CI/CMake commit + a
+cross-compiler fix commit + this documentation commit), verified by
+dispatching CI on the branch (`gh workflow run ci.yml --ref phase-10-ci`)
+until all three OS legs were green, then merged to `main`.
 
 Local-build note: the host's HTTPS FetchContent fails
 (`CRYPT_E_NO_REVOCATION_CHECK`), so configure with
