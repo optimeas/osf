@@ -12,6 +12,12 @@ when deeper context is needed.
 | Branch | `main` |
 | Spec revision in effect | **2026-05-24** |
 
+**Active side-branch (2026-06-03):** `prep-public-release` is staging
+the repo for going public — MicroPython removal, README refresh,
+Docusaurus-compatible docs restructure. Worktree at
+`C:\Users\Public\Documents\Develop\github\osf-docs`. Plan +
+checklist in `PUBLIC-PREP.md` on that branch (not on `main`).
+
 ---
 
 ## What OSF is
