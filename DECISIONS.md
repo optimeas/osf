@@ -647,8 +647,24 @@ warnings-as-errors, gating the `summary` job. New opt-in CMake option
 first GCC/AppleClang build of the code (previously MSVC-only); two hits
 were cleared — a dead Float/Double check in `block_writer.cpp` (MSVC
 C4127 → `static_assert`) and an unused test helper. All three OS legs
-green (304/304 ctest each), full CI run green. **Phase 11 (C ABI
-wrapper)** is the last remaining phase.
+green (304/304 ctest each), full CI run green.
+
+**Phase 11 complete (2026-06-04):** the C ABI wrapper — see **§23** for
+the full contract. A separate shared library `osf-c` (built only when
+`OSF_BUILD_C_API=ON`) exposes the C++ core through a pure-C99 `extern "C"`
+header `include/osf/c_api.h`: opaque `osf_manager` / borrowed `osf_channel`
+handles, `osf_status` codes mirroring `Error::Code`, a thread-local
+last-error, caller-buffer copy-out sample readers, and a round-trip
+`osf_write_to_file`. A standalone C99 test (`tests/c_api/test_c_api.c`)
+proves C-compatibility + DLL linkage; CI builds the shared lib and runs
+the C test on all three OSes (`-D OSF_BUILD_C_API=ON`). The cross-compiler
+pass surfaced two CMake fixes (enable C for the single-config generators;
+`POSITION_INDEPENDENT_CODE` for folding the static core into the shared
+lib). ctest 304 → **305/305** with the C API on; the matrix is green.
+
+**The §20 Implementation Order is now complete (phases 1–11).** Remaining
+C++ work is incremental (e.g. the deferred full C builder API in BACKLOG)
+rather than a numbered phase.
 
 ## 21. Java Implementation Architecture
 

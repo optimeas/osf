@@ -8,6 +8,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 11 — C ABI wrapper (`osf-c`).** The final §20 phase: a separate
+  **shared** library exposing the C++ core through a pure-C99 `extern "C"`
+  surface for cross-language consumption (Windows DLL / ActiveX-OCX,
+  future bindings). Built only when `OSF_BUILD_C_API=ON` (default OFF);
+  see DECISIONS §23 for the full contract.
+  - `include/osf/c_api.h` — opaque `osf_manager` (owns a `DataManager`) +
+    borrowed `osf_channel` handles; `osf_status` codes mirroring
+    `osf::Error::Code` (`OSF_OK == 0`); thread-local
+    `osf_last_error_message()`. Read path: `osf_load_file`, channel
+    enumeration + metadata, **caller-buffer copy-out** readers
+    (`osf_channel_read_timestamps` / `read_f64` / `read_i64` / `read_gps`,
+    reconstructing equidistant timestamps), borrowed `string_at` /
+    `binary_at`. Round-trip `osf_write_to_file` (always OSF5).
+    `OSF_C_API` export macro (`__declspec(dllexport/import)` on Windows;
+    `visibility("default")` elsewhere).
+  - `src/c_api.cpp` — thin adapter over `DataManager` + the `BlockWriter`
+    `write_to_file` convenience; every entry point `try/catch`-wrapped so
+    no C++ exception crosses the ABI.
+  - `tests/c_api/test_c_api.c` — a standalone **C99** program (proves
+    C-compatibility + DLL linkage): load, enumerate, read, round-trip
+    write + reload, error path. Registered as ctest `c_api`.
+  - CI builds the shared `osf-c` and runs the C test on
+    ubuntu/macos/windows (`-D OSF_BUILD_C_API=ON`). Two CMake fixes were
+    needed for the cross-compiler legs: `enable_language(C)` (single-config
+    generators don't auto-enable C) and `CMAKE_POSITION_INDEPENDENT_CODE`
+    (fold the static core into the shared lib on ELF/Mach-O).
+  ctest 304 → **305/305 green** with `OSF_BUILD_C_API=ON`, 0 warnings
+  under `/W4 /permissive-` (`/WX`). **This completes the §20
+  Implementation Order (phases 1–11).**
 - **Phase 10 — CI integration.** The C++ implementation now builds and
   tests on every change via GitHub Actions (DECISIONS §20). `.github/workflows/ci.yml`
   gains `implementations/cpp/**` in its push + pull_request path filters
