@@ -173,6 +173,12 @@ endif()
 # ---------------------------------------------------------------------------
 
 if(OSF_BUILD_C_API)
+    # The C ABI test (tests/c_api/test_c_api.c) is compiled as C; the
+    # project is otherwise CXX-only. Enable C here so multi-config (MSVC,
+    # auto-enables C) and single-config (Make/Ninja, does not) generators
+    # both work. No-op for the default build (option OFF).
+    enable_language(C)
+
     add_library(osf_c SHARED src/c_api.cpp)
     add_library(osf::c ALIAS osf_c)
     set_target_properties(osf_c PROPERTIES
