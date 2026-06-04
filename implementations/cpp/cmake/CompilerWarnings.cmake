@@ -29,4 +29,16 @@ function(osf_set_warnings target)
             -Wsign-conversion
         )
     endif()
+
+    # Opt-in warnings-as-errors (default OFF; CI turns it ON). Local dev
+    # builds stay lenient; CI enforces a warning-free build on every
+    # compiler. Applied per-target so vendored sources with their own
+    # per-source warning overrides (e.g. pugixml.cpp) are unaffected.
+    if(OSF_WARNINGS_AS_ERRORS)
+        if(MSVC)
+            target_compile_options(${target} PRIVATE /WX)
+        else()
+            target_compile_options(${target} PRIVATE -Werror)
+        endif()
+    endif()
 endfunction()

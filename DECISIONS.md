@@ -598,8 +598,71 @@ Numeric (11 types) + `GpsLocation` only; string/binary excluded by design.
 Channels auto-track on first write-through; channel-type validation is
 delegated to the writer. 12 new GoogleTest cases take ctest from 271 to
 **283/283 green** (0 warnings under MSVC `/W4 /permissive-`). Phase 7 is
-complete; **Phase 8 (transparent OSFZ decompression on read)** is next —
-it removes the current `DataManager` OSFZ-rejection stub.
+complete.
+
+**Phase 8 complete (2026-06-03):** transparent OSFZ (gzip / zlib)
+decompression on read at `include/osf/compression.hpp` /
+`src/compression.cpp` — removes the `DataManager` OSFZ-rejection stub.
+Mirrors the Rust `compression` module (`detect_and_wrap` /
+`MaybeCompressed<R>`): `osf::DecompressingIStream` is a `std::istream`
+over a source stream that classifies by the leading two bytes (gzip
+`0x1F 0x8B`, zlib `0x78 {01,5E,9C,DA}`, else plain) and inflates on
+demand through a custom `std::streambuf` (constant-memory streaming, no
+whole-file buffering; auto gzip/zlib header detection via
+`inflateInit2(MAX_WBITS | 32)`; best-effort EOF on truncation; the
+`z_stream` is hidden behind a PIMPL so the public header is zlib-free).
+`DataManager::load_from_file` / `load_from_stream` wrap their input
+before the magic-header parse and populate `ReaderStats::compressed` /
+`compression_format`; the low-level `parse_magic_header` stays
+non-decompressing by design. zlib provisioning honours the
+`OSF_USE_SYSTEM_ZLIB` option — default FetchContent zlib 1.3.1 (pinned
+tarball + SHA256), `ON` uses `find_package(ZLIB)`; zlib is a PRIVATE
+dependency of `osf_core`. ctest 283 → **294/294 green** (0 warnings
+under MSVC `/W4 /permissive-`).
+
+**Phase 9 complete (2026-06-03):** opt-in, header-only throwing
+convenience layer at `include/osf/throwing.hpp` (the §20 sketch above).
+`osf::Exception : std::runtime_error` carries the `osf::Error` (`what()`
+= message or category name; `code()` / `error()` expose the structured
+detail). `osf::throwing::unwrap(Result<T>)` returns the value or throws —
+works on **any** core `Result`, including the writer methods
+(`unwrap(w.start())`), so the layer needs no per-method writer wrappers
+(confirmed scope). Free `osf::throwing::load(path)` / `load(istream&)` →
+`DataManager` and `write_to_file(mgr, path)` / `write_to(mgr, ostream&)`
+→ `void` (OSF5, §6). Header-only, **not** part of the `osf/osf.hpp`
+umbrella and **not** compiled into the library — consumers who never
+include it pull in no extra machinery. ctest 294 → **304/304 green**
+(0 warnings under MSVC `/W4 /permissive-`).
+
+**Phase 10 complete (2026-06-03):** CI integration. `.github/workflows/ci.yml`
+now covers the C++ implementation — `implementations/cpp/**` joined the
+push + pull_request path filters (C++ changes previously triggered no CI
+run), and a `test-cpp` job configures + builds + runs ctest across a
+**ubuntu-latest / macos-14 / windows-latest** matrix with
+warnings-as-errors, gating the `summary` job. New opt-in CMake option
+`OSF_WARNINGS_AS_ERRORS` (default OFF; CI sets it ON) wires `/WX` (MSVC)
+/ `-Werror` (GCC/Clang/AppleClang) into `osf_set_warnings`. This is the
+first GCC/AppleClang build of the code (previously MSVC-only); two hits
+were cleared — a dead Float/Double check in `block_writer.cpp` (MSVC
+C4127 → `static_assert`) and an unused test helper. All three OS legs
+green (304/304 ctest each), full CI run green.
+
+**Phase 11 complete (2026-06-04):** the C ABI wrapper — see **§23** for
+the full contract. A separate shared library `osf-c` (built only when
+`OSF_BUILD_C_API=ON`) exposes the C++ core through a pure-C99 `extern "C"`
+header `include/osf/c_api.h`: opaque `osf_manager` / borrowed `osf_channel`
+handles, `osf_status` codes mirroring `Error::Code`, a thread-local
+last-error, caller-buffer copy-out sample readers, and a round-trip
+`osf_write_to_file`. A standalone C99 test (`tests/c_api/test_c_api.c`)
+proves C-compatibility + DLL linkage; CI builds the shared lib and runs
+the C test on all three OSes (`-D OSF_BUILD_C_API=ON`). The cross-compiler
+pass surfaced two CMake fixes (enable C for the single-config generators;
+`POSITION_INDEPENDENT_CODE` for folding the static core into the shared
+lib). ctest 304 → **305/305** with the C API on; the matrix is green.
+
+**The §20 Implementation Order is now complete (phases 1–11).** Remaining
+C++ work is incremental (e.g. the deferred full C builder API in BACKLOG)
+rather than a numbered phase.
 
 ## 21. Java Implementation Architecture
 
@@ -920,3 +983,69 @@ The `OSF.Progress.*` family (eight units totalling ~1400 LOC), the
 sniffing wrapper. `TOSFFile.TruncationSeen: Boolean` is the proper
 signal replacing the latter. Net delta: ~621 LOC removed across the
 Delphi tree.
+
+## 23. C ABI (osf-c)
+
+**Decision (Phase 11, 2026-06-04):** the C++ implementation ships a
+C-callable ABI as a separate **shared** library `osf-c`, built only when
+`OSF_BUILD_C_API=ON` (default OFF). It wraps the existing C++ core through
+an `extern "C"` interface for cross-language consumption (Windows DLL /
+ActiveX-OCX, future language bindings). This is the deferred deliverable
+§20 always anticipated, now landed after the core reached roundtrip
+validation so the ABI is designed against a stable surface rather than
+forcing constraints onto the natural C++ form.
+
+This is **distinct from `implementations/c/`** (a separate, planned
+from-scratch native C99 implementation for embedded targets). `osf-c`
+reimplements nothing — it is a thin adapter over `DataManager` and the
+`BlockWriter` round-trip convenience.
+
+**Scope.** Read + round-trip write. The full read path (open OSF/OSFZ,
+enumerate channels, file + channel metadata, sample/timestamp access) plus
+a single `osf_write_to_file(manager, path)` re-export (always OSF5, §6). A
+sample-by-sample C builder, per-exact-type numeric getters, and a
+memory/stream load entry are out of scope (BACKLOG).
+
+**Public header.** `include/osf/c_api.h` — pure C99, depends only on
+`<stdint.h>` / `<stddef.h>`, `extern "C"`-guarded for C++ consumers.
+Export decoration via the `OSF_C_API` macro: `__declspec(dllexport)` when
+building (`OSF_C_BUILDING` defined), `__declspec(dllimport)` for consumers
+on Windows; `__attribute__((visibility("default")))` elsewhere (the target
+sets `*_VISIBILITY_PRESET hidden`).
+
+**Handle patterns.** Opaque pointers only. `osf_manager` owns a heap
+`osf::DataManager`; `osf_channel` is a **borrowed** `osf::DataChannel
+const*` into the manager's `channels()` (stable for the manager's
+lifetime, never freed by the caller). `osf_manager_free` is the sole
+destructor. No struct layouts cross the ABI — only scalars + opaque
+pointers — so the binary layout cannot drift.
+
+**Error model.** Every fallible call returns `osf_status` (`OSF_OK = 0`,
+remaining codes mirror `osf::Error::Code` 1:1, append-only). Output
+handles are returned via an out-param. On failure a **thread-local**
+last-error string is set, retrievable with `osf_last_error_message()`
+(valid until the next `osf_*` call on the same thread). Every entry point
+is wrapped in `try/catch`; no C++ exception ever crosses the boundary
+(pointer-returning getters yield `nullptr` / `""` / `0` on bad input and
+set the last error).
+
+**String ownership.** All `const char*` returned by getters (channel
+names, units, creator, string samples) are **borrowed**, owned by the
+manager, valid until `osf_manager_free`. The library never hands back a
+heap string the caller must free; the caller copies if it needs the value
+to outlive the handle.
+
+**Buffer ownership.** Sample / timestamp readers copy into a
+caller-provided buffer of capacity `cap` and return the number written
+(`min(sample_count, cap)`); the caller sizes via
+`osf_channel_sample_count` first. Equidistant timestamps are reconstructed
+into the caller's buffer. Numeric access is convenience-typed:
+`osf_channel_data_type` reports the exact type, `osf_channel_read_f64`
+(any numeric → `double`) and `osf_channel_read_i64` (integers/bool →
+`int64`) cover the analyst path; `osf_channel_read_gps` writes lat/lon/alt
+triples; `osf_channel_string_at` / `binary_at` return borrowed views.
+
+**ABI stability guarantees.** Enums are append-only and never renumbered;
+the function set grows additively. `osf_version()` returns the core
+version string. The default build (`OSF_BUILD_C_API=OFF`) and the core
+library are unaffected — the C ABI is purely additive.

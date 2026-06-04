@@ -291,6 +291,27 @@ osf_set_warnings(test_stale_value_guard)
 gtest_discover_tests(test_stale_value_guard)
 
 # ---------------------------------------------------------------------------
+# test_throwing — opt-in throwing convenience layer unit tests (Phase 9).
+# Includes integration/roundtrip_helper.hpp for the write round-trips.
+# ---------------------------------------------------------------------------
+
+add_executable(test_throwing
+    unit/test_throwing.cpp
+)
+
+target_link_libraries(test_throwing PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_include_directories(test_throwing PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/integration")
+
+osf_set_warnings(test_throwing)
+
+gtest_discover_tests(test_throwing)
+
+# ---------------------------------------------------------------------------
 # test_writer_common — shared writer infrastructure unit tests (Phase 7c).
 # ---------------------------------------------------------------------------
 
@@ -471,3 +492,76 @@ target_include_directories(test_block_writer_examples PRIVATE
 osf_set_warnings(test_block_writer_examples)
 
 gtest_discover_tests(test_block_writer_examples)
+
+# ---------------------------------------------------------------------------
+# test_compression — DecompressingIStream + detect_compression unit tests
+# (Phase 8). Links zlib directly to build compressed fixtures.
+# ---------------------------------------------------------------------------
+
+add_executable(test_compression
+    unit/test_compression.cpp
+)
+
+target_link_libraries(test_compression PRIVATE
+    osf::osf
+    GTest::gtest_main
+    ${OSF_ZLIB_TARGET}
+)
+
+if(OSF_ZLIB_INCLUDE_DIRS)
+    target_include_directories(test_compression PRIVATE ${OSF_ZLIB_INCLUDE_DIRS})
+endif()
+
+osf_set_warnings(test_compression)
+
+gtest_discover_tests(test_compression)
+
+# ---------------------------------------------------------------------------
+# test_compression_examples — transparent OSFZ decompression against real
+# files (Phase 8). Links zlib directly to re-compress reference files.
+# ---------------------------------------------------------------------------
+
+add_executable(test_compression_examples
+    integration/test_compression_examples.cpp
+)
+
+target_link_libraries(test_compression_examples PRIVATE
+    osf::osf
+    GTest::gtest_main
+    ${OSF_ZLIB_TARGET}
+)
+
+target_compile_definitions(test_compression_examples PRIVATE
+    OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+
+# roundtrip_helper.hpp lives in the integration/ source dir.
+target_include_directories(test_compression_examples PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/integration")
+
+if(OSF_ZLIB_INCLUDE_DIRS)
+    target_include_directories(test_compression_examples PRIVATE ${OSF_ZLIB_INCLUDE_DIRS})
+endif()
+
+osf_set_warnings(test_compression_examples)
+
+gtest_discover_tests(test_compression_examples)
+
+# ---------------------------------------------------------------------------
+# test_c_api — C ABI smoke test (Phase 11). A standalone C99 program that
+# links the osf-c shared library; built only when OSF_BUILD_C_API=ON.
+# Proves the header is C-compatible and the DLL/.so links + works.
+# ---------------------------------------------------------------------------
+
+if(OSF_BUILD_C_API)
+    add_executable(test_c_api c_api/test_c_api.c)
+    set_target_properties(test_c_api PROPERTIES LINKER_LANGUAGE C)
+    target_link_libraries(test_c_api PRIVATE osf_c)
+    target_compile_definitions(test_c_api PRIVATE
+        OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+    osf_set_warnings(test_c_api)
+    add_test(NAME c_api COMMAND test_c_api)
+    # Make the osf-c shared library discoverable at run time on every OS
+    # without copying or RPATH juggling.
+    set_tests_properties(c_api PROPERTIES ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:osf_c>;LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:osf_c>;DYLD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:osf_c>")
+endif()

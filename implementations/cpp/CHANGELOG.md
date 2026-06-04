@@ -8,6 +8,107 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 11 — C ABI wrapper (`osf-c`).** The final §20 phase: a separate
+  **shared** library exposing the C++ core through a pure-C99 `extern "C"`
+  surface for cross-language consumption (Windows DLL / ActiveX-OCX,
+  future bindings). Built only when `OSF_BUILD_C_API=ON` (default OFF);
+  see DECISIONS §23 for the full contract.
+  - `include/osf/c_api.h` — opaque `osf_manager` (owns a `DataManager`) +
+    borrowed `osf_channel` handles; `osf_status` codes mirroring
+    `osf::Error::Code` (`OSF_OK == 0`); thread-local
+    `osf_last_error_message()`. Read path: `osf_load_file`, channel
+    enumeration + metadata, **caller-buffer copy-out** readers
+    (`osf_channel_read_timestamps` / `read_f64` / `read_i64` / `read_gps`,
+    reconstructing equidistant timestamps), borrowed `string_at` /
+    `binary_at`. Round-trip `osf_write_to_file` (always OSF5).
+    `OSF_C_API` export macro (`__declspec(dllexport/import)` on Windows;
+    `visibility("default")` elsewhere).
+  - `src/c_api.cpp` — thin adapter over `DataManager` + the `BlockWriter`
+    `write_to_file` convenience; every entry point `try/catch`-wrapped so
+    no C++ exception crosses the ABI.
+  - `tests/c_api/test_c_api.c` — a standalone **C99** program (proves
+    C-compatibility + DLL linkage): load, enumerate, read, round-trip
+    write + reload, error path. Registered as ctest `c_api`.
+  - CI builds the shared `osf-c` and runs the C test on
+    ubuntu/macos/windows (`-D OSF_BUILD_C_API=ON`). Two CMake fixes were
+    needed for the cross-compiler legs: `enable_language(C)` (single-config
+    generators don't auto-enable C) and `CMAKE_POSITION_INDEPENDENT_CODE`
+    (fold the static core into the shared lib on ELF/Mach-O).
+  ctest 304 → **305/305 green** with `OSF_BUILD_C_API=ON`, 0 warnings
+  under `/W4 /permissive-` (`/WX`). **This completes the §20
+  Implementation Order (phases 1–11).**
+- **Phase 10 — CI integration.** The C++ implementation now builds and
+  tests on every change via GitHub Actions (DECISIONS §20). `.github/workflows/ci.yml`
+  gains `implementations/cpp/**` in its push + pull_request path filters
+  (C++ changes previously triggered no CI run) and a `test-cpp` job that
+  configures, builds, and runs ctest across a **ubuntu-latest / macos-14
+  / windows-latest** matrix, gating the `summary` job. The build runs
+  with **warnings-as-errors** via the new opt-in CMake option
+  `OSF_WARNINGS_AS_ERRORS` (default OFF; CI sets it ON), wired into
+  `osf_set_warnings` as `/WX` (MSVC) / `-Werror` (GCC/Clang/AppleClang).
+  This is the first time the code is compiled under GCC and AppleClang
+  (it had only ever been MSVC-built); two warnings-as-errors hits were
+  cleared in the process — a dead Float/Double runtime check in
+  `block_writer.cpp` (MSVC C4127, replaced with a `static_assert`) and an
+  unused test helper in `test_manager.cpp` (`-Werror=unused-function`).
+  All three OS legs green (304/304 ctest each).
+
+### Changed
+
+- New CMake option `OSF_WARNINGS_AS_ERRORS` (default OFF) — promotes
+  compiler warnings to errors for OSF targets only (vendored `pugixml.cpp`
+  and the FetchContent `zlib` / `googletest` targets are unaffected).
+  Local dev builds stay lenient; CI enables it.
+
+- **Phase 9 — throwing convenience layer** at
+  `include/osf/throwing.hpp` (header-only, opt-in). Exposes the
+  `Result`-based core API as exception-throwing functions for consumers
+  who prefer RAII-style error propagation, per DECISIONS §20:
+  - `osf::Exception : std::runtime_error` — carries the `osf::Error`;
+    `what()` is the error message (or the stable category name when
+    empty); `code()` / `error()` expose the structured detail. In
+    namespace `osf`.
+  - `osf::throwing::unwrap(Result<T>)` — returns the value or throws
+    `osf::Exception`. Works on **any** core `Result`, including the writer
+    methods (`unwrap(w.start())`, `unwrap(w.add_channel(def))`), which
+    keeps the layer thin — no per-method writer wrappers.
+  - `osf::throwing::load(path)` / `load(std::istream&)` → `DataManager`;
+    `osf::throwing::write_to_file(mgr, path)` / `write_to(mgr, ostream&)`
+    → `void` (OSF5, DECISIONS §6).
+  Header-only and **not** part of the `osf/osf.hpp` umbrella and **not**
+  compiled into the `osf` library — consumers who never include it pull
+  in no extra machinery. 10 new GoogleTest cases bring the C++ ctest
+  count from 294 to **304/304 green**, 0 warnings under MSVC
+  `/W4 /permissive-`. Phase 10 (CI integration) is next.
+- **Phase 8 — transparent OSFZ decompression on read** at
+  `include/osf/compression.hpp` / `src/compression.cpp`. Removes the
+  `DataManager` OSFZ-rejection stub: gzip- and zlib-wrapped OSF files now
+  load transparently (deployed optiMEAS devices emit gzip-OSFZ —
+  `weather_station.osfz`, the Train OSFZ field recordings; older tooling
+  used raw zlib). Mirrors the Rust `compression` module
+  (`detect_and_wrap` / `MaybeCompressed<R>`):
+  - `osf::DecompressingIStream` — a `std::istream` over a source stream
+    that classifies by the leading two bytes (gzip `0x1F 0x8B`, zlib
+    `0x78 {01,5E,9C,DA}`, else plain) and **inflates on demand** via a
+    custom `std::streambuf` (constant-memory streaming, no whole-file
+    buffering). Auto gzip/zlib header detection via
+    `inflateInit2(MAX_WBITS | 32)`; best-effort EOF on truncation. The
+    `z_stream` is hidden behind a PIMPL so the public header stays
+    zlib-free. Plus the non-consuming `detect_compression(std::istream&)`.
+  - `DataManager::load_from_file` / `load_from_stream` wrap their input in
+    a `DecompressingIStream` before the magic-header parse and populate
+    `ReaderStats::compressed` + `compression_format`. The low-level
+    `parse_magic_header` deliberately stays non-decompressing.
+  - zlib provisioning honours the declared `OSF_USE_SYSTEM_ZLIB` option:
+    default fetches zlib **1.3.1** via FetchContent (pinned tarball +
+    SHA256); `ON` uses `find_package(ZLIB)`. zlib is a PRIVATE dependency
+    of `osf_core`.
+  `tests/unit/test_compression.cpp` (detection + round-trips incl. a
+  256 KiB multi-chunk case) and `tests/integration/test_compression_examples.cpp`
+  (gzip+zlib re-wrap of `steam_loco.osf` matches plain via
+  `roundtrip_managers_equal`; `weather_station.osfz` loads). ctest 283 →
+  **294/294 green**, 0 warnings under MSVC `/W4 /permissive-`. Phase 9
+  (throwing convenience layer) is next.
 - **Phase 7d — `StaleValueGuard`** (optional freshness layer) at
   `include/osf/stale_value_guard.hpp` / `src/stale_value_guard.cpp`.
   Re-emits the last value of idle timestamped channels so their on-disk

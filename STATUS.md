@@ -514,8 +514,8 @@ enough that the Arc-Channel optimisation is not needed yet.
 
 ## C++ implementation — current state
 
-Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Reader updated for the version-deterministic null-terminator rule on 2026-05-24. Phase 7a (private block-encoder library) completed 2026-05-26. Phase 7b (`StreamingWriter` — embedded streaming OSF5 writer) completed 2026-05-31. Phase 7c (`BlockWriter` — analyst-style OSF5 writer) completed 2026-06-02. **Phase 7d (`StaleValueGuard` — optional freshness layer) completed 2026-06-03.** Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture).
-Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, both OSF4 + OSF5 metablock parsers, the block-stream reader (with `ReaderStats`), the typed `DataManager`, the OSF5 block-encoder primitives, **both** user-facing writer classes (`StreamingWriter` + `BlockWriter`), and the optional `StaleValueGuard` freshness layer are all in place — Phase 7 is complete. **Phase 8 (transparent OSFZ decompression on read)** arrives next.
+Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Reader updated for the version-deterministic null-terminator rule on 2026-05-24. Phase 7a (private block-encoder library) completed 2026-05-26. Phase 7b (`StreamingWriter` — embedded streaming OSF5 writer) completed 2026-05-31. Phase 7c (`BlockWriter` — analyst-style OSF5 writer) completed 2026-06-02. Phase 7d (`StaleValueGuard` — optional freshness layer) completed 2026-06-03. Phase 8 (transparent OSFZ decompression on read) completed 2026-06-03. Phase 9 (throwing convenience layer) completed 2026-06-03. Phase 10 (CI integration) completed 2026-06-03. **Phase 11 (C ABI wrapper) completed 2026-06-04 — the §20 Implementation Order is now complete (phases 1–11).** Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture) + [§23](DECISIONS.md#23-c-abi-osf-c).
+Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, both OSF4 + OSF5 metablock parsers, the block-stream reader (with `ReaderStats`), the typed `DataManager`, the OSF5 block-encoder primitives, **both** user-facing writer classes (`StreamingWriter` + `BlockWriter`), the optional `StaleValueGuard` freshness layer, transparent OSFZ (gzip/zlib) decompression on read, the opt-in throwing convenience layer, and the `osf-c` C ABI shared library are all in place — and CI builds + tests them on Linux/macOS/Windows. **All eleven phases are done;** remaining C++ work is incremental (BACKLOG), not a numbered phase.
 
 **Library targets:**
 
@@ -538,7 +538,10 @@ Standalone C++17 implementation, parallel to the Rust core — not a port from C
 | `include/osf/stats.hpp` | Reader telemetry: `ReaderStats` (byte/block counters, channel counters, `elapsed`, `trailer_seen`, `compressed`, per-channel `std::unordered_map<u16, ChannelStats>`) and `ChannelStats` (name, blocks/skipped/samples/bytes/segments, `time_range_ns`). `format_bytes`, `format_duration`, `compression_format_name`. `operator<<` overloads format the structs in the same shape as the Rust reference. |
 | `include/osf/reader.hpp` | Block-stream reader: `BlockReader` class — constructor takes `std::istream&` (positioned after the metablock) + `MetaBlock const&`; fluent setters `with_capture_skipped_payload(bool)` and `with_file_size(u64)`; primitive `next() -> std::optional<Result<Block>>`; range-based-for support via `begin()` / `end()` (input iterator + `EndSentinel`); `stats()`, `blocks_truncated()`, `trailer_seen()`, `file_size_bytes()`. Best-effort on truncation (`stats().blocks_truncated` bumped, iteration ends cleanly), hard error on unknown channel index, forward-compat `Skipped` records for `Unsupported` channels and deprecated / reserved control bytes, silent consumption of the optional 0xFFFF info block + 40-byte magic trailer. |
 | `include/osf/data_channel.hpp` | Typed in-memory channel model: `DataChannel` as `std::variant<EquidistantChannel, TimestampedChannel, VariableChannel>` (distinct from the metablock-level `osf::Channel` — `DataChannel` represents the assembled samples, `osf::Channel` the channel definition). `EquidistantChannel` carries flat `NumericValues` + `std::vector<Segment>`; `TimestampedChannel` carries parallel `std::vector<int64>` + `NumericValues`; `VariableChannel` carries timestamps + string XOR binary samples. `Segment`, `ChannelMeta`, `NumericValues` variant (per numeric type + `GpsLocation`), `Sample<T>` template, `NumericValueRef`, `VariableValueRef`. Materializing `samples_vector()` per channel kind, twelve flat-access helpers per channel kind (`as_doubles_flat`, …, `as_gps_flat`), and free-function common accessors on `DataChannel`. |
-| `include/osf/manager.hpp` | High-level reader: `DataManager` class — public `meta` and `stats` fields; static `load_from_file(path)` and `load_from_stream(istream&)` build the typed channel list; `channel(name)` (mandatory) and `channel_by_index(u16)` (optional) lookups; `channels()` for ordered iteration. OSFZ-stub on file open: the first 2 bytes are peeked, gzip / zlib magic produces a clear `IoError` pointing to Phase 8 rather than a confusing magic-header parse failure. |
+| `include/osf/manager.hpp` | High-level reader: `DataManager` class — public `meta` and `stats` fields; static `load_from_file(path)` and `load_from_stream(istream&)` build the typed channel list; `channel(name)` (mandatory) and `channel_by_index(u16)` (optional) lookups; `channels()` for ordered iteration. **Transparent OSFZ decompression (Phase 8):** the input is wrapped in a `DecompressingIStream` before the magic-header parse; gzip / zlib files load transparently and `stats.compressed` / `compression_format` are populated. |
+| `include/osf/compression.hpp` + `src/compression.cpp` | **Phase 8** transparent OSFZ decompression on read. `osf::DecompressingIStream` — a `std::istream` over a source stream that classifies by the leading two bytes (gzip `0x1F 0x8B`, zlib `0x78 {01,5E,9C,DA}`, else plain) and inflates on demand via a custom `std::streambuf` (constant-memory streaming, auto gzip/zlib header detection via `inflateInit2(MAX_WBITS \| 32)`, best-effort EOF on truncation; `z_stream` hidden behind a PIMPL so the public header is zlib-free). Plus the non-consuming `detect_compression(std::istream&)`. zlib is a PRIVATE `osf_core` dependency provisioned via `OSF_USE_SYSTEM_ZLIB` (default FetchContent zlib 1.3.1; `ON` → `find_package(ZLIB)`). |
+| `include/osf/throwing.hpp` (header-only) | **Phase 9** opt-in throwing convenience layer. `osf::Exception : std::runtime_error` wraps an `osf::Error` (`what()` = message or category name; `code()` / `error()` for structured detail). `osf::throwing::unwrap(Result<T>)` returns the value or throws — works on any core `Result` including writer methods, so no per-method wrappers. Free `osf::throwing::load(path)` / `load(istream&)` → `DataManager` and `write_to_file(mgr, path)` / `write_to(mgr, ostream&)` → `void` (OSF5). **Not** in the `osf.hpp` umbrella and **not** compiled into the library — opt-in by design. |
+| `include/osf/c_api.h` + `src/c_api.cpp` | **Phase 11** C ABI wrapper, built into the separate shared library `osf-c` only when `OSF_BUILD_C_API=ON` (DECISIONS §23). Pure-C99 `extern "C"` surface: opaque `osf_manager` (owns a `DataManager`) + borrowed `osf_channel` handles; `osf_status` codes mirroring `Error::Code`; thread-local `osf_last_error_message()`; read path (`osf_load_file`, channel enumeration + metadata, caller-buffer copy-out `read_timestamps`/`read_f64`/`read_i64`/`read_gps`, borrowed `string_at`/`binary_at`) + round-trip `osf_write_to_file` (OSF5). Every entry point `try/catch`-wrapped; no C++ exception crosses the ABI. `OSF_C_API` export macro (`dllexport/import` on Windows; `visibility("default")` else). |
 | `src/error.cpp` | `error_category_name` implementation; covers all eighteen `Error::Code` enumerators |
 | `src/header.cpp` | Magic-header parser implementation. Byte-by-byte read via `istream::get()`, anonymous-namespace helpers for line read / identifier mapping / `from_chars`-based length parse, CRLF tolerance |
 | `src/types.cpp` | `parse_data_type` / `parse_channel_type` / `parse_spectrum_type` implementations. If-chain over wire spellings; `bytearray` normalises to `Binary`; removed datatypes (`gpsdata` / `pair` / `triple` / `candata`) reject with `Error::Code::RemovedInSpec` and a replacement-hint message |
@@ -557,7 +560,7 @@ Standalone C++17 implementation, parallel to the Rust core — not a port from C
 | `include/osf/block_writer.hpp` + `src/block_writer.cpp` | **Phase 7c** analyst-style writer: accumulates a per-channel `ChannelData` variant in memory, emits the whole file at `write_to_file(path)` / `write_to(ostream&)` (const). Same template surface as `StreamingWriter`; **does** auto-bump variable `sizeoflengthvalue` 2 → 4. `from_manager(DataManager const&)` + free `osf::write_to_file` / `osf::write_to(DataManager, …)` for round-trip / copy |
 | `include/osf/stale_value_guard.hpp` + `src/stale_value_guard.cpp` | **Phase 7d** optional freshness layer over `StreamingWriter`. Write-through wrapper: forwards each timestamped write and caches the channel's last `(timestamp, value)`. `poll(now_ns)` re-emits the cached value of any channel idle `>= repeat_interval_ns` (default 100 s) stamped at `now_ns`, at most once per poll (no backfill, no internal clock/thread). Numeric (11 types) + `GpsLocation` only; string/binary excluded. Auto-tracks on first write-through; `is_tracked` / `forget` / `clear`. Header-defined class (in-header numeric template bodies; GPS writes + `poll` + `reemit` via `std::visit` in the `.cpp`) |
 | `tests/CMakeLists.txt` | GoogleTest via `FetchContent`; pinned to v1.15.2 by tarball URL + SHA256; `gtest_force_shared_crt=ON` for /MD parity; `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE` for CMP0135 NEW behaviour; `OSF_EXAMPLES_DIR` define for integration tests |
-| `tests/integration/test_header_examples.cpp` | Four integration tests against `examples/`: `motorbike.osf` and `steam_loco.osf` parse as Osf4; `weather_station.osfz` rejects until Phase 8; the 17 generated files in `examples/generated/` all parse with version per filename prefix |
+| `tests/integration/test_header_examples.cpp` | Four integration tests against `examples/`: `motorbike.osf` and `steam_loco.osf` parse as Osf4; raw `weather_station.osfz` gzip bytes are not parseable as a plain magic header (the low-level parser deliberately does not decompress — OSFZ transparency lives in the DataManager layer); the 17 generated files in `examples/generated/` all parse with version per filename prefix |
 | `tests/integration/test_metablock_examples.cpp` | Three integration tests against the OSF5 reference files in `examples/generated/`: snapshot check on `osf5_equidistant.osf`; every `osf5_*.osf` parses with non-empty channels and valid `sizeoflengthvalue`; `osf5_gpslocation.osf` actually declares a `GpsLocation` channel |
 | `tests/integration/test_metablock_xml_examples.cpp` | Six integration tests against `examples/generated/osf4_*.osf` plus the two field samples: snapshot check on `osf4_equidistant.osf`; every `osf4_*.osf` parses with valid `sizeoflengthvalue`; `osf4_gpslocation.osf` declares a `GpsLocation` channel; `motorbike.osf` and `steam_loco.osf` metablocks parse end-to-end (encoding-tolerance + deprecated-field-tolerance paths); cross-parser symmetry probe (`osf4_equidistant.osf` via XML parser matches `osf5_equidistant.osf` via JSON parser on every channel field) |
 | `tests/integration/test_reader_examples.cpp` | Six BlockReader integration tests: every `.osf` under `examples/generated/` streams end-to-end producing at least one block; first-block snapshots on `osf5_scalar_int64.osf` (single-sample AbsTs Int64) and `osf4_equidistant.osf` (StartData with sample_rate > 0); `motorbike.osf` and `steam_loco.osf` field samples stream clean; reader-stats sanity (non-zero counters, at least one channel produces a time range) |
@@ -571,8 +574,12 @@ Standalone C++17 implementation, parallel to the Rust core — not a port from C
 | `tests/unit/test_stats.cpp` | 6 unit tests for `ChannelStats::observe_timestamp` (two-sided growth), `format_bytes` (unit thresholds), `format_duration` (ms / s split), `compression_format_name`, and the two ostream overloads |
 | `tests/unit/test_reader.cpp` | 24 BlockReader unit tests against synthetic byte sequences (port of the Rust reader suite): empty stream, three truncation paths (channel-index / length-field / mid-payload), unknown-channel-index hard error, `Unsupported`-channel skip with stream alignment, capture-skipped opt-in, deprecated control bytes 1/3/4, unknown high control byte 0x55, every typed parser (single + multi for AbsTs int64 / double, StartData double + float-N10, ContinuedData int16-N4, AbsTs string version-deterministic-strip in both OSF5 and OSF4, AbsTs binary version-deterministic-strip in both OSF5 and OSF4, AbsTs gpslocation, ContinuedRelStampData int16), `InvalidBlock` for equidistant-on-string, trailer consumption, range-based-for iteration |
 | `tests/unit/test_data_channel.cpp` | 11 unit tests for the typed channel model: `NumericValues` data-type detection and `empty_for` (returns `std::nullopt` for variable + Unsupported); equidistant `samples_vector` with single segment, three segments without interpolation between them, empty channel; flat-access mismatch returns `DataTypeMismatch`; timestamped `samples_vector` pairs correctly + flat-access works; variable string + binary channels collect values + `as_strings` / `as_binaries` mismatch handling; common `DataChannel` accessors per variant |
-| `tests/unit/test_manager.cpp` | 13 DataManager unit tests driving the builder through synthetic in-memory OSF5 streams: one-start-plus-continued = one-segment, two-starts = two-segments, start-then-abs-ts = `ChannelMixedBlockTypes`, continued-without-start = `ContinuedDataWithoutStart`, abs-int32 builds Timestamped, rel-stamp-after-abs extends cumulatively, rel-stamp-without-anchor = `RelStampWithoutAnchor`, variable-string collects strings, Unsupported channel dropped from output, name + index lookups, gzip / zlib magic produce the Phase-8 stub error |
+| `tests/unit/test_manager.cpp` | 13 DataManager unit tests driving the builder through synthetic in-memory OSF5 streams: one-start-plus-continued = one-segment, two-starts = two-segments, start-then-abs-ts = `ChannelMixedBlockTypes`, continued-without-start = `ContinuedDataWithoutStart`, abs-int32 builds Timestamped, rel-stamp-after-abs extends cumulatively, rel-stamp-without-anchor = `RelStampWithoutAnchor`, variable-string collects strings, Unsupported channel dropped from output, name + index lookups, and a truncated-gzip input fails gracefully (Phase-8 decompressor yields best-effort EOF, then the header parse fails — no crash, no leftover stub message) |
 | `tests/unit/test_stale_value_guard.cpp` | 12 `StaleValueGuard` unit tests (Phase 7d): no-repeat-before-interval, single repeat @ now after interval, real-write resets staleness, at-most-one-repeat-per-poll (no backfill), repeated polls keep re-emitting, multiple channels mixed numeric types + GPS, batch-write caches the last sample, custom interval honoured, un-advanced `now` re-emits nothing, untracked channel ignored, `is_tracked`/`forget`/`clear` control surface, writer-error propagates out of `poll`. Each writes through a real `StreamingWriter` to a temp file, then reloads via `DataManager` to assert repeated timestamps/values |
+| `tests/unit/test_compression.cpp` | 10 unit tests (Phase 8): `detect_compression` classifies plain/zlib/gzip without consuming (position preserved); `DecompressingIStream` round-trips plain / zlib / gzip, treats `0x78 0xFF` (invalid zlib second byte) / single-byte `0x78` / empty / `OCEAN_STREAM_FORMAT4` as plain, and round-trips a 256 KiB payload that spans multiple inflate chunks. Links zlib directly to build compressed fixtures |
+| `tests/integration/test_compression_examples.cpp` | 2 integration tests (Phase 8): a gzip and a zlib re-wrap of `steam_loco.osf` load via `load_from_stream` and match the plain load through `roundtrip_managers_equal` (with `stats.compressed` / `compression_format` set); the real `weather_station.osfz` gzip field sample loads transparently with ≥1 non-empty channel |
+| `tests/c_api/test_c_api.c` | Standalone **C99** smoke test (Phase 11), built + registered as ctest `c_api` only when `OSF_BUILD_C_API=ON`. Proves `osf/c_api.h` is C-compatible and `osf-c` links + works: `osf_version`, load a generated `osf5_*.osf`, channel count + by-name lookup (same borrowed handle), data type + sample count, `read_timestamps` + `read_f64` copy-out counts, `osf_write_to_file` round-trip + reload, missing-file error path with non-empty `osf_last_error_message`. The osf-c lib dir is put on the runtime library path via the test's `ENVIRONMENT_MODIFICATION`. |
+| `tests/unit/test_throwing.cpp` | 10 unit tests (Phase 9): `throwing::load` success / missing-file-throws / `load(istream)` success + garbage-throws; `write_to_file` + `write_to(ostream)` round-trip via `roundtrip_managers_equal`; `unwrap(Result<void>)` success (no throw) + failure (throws), `unwrap(Result<T>)` returns the value; `osf::Exception` carries `code()` + `error().message == what()`. Links `osf::osf` + the `integration/` include for `roundtrip_helper.hpp` |
 | `third_party/tl-expected/` | Vendored TartanLlama/expected v1.3.1 (`tl/expected.hpp` + `LICENSE`, CC0 1.0) |
 | `third_party/nlohmann-json/` | Vendored nlohmann/json v3.11.3 (`nlohmann/json.hpp` + `LICENSE`, MIT). Single-header form; SHA-256 of `json.hpp` matches the upstream v3.11.3 release asset |
 | `third_party/pugixml/` | Vendored pugixml v1.15 (`pugixml.hpp` + `pugixml.cpp` + `pugiconfig.hpp` + `LICENSE`, MIT). Unlike the other two vendored libraries pugixml is not header-only; the `.cpp` compiles into `osf_core` directly with warnings disabled (`/W0` on MSVC, `-w` on GCC/Clang). SHA-256: `pugixml.hpp = 2555F950…0043BE734`, `pugixml.cpp = 67C3892E…D09E0744`, `pugiconfig.hpp = 981CD9AD…FC98B92D` |
@@ -581,7 +588,7 @@ Standalone C++17 implementation, parallel to the Rust core — not a port from C
 **Build options (DECISIONS §20):**
 
 - `BUILD_SHARED_LIBS` (default OFF), `OSF_BUILD_TESTS` (default ON) — effective in Phase 1.
-- `OSF_BUILD_EXAMPLES` (default ON, no-op until Phase ≥3), `OSF_BUILD_C_API` (default OFF, activates in Phase 11), `OSF_USE_SYSTEM_ZLIB` (default OFF, relevant once Phase 8 lands) — declared now, enabled in their respective phases.
+- `OSF_BUILD_EXAMPLES` (default ON, no-op until Phase ≥3), `OSF_BUILD_C_API` (default OFF; **ON builds the `osf-c` C ABI shared library + the `c_api` test** — Phase 11), `OSF_USE_SYSTEM_ZLIB` (default OFF, Phase 8 zlib provider), `OSF_WARNINGS_AS_ERRORS` (default OFF; CI sets ON — Phase 10). When `OSF_BUILD_C_API=ON`, `CMAKE_POSITION_INDEPENDENT_CODE` is forced ON so the static core folds into the shared lib, and the C language is enabled for the C test.
 
 **Build & test:**
 
@@ -591,12 +598,23 @@ cmake --build build
 ctest --test-dir build
 ```
 
-**Build verification (local, 2026-06-03 after Phase 7d):**
+**Build verification (2026-06-04 after Phase 11):**
 
-- Toolchain: MSVC 19.50.35730, Visual Studio 18 generator, CMake 4.2.3.
-- `cmake -B build` configures with **0 CMake warnings** (CMP0135 set to NEW explicitly via `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE`).
-- `cmake --build` produces `osf.lib` plus the test executables with **0 compile warnings** under `/W4 /permissive-` (the vendored `pugixml.cpp` is built with `/W0` since it is treated as binary-identical to upstream).
-- `ctest` reports **283/283 passed in ~6.7 s** (271 post-Phase-7c baseline + 12 new Phase-7d `StaleValueGuard` tests). From-scratch clean rebuild confirmed.
+- **CI (GitHub Actions)** builds + tests the C++ implementation on every
+  change. The `test-cpp` job (ubuntu-latest / macos-14 / windows-latest)
+  configures with `-D OSF_WARNINGS_AS_ERRORS=ON` (`/WX` / `-Werror`)
+  **and `-D OSF_BUILD_C_API=ON`**, builds (incl. the shared `osf-c`), and
+  runs ctest. All three legs green — **305/305 ctest each** (304 + the C
+  ABI `c_api` test) — and the full CI run (Rust + C++ + wheels + sdist +
+  summary) is green. FetchContent fetches googletest + zlib over HTTPS on
+  the runners (no local-extract workaround needed there).
+- Local (MSVC 19.50.35730, Visual Studio 18, CMake 4.2.3): `ctest`
+  reports **304/304 passed** with 0 warnings under `/W4 /permissive-`.
+  zlib 1.3.1 comes via FetchContent with the local-extract workaround
+  (`FETCHCONTENT_SOURCE_DIR_ZLIB`) for the host's HTTPS-FetchContent
+  failure (the CI's MSVC is *older* than the local one, so the local
+  `/WX` build is not a complete proxy for the Windows CI leg — verify
+  Windows on CI).
 
 **Constraints:**
 
@@ -605,11 +623,13 @@ ctest --test-dir build
 
 **Pending:**
 
-Phase 7 is complete (both writers + the optional `StaleValueGuard`).
-Next, sequentially per §20 Implementation Order: transparent OSFZ
-decompression (Phase 8 — removes the current `DataManager`
-OSFZ-rejection stub), throwing convenience layer (Phase 9), CI
-integration (Phase 10), C ABI wrapper (Phase 11).
+**The §20 Implementation Order is complete — all eleven phases are done**
+(both writers, the optional `StaleValueGuard`, transparent OSFZ read, the
+opt-in throwing layer, CI on Linux/macOS/Windows, and the `osf-c` C ABI).
+Remaining C++ work is incremental, not a numbered phase — see BACKLOG for
+the deferred items (notably a full sample-by-sample C **builder** API,
+per-exact-type numeric C getters, an `osf_load_buffer` memory/stream load
+entry, and packaging/installing the DLL + import library).
 
 The 18 polish nits from the Phase-7b code-quality reviews were all
 folded in during Phase 7c (the four `### C++ StreamingWriter … polish
@@ -631,10 +651,15 @@ CI integration (Phase 10) will extend `ci.yml`'s path filter to `implementations
 GitHub Actions workflows live in `.github/workflows/`:
 
 - `ci.yml` — runs on every push to `main`, every PR, and on
-  `workflow_dispatch`. Three job groups: `test-rust` (cargo test +
-  clippy), `build-wheels` (4-platform matrix via maturin-action +
-  per-wheel pytest run), `build-sdist`. A `summary` job aggregates
-  results for branch-protection gating.
+  `workflow_dispatch`. Job groups: `test-rust` (cargo test + clippy),
+  **`test-cpp`** (Phase 10 — configure + build + ctest on
+  ubuntu-latest / macos-14 / windows-latest with warnings-as-errors),
+  `build-wheels` (4-platform matrix via maturin-action + per-wheel
+  pytest run), `build-sdist`. A `summary` job aggregates results for
+  branch-protection gating. The push + pull_request path filters cover
+  `implementations/{python,rust,cpp}/**`, `examples/**`, and
+  `.github/workflows/**` (the Delphi tree is still uncovered — no hosted
+  Delphi toolchain).
 - `release.yml` — triggered by `v*`-tag pushes. Same wheel + sdist
   matrix; the `publish-testpypi` job uploads to TestPyPI via
   Trusted Publishing (OIDC, no API tokens).
@@ -738,47 +763,48 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 ---
 
-## Next session priorities (as of 2026-06-03)
+## Next session priorities (as of 2026-06-04)
 
-Current state — **C++ Phase 7 is complete**. Both OSF5 writers
-(`StreamingWriter` embedded, `BlockWriter` analyst-style) plus
-the optional `StaleValueGuard` freshness layer are in place;
-**283/283 ctest green** under MSVC `/W4 /permissive-`. The
-`StaleValueGuard` (Phase 7d, this session) is a write-through
-wrapper over `StreamingWriter` that re-emits the last value of
-idle timestamped channels on `poll(now_ns)` (default 100 s
-interval, numeric + GPS, no backfill / no internal clock).
+Current state — **the C++ §20 Implementation Order is complete (phases
+1–11).** **305/305 ctest green** locally (MSVC `/W4 /permissive-`, with
+`OSF_BUILD_C_API=ON`) and on CI across ubuntu-latest / macos-14 /
+windows-latest with warnings-as-errors + the C ABI. Phase 11 (this
+session) added the `osf-c` C ABI shared library (DECISIONS §23):
+`include/osf/c_api.h` / `src/c_api.cpp`, a C99 `extern "C"` surface over
+`DataManager` + the round-trip write, with a standalone C test and CI
+coverage. Two cross-compiler CMake fixes landed on the branch
+(`enable_language(C)`; `CMAKE_POSITION_INDEPENDENT_CODE`).
 
-Recommended sequence:
+There is no next numbered C++ phase. Options for continuing the C++
+track are all **incremental / BACKLOG**, not required:
 
-1. **C++ Phase 8 — transparent OSFZ decompression on read**
-   (next immediate work). Removes the current `DataManager`
-   OSFZ-rejection stub (the gzip/zlib magic peek in
-   `manager.cpp`'s `parse_header_and_metablock`). Detect
-   gzip (`0x1F 0x8B`) / zlib (`0x78 …`) by leading magic and
-   wrap the input stream in a decompressor before the
-   magic-header parse — mirror the Rust `compression` module
-   (`MaybeCompressed<R>` + `detect_and_wrap`). `OSF_USE_SYSTEM_ZLIB`
-   (default OFF) is already declared in CMake for this phase;
-   pick a vendored vs. system zlib strategy. Unblocks the
-   `weather_station.osfz` and `Testdata Motorbike/` field
-   samples through the C++ reader.
-2. **Phase 9 — throwing convenience layer**, then Phase 10
-   (CI: extend `ci.yml` path filter to `implementations/cpp/**`
-   plus a Linux/macOS/Windows job matrix) and Phase 11 (C ABI
-   wrapper) per §20 Implementation Order.
+1. **Full C builder API** — sample-by-sample OSF creation from C
+   (`osf_writer_new`, `add_channel`, `add_*_samples`, `write`),
+   per-exact-type numeric getters, and an `osf_load_buffer` memory/stream
+   load entry. Deferred in the Phase-11 scope decision.
+2. **Packaging** the `osf-c` shared library (install rules, an import
+   library, a pkg-config / CMake package config) for external consumers.
 
-Parallel work: **Java sync** if the Java implementation has
-not yet absorbed the spec rev 2026-05-24 updates
-(version-deterministic null-terminator rule, uniform bit-7
-optionality). DECISIONS §21 already documents the new rules,
-but no Java code exists yet to enforce them — the scaffolding
-prompt would be the next concrete step on that track.
+Parallel / other tracks (the bigger roadmap now that C++ §20 is done):
 
-The Phase 7d work landed on branch `phase-7d-stale-value-guard`
-(feature commit + this documentation commit); documentation
-deltas (this STATUS update + CHANGELOG entries + DECISIONS §20
-update) accompany the merge to `main`.
+- **Java implementation** (DECISIONS §21) — no Java code exists yet; the
+  scaffolding prompt absorbing the spec rev 2026-05-24 rules
+  (version-deterministic null-terminator, uniform bit-7 optionality)
+  would be the first concrete step.
+- **Other language placeholders** (C native, C#, …) remain
+  README-only.
+
+The Phase 11 work landed on branch `phase-11-c-api` (feature commit +
+two cross-compiler CMake fix commits + this documentation commit),
+verified by dispatching CI on the branch
+(`gh workflow run ci.yml --ref phase-11-c-api`) until all three OS legs
+were green, then merged to `main`.
+
+Local-build note: the host's HTTPS FetchContent fails
+(`CRYPT_E_NO_REVOCATION_CHECK`), so configure with
+`-D FETCHCONTENT_SOURCE_DIR_ZLIB=…` and
+`-D FETCHCONTENT_SOURCE_DIR_GOOGLETEST=…` pointing at local
+extracts (download once via `Invoke-WebRequest`); see CLAUDE.md.
 
 ---
 
