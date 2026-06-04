@@ -132,12 +132,45 @@ Manual on GitHub. Pre-checks:
 - [ ] **⚠ MANDATORY — purge unreleased field data from git history.**
       `examples/Testdata Train OSFZ/` (348 files) was removed from the
       working tree but is **not authorized for publication** and is
-      still retrievable from history until rewritten. Run a history
-      purge (e.g. `git filter-repo --path "examples/Testdata Train OSFZ"
-      --invert-paths`) and force-push **after** the parallel C++ /
-      Java tracks have settled and merged — the rewrite changes every
-      subsequent SHA and would otherwise break those worktrees.
-      Coordinate the rewrite as one of the last steps before the flip.
+      still retrievable from history until rewritten. **The blobs are
+      reachable from BOTH `main` and `prep-public-release` (357 objects
+      each)** — `main` never removed them from its tree at all (only
+      `prep` did, in `41ac7da`), so the rewrite must cover both branches.
+      The procedure below was **dry-run-validated 2026-06-04** (see the
+      hand-off note) — it removes exactly the 348 train files and nothing
+      else, shrinking the pack 157 → 95 MiB and leaving the `prep` tip
+      tree byte-identical.
+
+      Tooling: `git-filter-repo` (the doc-recommended tool). No system
+      Python on this host — use the standalone single-file script with a
+      venv interpreter (no install, no pollution):
+
+      ```powershell
+      # one-time: fetch the standalone script (Windows cert store works)
+      $py = "C:\Users\bus\Documents\Claude\dev-setup\test-python\.venv\Scripts\python.exe"
+      $fr = "$env:TEMP\git-filter-repo.py"
+      Invoke-WebRequest -UseBasicParsing `
+        -Uri "https://raw.githubusercontent.com/newren/git-filter-repo/v2.47.0/git-filter-repo" `
+        -OutFile $fr
+
+      # run on a FRESH mirror clone, never the live working repo
+      git clone --mirror <repo> "$env:TEMP\osf-flip.git"
+      Push-Location "$env:TEMP\osf-flip.git"
+      & $py $fr --path "examples/Testdata Train OSFZ" --invert-paths
+      # verify (must print 0): 
+      (git rev-list --all --objects | Select-String "Testdata Train OSFZ").Count
+      # then push the rewritten refs back:
+      git push --force --mirror https://github.com/optimeas/osf.git
+      Pop-Location
+      ```
+
+      **Sequencing — run this as one of the LAST steps before the flip,
+      AFTER:** (1) Phases 2–3 done, (2) `prep-public-release` merged to
+      `main` (so the train-removal + all cleanup live on `main`), (3) the
+      parallel C++ worktree at `C:\Users\Public\Documents\Develop\github\osf`
+      (has `main` checked out) is dormant/re-synced — the rewrite changes
+      every subsequent SHA and would otherwise break it. The C++ track is
+      already settled on `main`; no Java track is active.
       (Double-check no other unreleased data slipped in before running.)
 - [ ] All previous phases merged to `main`
 - [ ] CI green on `main`
@@ -197,7 +230,9 @@ Their `cpp/README.md` on `phase-10-ci` is still the stale "phase 1
 skeleton" — when their work merges, prefer this branch's version (no
 conflict expected; they didn't touch it).
 
-**Next session — pick up with EITHER:**
+**Next session — pick up with EITHER:** *(superseded by the 2026-06-04
+note below — the C++ track has now fully settled on `main`.)*
+
 - **Phase 2** (Docusaurus integration prep — layout/frontmatter audit,
   i18n decision), or
 - **Phase 3** (per-implementation + examples documentation — user's
@@ -207,3 +242,36 @@ conflict expected; they didn't touch it).
   purge + flip prep.
 
 Decision pending from the user on which of these to start with.
+
+### 2026-06-04 — main synced in; Train-purge dry-run validated
+
+**C++ track fully settled.** All of C++ §20 (phases 1–11) is merged to
+`main` (`0f51096`, 305/305 ctest, CI-green); no Java track is active.
+`main` was merged into `prep-public-release` this session (merge commit,
+one docs conflict in STATUS.md resolved toward main's "§20 complete"
+state, plus two MicroPython residuals from main swept). The branch now
+carries the whole finished C++ surface.
+
+**Train-data history purge — tooling chosen + dry-run-validated (NOT yet
+executed live).** The exact, reproducible procedure is now in the Phase 4
+checklist above. Key findings from the dry run (on a throwaway mirror
+clone, `git-filter-repo v2.47.0`):
+
+- removes exactly the **348** `Testdata Train OSFZ` files across all
+  history; **0** non-train paths touched, **0** train objects left;
+- `prep` tip tree byte-identical before/after (`9d9d95f…`) — zero impact
+  on the deliverable;
+- pack shrinks **157 → 95 MiB** (the remaining 95 MiB is the *authorized*
+  Motorbike / steam_loco / weather_station / generated data);
+- 2 train-only commits become empty and are pruned on each branch.
+- **Both `main` and `prep` carry the train blobs** (357 objects each) —
+  the live rewrite must cover both. `main` still has the files *in its
+  tip tree* (only `prep` removed them); the merge of `prep`→`main` will
+  carry that removal, and the purge scrubs the history regardless.
+
+**Still NOT done (the live purge is deliberately deferred):** the
+irreversible `--force --mirror` push is one of the *last* steps before
+the flip. It must wait until Phases 2–3 are done and `prep` is merged to
+`main`, and the C++ worktree at `C:\Users\Public\Documents\Develop\github\osf`
+(has `main` checked out) is re-synced afterwards. Phases 2 and 3 remain
+the next substantive work.
