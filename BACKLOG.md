@@ -126,6 +126,33 @@ Triggers for action: profiling on a representative workload shows
 the I/O path is the bottleneck; or a connector implementation
 explicitly needs random access into multi-GB OSF files.
 
+### C++ C ABI (osf-c) — deferred surface (post-Phase-11)
+
+Phase 11 (DECISIONS §23) shipped the `osf-c` C ABI shared library with a
+deliberately bounded scope: full read path + a single round-trip
+`osf_write_to_file`. The following were considered and parked:
+
+- **Full sample-by-sample C builder.** A `osf_writer_*` family
+  (`osf_writer_new`, `add_channel`, `add_equidistant_segment`,
+  `add_timestamped_*` over all types, `write_to_file`) so C consumers can
+  produce OSF from scratch rather than only re-export a loaded manager.
+  Large surface (~30+ functions); wraps `BlockWriter` / `StreamingWriter`.
+  Trigger: a concrete cross-language *writer* use case (the current
+  consumers read + convert).
+- **Per-exact-type numeric getters.** The current readers are
+  convenience-typed (`read_f64` / `read_i64` + the exact `osf_channel_data_type`
+  tag); add bit-exact `read_i8/u8/.../f32` if a consumer needs lossless
+  access to `uint64` / `float` without going through `double`/`int64`.
+- **`osf_load_buffer`** — load from an in-memory buffer / stream rather
+  than only a file path (mirrors `DataManager::load_from_stream`). Needed
+  for consumers that already hold the bytes (network, embedded flash).
+- **Packaging.** Install rules for `osf-c` (the shared lib + the import
+  library on Windows + `c_api.h`), a CMake package config / pkg-config so
+  external projects can `find_package(osf-c)`. Pairs with a future
+  release of the C++ library.
+
+None block current consumers; `OSF_BUILD_C_API` stays OFF by default.
+
 ### C++ DurableFile hardening (post-Phase-7b)
 
 Phase-7b Task 1 (`implementations/cpp/src/durable_file.{hpp,cpp}`,

@@ -647,8 +647,24 @@ warnings-as-errors, gating the `summary` job. New opt-in CMake option
 first GCC/AppleClang build of the code (previously MSVC-only); two hits
 were cleared — a dead Float/Double check in `block_writer.cpp` (MSVC
 C4127 → `static_assert`) and an unused test helper. All three OS legs
-green (304/304 ctest each), full CI run green. **Phase 11 (C ABI
-wrapper)** is the last remaining phase.
+green (304/304 ctest each), full CI run green.
+
+**Phase 11 complete (2026-06-04):** the C ABI wrapper — see **§23** for
+the full contract. A separate shared library `osf-c` (built only when
+`OSF_BUILD_C_API=ON`) exposes the C++ core through a pure-C99 `extern "C"`
+header `include/osf/c_api.h`: opaque `osf_manager` / borrowed `osf_channel`
+handles, `osf_status` codes mirroring `Error::Code`, a thread-local
+last-error, caller-buffer copy-out sample readers, and a round-trip
+`osf_write_to_file`. A standalone C99 test (`tests/c_api/test_c_api.c`)
+proves C-compatibility + DLL linkage; CI builds the shared lib and runs
+the C test on all three OSes (`-D OSF_BUILD_C_API=ON`). The cross-compiler
+pass surfaced two CMake fixes (enable C for the single-config generators;
+`POSITION_INDEPENDENT_CODE` for folding the static core into the shared
+lib). ctest 304 → **305/305** with the C API on; the matrix is green.
+
+**The §20 Implementation Order is now complete (phases 1–11).** Remaining
+C++ work is incremental (e.g. the deferred full C builder API in BACKLOG)
+rather than a numbered phase.
 
 ## 21. Java Implementation Architecture
 
@@ -969,3 +985,69 @@ The `OSF.Progress.*` family (eight units totalling ~1400 LOC), the
 sniffing wrapper. `TOSFFile.TruncationSeen: Boolean` is the proper
 signal replacing the latter. Net delta: ~621 LOC removed across the
 Delphi tree.
+
+## 23. C ABI (osf-c)
+
+**Decision (Phase 11, 2026-06-04):** the C++ implementation ships a
+C-callable ABI as a separate **shared** library `osf-c`, built only when
+`OSF_BUILD_C_API=ON` (default OFF). It wraps the existing C++ core through
+an `extern "C"` interface for cross-language consumption (Windows DLL /
+ActiveX-OCX, future language bindings). This is the deferred deliverable
+§20 always anticipated, now landed after the core reached roundtrip
+validation so the ABI is designed against a stable surface rather than
+forcing constraints onto the natural C++ form.
+
+This is **distinct from `implementations/c/`** (a separate, planned
+from-scratch native C99 implementation for embedded targets). `osf-c`
+reimplements nothing — it is a thin adapter over `DataManager` and the
+`BlockWriter` round-trip convenience.
+
+**Scope.** Read + round-trip write. The full read path (open OSF/OSFZ,
+enumerate channels, file + channel metadata, sample/timestamp access) plus
+a single `osf_write_to_file(manager, path)` re-export (always OSF5, §6). A
+sample-by-sample C builder, per-exact-type numeric getters, and a
+memory/stream load entry are out of scope (BACKLOG).
+
+**Public header.** `include/osf/c_api.h` — pure C99, depends only on
+`<stdint.h>` / `<stddef.h>`, `extern "C"`-guarded for C++ consumers.
+Export decoration via the `OSF_C_API` macro: `__declspec(dllexport)` when
+building (`OSF_C_BUILDING` defined), `__declspec(dllimport)` for consumers
+on Windows; `__attribute__((visibility("default")))` elsewhere (the target
+sets `*_VISIBILITY_PRESET hidden`).
+
+**Handle patterns.** Opaque pointers only. `osf_manager` owns a heap
+`osf::DataManager`; `osf_channel` is a **borrowed** `osf::DataChannel
+const*` into the manager's `channels()` (stable for the manager's
+lifetime, never freed by the caller). `osf_manager_free` is the sole
+destructor. No struct layouts cross the ABI — only scalars + opaque
+pointers — so the binary layout cannot drift.
+
+**Error model.** Every fallible call returns `osf_status` (`OSF_OK = 0`,
+remaining codes mirror `osf::Error::Code` 1:1, append-only). Output
+handles are returned via an out-param. On failure a **thread-local**
+last-error string is set, retrievable with `osf_last_error_message()`
+(valid until the next `osf_*` call on the same thread). Every entry point
+is wrapped in `try/catch`; no C++ exception ever crosses the boundary
+(pointer-returning getters yield `nullptr` / `""` / `0` on bad input and
+set the last error).
+
+**String ownership.** All `const char*` returned by getters (channel
+names, units, creator, string samples) are **borrowed**, owned by the
+manager, valid until `osf_manager_free`. The library never hands back a
+heap string the caller must free; the caller copies if it needs the value
+to outlive the handle.
+
+**Buffer ownership.** Sample / timestamp readers copy into a
+caller-provided buffer of capacity `cap` and return the number written
+(`min(sample_count, cap)`); the caller sizes via
+`osf_channel_sample_count` first. Equidistant timestamps are reconstructed
+into the caller's buffer. Numeric access is convenience-typed:
+`osf_channel_data_type` reports the exact type, `osf_channel_read_f64`
+(any numeric → `double`) and `osf_channel_read_i64` (integers/bool →
+`int64`) cover the analyst path; `osf_channel_read_gps` writes lat/lon/alt
+triples; `osf_channel_string_at` / `binary_at` return borrowed views.
+
+**ABI stability guarantees.** Enums are append-only and never renumbered;
+the function set grows additively. `osf_version()` returns the core
+version string. The default build (`OSF_BUILD_C_API=OFF`) and the core
+library are unaffected — the C ABI is purely additive.
