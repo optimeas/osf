@@ -17,12 +17,30 @@ Remaining work continues directly on `main`.
 > manual step" framing this section originally carried was mistaken.
 > Consequence: the unreleased Train field data (in history since
 > 2026-05-19) and the `docs/superpowers/` artefacts were publicly
-> reachable via `git clone` history the whole time. The mandatory history
-> purge (Phase 4) was therefore **executed immediately** rather than
-> deferred behind Phases 2–3 — it was overdue, not a final-step nicety.
-> Mitigating at the time of discovery: 0 forks, 0 watchers, 1 star. After
-> the rewrite + force-push, GitHub Support should be asked to drop cached
-> views / unreachable objects for the Train paths (foreign data).
+> reachable via `git clone` history the whole time. The history purge
+> (Phase 4) was therefore **executed immediately** rather than deferred
+> behind Phases 2–3. **Done 2026-06-04:** `git-filter-repo` on a fresh
+> mirror (`--path "examples/Testdata Train OSFZ" --path docs/superpowers
+> --invert-paths`) + `git push --force --mirror`; new tip `1cd30c4`, tags
+> `v0.1.0`/`v0.2.0`/`v0.10.0` rewritten; a fresh clone now pulls 0 train +
+> 0 superpowers objects, tip tree byte-identical, authorized data intact.
+>
+> **No GitHub Support follow-up needed.** The data owner (Burkhard)
+> reassessed the Train data as low-sensitivity: a third party can do
+> nothing with it and incidental exposure is uncritical, including towards
+> the customer — the only requirement is that it not stay **published
+> long-term**, which the purge already satisfies (no fresh clone carries
+> it). The remaining unreachable objects are left to GitHub's periodic
+> `gc`; with 0 forks there is no fork-network retention. The earlier
+> "ask Support to drop cached views" step is dropped.
+>
+> **No second worktree to re-sync on this machine:** `V:\` is a `subst`
+> alias for `C:\Users\Public\Documents\Develop`, so `v:\github\osf` and
+> the `C:\Users\Public\...\osf` "C++ worktree" are the same directory
+> (canonical path `C:/Users/Public/Documents/Develop/github/osf`), already
+> at the rewritten tip. Only a clone on *another* machine would need
+> `git fetch --force --tags && git reset --hard origin/main` before its
+> next push.
 
 ---
 
@@ -165,10 +183,10 @@ here must be **drop-in copyable** into that site's `docs/` tree.
 
 Manual on GitHub. Pre-checks:
 
-- [ ] **⚠ MANDATORY — purge unreleased field data from git history.**
-      `examples/Testdata Train OSFZ/` (348 files) was removed from the
-      working tree but is **not authorized for publication** and is
-      still retrievable from history until rewritten. **The blobs are
+- [x] **DONE 2026-06-04 — purged unreleased field data from git history.**
+      (Outcome summary in the ⚠ CORRECTION note at the top of this file.)
+      `examples/Testdata Train OSFZ/` (348 files) had been removed from the
+      working tree but was still retrievable from history until rewritten. **The blobs are
       reachable from BOTH `main` and `prep-public-release` (357 objects
       each)** — `main` never removed them from its tree at all (only
       `prep` did, in `41ac7da`), so the rewrite must cover both branches.
@@ -205,14 +223,23 @@ Manual on GitHub. Pre-checks:
       Pop-Location
       ```
 
-      **Sequencing — run this as one of the LAST steps before the flip,
-      AFTER:** (1) Phases 2–3 done, (2) `prep-public-release` merged to
-      `main` (so the train-removal + all cleanup live on `main`), (3) the
-      parallel C++ worktree at `C:\Users\Public\Documents\Develop\github\osf`
-      (has `main` checked out) is dormant/re-synced — the rewrite changes
-      every subsequent SHA and would otherwise break it. The C++ track is
-      already settled on `main`; no Java track is active.
-      (Double-check no other unreleased data slipped in before running.)
+      **Sequencing — superseded.** This was originally planned as one of
+      the LAST steps before the flip. Once the repo turned out to be
+      *already public* (see the ⚠ CORRECTION note), the purge was no longer
+      something to defer behind Phases 2–3 — it was run immediately on
+      2026-06-04. The "re-sync the parallel C++ worktree afterwards"
+      concern was moot on this host: `V:\` is a `subst` alias for
+      `C:\Users\Public\Documents\Develop`, so that worktree path and
+      `v:\github\osf` are the same directory, already at the rewritten tip.
+      Only clones on *other* machines need a `git reset --hard origin/main`
+      before their next push.
+
+      **Data-sensitivity reassessment (owner, 2026-06-04):** the Train data
+      is low-sensitivity — a third party can do nothing with it, incidental
+      exposure is uncritical (incl. towards the customer); only long-term
+      publication had to be avoided, which the purge satisfies. → No GitHub
+      Support cache-purge requested; GitHub's periodic `gc` handles the
+      remaining unreachable objects (0 forks, so no fork-network retention).
 - [ ] All previous phases merged to `main`
 - [ ] CI green on `main`
 - [ ] CHANGELOG version-bumped + dated
