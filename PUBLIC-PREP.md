@@ -1,20 +1,17 @@
 # Public Release Preparation
 
-Tracking the steps to make the OSF repo public on GitHub. Branch:
-`prep-public-release`. Owner: Burkhard. Initiated 2026-06-03.
+Tracking the steps to make the OSF repo public on GitHub. Owner:
+Burkhard. Initiated 2026-06-03.
 
-This file is intentionally lightweight — it lives only on this branch
-and is removed at merge. The repo-going-public itself is the last,
-manual step (GitHub Settings → Visibility → Public).
-
-Parallel tracks that **must not be disturbed** while this work runs:
-
-- `phase-7d-stale-value-guard` (main checkout at
-  `C:\Users\Public\Documents\Develop\github\osf`) — active C++ work.
-- Java track — just started elsewhere via `session_snapshot`.
-
-This branch's worktree is `C:\Users\Public\Documents\Develop\github\osf-docs`
-to keep all three isolated.
+**Consolidated onto `main` 2026-06-04.** The `prep-public-release`
+branch + the separate `osf-docs` worktree existed only to isolate this
+work from the parallel C++/Java tracks. Those tracks have settled (C++
+§20 complete on `main`; no Java track active), so the branch was
+fast-forwarded into `main` and removed. This file is **kept on `main`**
+(not removed at merge, as originally planned) — it is the only living
+tracker for the still-open Phases 2–4 and the gating history purge.
+Remaining work continues directly on `main`. The repo-going-public
+itself is the last, manual step (GitHub Settings → Visibility → Public).
 
 ---
 
@@ -109,21 +106,42 @@ here must be **drop-in copyable** into that site's `docs/` tree.
 
 ## Phase 3 — Per-implementation + examples documentation
 
-- [ ] **Per-implementation pages.** For each language with code:
-      install / quickstart / API tour / link to source. Skeleton
-      pages only for planned languages.
-  - [ ] Delphi
-  - [ ] Rust (`osf-core`)
-  - [ ] Python (`osfdata`)
-  - [ ] C++ (current state; honest about Phase 7c done / 7d–11 pending)
-  - [ ] Java (status: just started)
-- [ ] **Examples documentation.** The 17 generated reference files
-      under `examples/generated/` deserve a structured doc page —
-      what each file demonstrates, how to read it, what code produced
-      it. Plus the field samples (`motorbike.osf`, `steam_loco.osf`,
-      `weather_station.osfz`).
-- [ ] **Integrations docs** (Arrow, PyTorch, TensorFlow, MCP,
-      LangChain) — even placeholder pages signal intent.
+**Decisions taken 2026-06-04 (next session implements these, DE first):**
+
+- **New `docs/{de,en}/implementations/` section** for the per-language
+  pages (NOT folded into the existing `integrations/` section — keep
+  `integrations/` for the ecosystem/binding angle). Follow the existing
+  frontmatter convention (`title`/`description`/`sidebar_position`/
+  `image`/`keywords`/`last_update`) and the bilingual cross-link line.
+- **Language order, DE first then EN** (owner is German-speaking): write
+  each German page first, then mirror to English.
+- **Lean placeholders:** Java gets its own skeleton page; C / C# /
+  MATLAB / JavaScript / Swift share **one** combined "planned
+  implementations" page; the ecosystem integrations (Arrow / PyTorch /
+  TensorFlow / MCP / LangChain) get **one** short "planned" page — no
+  per-item empty stubs.
+
+- [ ] **Per-implementation pages** (`implementations/`). Install /
+      quickstart / API tour / link to source.
+  - [ ] `index.md` — status table (available vs. planned) + legend
+  - [ ] Delphi — full (library + demos + osftool CLI)
+  - [ ] Rust (`osf-core`) — full
+  - [ ] Python (`osfdata`) — full (cross-link the existing
+        `integrations/python.md`, don't duplicate it)
+  - [ ] C++ — full (§20 complete: reader/DataManager/writers/throwing/
+        C-ABI; honest "all phases done")
+  - [ ] Java — skeleton (planned; architecture per DECISIONS §21; no
+        code yet)
+  - [ ] `planned.md` — combined C / C# / MATLAB / JavaScript / Swift
+- [ ] **Examples documentation** — expand the stub
+      `docs/{de,en}/examples/osf_file_examples.md` (currently a
+      "working on it" placeholder). The 17 generated reference files
+      under `examples/generated/` (8× OSF4, 9× OSF5) as a structured
+      table — what each demonstrates, how to read it, what code produced
+      it (`OSFGeneratorCLI`). Plus the field samples (`motorbike.osf`,
+      `steam_loco.osf`, `weather_station.osfz` — all OSF4 per the audit).
+- [ ] **Ecosystem integrations** (Arrow, PyTorch, TensorFlow, MCP,
+      LangChain) — one combined "planned" page signalling intent.
 
 ## Phase 4 — Flip to public
 
