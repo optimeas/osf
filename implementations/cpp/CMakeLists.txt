@@ -29,6 +29,15 @@ option(OSF_BUILD_C_API      "Build the C ABI shared library wrapper"  OFF)
 option(OSF_USE_SYSTEM_ZLIB  "Prefer system zlib over FetchContent"    OFF)
 option(OSF_WARNINGS_AS_ERRORS "Treat compiler warnings as errors"     OFF)
 
+# When the C ABI shared library is built, the static osf_core (and the
+# vendored pugixml + FetchContent zlibstatic objects folded into it) must
+# be position-independent so they can link into the shared osf-c on
+# ELF/Mach-O. Set this before any target is created so every dependency
+# inherits it. No-op on MSVC.
+if(OSF_BUILD_C_API)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 # ---------------------------------------------------------------------------
 # Compiler warnings
 # ---------------------------------------------------------------------------
