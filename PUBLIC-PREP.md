@@ -10,8 +10,19 @@ work from the parallel C++/Java tracks. Those tracks have settled (C++
 fast-forwarded into `main` and removed. This file is **kept on `main`**
 (not removed at merge, as originally planned) — it is the only living
 tracker for the still-open Phases 2–4 and the gating history purge.
-Remaining work continues directly on `main`. The repo-going-public
-itself is the last, manual step (GitHub Settings → Visibility → Public).
+Remaining work continues directly on `main`.
+
+> **⚠ CORRECTION 2026-06-04:** the repo is ALREADY public — and has been
+> since creation (2026-05-03). The "the repo-going-public is the last,
+> manual step" framing this section originally carried was mistaken.
+> Consequence: the unreleased Train field data (in history since
+> 2026-05-19) and the `docs/superpowers/` artefacts were publicly
+> reachable via `git clone` history the whole time. The mandatory history
+> purge (Phase 4) was therefore **executed immediately** rather than
+> deferred behind Phases 2–3 — it was overdue, not a final-step nicety.
+> Mitigating at the time of discovery: 0 forks, 0 watchers, 1 star. After
+> the rewrite + force-push, GitHub Support should be asked to drop cached
+> views / unreachable objects for the Train paths (foreign data).
 
 ---
 
@@ -71,11 +82,18 @@ itself is the last, manual step (GitHub Settings → Visibility → Public).
   - [x] `docs/superpowers/plans/`, `docs/superpowers/specs/` — internal
         planning artifacts. **Decision:** `.gitignore` + `git rm
         --cached` (files stay on disk for ongoing C++/Java superpowers
-        work, untracked so they never reach the public repo; copies
-        remain in git history). Not a full history purge — content is
-        low-sensitivity (local paths, no secrets/customer data).
-        Dangling refs in CHANGELOG.md + DECISIONS.md reworded. Docusaurus
-        copy step must exclude `superpowers/` (noted in `.gitignore`).
+        work, untracked so they never reach the public repo).
+        **Updated 2026-06-04:** the dir is now backed by a SEPARATE
+        PRIVATE repo (`optimeas/osf-superpowers`), cloned into the
+        gitignored `docs/superpowers/` path as an independent clone (NOT
+        a submodule — no `.gitmodules` pointer in the public repo), so
+        plans/specs sync across machines + colleagues with full history
+        while staying invisible publicly. The previously-committed copies
+        ARE purged from history in the `git-filter-repo` run (same pass
+        as the Train data — see Phase 4), superseding the earlier "leave
+        in history, low-sensitivity" call. Dangling refs in CHANGELOG.md
+        + DECISIONS.md reworded. Docusaurus copy step must exclude
+        `superpowers/` (noted in `.gitignore`).
 
 ## Phase 2 — Docusaurus integration prep
 
@@ -157,7 +175,11 @@ Manual on GitHub. Pre-checks:
       The procedure below was **dry-run-validated 2026-06-04** (see the
       hand-off note) — it removes exactly the 348 train files and nothing
       else, shrinking the pack 157 → 95 MiB and leaving the `prep` tip
-      tree byte-identical.
+      tree byte-identical. **The live run additionally removes
+      `docs/superpowers/` (35 objects) per the 2026-06-04 decision —
+      beyond the train-only dry-run scope, but the same mechanism;
+      `docs/superpowers/` is already absent from the tip tree (`git rm
+      --cached`), so the deliverable tree stays unchanged.**
 
       Tooling: `git-filter-repo` (the doc-recommended tool). No system
       Python on this host — use the standalone single-file script with a
@@ -174,9 +196,10 @@ Manual on GitHub. Pre-checks:
       # run on a FRESH mirror clone, never the live working repo
       git clone --mirror <repo> "$env:TEMP\osf-flip.git"
       Push-Location "$env:TEMP\osf-flip.git"
-      & $py $fr --path "examples/Testdata Train OSFZ" --invert-paths
-      # verify (must print 0): 
+      & $py $fr --path "examples/Testdata Train OSFZ" --path "docs/superpowers" --invert-paths
+      # verify (must print 0 for BOTH):
       (git rev-list --all --objects | Select-String "Testdata Train OSFZ").Count
+      (git rev-list --all --objects | Select-String "docs/superpowers").Count
       # then push the rewritten refs back:
       git push --force --mirror https://github.com/optimeas/osf.git
       Pop-Location
