@@ -102,16 +102,21 @@ Remaining work continues directly on `main`.
         --cached` (files stay on disk for ongoing C++/Java superpowers
         work, untracked so they never reach the public repo).
         **Updated 2026-06-04:** the dir is now backed by a SEPARATE
-        PRIVATE repo (`optimeas/osf-superpowers`), cloned into the
-        gitignored `docs/superpowers/` path as an independent clone (NOT
-        a submodule — no `.gitmodules` pointer in the public repo), so
-        plans/specs sync across machines + colleagues with full history
-        while staying invisible publicly. The previously-committed copies
-        ARE purged from history in the `git-filter-repo` run (same pass
-        as the Train data — see Phase 4), superseding the earlier "leave
-        in history, low-sensitivity" call. Dangling refs in CHANGELOG.md
-        + DECISIONS.md reworded. Docusaurus copy step must exclude
-        `superpowers/` (noted in `.gitignore`).
+        PRIVATE repo (intentionally unnamed/unlinked here — see below),
+        cloned into the gitignored `docs/superpowers/` path as an
+        independent clone (NOT a submodule — no `.gitmodules` pointer in
+        the public repo), so plans/specs sync across machines + colleagues
+        with full history while staying invisible publicly. The
+        previously-committed copies ARE purged from history in the
+        `git-filter-repo` run (same pass as the Train data — see Phase 4),
+        superseding the earlier "leave in history, low-sensitivity" call.
+        Dangling refs in CHANGELOG.md + DECISIONS.md reworded. Docusaurus
+        copy step must exclude `superpowers/` (noted in `.gitignore`).
+        **Discovery is deliberately out-of-band:** per the 2026-06-04
+        decision the public repo carries NO name, URL, or bootstrap
+        pointer to the private planning repo — colleagues learn the clone
+        step from team onboarding + the private repo's own README, not
+        from anything in this public tree.
 
 ## Phase 2 — Docusaurus integration prep
 

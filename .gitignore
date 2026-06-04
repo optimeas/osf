@@ -56,18 +56,10 @@ docs/pdf-out/
 # VS Code workspace metadata.
 .vscode/
 
-# Internal superpowers planning/spec artefacts (per-phase agent plans).
-# These are session-local development scaffolding, not public docs:
-# they carry local machine paths and "for agentic workers" framing and
-# would otherwise render as pages in the public Docusaurus site.
-# Shared across machines + colleagues via a SEPARATE PRIVATE repo
-# (optimeas/osf-superpowers) cloned into this gitignored path as an
-# INDEPENDENT clone -- not a submodule, so no .gitmodules pointer leaks
-# the private repo into this public one. Bootstrap on a new machine:
-#     git clone https://github.com/optimeas/osf-superpowers.git docs/superpowers
-# The previously-committed copies were purged from this repo's history
-# in the git-filter-repo run (same pass as the unreleased Train field
-# data).
+# Internal planning/spec scaffolding — not part of the published project.
+# Kept on disk for ongoing development but never tracked or published:
+# it carries local paths and would otherwise render as public doc pages.
+# Shared out-of-band, not through this repo (no link/pointer here by design).
 # NOTE: when syncing docs/ to the external Docusaurus site, exclude
 # superpowers/ in the copy step (gitignored files are still on disk).
 docs/superpowers/
