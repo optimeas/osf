@@ -545,3 +545,23 @@ endif()
 osf_set_warnings(test_compression_examples)
 
 gtest_discover_tests(test_compression_examples)
+
+# ---------------------------------------------------------------------------
+# test_c_api — C ABI smoke test (Phase 11). A standalone C99 program that
+# links the osf-c shared library; built only when OSF_BUILD_C_API=ON.
+# Proves the header is C-compatible and the DLL/.so links + works.
+# ---------------------------------------------------------------------------
+
+if(OSF_BUILD_C_API)
+    add_executable(test_c_api c_api/test_c_api.c)
+    set_target_properties(test_c_api PROPERTIES LINKER_LANGUAGE C)
+    target_link_libraries(test_c_api PRIVATE osf_c)
+    target_compile_definitions(test_c_api PRIVATE
+        OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+    osf_set_warnings(test_c_api)
+    add_test(NAME c_api COMMAND test_c_api)
+    # Make the osf-c shared library discoverable at run time on every OS
+    # without copying or RPATH juggling.
+    set_tests_properties(c_api PROPERTIES ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:osf_c>;LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:osf_c>;DYLD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:osf_c>")
+endif()

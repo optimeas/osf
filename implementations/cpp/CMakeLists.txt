@@ -167,6 +167,28 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# osf-c — C ABI shared library (Phase 11, DECISIONS §23). Built only when
+# OSF_BUILD_C_API=ON. Wraps osf_core (static, folded in) behind a pure-C99
+# extern "C" surface; the public header is include/osf/c_api.h.
+# ---------------------------------------------------------------------------
+
+if(OSF_BUILD_C_API)
+    add_library(osf_c SHARED src/c_api.cpp)
+    add_library(osf::c ALIAS osf_c)
+    set_target_properties(osf_c PROPERTIES
+        OUTPUT_NAME osf-c
+        C_VISIBILITY_PRESET hidden
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
+    )
+    target_compile_definitions(osf_c PRIVATE OSF_C_BUILDING)
+    target_link_libraries(osf_c PRIVATE osf_core)
+    target_include_directories(osf_c PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    osf_set_warnings(osf_c)
+endif()
+
+# ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 

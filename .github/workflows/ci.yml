@@ -86,6 +86,7 @@ jobs:
           cmake -B implementations/cpp/build -S implementations/cpp
           -D CMAKE_BUILD_TYPE=Debug
           -D OSF_WARNINGS_AS_ERRORS=ON
+          -D OSF_BUILD_C_API=ON
       - name: Build
         run: cmake --build implementations/cpp/build --config Debug
       - name: Test
