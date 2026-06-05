@@ -162,8 +162,17 @@ here must be **drop-in copyable** into that site's `docs/` tree.
   TensorFlow / MCP / LangChain) get **one** short "planned" page — no
   per-item empty stubs.
 
-- [ ] **Per-implementation pages** (`implementations/`). Install /
-      quickstart / API tour / link to source.
+**Progress 2026-06-05 — DE side complete; EN mirror + review pending.** All
+German pages written: `implementations/{index,delphi,rust,python,cpp,java,planned}.md`,
+`examples/osf_file_examples.md` expanded (17-file table + field samples),
+`integrations/planned.md` added + `integrations/index.md` reworked
+(implementations section at `sidebar_position: 3`; `integrations`→4, `tools`→5).
+Remaining: (1) Burkhard's DE review, (2) mirror everything to `docs/en/`,
+(3) optionally refresh the slightly stale `implementations/cpp/README.md`
+(says "CI in progress / C-ABI pending" — both are done per STATUS).
+
+- [x] **Per-implementation pages** (`implementations/`) — **DE done; EN pending.**
+      Install / quickstart / API tour / link to source.
   - [ ] `index.md` — status table (available vs. planned) + legend
   - [ ] Delphi — full (library + demos + osftool CLI)
   - [ ] Rust (`osf-core`) — full
@@ -174,15 +183,16 @@ here must be **drop-in copyable** into that site's `docs/` tree.
   - [ ] Java — skeleton (planned; architecture per DECISIONS §21; no
         code yet)
   - [ ] `planned.md` — combined C / C# / MATLAB / JavaScript / Swift
-- [ ] **Examples documentation** — expand the stub
+- [x] **Examples documentation** (**DE done; EN pending**) — expand the stub
       `docs/{de,en}/examples/osf_file_examples.md` (currently a
       "working on it" placeholder). The 17 generated reference files
       under `examples/generated/` (8× OSF4, 9× OSF5) as a structured
       table — what each demonstrates, how to read it, what code produced
       it (`OSFGeneratorCLI`). Plus the field samples (`motorbike.osf`,
       `steam_loco.osf`, `weather_station.osfz` — all OSF4 per the audit).
-- [ ] **Ecosystem integrations** (Arrow, PyTorch, TensorFlow, MCP,
+- [x] **Ecosystem integrations** (Arrow, PyTorch, TensorFlow, MCP,
       LangChain) — one combined "planned" page signalling intent.
+      (**DE done** as `integrations/planned.md`; **EN pending**.)
 
 ## Phase 4 — Flip to public
 

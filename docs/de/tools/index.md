@@ -1,7 +1,7 @@
 ---
 title: Werkzeuge
 description: Kommandozeilen-Werkzeuge und Hilfsprogramme für das OSF-Format
-sidebar_position: 4
+sidebar_position: 5
 image: "/img/om_social_card.png"
 keywords:
   - OSF
