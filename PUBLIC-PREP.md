@@ -8,9 +8,10 @@ branch + the separate `osf-docs` worktree existed only to isolate this
 work from the parallel C++/Java tracks. Those tracks have settled (C++
 §20 complete on `main`; no Java track active), so the branch was
 fast-forwarded into `main` and removed. This file is **kept on `main`**
-(not removed at merge, as originally planned) — it is the only living
-tracker for the still-open Phases 2–4 and the gating history purge.
-Remaining work continues directly on `main`.
+(not removed at merge, as originally planned) — it is the living tracker
+for the public-release prep. Phases 1, 3 and 4 (incl. the history purge)
+are done; Phase 2 is synced to a Docusaurus PR branch (owner merge
+pending). Remaining work continues directly on `main`.
 
 > **⚠ CORRECTION 2026-06-04:** the repo is ALREADY public — and has been
 > since creation (2026-05-03). The "the repo-going-public is the last,
@@ -120,30 +121,43 @@ Remaining work continues directly on `main`.
 
 ## Phase 2 — Docusaurus integration prep
 
-Target: external Bitbucket-hosted Docusaurus repo. The Markdown sources
-here must be **drop-in copyable** into that site's `docs/` tree.
+Target: external Bitbucket-hosted Docusaurus repo `optimeas-documentation`
+(deploys to docs.optimeas.com), locally at `V:\bitbucket\optimeas-documentation`.
 
-- [ ] **Layout audit.** Current `docs/{de,en}/` structure vs.
-      Docusaurus conventions:
-  - sidebar item ordering (Docusaurus uses `sidebar_position` or
-    `_category_.json` files — pick one)
-  - frontmatter (`id`, `title`, `slug`, `sidebar_label`,
-    `sidebar_position`) — currently missing from most files
-  - internal links — relative `[x](osf4.md)` vs. Docusaurus
-    `[x](./osf4)` or `[x](/docs/references/osf4)`
-  - asset paths — `media/` references survive the copy?
-  - i18n strategy — Docusaurus has native i18n (`i18n/de/`,
-    `i18n/en/`); current layout puts language in path
-    (`docs/de/`, `docs/en/`). Decide: keep current layout (treat as
-    two sibling doc trees in Docusaurus) vs. restructure to
-    Docusaurus i18n convention. **Decision pending.**
-- [ ] **Cross-repo sync mechanism.** Manual copy on each release vs.
-      Bitbucket pipeline pulls from GitHub vs. submodule. Out of
-      scope for the source layout, but the layout choice should not
-      block any of these.
-- [ ] **Docusaurus-readiness PoC.** Drop the current `docs/` into a
-      local minimal Docusaurus install, see what breaks, fix at the
-      source.
+**DONE 2026-06-06 — synced to a PR branch; owner review/merge pending.**
+Design + plan: `docs/superpowers/{specs,plans}/2026-06-06-osf-docs-docusaurus-sync*`.
+
+- [x] **Layout audit.** Audited `docs/{de,en}/` against the live target:
+  - sidebar ordering: the OSF subtree uses `index.md` + `sidebar_position`
+    (no `_category_.json` inside `osf/`; only `data_formats/_category_.json`
+    above it) — our pages already match.
+  - frontmatter: matches the target OSF-subtree convention
+    (`title`/`description`/`sidebar_position`/`image: "/img/om_social_card.png"`/
+    `keywords`/`last_update.author: Optimeas GmbH`).
+  - internal links: already relative `.md` — Docusaurus-native and portable;
+    resolve within each locale tree after the move.
+  - asset paths: `media/` references survive (media copied alongside).
+  - **i18n strategy — DECIDED (dictated by the target):** keep the target's
+    **native Docusaurus i18n** with **German as default** —
+    `defaultLocale: "de"`, `locales: ["de","en"]`. DE → `docs/…/osf`,
+    EN → `i18n/en/docusaurus-plugin-content-docs/current/…/osf`. The GitHub
+    `docs/{de,en}` sibling layout stays the authoring source; the sync maps it
+    in. Manual `🇩🇪`/`🇬🇧` flag cross-links are GitHub-only and stripped on
+    sync (the locale switcher replaces them).
+- [x] **Cross-repo sync mechanism.** Reusable script
+      `docs/scripts/sync-to-docusaurus.py` (+ 9 unittest cases): path mapping,
+      flag-link strip at any `../` depth, clean-replace `.md`, additive
+      `media/`. `--dry-run` + tally. Delivery is a feature branch + PR (never
+      direct to `main`, which auto-deploys). Submodule/pipeline-pull rejected
+      as fragile (cross-host auth + the path/i18n/flag transform).
+- [x] **Docusaurus-readiness check.** The local PoC build was blocked by this
+      host's Windows TLS issue (`UNABLE_TO_VERIFY_LEAF_SIGNATURE` on npm
+      fetches — same cert problem as the C++ FetchContent caveat), so readiness
+      was verified offline instead (62 internal links resolve, 0 broken;
+      40/40 frontmatter blocks valid; 0 flag remnants) and the **authoritative
+      build is the Bitbucket PR pipeline** (`node:20`). Synced to branch
+      `osf-docs-sync-phase3` (target commit `a79a9a1`, 44 files); **owner
+      opens the PR → pipeline builds → review + merge → SFTP deploy.**
 
 ## Phase 3 — Per-implementation + examples documentation
 

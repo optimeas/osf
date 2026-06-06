@@ -17,8 +17,10 @@ the separate `osf-docs` worktree were consolidated onto `main` on
 2026-06-04; public-prep work now continues directly on `main`. Done: Phase 1
 (repo cleanup), the Phase 4 history purge (unreleased field data + planning
 artefacts scrubbed from history), and Phase 3 (per-implementation + examples
-developer docs, **DE + EN**). Remaining: **Phase 2** (Docusaurus integration
-prep — layout/frontmatter audit, i18n decision). Tracker: `PUBLIC-PREP.md`.
+developer docs, **DE + EN**) and Phase 2 (Docusaurus integration prep — audit
++ reusable `docs/scripts/sync-to-docusaurus.py` sync tool; OSF docs synced to
+the Bitbucket site's native-i18n layout on PR branch `osf-docs-sync-phase3`,
+owner merge pending). Tracker: `PUBLIC-PREP.md`.
 
 ---
 
