@@ -12,15 +12,15 @@ when deeper context is needed.
 | Branch | `main` |
 | Spec revision in effect | **2026-05-24** |
 
-**Public-release prep (on `main`):** the `prep-public-release` branch and
-the separate `osf-docs` worktree were consolidated onto `main` on
-2026-06-04; public-prep work now continues directly on `main`. Done: Phase 1
-(repo cleanup), the Phase 4 history purge (unreleased field data + planning
-artefacts scrubbed from history), and Phase 3 (per-implementation + examples
-developer docs, **DE + EN**) and Phase 2 (Docusaurus integration prep — audit
-+ reusable `docs/scripts/sync-to-docusaurus.py` sync tool; OSF docs synced to
-the Bitbucket site's native-i18n layout on PR branch `osf-docs-sync-phase3`,
-owner merge pending). Tracker: `PUBLIC-PREP.md`.
+**Public-release prep — done (on `main`).** Phase 1 (repo cleanup), Phase 3
+(per-implementation + examples developer docs, **DE + EN**) and Phase 4
+(history purge of unreleased field data + planning artefacts) are complete;
+Phase 2 (Docusaurus integration) shipped the reusable
+`docs/scripts/sync-to-docusaurus.py` tool and the OSF docs are synced to the
+Bitbucket site on PR branch `osf-docs-sync-phase3` (owner merge pending). The
+`PUBLIC-PREP.md` tracker was closed/removed 2026-06-07; residual optional
+polish (tag, GitHub topics, branch protection, issue templates) is parked in
+`BACKLOG.md`.
 
 ---
 

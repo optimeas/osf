@@ -275,6 +275,27 @@ metadata fields, or a future StreamingWriter-focused session.
 
 ---
 
+### Public-release prep — residual optional polish
+
+The `PUBLIC-PREP.md` tracker was closed and removed on 2026-06-07. Phase 1
+(cleanup), Phase 3 (DE + EN developer docs) and Phase 4 (history purge) are
+done; Phase 2 (Docusaurus integration) shipped as
+`docs/scripts/sync-to-docusaurus.py` with the OSF docs synced to the Bitbucket
+site (PR branch `osf-docs-sync-phase3`). The repo has been public since
+2026-05-03, so the remaining items are optional polish, not blockers:
+
+- CHANGELOG version bump + date for a public release line; cut a tag
+  (e.g. `v0.11.0-public`) if desired.
+- GitHub repo description + topics.
+- Branch-protection rules review (they apply to public PRs too).
+- Issue templates; re-read `CONTRIBUTING.md` for public-facing tone.
+
+Deliver future doc changes to the public site via a PR to the Bitbucket repo
+(`docs/scripts/sync-to-docusaurus.py`) — never push to its `main`, which
+auto-deploys.
+
+---
+
 ## How to add an entry
 
 - Place under the most fitting section, or add a new section if
