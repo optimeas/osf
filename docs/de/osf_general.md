@@ -263,7 +263,7 @@ Metadaten sind frei definierbar und eignen sich für:
 Die folgenden Parameter definieren die grundlegende Struktur eines Kanals in OSF und bestimmen, wie Daten im Streaming-Format gespeichert und interpretiert werden. Sie sind für alle Kanäle relevant und bilden das Fundament der Kanalbeschreibung.
 
 <a name="datentypen"></a>
-### Datentypen (datatype) 
+### Datentypen (datatype) {#datentypen}
 
 Der Parameter `datatype` legt das Datenformat der Werte eines Kanals fest. Jeder Wert wird in einem genau definierten binären Format gespeichert.
 
@@ -288,7 +288,8 @@ Der Parameter `datatype` legt das Datenformat der Werte eines Kanals fest. Jeder
 
 > **Hinweis zu Integer-Typen:** Integer-Werte (`int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) werden in OSF-Dateien typischerweise für **Zustände, Statusinformationen oder Zählerwerte** verwendet, nicht als skalierte Rohwerte einer physikalischen Größe. Aus diesem Grund kennt OSF bewusst **keine** `scale`/`offset`-Parameter zur Umrechnung in physikalische Werte – physikalische Größen werden direkt als `float` oder `double` gespeichert.
 
-<a name="hinweis-zur-nullterminierung-von-string-und-binary"></a>
+#### Hinweis zur Nullterminierung von `string` und `binary` {#hinweis-zur-nullterminierung-von-string-und-binary}
+
 > **Hinweis zur Nullterminierung von `string` und `binary`:**
 > Das abschließende `0x00`-Byte bei `string`- und `binary`-Payloads in `bcAbsTimeStampData` ist eine historische Altlast aus der Qt-`QString`-Serialisierung in den ursprünglichen Optimeas-Geräten. Die Blocklänge ist durch `sizeoflengthvalue` bereits eindeutig bestimmt, ein Null-Terminator als Sentinel ist redundant. Bei Binärdaten ist es eine aktive Stolperfalle: ein Leser, der das Byte nicht entfernt, produziert ungültige Ausgaben (eine JPEG-Datei mit angehängtem `0x00` ist keine gültige JPEG mehr). Umgekehrt schneidet ein Leser, der auf einer OSF5-Binärnutzlast ohne Terminator (ein ASN.1-Blob, der legitim auf `0x00` endet, eine Protobuf-Nachricht, ein als Binary gespeicherter null-terminierter String) ein Byte abschneidet, ein echtes Datenbyte ab. Die Regel ist deshalb an die On-Disk-Versionsnummer geknüpft, damit weder Schreiber noch Leser raten müssen.
 >
@@ -318,7 +319,7 @@ struct gps_location {
 
 
 <a name="kanaltypen"></a>
-### Kanaltypen (channeltype)
+### Kanaltypen (channeltype) {#kanaltypen}
 
 Der Parameter `channeltype` definiert die **logische Organisation der Werte** eines Kanals. Er legt fest, wie viele Werte pro Datenblock gespeichert werden und welche Struktur diese Werte haben.
 
@@ -456,7 +457,7 @@ OSF kennt drei grundlegende Kanaltypen:
 
 
 <a name="sizeoflengthvalue"></a>
-### Blockgrößenfeld (sizeoflengthvalue)
+### Blockgrößenfeld (sizeoflengthvalue) {#sizeoflengthvalue}
 
 Der Parameter `sizeoflengthvalue` definiert, wie groß das Längenfeld ist, das jedem Datenblock eines Kanals vorangestellt wird. Er bestimmt also, wie viele Bytes zur Angabe der Blockgröße verwendet werden und damit, wie groß ein einzelner Datenblock maximal sein kann.
 

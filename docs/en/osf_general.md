@@ -263,7 +263,7 @@ Metadata is freely definable and is suited for:
 The following parameters define the basic structure of a channel in OSF and determine how data is stored and interpreted in the streaming format. They are relevant for all channels and form the foundation of the channel description.
 
 <a name="datatypes"></a>
-### Data types (datatype)
+### Data types (datatype) {#datatypes}
 
 The `datatype` parameter defines the data format of a channel's values. Each value is stored in a precisely defined binary format.
 
@@ -288,7 +288,8 @@ The `datatype` parameter defines the data format of a channel's values. Each val
 
 > **Note on integer types:** Integer values (`int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) are typically used in OSF files for **states, status information, or counter values**, not as scaled raw values of a physical quantity. For this reason OSF deliberately has **no** `scale`/`offset` parameters for conversion to physical values — physical quantities are stored directly as `float` or `double`.
 
-<a name="note-on-null-termination-of-string-and-binary"></a>
+#### Note on null termination of `string` and `binary` {#note-on-null-termination-of-string-and-binary}
+
 > **Note on null termination of `string` and `binary`:**
 > The trailing `0x00` byte on `string` and `binary` payloads in `bcAbsTimeStampData` is a historical artefact from the Qt `QString` serialisation used in the original Optimeas devices. The block length is already determined by `sizeoflengthvalue`, so a null-terminator as a sentinel is redundant. For binary payloads it is an active stumbling block: a reader that leaves the trailing byte in place produces invalid output (a JPEG file with a trailing `0x00` is no longer a valid JPEG). Equally, a reader that strips a byte from an OSF5 binary payload that never had one (an ASN.1 blob that legitimately ends in `0x00`, a protobuf message, a null-terminated string stored as binary) cuts off a real data byte. The rule is therefore tied to the on-disk format version, so neither writers nor readers have to guess.
 >
@@ -318,7 +319,7 @@ struct gps_location {
 
 
 <a name="channeltypes"></a>
-### Channel types (channeltype)
+### Channel types (channeltype) {#channeltypes}
 
 The `channeltype` parameter defines the **logical organization of a channel's values**. It specifies how many values are stored per data block and what structure those values have.
 
@@ -456,7 +457,7 @@ OSF defines three basic channel types:
 
 
 <a name="sizeoflengthvalue"></a>
-### Block size field (sizeoflengthvalue)
+### Block size field (sizeoflengthvalue) {#sizeoflengthvalue}
 
 The `sizeoflengthvalue` parameter defines the size of the length field that precedes each data block of a channel. It specifies how many bytes are used to express the block size and therefore the maximum size of a single data block.
 
