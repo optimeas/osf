@@ -162,29 +162,31 @@ here must be **drop-in copyable** into that site's `docs/` tree.
   TensorFlow / MCP / LangChain) get **one** short "planned" page — no
   per-item empty stubs.
 
-**Progress 2026-06-05 — DE side complete; EN mirror + review pending.** All
-German pages written: `implementations/{index,delphi,rust,python,cpp,java,planned}.md`,
-`examples/osf_file_examples.md` expanded (17-file table + field samples),
-`integrations/planned.md` added + `integrations/index.md` reworked
-(implementations section at `sidebar_position: 3`; `integrations`→4, `tools`→5).
-Remaining: (1) Burkhard's DE review, (2) mirror everything to `docs/en/`,
-(3) optionally refresh the slightly stale `implementations/cpp/README.md`
-(says "CI in progress / C-ABI pending" — both are done per STATUS).
+**DONE 2026-06-06 — Phase 3 complete (DE + EN).** DE pages were reviewed and
+approved by Burkhard; the EN mirror landed (commit `fd130d5`) with the same
+structure, frontmatter and section ordering (implementations `sidebar_position:
+3`; `integrations`→4, `tools`→5). The DE review also caught one fix, folded
+into the same commit: `implementations/rust.md` `sidebar_position` 4 → 3 (was
+tied with `python.md`, breaking the Rust-before-Python order). The optional
+follow-up (3) — refreshing the stale `implementations/cpp/README.md` — was
+done separately (commit `4d7cddc`): badge in-development → complete, "CI in
+progress / C-ABI pending" replaced by "all phases complete + CI on
+Linux/macOS/Windows" and the shipped `osf-c` C ABI.
 
-- [x] **Per-implementation pages** (`implementations/`) — **DE done; EN pending.**
+- [x] **Per-implementation pages** (`implementations/`) — **DE + EN done.**
       Install / quickstart / API tour / link to source.
-  - [ ] `index.md` — status table (available vs. planned) + legend
-  - [ ] Delphi — full (library + demos + osftool CLI)
-  - [ ] Rust (`osf-core`) — full
-  - [ ] Python (`osfdata`) — full (cross-link the existing
+  - [x] `index.md` — status table (available vs. planned) + legend
+  - [x] Delphi — full (library + demos + osftool CLI)
+  - [x] Rust (`osf-core`) — full
+  - [x] Python (`osfdata`) — full (cross-link the existing
         `integrations/python.md`, don't duplicate it)
-  - [ ] C++ — full (§20 complete: reader/DataManager/writers/throwing/
+  - [x] C++ — full (§20 complete: reader/DataManager/writers/throwing/
         C-ABI; honest "all phases done")
-  - [ ] Java — skeleton (planned; architecture per DECISIONS §21; no
+  - [x] Java — skeleton (planned; architecture per DECISIONS §21; no
         code yet)
-  - [ ] `planned.md` — combined C / C# / MATLAB / JavaScript / Swift
-- [x] **Examples documentation** (**DE done; EN pending**) — expand the stub
-      `docs/{de,en}/examples/osf_file_examples.md` (currently a
+  - [x] `planned.md` — combined C / C# / MATLAB / JavaScript / Swift
+- [x] **Examples documentation** (**DE + EN done**) — expanded the stub
+      `docs/{de,en}/examples/osf_file_examples.md` (was a
       "working on it" placeholder). The 17 generated reference files
       under `examples/generated/` (8× OSF4, 9× OSF5) as a structured
       table — what each demonstrates, how to read it, what code produced
@@ -192,7 +194,7 @@ Remaining: (1) Burkhard's DE review, (2) mirror everything to `docs/en/`,
       `steam_loco.osf`, `weather_station.osfz` — all OSF4 per the audit).
 - [x] **Ecosystem integrations** (Arrow, PyTorch, TensorFlow, MCP,
       LangChain) — one combined "planned" page signalling intent.
-      (**DE done** as `integrations/planned.md`; **EN pending**.)
+      (**DE + EN done** as `integrations/planned.md`.)
 
 ## Phase 4 — Flip to public
 
@@ -358,3 +360,27 @@ the flip. It must wait until Phases 2–3 are done and `prep` is merged to
 `main`, and the C++ worktree at `C:\Users\Public\Documents\Develop\github\osf`
 (has `main` checked out) is re-synced afterwards. Phases 2 and 3 remain
 the next substantive work.
+
+### 2026-06-06 — main re-synced after the purge; Phase 3 closed (DE + EN)
+
+Picked up on a *different* machine whose local `main` still held the
+pre-purge history (293 local-only commits, 0 merge-base with the rewritten
+`origin/main`). Re-synced as the PUBLIC-PREP note above anticipated for
+"other machines": backed the old tip up to `backup/pre-purge-main-2470bf5`,
+then `git reset --hard origin/main`. The untracked `examples/Testdata Train
+OSFZ/` still sits on that disk (left as-is, not re-added).
+
+**Phase 3 finished and pushed.** The EN mirror of the DE Phase-3 docs landed
+(`fd130d5`) — `docs/en/implementations/{index,delphi,rust,python,cpp,java,
+planned}.md`, the expanded `examples/osf_file_examples.md`, the new
+`integrations/planned.md`, the reworked `integrations/index.md`, and the
+section re-ordering (integrations 3→4, tools 4→5 on the EN side). One DE
+review fix folded in (`rust.md` sidebar_position 4→3). The stale
+`implementations/cpp/README.md` was refreshed to the §20-complete state
+(`4d7cddc`). DE↔EN parity, internal links and cross-links all verified.
+
+**Next substantive work is Phase 2** (Docusaurus integration prep): the
+layout/frontmatter audit and the still-open **i18n decision** (keep the
+current `docs/de` + `docs/en` sibling-tree layout vs. restructure to the
+Docusaurus native `i18n/` convention), plus the cross-repo sync mechanism to
+the Bitbucket-hosted Docusaurus site.

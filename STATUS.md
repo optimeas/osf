@@ -12,11 +12,13 @@ when deeper context is needed.
 | Branch | `main` |
 | Spec revision in effect | **2026-05-24** |
 
-**Active side-branch (2026-06-03):** `prep-public-release` is staging
-the repo for going public — MicroPython removal, README refresh,
-Docusaurus-compatible docs restructure. Worktree at
-`C:\Users\Public\Documents\Develop\github\osf-docs`. Plan +
-checklist in `PUBLIC-PREP.md` on that branch (not on `main`).
+**Public-release prep (on `main`):** the `prep-public-release` branch and
+the separate `osf-docs` worktree were consolidated onto `main` on
+2026-06-04; public-prep work now continues directly on `main`. Done: Phase 1
+(repo cleanup), the Phase 4 history purge (unreleased field data + planning
+artefacts scrubbed from history), and Phase 3 (per-implementation + examples
+developer docs, **DE + EN**). Remaining: **Phase 2** (Docusaurus integration
+prep — layout/frontmatter audit, i18n decision). Tracker: `PUBLIC-PREP.md`.
 
 ---
 
