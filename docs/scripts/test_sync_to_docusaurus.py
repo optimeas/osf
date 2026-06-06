@@ -39,6 +39,12 @@ class StripFlagLinkTests(unittest.TestCase):
         text = "🇩🇪 [German version](../../de/index.md)\n# H\n"
         self.assertEqual(sync.strip_flag_link(text), "# H\n")
 
+    def test_strips_root_level_flag_single_dotdot(self):
+        # root-level pages (docs/de/index.md) use a single ../ ; deeper pages
+        # use ../../ . Both must be stripped.
+        text = "🇬🇧 [English version](../en/index.md)\n\n# Title\n"
+        self.assertEqual(sync.strip_flag_link(text), "# Title\n")
+
 
 class SyncLocaleTests(unittest.TestCase):
     def setUp(self):

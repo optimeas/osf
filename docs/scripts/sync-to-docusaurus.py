@@ -27,9 +27,11 @@ DST_EN = Path(
 )
 
 # A line that is (optional ws) two regional-indicator glyphs (a flag) followed
-# by a markdown link into the sibling ../../en/ or ../../de/ locale tree.
+# by a markdown link into the sibling en/ or de/ locale tree. The ../ depth
+# varies with the page's directory depth (root pages use ../, deeper pages
+# ../../), so match one or more ../ segments.
 FLAG_LINK_RE = re.compile(
-    r"^\s*[\U0001F1E6-\U0001F1FF]{2}\s*\[[^\]]*\]\(\.\./\.\./(?:en|de)/[^)]*\)\s*$"
+    r"^\s*[\U0001F1E6-\U0001F1FF]{2}\s*\[[^\]]*\]\((?:\.\./)+(?:en|de)/[^)]*\)\s*$"
 )
 
 
