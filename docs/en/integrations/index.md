@@ -1,25 +1,36 @@
 ---
 title: Integrations
-description: Programming language bindings and integrations for the OSF format
-sidebar_position: 3
+description: Ecosystem bindings for the OSF format — Python and planned bindings to Arrow, PyTorch, TensorFlow, MCP and LangChain
+sidebar_position: 4
 image: "/img/om_social_card.png"
 keywords:
   - OSF
   - Integration
   - Python
+  - Arrow
 last_update:
-  date: 2026-05-06
+  date: 2026-06-04
   author: Optimeas GmbH
 ---
 
-🇩🇪 [Deutsche Version](../../de/integrations/index.md)
+🇩🇪 [German version](../../de/integrations/index.md)
 
 ## Integrations
 
-This chapter collects the bindings of the OSF format to various programming languages and ecosystems. Each integration is documented independently and contains an API overview, installation instructions, and references to the source code.
+This chapter describes connecting OSF to existing **ecosystems** and tool
+chains — such as the scientific Python ecosystem or data/AI frameworks. Each
+integration is documented independently and contains an API overview,
+installation instructions and references to the source code.
+
+The language **implementations** of the format itself (Delphi, Rust, Python,
+C++, Java …) are described in their own chapter
+[Implementations](../implementations/index.md).
 
 Currently available:
 
-- **[Python](python.md)** — The `osfdata` package with full OSF4/OSF5 support, NumPy integration, and a Rust foundation.
+- **[Python](python.md)** — The `osfdata` package with full OSF4/OSF5
+  support, NumPy integration and a Rust foundation.
 
-More integrations are in preparation (C, C++, C#, MATLAB, JavaScript/TypeScript). For the current status, see [GitHub](https://github.com/optimeas/osf).
+Bindings to Apache Arrow, PyTorch, TensorFlow, MCP and LangChain are planned
+— see [Planned integrations](planned.md). The repository on
+[GitHub](https://github.com/optimeas/osf) carries the current status.

@@ -1,7 +1,7 @@
 ---
 title: Rust-Implementierung
 description: Die osf-core-Bibliothek in Rust — Lesen, Schreiben und transparentes OSFZ; zugleich Fundament der Python-Anbindung
-sidebar_position: 4
+sidebar_position: 3
 image: "/img/om_social_card.png"
 keywords:
   - OSF

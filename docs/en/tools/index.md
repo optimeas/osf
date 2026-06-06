@@ -1,7 +1,7 @@
 ---
 title: Tools
 description: Command-line tools and utilities for the OSF format
-sidebar_position: 4
+sidebar_position: 5
 image: "/img/om_social_card.png"
 keywords:
   - OSF
