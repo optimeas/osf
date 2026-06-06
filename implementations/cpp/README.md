@@ -1,14 +1,14 @@
 # OSF — C++ implementation
 
-![Status](https://img.shields.io/badge/status-in%20development-yellow)
+![Status](https://img.shields.io/badge/status-complete-brightgreen)
 [![License](https://img.shields.io/badge/license-MIT-blue)](../../LICENSE)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-blue)
 
-A standalone C++17 implementation of the [Open Streaming Format](../../README.md) specification — no FFI, no Rust dependency, idiomatic modern C++. Reads `.osf` and `.osfz` files and writes OSF5. Cross-language CI and a C ABI wrapper are the remaining milestones.
+A standalone C++17 implementation of the [Open Streaming Format](../../README.md) specification — no FFI, no Rust dependency, idiomatic modern C++. Reads `.osf` and `.osfz` files and writes OSF5.
 
 ## Status
 
-Built as a phased plan (see [DECISIONS.md §20](../../DECISIONS.md) for the full list). The core read and write surface is complete and covered by the GoogleTest/ctest suite (0 warnings under MSVC `/W4 /permissive-`).
+Built as a phased plan (see [DECISIONS.md §20](../../DECISIONS.md) for the full list). **All phases are complete.** The read and write surface is covered by the GoogleTest/ctest suite (0 warnings under MSVC `/W4 /permissive-`), and CI builds and tests on **Linux, macOS and Windows** with warnings-as-errors.
 
 **Read path:**
 
@@ -22,14 +22,10 @@ Built as a phased plan (see [DECISIONS.md §20](../../DECISIONS.md) for the full
 - `BlockWriter` — analyst-style, accumulate in memory and emit a complete file
 - `StaleValueGuard` — optional freshness layer re-emitting idle channels' last value
 
-**Convenience:**
+**Convenience and bindings:**
 
-- A throwing convenience layer over the `Result<T>` core for callers who prefer exceptions
-
-**In progress / pending:**
-
-- Cross-platform CI (Linux/macOS/Windows) — in progress
-- A C ABI shared library as a separate target for cross-language consumption — pending
+- A throwing convenience layer (`osf::throwing`) over the `Result<T>` core for callers who prefer exceptions
+- The C ABI shared library `osf-c` (`osf/c_api.h`) — a pure C99 layer for cross-language consumption (built with `-D OSF_BUILD_C_API=ON`)
 
 ## Build quickstart
 
