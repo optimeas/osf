@@ -12,12 +12,13 @@ when deeper context is needed.
 | Branch | `main` |
 | Spec revision in effect | **2026-05-24** |
 
-**Public-release prep — done (on `main`).** Phase 1 (repo cleanup), Phase 3
+**Public-release prep — done (on `main`).** All four phases are complete:
+Phase 1 (repo cleanup), Phase 2 (Docusaurus integration), Phase 3
 (per-implementation + examples developer docs, **DE + EN**) and Phase 4
-(history purge of unreleased field data + planning artefacts) are complete;
-Phase 2 (Docusaurus integration) shipped the reusable
-`docs/scripts/sync-to-docusaurus.py` tool and the OSF docs are synced to the
-Bitbucket site on PR branch `osf-docs-sync-phase3` (owner merge pending). The
+(history purge of unreleased field data + planning artefacts). Phase 2
+shipped the reusable `docs/scripts/sync-to-docusaurus.py` tool; the OSF docs
+were synced via PR branch `osf-docs-sync-phase3` and **merged + deployed to
+docs.optimeas.com** (2026-06-07 — pipeline build + SFTP upload clean). The
 `PUBLIC-PREP.md` tracker was closed/removed 2026-06-07; residual optional
 polish (tag, GitHub topics, branch protection, issue templates) is parked in
 `BACKLOG.md`.
