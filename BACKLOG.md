@@ -296,6 +296,76 @@ auto-deploys.
 
 ---
 
+## Streaming Transport
+
+### OSF5 Streaming Transport layer + UDP reference receivers (epic)
+
+optiMEAS smartCore devices can stream live channel data over the network via
+the `osfudpstreamer` module, which today serialises selected channels as an
+**OSF4** byte stream chopped into UDP datagrams (broadcast by default, port
+12345). The on-wire framing — the `OSF40` (header-length), `OSF41`
+(header-chunk) and `OSF42` (data-chunk) packet types — is documented on
+docs.optimeas.com; a minimal receiver reassembles the datagram payloads back
+into the embedded OSF4 file and can then read it with a normal OSF4 reader.
+
+This epic raises streaming to a first-class, **specified** capability of OSF,
+built on **OSF5**. Two boundaries are deliberate. We do **not** bend the
+OSF4/OSF5 core file-format spec to fit the transport — the transport is an
+additive layer on top. And we make a **clean cut to OSF5**: the legacy
+OSF4-UDP protocol (`OSF40/41/42`) is not adopted, extended, or given a
+reference receiver here; OSF5 forward only.
+
+Why a new transport rather than reusing the existing one — the current
+framing has structural weaknesses a fresh OSF5 transport should fix:
+
+- **No sequence number on data packets.** A lost datagram silently breaks
+  the embedded block-stream framing, with resync only at the next periodic
+  header re-broadcast. This is the most serious gap.
+- The framing reuses the literal `OSF4` label and carries **no independent
+  transport version**, so it cannot evolve separately from the payload.
+- **Mixed endianness** — big-endian framing wrapping the little-endian OSF
+  payload.
+- **No per-packet / per-generation integrity** (e.g. CRC).
+- **Broadcast-only** by default (layer-2); multicast would route across
+  subnets.
+- A large default max packet size forces IP fragmentation; an MTU-friendly
+  default is preferable.
+
+Scope, as separable tracks (this repo owns the spec and the reference
+receivers):
+
+- **A — Spec.** An "OSF5 Streaming Transport" section added to the OSF
+  documentation: a datagram framing that carries (a) the OSF5 metablock as a
+  repeated keyframe for late-join / resync and (b) the OSF5 block stream as
+  sequenced data packets, addressing the design goals above. Lands as a docs
+  section plus a `DECISIONS.md` entry. **This unlocks everything else.**
+- **B — Reference receivers** in each implementation language, each a thin
+  UDP de-framing layer in front of the existing OSF5 block reader:
+  - **Delphi** — a live receiver that visualises channels in a chart (the
+    `osfviewer` demo is the natural starting point).
+  - **Python** — receive and re-emit / persist in another format (e.g. JSON,
+    or a pandas / CSV / message-bus gateway).
+  - **Rust** — a reusable de-framing crate (the foundation) plus a CLI that
+    reconstructs `.osf` files or prints live statistics.
+  - **C++** — the canonical reference on top of the `osf` library.
+- **B′ — Reference sender / test harness** (e.g. in Rust) that emits the
+  transport without a device, so receivers can be developed and CI-tested
+  standalone.
+- **C — Device-side producer.** A new OSF5-based streaming module on the
+  smartCore side. This lives in the smartCore project and is tracked there,
+  not in this repo; it is listed here only as the upstream counterpart so the
+  transport spec is co-designed against a real producer.
+
+Dependencies: B, B′ and C all depend on A. The detailed transport design
+(packet layout, sequence / generation-id semantics, keyframe cadence,
+multicast, integrity) is deferred to a dedicated design / brainstorming
+session; until then this entry is a parked direction, not a commitment.
+
+Trigger to act: that design session is scheduled, or a concrete need for a
+live OSF5 network consumer arises.
+
+---
+
 ## How to add an entry
 
 - Place under the most fitting section, or add a new section if
