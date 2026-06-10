@@ -31,8 +31,10 @@ class DataTypeTest {
     }
 
     @Test
-    void rejectsUnknownType() {
-        assertThatThrownBy(() -> DataType.fromWireName("wat"))
-            .isInstanceOf(OsfException.UnsupportedType.class);
+    void unknownTypeReturnsUnsupported() {
+        // Forward-compatibility: an unknown (but not removed) wire name must NOT
+        // throw — it returns UNSUPPORTED so the file still loads.
+        assertThat(DataType.fromWireName("wat")).isEqualTo(DataType.UNSUPPORTED);
+        assertThat(DataType.fromWireName("somefuturetype")).isEqualTo(DataType.UNSUPPORTED);
     }
 }

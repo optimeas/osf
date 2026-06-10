@@ -376,6 +376,68 @@ class JsonMetablockParserTest {
     }
 
     // -----------------------------------------------------------------------
+    // forward-compat: unknown channeltype → UNSUPPORTED, wire string in attributes
+    // -----------------------------------------------------------------------
+
+    @Test
+    void unknownChanneltype_parsesAsUnsupportedAndPreservesWireString() {
+        byte[] bytes = utf8("""
+                {
+                  "osf": {
+                    "format": "osf5",
+                    "version": 5,
+                    "file": {},
+                    "channels": [
+                      {
+                        "index": 0,
+                        "name": "VectorCh",
+                        "channeltype": "vector",
+                        "datatype": "double",
+                        "sizeoflengthvalue": 2
+                      }
+                    ]
+                  }
+                }
+                """);
+
+        Metablock mb = parser.parse(bytes);
+        ChannelDef ch = mb.channels().get(0);
+        assertThat(ch.channelType()).isEqualTo(ChannelType.UNSUPPORTED);
+        assertThat(ch.attributes()).containsEntry("channeltype", "vector");
+    }
+
+    // -----------------------------------------------------------------------
+    // forward-compat: unknown datatype → UNSUPPORTED, wire string in attributes
+    // -----------------------------------------------------------------------
+
+    @Test
+    void unknownDatatype_parsesAsUnsupportedAndPreservesWireString() {
+        byte[] bytes = utf8("""
+                {
+                  "osf": {
+                    "format": "osf5",
+                    "version": 5,
+                    "file": {},
+                    "channels": [
+                      {
+                        "index": 0,
+                        "name": "FutureCh",
+                        "channeltype": "scalar",
+                        "datatype": "somefuturetype",
+                        "sizeoflengthvalue": 2
+                      }
+                    ]
+                  }
+                }
+                """);
+
+        Metablock mb = parser.parse(bytes);
+        ChannelDef ch = mb.channels().get(0);
+        assertThat(ch.dataType()).isEqualTo(DataType.UNSUPPORTED);
+        assertThat(ch.attributes()).containsEntry("datatype", "somefuturetype");
+    }
+
+    // -----------------------------------------------------------------------
     // bytearray alias is normalised to BINARY
     // -----------------------------------------------------------------------
 

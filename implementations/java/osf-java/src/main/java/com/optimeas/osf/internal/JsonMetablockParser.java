@@ -181,16 +181,19 @@ public class JsonMetablockParser {
             throw new OsfException.MalformedFile(
                     "channel \"" + name + "\" is missing required field \"channeltype\"");
         }
-        // fromWireName throws UnsupportedType for unknown values — propagated as-is
-        ChannelType channelType = ChannelType.fromWireName(ctNode.textValue());
+        // fromWireName returns UNSUPPORTED for unknown values (forward-compat, never throws)
+        String rawChannelType = ctNode.textValue();
+        ChannelType channelType = ChannelType.fromWireName(rawChannelType);
 
-        // datatype — required; removed types throw UnsupportedType (propagated)
+        // datatype — required; removed types throw UnsupportedType (propagated);
+        // unknown (non-removed) types return DataType.UNSUPPORTED (forward-compat)
         JsonNode dtNode = obj.get(F_DATATYPE);
         if (dtNode == null || !dtNode.isTextual()) {
             throw new OsfException.MalformedFile(
                     "channel \"" + name + "\" is missing required field \"datatype\"");
         }
-        DataType dataType = DataType.fromWireName(dtNode.textValue());
+        String rawDataType = dtNode.textValue();
+        DataType dataType = DataType.fromWireName(rawDataType);
 
         // sizeoflengthvalue — required, must be 2 or 4
         JsonNode solNode = obj.get(F_SIZEOFLENGTHVALUE);
@@ -230,6 +233,15 @@ public class JsonMetablockParser {
                 }
             }
         });
+
+        // Preserve the original wire strings for UNSUPPORTED types so that
+        // diagnostics and skip logic can inspect what was actually on disk.
+        if (dataType == DataType.UNSUPPORTED) {
+            attributes.put(F_DATATYPE, rawDataType);
+        }
+        if (channelType == ChannelType.UNSUPPORTED) {
+            attributes.put(F_CHANNELTYPE, rawChannelType);
+        }
 
         return new ChannelDef(
                 index,
