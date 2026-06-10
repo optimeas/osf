@@ -11,7 +11,7 @@ keywords:
   - C-ABI
   - osf-c
 last_update:
-  date: 2026-06-04
+  date: 2026-06-10
   author: Optimeas GmbH
 ---
 
@@ -57,6 +57,75 @@ builds and tests on **Linux, macOS and Windows**.
 - The **C ABI library `osf-c`** (`osf/c_api.h`) — a pure C99 layer for
   cross-language use (DLL/shared object)
 
+## Architecture at a glance
+
+Two API tiers sit on a shared, exception-free core (`osf::Result<T>`). The read
+side assembles typed channels from the block stream; the write side offers two
+writer classes for different deployment profiles; and a C ABI exposes the whole
+thing to non-C++ consumers.
+
+### Read path
+
+```mermaid
+flowchart LR
+    F([".osf / .osfz file"]) --> D["DecompressingIStream<br/>gzip · zlib · plain<br/>(auto-detect)"]
+    D --> H["parse_magic_header"]
+    H --> M["MetaBlock parser<br/>OSF5 JSON · OSF4 XML"]
+    M --> B["BlockReader<br/>raw block stream"]
+    B --> DM["DataManager<br/>typed channel assembly"]
+    DM --> C["DataChannel<br/>Equidistant · Timestamped · Variable"]
+```
+
+`DataManager::load_from_file()` drives this whole pipeline; OSFZ is detected and
+inflated transparently, so `.osf` and `.osfz` use the same call.
+
+### Write path (OSF5)
+
+```mermaid
+flowchart TB
+    SVG["StaleValueGuard<br/>optional freshness layer"] --> SW
+    subgraph W ["OSF5 writers"]
+        SW["StreamingWriter<br/>embedded · fsync per block"]
+        BW["BlockWriter<br/>analyst · in-memory"]
+    end
+    SW --> WC["writer_common<br/>chunking · build_metablock"]
+    BW --> WC
+    DM["DataManager (loaded)"] -. "osf::write_to_file(mgr, path)" .-> BW
+    WC --> OUT([".osf (OSF5)"])
+```
+
+### Layering & the C ABI
+
+```mermaid
+flowchart TB
+    APP["C++ application"] --> CORE["osf::osf core<br/>exception-free · Result&lt;T&gt;"]
+    APP -. "opt-in" .-> THR["osf::throwing<br/>exception wrapper"]
+    THR --> CORE
+    EXT["C · C#/P-Invoke · OCX consumer"] --> CAPI["osf-c<br/>pure C99 ABI · osf/c_api.h"]
+    CAPI --> CORE
+```
+
+### Which class for what
+
+| You want to… | Use | Notes |
+|---|---|---|
+| Read a file, get typed channels | `osf::DataManager` | High-level entry point — `load_from_file()`, `channel("name")`. Reads `.osf` and `.osfz`. |
+| Iterate the raw block stream | `osf::BlockReader` | Lower-level; advanced / streaming consumers. |
+| Hold a channel's samples | `osf::DataChannel` | Variant over Equidistant / Timestamped / Variable; typed flat accessors. |
+| Record on an embedded device | `osf::StreamingWriter` | `fsync` per block, constant memory, power-loss safe. |
+| Write a complete file in one go | `osf::BlockWriter` | Accumulates in memory, emits at `write_to_file()`; auto-bumps `sizeoflengthvalue`. |
+| Keep idle channels "fresh" | `osf::StaleValueGuard` | Re-emits the last value of channels idle past a threshold. |
+| Round-trip / OSF4 → OSF5 | free `osf::write_to_file(mgr, …)` | Loads a `DataManager` into a `BlockWriter` and writes OSF5. |
+| Use exceptions, not `Result<T>` | `osf::throwing` | Opt-in header; not compiled into the core. |
+| Call from C, C#, OCX, … | `osf-c` (`osf/c_api.h`) | Pure C99 ABI; build with `-D OSF_BUILD_C_API=ON`. |
+
+### Runnable examples
+
+`implementations/cpp/examples/` ships four small programs over `<osf/osf.hpp>` —
+**`inspect`** (header / metadata / channels, transparent OSFZ), **`dump`**
+(sample values), **`write`** (synthesize and write OSF5) and **`copy`**
+(round-trip). They build with `-D OSF_BUILD_EXAMPLES=ON` (on by default).
+
 ## Building — quick start
 
 ```bash
@@ -73,6 +142,8 @@ Platform-specific notes, CMake options and FAQ are in
 | Option | Default | Effect |
 |---|---|---|
 | `OSF_BUILD_TESTS` | `ON` | build the GoogleTest/ctest suite |
+| `OSF_BUILD_EXAMPLES` | `ON` | build the runnable example programs under `examples/` |
+| `OSF_BUILD_DOCS` | `OFF` | generate the Doxygen API reference (`osf-docs` target; needs Doxygen) |
 | `OSF_BUILD_C_API` | `OFF` | also build the C ABI library `osf-c` (+ C test) |
 | `OSF_USE_SYSTEM_ZLIB` | `OFF` | use system zlib instead of FetchContent |
 | `OSF_WARNINGS_AS_ERRORS` | `OFF` | warnings as errors (`/WX` or `-Werror`); `ON` in CI |
@@ -151,8 +222,10 @@ ActiveX/OCX and future language bindings.
 
 - **Only OSF5 is written** (DECISIONS §6) — even when the source was an OSF4
   file.
-- **No OSFZ output**: compression is a downstream concern (DECISIONS §12);
-  OSFZ is read transparently.
+- **OSFZ on write is a post-close step** (DECISIONS §12): the writers never
+  compress inline; OSFZ (gzip) is produced *after* the `.osf` file is finalized
+  — by a forthcoming post-close compressor (background thread) or a standalone
+  compress CLI. OSFZ is **read** transparently.
 - **Best-effort on read**: truncated files yield all data up to the last
   fully readable block, without crashing.
 - The library is **Qt-neutral**; a Qt-aware add-on may follow later as a
@@ -163,6 +236,8 @@ ActiveX/OCX and future language bindings.
 - Source code on GitHub: [github.com/optimeas/osf](https://github.com/optimeas/osf),
   directory `implementations/cpp/`
 - Build guide: [`BUILD.md`](https://github.com/optimeas/osf/blob/main/implementations/cpp/BUILD.md)
+- API reference: generate with Doxygen via `-D OSF_BUILD_DOCS=ON` (the
+  `osf-docs` target) — see `BUILD.md`
 - Architecture and phased plan:
   [DECISIONS §20](https://github.com/optimeas/osf/blob/main/DECISIONS.md) and
   the C ABI in §23
