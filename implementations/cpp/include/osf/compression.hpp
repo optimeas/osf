@@ -3,8 +3,7 @@
 
 /**
  * @file compression.hpp
- * @brief Transparent OSFZ (gzip / zlib) decompression on the read path
- *        (Phase 8).
+ * @brief Transparent OSFZ (gzip / zlib) decompression on the read path.
  *
  * OSFZ files are gzip- or zlib-compressed OSF files with no dedicated
  * magic header — detection is by the leading two bytes of the stream:

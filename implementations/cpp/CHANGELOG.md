@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- **Phase 11 — C ABI wrapper (`osf-c`).** The final §20 phase: a separate
+- **C ABI wrapper (`osf-c`).** A separate
   **shared** library exposing the C++ core through a pure-C99 `extern "C"`
   surface for cross-language consumption (Windows DLL / ActiveX-OCX,
   future bindings). Built only when `OSF_BUILD_C_API=ON` (default OFF);
@@ -36,8 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     (fold the static core into the shared lib on ELF/Mach-O).
   ctest 304 → **305/305 green** with `OSF_BUILD_C_API=ON`, 0 warnings
   under `/W4 /permissive-` (`/WX`). **This completes the §20
-  Implementation Order (phases 1–11).**
-- **Phase 10 — CI integration.** The C++ implementation now builds and
+  Implementation Order.**
+- **CI integration.** The C++ implementation now builds and
   tests on every change via GitHub Actions (DECISIONS §20). `.github/workflows/ci.yml`
   gains `implementations/cpp/**` in its push + pull_request path filters
   (C++ changes previously triggered no CI run) and a `test-cpp` job that
@@ -60,7 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and the FetchContent `zlib` / `googletest` targets are unaffected).
   Local dev builds stay lenient; CI enables it.
 
-- **Phase 9 — throwing convenience layer** at
+- **Throwing convenience layer** at
   `include/osf/throwing.hpp` (header-only, opt-in). Exposes the
   `Result`-based core API as exception-throwing functions for consumers
   who prefer RAII-style error propagation, per DECISIONS §20:
@@ -79,8 +79,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   compiled into the `osf` library — consumers who never include it pull
   in no extra machinery. 10 new GoogleTest cases bring the C++ ctest
   count from 294 to **304/304 green**, 0 warnings under MSVC
-  `/W4 /permissive-`. Phase 10 (CI integration) is next.
-- **Phase 8 — transparent OSFZ decompression on read** at
+  `/W4 /permissive-`.
+- **Transparent OSFZ decompression on read** at
   `include/osf/compression.hpp` / `src/compression.cpp`. Removes the
   `DataManager` OSFZ-rejection stub: gzip- and zlib-wrapped OSF files now
   load transparently (deployed optiMEAS devices emit gzip-OSFZ —
@@ -107,9 +107,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   256 KiB multi-chunk case) and `tests/integration/test_compression_examples.cpp`
   (gzip+zlib re-wrap of `steam_loco.osf` matches plain via
   `roundtrip_managers_equal`; `weather_station.osfz` loads). ctest 283 →
-  **294/294 green**, 0 warnings under MSVC `/W4 /permissive-`. Phase 9
-  (throwing convenience layer) is next.
-- **Phase 7d — `StaleValueGuard`** (optional freshness layer) at
+  **294/294 green**, 0 warnings under MSVC `/W4 /permissive-`.
+- **`StaleValueGuard`** (optional freshness layer) at
   `include/osf/stale_value_guard.hpp` / `src/stale_value_guard.cpp`.
   Re-emits the last value of idle timestamped channels so their on-disk
   trace stays "fresh" (the optiMEAS 100-second-repeat convention), which
@@ -133,8 +132,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   12 new GoogleTest cases bring the C++ ctest count from 271 to
   **283/283 green**, 0 warnings under MSVC `/W4 /permissive-`. The
   two-writer OSF5 write surface of DECISIONS §7 plus this guard complete
-  Phase 7; Phase 8 (transparent OSFZ decompression on read) is next.
-- **Phase 7c — `BlockWriter`** (analyst-style OSF5 writer) at
+  the write-path implementation.
+- **`BlockWriter`** (analyst-style OSF5 writer) at
   `include/osf/block_writer.hpp` / `src/block_writer.cpp`. Accumulates
   every channel kind in memory and emits the complete file at
   `write_to_file(path)` / `write_to(std::ostream&)` (const /
@@ -187,29 +186,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the parked BACKLOG Task-7 #2 nit; `StreamingWriter` output converges
   to the reference on this field (round-trip behaviour unchanged — the
   reader keys non-equidistant channels off `datatype`).
-- **18 parked Phase-7b polish nits folded in** alongside Phase 7c
-  (the four `### C++ StreamingWriter … polish (post-Phase-7b)` BACKLOG
-  entries): `MAX_PAYLOAD_FOR_SOV` → `max_payload_for_sov`, the two
-  sizing constants promoted, `make_double_channel` split into
-  scalar/equidistant test helpers, `sov_for` assert, `start()`
-  Broken-state error surfacing, tightened long-run chunking assertions,
-  and stale-comment / truncation-math cleanups. A strict-aliasing UB in
-  the `BlockWriter` `std::vector<bool>` emit path (a `reinterpret_cast`
-  to `bool const*`) was caught in review and fixed with a genuine
-  `bool[]` materialisation.
+- **18 polish nits folded into the BlockWriter release** (the four
+  `### C++ StreamingWriter … polish` BACKLOG entries):
+  `MAX_PAYLOAD_FOR_SOV` → `max_payload_for_sov`, the two sizing constants
+  promoted, `make_double_channel` split into scalar/equidistant test
+  helpers, `sov_for` assert, `start()` Broken-state error surfacing,
+  tightened long-run chunking assertions, and stale-comment /
+  truncation-math cleanups. A strict-aliasing UB in the `BlockWriter`
+  `std::vector<bool>` emit path (a `reinterpret_cast` to `bool const*`)
+  was caught in review and fixed with a genuine `bool[]` materialisation.
 - **Reader-comment correction in `src/reader.cpp`.** The note in
   `parse_abs_ts_string_or_binary` that said *"per spec bit 7 should
   be set; we tolerate clear bit as implicit N=1"* misread the spec.
   Both bit-7 forms are valid; the canonical compact form for a
   single sample is bit-7 = 0 with no `[u32 N]` prefix (saves four
-  bytes vs. the bit-7 = 1 + `u32 N=1` variant). The Phase 7a encoder
-  and the (now-fixed) Rust writer both emit the canonical form; the
+  bytes vs. the bit-7 = 1 + `u32 N=1` variant). Both the C++ encoder
+  and the (now-fixed) Rust writer emit the canonical form; the
   reader still accepts either. Documentation-only — wire-format
   behaviour unchanged; 192/192 ctest still green.
 
 ### Added
 
-- **Phase 7b — `StreamingWriter`** (embedded streaming OSF5
+- **`StreamingWriter`** (embedded streaming OSF5
   writer) at `include/osf/streaming_writer.hpp` /
   `src/streaming_writer.cpp` (764 lines). Public API ships
   all four write families per Spec §2 Q4/Q5/Q6 + §3.3:
@@ -253,8 +251,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `start()`. Round-trip pinned via 14 new tests.
 - **`BinarySample`** promoted to public header
   `include/osf/binary_sample.hpp` (Task 0) — was private to
-  the Phase-7a encoder; the new `StreamingWriter` API needs
-  it on the public surface for the
+  the block encoder; the `StreamingWriter` API needs it on
+  the public surface for the
   `write_timestamped_binary(channel, ts, BinarySample)`
   signature.
 - **Cross-implementation roundtrip integration test**
@@ -274,18 +272,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   integration). Total ctest count moves from 192/192 to
   **245/245 green** in ~10 s under MSVC `/W4 /permissive-`,
   0 build warnings.
-- **Phase 7c (`BlockWriter`) and Phase 7d (`StaleValueGuard`)**
-  arrive next on the same encoder substrate. 18 minor polish
-  items parked across four BACKLOG entries
-  (`### C++ StreamingWriter ... polish (post-Phase-7b)`),
-  scheduled to land as a single tightening pass on top of
-  Phase 7c since the chunking helpers + encoder symbols
-  + roundtrip helper shape are all reused there.
+- **`BlockWriter` and `StaleValueGuard`** reuse the same encoder
+  substrate. 18 minor polish items were parked across four BACKLOG
+  entries (`### C++ StreamingWriter ... polish`) and landed as a single
+  tightening pass alongside `BlockWriter`, since
+  the chunking helpers + encoder symbols + roundtrip helper shape are
+  all reused there.
 
-- **Phase 7a — Private block-encoder layer.** Six encoder symbols
-  in `src/block_encode.hpp` / `.cpp`, namespace `osf::detail`,
-  composed by the future `StreamingWriter` (Phase 7b) and
-  `BlockWriter` (Phase 7c). All return `Result<void>` with three
+- **Private block-encoder layer.** Six encoder symbols in
+  `src/block_encode.hpp` / `.cpp`, namespace `osf::detail`, composed
+  by `StreamingWriter` and `BlockWriter`. All return `Result<void>`
+  with three
   documented error conditions (count==0, `sizeoflengthvalue` ∉ {2,4},
   oversize payload):
   - `encode_start_data<T>` (template, instantiated for `float` /
@@ -357,8 +354,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Notes
 
-- Total ctest count is now **192/192 green** locally (157
-  pre-Phase-7a baseline + 35 new). No release tag yet.
+- Total ctest count is now **192/192 green** locally (157 pre-encoder
+  baseline + 35 new). No release tag yet.
 
 ## [0.0.6] - 2026-05-23
 
@@ -406,9 +403,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   timestamps using the channel's last absolute ts as anchor.
 - OSFZ-stub detection: `DataManager::load_from_file` /
   `load_from_stream` peek at the first two bytes and reject
-  gzip / zlib magic with a clear `IoError` message pointing to
-  Phase 8 — keeps callers from getting a confusing magic-header
-  parse failure on a compressed file.
+  gzip / zlib magic with a clear `IoError` message — keeps callers
+  from getting a confusing magic-header parse failure on a compressed
+  file. (Transparent decompression was added later; see above.)
 - `tests/unit/test_data_channel.cpp` — 11 tests covering
   `NumericValues` helpers (`data_type`, `empty_for`),
   `samples_vector` for equidistant (single + multi-segment, no
@@ -423,15 +420,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Timestamped, rel-stamp extends cumulatively, rel-stamp without
   anchor = `RelStampWithoutAnchor`, variable strings collected,
   Unsupported channel dropped from output, name + index lookups,
-  gzip / zlib magic produce the Phase-8 error.
+  gzip / zlib magic produce the OSFZ-stub error.
 - `tests/integration/test_manager_examples.cpp` — 7 tests against
   the generated reference files plus the field samples: every
   `.osf` under `examples/generated/` loads through
   `load_from_file` and produces at least one channel with
   samples; snapshot probes pin equidistant / GPS / string
   channels on specific files; `motorbike.osf` + `steam_loco.osf`
-  load clean; `weather_station.osfz` produces the Phase-8 OSFZ
-  error.
+  load clean; `weather_station.osfz` produces the OSFZ-stub error.
 
 ### Changed
 
@@ -465,8 +461,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `TRAILER_CHANNEL_INDEX`, `MAGIC_TRAILER_LEN`.
 - Reader telemetry in `include/osf/stats.hpp`: `ReaderStats` and
   `ChannelStats` with per-channel detail, byte/block counters,
-  `time_range_ns`, plus a `CompressionFormat` enum reserved for
-  Phase 8. `operator<<` overloads format both structs in the same
+  `time_range_ns`, plus a `CompressionFormat` enum. `operator<<`
+  overloads format both structs in the same
   shape as the Rust reference (`File size: …`, `Channels total: …`,
   `blocks=X+Yskipped samples=…`).
 - Six new `osf::Error::Code` values: `UnknownChannelIndex`,
@@ -536,9 +532,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - OSF4 XML metablock parser (`osf::parse_metablock_xml`) in two
   overloads: `std::uint8_t const*` + size and `std::string_view`.
   Populates the same `osf::MetaBlock` data model as the OSF5 JSON
-  parser (Phase 3); Phase 4's success criterion is symmetric
-  population, pinned by an `equidistant_osf4_and_osf5_have_matching_channels`
-  integration test.
+  parser; population is symmetric, pinned by an
+  `equidistant_osf4_and_osf5_have_matching_channels` integration test.
 - New `osf::Error::Code::XmlParseError` enumerator, paralleling the
   existing `JsonParseError`. `error_category_name` extended.
 - Vendored `pugixml` v1.15 (MIT) under `third_party/pugixml/`.
@@ -588,8 +583,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   datatypes `uint8`..`uint64` added).
 - `osf::FileInfo`, `osf::Channel`, `osf::Info`, `osf::MetaBlock`
   structs as the shared metablock data model (used by both the OSF5
-  parser landing in this release and the OSF4 parser arriving in
-  Phase 4). `std::optional<T>` everywhere the Rust reference has
+  JSON parser and the OSF4 XML parser). `std::optional<T>` everywhere
+  the Rust reference has
   `Option<T>`; default member initialisers throughout.
 - `osf::parse_data_type`, `osf::parse_channel_type`,
   `osf::parse_spectrum_type` wire-string-to-enum helpers.

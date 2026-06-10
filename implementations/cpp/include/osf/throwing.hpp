@@ -4,7 +4,7 @@
 /**
  * @file throwing.hpp
  * @brief Opt-in, exception-throwing convenience layer over the
- *        Result-based core API (Phase 9, DECISIONS §20).
+ *        Result-based core API (DECISIONS §20).
  *
  * The entire OSF C++ core API is `Result<T>` (= `tl::expected<T, Error>`)
  * based: every fallible operation returns a `Result` the caller inspects.

@@ -4,7 +4,7 @@
 /**
  * @file stale_value_guard.hpp
  * @brief Freshness layer over StreamingWriter that re-emits the last
- *        value of idle timestamped channels (Phase 7d).
+ *        value of idle timestamped channels.
  *
  * Timestamped (sporadic / event) channels only receive a sample when
  * their value changes. On a time-series trace or in downstream analysis,

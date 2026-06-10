@@ -2,7 +2,7 @@
 /* Copyright (c) 2026 Optimeas GmbH */
 
 /*
- * C ABI smoke test (Phase 11). Compiled as C99 to prove osf/c_api.h is
+ * C ABI smoke test. Compiled as C99 to prove osf/c_api.h is
  * C-compatible and the osf-c shared library links + works end-to-end.
  * Exercises load, channel enumeration + metadata, sample/timestamp
  * readers, a round-trip write, and the error path. Returns non-zero on

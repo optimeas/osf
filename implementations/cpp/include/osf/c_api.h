@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Optimeas GmbH
 
 /*
- * c_api.h — C ABI for the OSF C++ library (Phase 11, DECISIONS §23).
+ * c_api.h — C ABI for the OSF C++ library (DECISIONS §23).
  *
  * A C-callable surface over the C++ core, exposed by the separate shared
  * library `osf-c` (built only when OSF_BUILD_C_API=ON). Pure C99: depends

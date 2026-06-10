@@ -94,7 +94,7 @@ target_include_directories(osf_headers SYSTEM INTERFACE
 )
 
 # ---------------------------------------------------------------------------
-# zlib — transparent OSFZ (gzip / zlib) decompression on read (Phase 8).
+# zlib — transparent OSFZ (gzip / zlib) decompression on read.
 #
 #   OSF_USE_SYSTEM_ZLIB=ON  -> find_package(ZLIB) (system / vcpkg).
 #   OSF_USE_SYSTEM_ZLIB=OFF -> FetchContent zlib 1.3.1 (pinned tarball +
@@ -176,7 +176,7 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# osf-c — C ABI shared library (Phase 11, DECISIONS §23). Built only when
+# osf-c — C ABI shared library (DECISIONS §23). Built only when
 # OSF_BUILD_C_API=ON. Wraps osf_core (static, folded in) behind a pure-C99
 # extern "C" surface; the public header is include/osf/c_api.h.
 # ---------------------------------------------------------------------------

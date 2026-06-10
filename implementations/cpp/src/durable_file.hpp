@@ -5,8 +5,8 @@
  * @file durable_file.hpp
  * @brief Private RAII wrapper for append-only writes with OS-level fsync.
  *
- * Used by StreamingWriter (Phase 7b) and reserved for future writers
- * that need durable per-block flush semantics. Two compile-time
+ * Used by StreamingWriter and reserved for future writers that need
+ * durable per-block flush semantics. Two compile-time
  * implementations: POSIX (open / write / fsync / close) and Windows
  * (CreateFileW / WriteFile / FlushFileBuffers / CloseHandle). Selected
  * via #ifdef on _WIN32.

@@ -49,10 +49,9 @@ public:
     /// `BlockReader` to completion, and assemble the typed channel
     /// list.
     ///
-    /// OSFZ-compressed input is detected by leading-byte magic (gzip
-    /// `0x1F 0x8B` or zlib `0x78 …`) and currently rejected with an
-    /// error pointing to Phase 8; transparent decompression lands
-    /// there.
+    /// OSFZ-compressed input (gzip `0x1F 0x8B` or zlib `0x78 …`) is
+    /// detected and decompressed transparently before the magic-header
+    /// parse.
     [[nodiscard]] static Result<DataManager> load_from_file(
         std::filesystem::path const& path);
 

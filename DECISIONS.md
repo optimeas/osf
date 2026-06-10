@@ -475,7 +475,7 @@ kept consistently across all such enumerations and is **not** renamed.
 | `BUILD_SHARED_LIBS` | `OFF` | Static library by default; shared on demand |
 | `OSF_BUILD_TESTS` | `ON` | GoogleTest-based unit and integration tests |
 | `OSF_BUILD_EXAMPLES` | `ON` | Example executables (inspect, stats, dump, copy) |
-| `OSF_BUILD_C_API` | `OFF` | C ABI wrapper as separate shared library; disabled until Phase 2 |
+| `OSF_BUILD_C_API` | `OFF` | C ABI shared library (`osf-c`); opt-in, default OFF |
 | `OSF_USE_SYSTEM_ZLIB` | `OFF` | Prefer system zlib over `FetchContent` build |
 
 Static linkage is the default to avoid C++ ABI stability issues across

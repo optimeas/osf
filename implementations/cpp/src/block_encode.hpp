@@ -4,7 +4,7 @@
 /**
  * @file block_encode.hpp
  * @brief Private OSF block-encoder primitives shared by BlockWriter and
- *        StreamingWriter (Phase 7b + 7c).
+ *        StreamingWriter.
  *
  * This module is C++-specific. The Rust reference embeds encode logic
  * directly into writer.rs; the C++ split into a private encoder layer

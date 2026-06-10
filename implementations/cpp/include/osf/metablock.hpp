@@ -6,8 +6,8 @@
 ///
 /// OSF4 and OSF5 differ only in *how* the metablock is serialised — XML
 /// vs. JSON — not in *what* it carries. This header defines the shared
-/// data structures that `parse_metablock_json` (Phase 3) and
-/// `parse_metablock_xml` (Phase 4) populate. Block readers, writers,
+/// data structures that `parse_metablock_json` and `parse_metablock_xml`
+/// populate. Block readers, writers,
 /// and downstream tooling see `MetaBlock` only; the format split stops
 /// here.
 ///

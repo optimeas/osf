@@ -2,9 +2,9 @@
 // Copyright (c) 2026 Optimeas GmbH
 //
 // Integration tests for osf::BlockReader against real reference and
-// field-recorded OSF files. The Phase-5 success criterion is that
-// every shipped OSF file (uncompressed) can be read end-to-end —
-// magic header, metablock, every block — without a hard error.
+// field-recorded OSF files. Every shipped OSF file (uncompressed) must
+// be readable end-to-end — magic header, metablock, every block —
+// without a hard error.
 
 #include <gtest/gtest.h>
 

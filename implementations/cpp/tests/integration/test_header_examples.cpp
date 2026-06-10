@@ -48,10 +48,9 @@ TEST_F(HeaderExamplesTest, steam_loco_osf_has_valid_header) {
 // ----- 3: weather_station.osfz — gzip bytes are not a plain header -----
 //
 // The low-level magic-header parser deliberately does NOT decompress —
-// OSFZ transparency lives in the DataManager read layer (Phase 8), which
-// wraps the source in a DecompressingIStream. So raw gzip bytes remain
-// un-parseable as a plain OSF magic header; this is a permanent property,
-// not a pending gap.
+// OSFZ transparency lives in the DataManager read layer, which wraps the
+// source in a DecompressingIStream. So raw gzip bytes remain un-parseable
+// as a plain OSF magic header; this is by design.
 
 TEST_F(HeaderExamplesTest, weather_station_osfz_not_parseable_as_plain_header) {
     auto result = osf::parse_magic_header(examples_dir() / "weather_station.osfz");

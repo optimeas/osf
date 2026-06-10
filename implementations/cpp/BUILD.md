@@ -80,8 +80,8 @@ Apple Silicon (arm64) and Intel (x86_64) hosts both build natively. Universal-bi
 | `BUILD_SHARED_LIBS` | `OFF` | Build `osf::osf` as shared library instead of static. |
 | `OSF_BUILD_TESTS` | `ON` | Configure GoogleTest and the unit-test executables. |
 | `OSF_BUILD_EXAMPLES` | `ON` | Reserved for later phases. Currently has no effect because no examples ship yet. |
-| `OSF_BUILD_C_API` | `OFF` | Build the C ABI shared-library wrapper. Reserved for Phase 11; currently has no effect. |
-| `OSF_USE_SYSTEM_ZLIB` | `OFF` | Prefer the system zlib over a `FetchContent` build. Relevant once Phase 8 (OSFZ decompression) lands. |
+| `OSF_BUILD_C_API` | `OFF` | Build the `osf-c` C ABI shared-library wrapper (DECISIONS §23). Opt-in, default OFF. |
+| `OSF_USE_SYSTEM_ZLIB` | `OFF` | Prefer the system zlib over a `FetchContent` build (for OSFZ decompression). |
 
 Set with `-D<OPTION>=<VALUE>`, for example:
 
@@ -128,4 +128,4 @@ Keep the **same SHA256** so reproducibility is unaffected. No source patch is ne
 
 ### Cross-compilation
 
-Not exercised by our local builds. The Phase 1 code is plain C++17 with no system-specific dependencies, so it should configure under a CMake toolchain file (`-DCMAKE_TOOLCHAIN_FILE=…`) in principle. Once Phase 8 lands (OSFZ via zlib), cross-builds may need additional plumbing for the zlib build step. If you cross-build today and run into something, please open an issue.
+Not exercised by our local builds. The code is plain C++17 with no system-specific dependencies, so it should configure under a CMake toolchain file (`-DCMAKE_TOOLCHAIN_FILE=…`) in principle. Cross-builds that enable `OSF_BUILD_C_API` or transparent OSFZ decompression (zlib) may need additional plumbing for the zlib build step. If you cross-build and run into something, please open an issue.
