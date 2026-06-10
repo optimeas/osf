@@ -77,7 +77,7 @@ stream by its leading two bytes and inflates on demand via a custom
 auto-detect; `z_stream` behind a PIMPL). `DataManager` wraps its input
 and sets `stats.compressed` / `compression_format`. zlib is a PRIVATE
 `osf_core` dependency via `OSF_USE_SYSTEM_ZLIB` (default FetchContent
-zlib 1.3.1). New `test_compression.cpp` + `test_compression_examples.cpp`;
+zlib 1.3.2). New `test_compression.cpp` + `test_compression_examples.cpp`;
 the former OSFZ-rejection stub tests were flipped/merged. ctest 283 →
 **294/294 green**. `weather_station.osfz` now loads. Branch
 `phase-8-osfz-read`. Next: Phase 9 (throwing convenience layer).
@@ -235,7 +235,7 @@ auto-detect; `z_stream` behind a PIMPL so the header is zlib-free).
 `DataManager` wraps its input before the magic-header parse and sets
 `stats.compressed` / `compression_format`; `parse_magic_header` stays
 non-decompressing. zlib is a PRIVATE `osf_core` dependency via
-`OSF_USE_SYSTEM_ZLIB` (default FetchContent zlib 1.3.1, pinned tarball
+`OSF_USE_SYSTEM_ZLIB` (default FetchContent zlib 1.3.2, pinned tarball
 + SHA256; `ON` → `find_package(ZLIB)`). Mirrors the Rust `compression`
 module.
 
@@ -296,20 +296,20 @@ Push-Location $env:TEMP; New-Item -ItemType Directory -Force gtest-extract | Out
 Set-Location gtest-extract
 & "<cmake.exe>" -E tar xzf "$env:TEMP\googletest-v1.15.2.tar.gz"; Pop-Location
 
-# Phase 8 adds a second FetchContent dep: zlib 1.3.1 (transparent OSFZ read).
-Invoke-WebRequest -Uri "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz" `
-  -OutFile "$env:TEMP\zlib-1.3.1.tar.gz" -UseBasicParsing
+# Transparent OSFZ read uses zlib. FetchContent dep: zlib 1.3.2.
+Invoke-WebRequest -Uri "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz" `
+  -OutFile "$env:TEMP\zlib-1.3.2.tar.gz" -UseBasicParsing
 New-Item -ItemType Directory -Force "$env:TEMP\zlib-extract" | Out-Null
-Push-Location "$env:TEMP\zlib-extract"; & "<cmake.exe>" -E tar xzf "$env:TEMP\zlib-1.3.1.tar.gz"; Pop-Location
+Push-Location "$env:TEMP\zlib-extract"; & "<cmake.exe>" -E tar xzf "$env:TEMP\zlib-1.3.2.tar.gz"; Pop-Location
 
 cmake -B implementations\cpp\build -S implementations\cpp `
   -D FETCHCONTENT_SOURCE_DIR_GOOGLETEST="$env:TEMP\gtest-extract\googletest-1.15.2" `
-  -D FETCHCONTENT_SOURCE_DIR_ZLIB="$env:TEMP\zlib-extract\zlib-1.3.1"
+  -D FETCHCONTENT_SOURCE_DIR_ZLIB="$env:TEMP\zlib-extract\zlib-1.3.2"
 ```
 
 The cached extracts are reused across runs and survive reboots — no
 need to redownload unless `googletest` / `zlib` is bumped. (zlib's
-published SHA256 `9a93b2b7…72df23` is pinned in CMake; or build with
+published SHA256 `bb329a0a…d16` is pinned in CMake; or build with
 `-D OSF_USE_SYSTEM_ZLIB=ON` to use a system zlib instead.)
 
 ### C++ build flow (Windows)

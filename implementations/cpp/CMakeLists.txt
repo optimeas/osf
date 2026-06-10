@@ -97,7 +97,7 @@ target_include_directories(osf_headers SYSTEM INTERFACE
 # zlib — transparent OSFZ (gzip / zlib) decompression on read.
 #
 #   OSF_USE_SYSTEM_ZLIB=ON  -> find_package(ZLIB) (system / vcpkg).
-#   OSF_USE_SYSTEM_ZLIB=OFF -> FetchContent zlib 1.3.1 (pinned tarball +
+#   OSF_USE_SYSTEM_ZLIB=OFF -> FetchContent zlib 1.3.2 (pinned tarball +
 #                              SHA256).
 #
 # zlib is a PRIVATE dependency of osf_core (used only in
@@ -114,13 +114,13 @@ else()
     include(FetchContent)
     FetchContent_Declare(
         zlib
-        URL      https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
-        URL_HASH SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
+        URL      https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz
+        URL_HASH SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
         DOWNLOAD_EXTRACT_TIMESTAMP FALSE
     )
     set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(zlib)
-    # zlib 1.3.1 uses directory-scoped include_directories(), so the
+    # zlib 1.3.2 uses directory-scoped include_directories(), so the
     # zlibstatic target carries no interface include dirs — surface them
     # explicitly for osf_core and the compression tests.
     set(OSF_ZLIB_TARGET zlibstatic)

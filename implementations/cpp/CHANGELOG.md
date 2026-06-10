@@ -55,6 +55,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Vendored dependency bumps.** Two third-party components updated:
+  - `zlib` 1.3.1 → **1.3.2** (FetchContent pin). URL updated to
+    `https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz`;
+    SHA256 pin updated to
+    `bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16`.
+    Released 2026-02-17; contains minor bug-fixes over 1.3.1.
+  - `nlohmann/json` 3.11.3 → **3.12.0** (vendored single header).
+    `third_party/nlohmann-json/nlohmann/json.hpp` replaced with the
+    3.12.0 amalgamation (SHA-256:
+    `aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63`);
+    LICENSE provenance line bumped to v3.12.0. MIT license text
+    unchanged. No breaking API changes in the OSF usage surface
+    (JSON parsing only; no deprecated API use).
+
 - New CMake option `OSF_WARNINGS_AS_ERRORS` (default OFF) — promotes
   compiler warnings to errors for OSF targets only (vendored `pugixml.cpp`
   and the FetchContent `zlib` / `googletest` targets are unaffected).
@@ -100,7 +114,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     `ReaderStats::compressed` + `compression_format`. The low-level
     `parse_magic_header` deliberately stays non-decompressing.
   - zlib provisioning honours the declared `OSF_USE_SYSTEM_ZLIB` option:
-    default fetches zlib **1.3.1** via FetchContent (pinned tarball +
+    default fetches zlib **1.3.2** via FetchContent (pinned tarball +
     SHA256); `ON` uses `find_package(ZLIB)`. zlib is a PRIVATE dependency
     of `osf_core`.
   `tests/unit/test_compression.cpp` (detection + round-trips incl. a
@@ -593,7 +607,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   message; unknown spellings fall through to `Unsupported`.
 - Three new `osf::Error::Code` values: `InvalidMetablock`,
   `RemovedInSpec`, `JsonParseError`.
-- Vendored `nlohmann/json` v3.11.3 (single-header, MIT) under
+- Vendored `nlohmann/json` v3.12.0 (single-header, MIT) under
   `third_party/nlohmann-json/`; followed the same pattern as
   `tl-expected`: byte-identical drop, SHA-256 of `json.hpp` matches
   the upstream release asset, LICENSE prefixed with two provenance

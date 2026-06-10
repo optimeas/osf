@@ -667,7 +667,7 @@ whole-file buffering; auto gzip/zlib header detection via
 before the magic-header parse and populate `ReaderStats::compressed` /
 `compression_format`; the low-level `parse_magic_header` stays
 non-decompressing by design. zlib provisioning honours the
-`OSF_USE_SYSTEM_ZLIB` option — default FetchContent zlib 1.3.1 (pinned
+`OSF_USE_SYSTEM_ZLIB` option — default FetchContent zlib 1.3.2 (pinned
 tarball + SHA256), `ON` uses `find_package(ZLIB)`; zlib is a PRIVATE
 dependency of `osf_core`. ctest 283 → **294/294 green** (0 warnings
 under MSVC `/W4 /permissive-`).
