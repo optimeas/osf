@@ -38,3 +38,7 @@ ctest --test-dir build
 For platform-specific instructions, CMake options, and FAQ, see [`BUILD.md`](BUILD.md). For the architectural rationale and the full phased plan, see [`DECISIONS.md` §20](../../DECISIONS.md).
 
 Qt integration is intentionally **not** part of the core library (see DECISIONS.md §20). A separate Qt-aware module may follow once the core is stable.
+
+## Naming conventions
+
+Types use `PascalCase` (`DataManager`, `BlockWriter`, `ControlKind`, …) and functions/methods use `snake_case` (`load_from_file()`, `write_to_file()`, …). This matches the Rust reference implementation and the C ABI surface (`osf_load_file`, …). The `Kind` suffix on variant-tag enumerations (`BlockKind`, `ControlKind`, `ChannelData::Kind`) is a deliberate idiom and is kept consistently. See [DECISIONS.md §20](../../DECISIONS.md) for the full rationale.

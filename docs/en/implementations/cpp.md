@@ -78,7 +78,7 @@ Platform-specific notes, CMake options and FAQ are in
 | `OSF_WARNINGS_AS_ERRORS` | `OFF` | warnings as errors (`/WX` or `-Werror`); `ON` in CI |
 | `BUILD_SHARED_LIBS` | `OFF` | build the core library as a shared library |
 
-C++17 is hard-pinned. Third-party code (`tl::expected`, `nlohmann/json`,
+C++17 is the firmly-defined language baseline. Moving to C++20 or later is a deliberate library upgrade, not a build option. Third-party code (`tl::expected`, `nlohmann/json`,
 `pugixml`) is vendored in the repository under `third_party/`; zlib comes via
 FetchContent or the system.
 

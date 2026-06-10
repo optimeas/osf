@@ -89,7 +89,7 @@ Set with `-D<OPTION>=<VALUE>`, for example:
 cmake -B build -DBUILD_SHARED_LIBS=ON -DOSF_BUILD_TESTS=OFF
 ```
 
-The C++ language standard is **not** a CMake option. C++17 is hard-pinned in `CMakeLists.txt`; moving to a newer standard is a deliberate library upgrade, not a build switch (see [DECISIONS.md §20](../../DECISIONS.md)).
+The C++ language standard is **not** a CMake option. C++17 is the firmly-defined language baseline (see [DECISIONS.md §20](../../DECISIONS.md)); moving to C++20 or later is a deliberate library upgrade, not a build switch.
 
 ## FAQ
 

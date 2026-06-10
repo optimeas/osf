@@ -623,7 +623,7 @@ ctest --test-dir build
 
 **Constraints:**
 
-- C++17 is hard-pinned in `CMakeLists.txt` (DECISIONS §20). No `OSF_CXX_STANDARD` switch — moving to C++20 or later is a deliberate library upgrade, not a build option.
+- C++17 is the firmly-defined language baseline in `CMakeLists.txt` (DECISIONS §20). No `OSF_CXX_STANDARD` switch — moving to C++20 or later is a deliberate library upgrade, not a build option.
 - The library is Qt-neutral; a Qt-aware module may follow as a separate `integrations/` entry once the core is stable.
 
 **Pending:**
