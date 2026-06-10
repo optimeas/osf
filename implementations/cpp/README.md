@@ -27,6 +27,17 @@ Built as a phased plan (see [DECISIONS.md §20](../../DECISIONS.md) for the full
 - A throwing convenience layer (`osf::throwing`) over the `Result<T>` core for callers who prefer exceptions
 - The C ABI shared library `osf-c` (`osf/c_api.h`) — a pure C99 layer for cross-language consumption (built with `-D OSF_BUILD_C_API=ON`)
 
+## Generating the API reference
+
+Requires [Doxygen](https://www.doxygen.nl/) installed. Configure with `-D OSF_BUILD_DOCS=ON` and build the `osf-docs` target:
+
+```bash
+cmake -B build -D OSF_BUILD_DOCS=ON
+cmake --build build --target osf-docs
+```
+
+The generated HTML lands under `build/doxygen/html/index.html`. The target is not part of the default `ALL` build and does not affect tests or CI.
+
 ## Build quickstart
 
 ```bash

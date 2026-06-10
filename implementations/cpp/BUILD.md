@@ -79,7 +79,8 @@ Apple Silicon (arm64) and Intel (x86_64) hosts both build natively. Universal-bi
 |---|---|---|
 | `BUILD_SHARED_LIBS` | `OFF` | Build `osf::osf` as shared library instead of static. |
 | `OSF_BUILD_TESTS` | `ON` | Configure GoogleTest and the unit-test executables. |
-| `OSF_BUILD_EXAMPLES` | `ON` | Reserved for later phases. Currently has no effect because no examples ship yet. |
+| `OSF_BUILD_EXAMPLES` | `ON` | Build the example executables under `examples/`. |
+| `OSF_BUILD_DOCS` | `OFF` | Generate the Doxygen API reference (requires Doxygen installed). |
 | `OSF_BUILD_C_API` | `OFF` | Build the `osf-c` C ABI shared-library wrapper (DECISIONS §23). Opt-in, default OFF. |
 | `OSF_USE_SYSTEM_ZLIB` | `OFF` | Prefer the system zlib over a `FetchContent` build (for OSFZ decompression). |
 
@@ -90,6 +91,24 @@ cmake -B build -DBUILD_SHARED_LIBS=ON -DOSF_BUILD_TESTS=OFF
 ```
 
 The C++ language standard is **not** a CMake option. C++17 is the firmly-defined language baseline (see [DECISIONS.md §20](../../DECISIONS.md)); moving to C++20 or later is a deliberate library upgrade, not a build switch.
+
+## Generating the API reference
+
+Install [Doxygen](https://www.doxygen.nl/download.html) (version 1.9 or newer recommended), then configure with `-D OSF_BUILD_DOCS=ON` and build the `osf-docs` target:
+
+```bash
+cmake -B build -D OSF_BUILD_DOCS=ON
+cmake --build build --target osf-docs
+```
+
+The generated HTML lands under `build/doxygen/html/index.html`. On Windows with a multi-config generator (Visual Studio), add `--config Debug` (or `Release`) to the build command:
+
+```powershell
+cmake -B build -D OSF_BUILD_DOCS=ON
+cmake --build build --target osf-docs --config Debug
+```
+
+If Doxygen is not found, CMake prints a STATUS message and the `osf-docs` target is silently skipped — the rest of the build is unaffected. The docs target is not part of the default `ALL` build and is never run by CI.
 
 ## FAQ
 

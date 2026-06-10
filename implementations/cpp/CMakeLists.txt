@@ -25,6 +25,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_SHARED_LIBS    "Build shared instead of static library" OFF)
 option(OSF_BUILD_TESTS      "Build unit and integration tests"        ON)
 option(OSF_BUILD_EXAMPLES   "Build example executables"               ON)
+option(OSF_BUILD_DOCS       "Build the Doxygen API reference"         OFF)
 option(OSF_BUILD_C_API      "Build the C ABI shared library wrapper"  OFF)
 option(OSF_USE_SYSTEM_ZLIB  "Prefer system zlib over FetchContent"    OFF)
 option(OSF_WARNINGS_AS_ERRORS "Treat compiler warnings as errors"     OFF)
@@ -218,4 +219,28 @@ endif()
 
 if(OSF_BUILD_EXAMPLES)
     add_subdirectory(examples)
+endif()
+
+# ---------------------------------------------------------------------------
+# Doxygen API reference (opt-in, not part of ALL)
+# ---------------------------------------------------------------------------
+
+if(OSF_BUILD_DOCS)
+    find_package(Doxygen)
+    if(DOXYGEN_FOUND)
+        set(DOXYGEN_PROJECT_NAME    "OSF C++")
+        set(DOXYGEN_PROJECT_NUMBER  "${PROJECT_VERSION}")
+        set(DOXYGEN_GENERATE_HTML   YES)
+        set(DOXYGEN_GENERATE_LATEX  NO)
+        set(DOXYGEN_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/doxygen")
+        set(DOXYGEN_EXTRACT_ALL     NO)   # document commented public API, not everything
+        set(DOXYGEN_QUIET           YES)
+        set(DOXYGEN_WARN_IF_UNDOCUMENTED NO)
+        set(DOXYGEN_EXCLUDE_PATTERNS "*/third_party/*")
+        doxygen_add_docs(osf-docs
+            "${CMAKE_CURRENT_SOURCE_DIR}/include/osf"
+            COMMENT "Generating OSF C++ API reference (Doxygen)")
+    else()
+        message(STATUS "OSF_BUILD_DOCS=ON but Doxygen was not found — the 'osf-docs' target is skipped.")
+    endif()
 endif()
