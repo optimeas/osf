@@ -73,7 +73,6 @@ public final class MagicHeaderParser {
         byte[] lineBuf = new byte[MAX_MAGIC_HEADER_LEN + 2]; // +2 for '\r' and '\n'
         int lineLen = 0;    // bytes accumulated before '\n' (excluding '\n' itself)
         int totalBytes = 0; // total bytes consumed from stream (incl. '\n')
-        boolean newlineFound = false;
 
         while (true) {
             int b = in.read();
@@ -83,7 +82,6 @@ public final class MagicHeaderParser {
             }
             totalBytes++;
             if (b == '\n') {
-                newlineFound = true;
                 break;
             }
             if (lineLen > MAX_MAGIC_HEADER_LEN) {
