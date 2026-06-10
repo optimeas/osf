@@ -16,8 +16,8 @@
  *   - StreamingWriter (this class) — embedded; per-block flush via OS
  *     fsync. Constant memory footprint regardless of recording length.
  *     Compression is intentionally out of scope.
- *   - BlockWriter (Phase 7c) — analyst-style; accumulates samples in
- *     memory, emits the complete file at write_to() / write_to_file().
+ *   - BlockWriter — analyst-style; accumulates samples in memory,
+ *     emits the complete file at write_to() / write_to_file().
  *     Path or memory (std::ostream) sink.
  *
  * Compression is intentionally out of scope. The StreamingWriter writes
@@ -38,7 +38,7 @@
  * close the writer and construct a new one for the next recording.
  *
  * Streaming guarantees are file-system-specific. For memory/socket
- * sinks, BlockWriter (Phase 7c) is the right class.
+ * sinks, BlockWriter is the right class.
  */
 
 #pragma once

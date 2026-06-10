@@ -25,6 +25,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_SHARED_LIBS    "Build shared instead of static library" OFF)
 option(OSF_BUILD_TESTS      "Build unit and integration tests"        ON)
 option(OSF_BUILD_EXAMPLES   "Build example executables"               ON)
+option(OSF_BUILD_DOCS       "Build the Doxygen API reference"         OFF)
 option(OSF_BUILD_C_API      "Build the C ABI shared library wrapper"  OFF)
 option(OSF_USE_SYSTEM_ZLIB  "Prefer system zlib over FetchContent"    OFF)
 option(OSF_WARNINGS_AS_ERRORS "Treat compiler warnings as errors"     OFF)
@@ -94,10 +95,10 @@ target_include_directories(osf_headers SYSTEM INTERFACE
 )
 
 # ---------------------------------------------------------------------------
-# zlib — transparent OSFZ (gzip / zlib) decompression on read (Phase 8).
+# zlib — transparent OSFZ (gzip / zlib) decompression on read.
 #
 #   OSF_USE_SYSTEM_ZLIB=ON  -> find_package(ZLIB) (system / vcpkg).
-#   OSF_USE_SYSTEM_ZLIB=OFF -> FetchContent zlib 1.3.1 (pinned tarball +
+#   OSF_USE_SYSTEM_ZLIB=OFF -> FetchContent zlib 1.3.2 (pinned tarball +
 #                              SHA256).
 #
 # zlib is a PRIVATE dependency of osf_core (used only in
@@ -114,13 +115,13 @@ else()
     include(FetchContent)
     FetchContent_Declare(
         zlib
-        URL      https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
-        URL_HASH SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
+        URL      https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz
+        URL_HASH SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
         DOWNLOAD_EXTRACT_TIMESTAMP FALSE
     )
     set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(zlib)
-    # zlib 1.3.1 uses directory-scoped include_directories(), so the
+    # zlib 1.3.2 uses directory-scoped include_directories(), so the
     # zlibstatic target carries no interface include dirs — surface them
     # explicitly for osf_core and the compression tests.
     set(OSF_ZLIB_TARGET zlibstatic)
@@ -176,7 +177,7 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# osf-c — C ABI shared library (Phase 11, DECISIONS §23). Built only when
+# osf-c — C ABI shared library (DECISIONS §23). Built only when
 # OSF_BUILD_C_API=ON. Wraps osf_core (static, folded in) behind a pure-C99
 # extern "C" surface; the public header is include/osf/c_api.h.
 # ---------------------------------------------------------------------------
@@ -210,4 +211,36 @@ endif()
 if(OSF_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+# ---------------------------------------------------------------------------
+# Examples
+# ---------------------------------------------------------------------------
+
+if(OSF_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
+# ---------------------------------------------------------------------------
+# Doxygen API reference (opt-in, not part of ALL)
+# ---------------------------------------------------------------------------
+
+if(OSF_BUILD_DOCS)
+    find_package(Doxygen)
+    if(DOXYGEN_FOUND)
+        set(DOXYGEN_PROJECT_NAME    "OSF C++")
+        set(DOXYGEN_PROJECT_NUMBER  "${PROJECT_VERSION}")
+        set(DOXYGEN_GENERATE_HTML   YES)
+        set(DOXYGEN_GENERATE_LATEX  NO)
+        set(DOXYGEN_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/doxygen")
+        set(DOXYGEN_EXTRACT_ALL     NO)   # document commented public API, not everything
+        set(DOXYGEN_QUIET           YES)
+        set(DOXYGEN_WARN_IF_UNDOCUMENTED NO)
+        set(DOXYGEN_EXCLUDE_PATTERNS "*/third_party/*")
+        doxygen_add_docs(osf-docs
+            "${CMAKE_CURRENT_SOURCE_DIR}/include/osf"
+            COMMENT "Generating OSF C++ API reference (Doxygen)")
+    else()
+        message(STATUS "OSF_BUILD_DOCS=ON but Doxygen was not found — the 'osf-docs' target is skipped.")
+    endif()
 endif()

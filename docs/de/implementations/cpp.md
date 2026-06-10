@@ -78,7 +78,7 @@ Plattform­spezifische Hinweise, CMake-Optionen und FAQ stehen in
 | `OSF_WARNINGS_AS_ERRORS` | `OFF` | Warnungen als Fehler (`/WX` bzw. `-Werror`); in CI `ON` |
 | `BUILD_SHARED_LIBS` | `OFF` | die Kern-Bibliothek als Shared Library bauen |
 
-C++17 ist fest verdrahtet. Drittanbieter-Code (`tl::expected`,
+C++17 ist die fest definierte Sprachbaseline der Bibliothek. Der Wechsel auf C++20 oder höher ist ein bewusstes Library-Upgrade, keine Build-Option. Drittanbieter-Code (`tl::expected`,
 `nlohmann/json`, `pugixml`) ist im Repository unter `third_party/`
 mitgeliefert; zlib kommt per FetchContent oder System.
 

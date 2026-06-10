@@ -851,10 +851,25 @@ OSF-Magic-Header (`OSF4`, `OSF5`, `OCEAN_STREAM_FORMAT4` oder
 
 ### Schreiben
 
-Schreiber erzeugen niemals OSFZ-Dateien. Kompression ist Aufgabe
-der nachgelagerten Storage- oder Transportschicht (Dateisystem,
-Übertragungsprotokoll). Damit bleiben die OSF-Schreibroutinen —
-insbesondere auf Embedded-Systemen — schlank und vorhersehbar.
+Schreiber dürfen OSFZ-Ausgaben erzeugen. Als Kompressionsformat wird
+dabei **gzip (RFC 1952)** verwendet.
+
+**Streaming-Schreiber** (die Blöcke inkrementell mit per-Block-`fsync`
+schreiben) müssen die Kompression als **nachgelagerten Schritt nach der
+Finalisierung** behandeln, losgelöst vom eigentlichen Schreibpfad. Eine
+Inline-Kompression würde bei einem Stromausfall und anschließender
+Trunkierung die Dekompression unmöglich machen und die Best-Effort-Haltbarkeit
+aushebeln. Der Kompressionsschritt läuft nach dem Schließen des Schreibers —
+entweder als niedrig-priorisierter Hintergrundthread (der Prozess darf erst
+enden, wenn dieser abgeschlossen ist) oder als externer CLI-Prozess. Die
+Quell-OSF-Datei muss erhalten bleiben, bis die OSFZ-Datei erfolgreich
+geschrieben und fsync'd wurde; eine Verifizierung durch erneutes Lesen
+ist vor dem Löschen nicht erforderlich.
+
+**Block-Schreiber** (die die gesamte Datei im Speicher puffern und atomar
+schreiben) dürfen direkt komprimiert schreiben und OSFZ-Dateien inline
+erzeugen, da kein Risiko einer partiellen Ausgabe oder eines
+stromunfallbedingten Abbruchs besteht.
 
 <br/>
 

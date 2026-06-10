@@ -190,8 +190,8 @@ TEST_F(MetablockXmlExamplesTest, steam_loco_osf_metablock_parses) {
 // ---------------------------------------------------------------------
 // Symmetry probe: an OSF4 generated file (parsed by parse_metablock_xml)
 // and the equivalent OSF5 generated file (parsed by parse_metablock_json)
-// produce the same channel list shape. Phase 4's success criterion is
-// "symmetric population with the JSON parser" — pin one explicit case.
+// produce the same channel list shape: symmetric population with the
+// JSON parser — pin one explicit case.
 // ---------------------------------------------------------------------
 
 TEST_F(MetablockXmlExamplesTest, equidistant_osf4_and_osf5_have_matching_channels) {

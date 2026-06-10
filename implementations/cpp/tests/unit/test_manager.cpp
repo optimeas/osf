@@ -543,9 +543,8 @@ TEST(DataManager, channel_lookup_by_name_and_index) {
 
 // ---------------------------------------------------------------------
 // OSFZ: a malformed / truncated compressed stream fails gracefully.
-// The Phase-8 decompressor yields best-effort EOF on a truncated gzip
-// member, then the header parse fails — no hang, no crash, and no
-// leftover Phase-8 rejection-stub message.
+// The decompressor yields best-effort EOF on a truncated gzip member,
+// then the header parse fails — no hang, no crash.
 // ---------------------------------------------------------------------
 
 TEST(DataManager, truncated_gzip_input_fails_gracefully) {
@@ -554,8 +553,9 @@ TEST(DataManager, truncated_gzip_input_fails_gracefully) {
         std::ios::in | std::ios::binary);
     auto mgr = osf::DataManager::load_from_stream(ss);
     ASSERT_FALSE(mgr.has_value());
-    EXPECT_EQ(mgr.error().message.find("Phase 8"), std::string::npos)
-        << "the Phase-8 rejection stub should be gone: "
+    // Confirm the error is a parse failure, not a hang or crash.
+    EXPECT_FALSE(mgr.error().message.empty())
+        << "expected a non-empty error message, got: "
         << mgr.error().message;
 }
 

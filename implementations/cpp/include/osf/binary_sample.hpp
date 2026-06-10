@@ -6,10 +6,10 @@
  * @brief Non-owning view over a binary payload, C++17 substitute for
  *        std::span<std::uint8_t const>.
  *
- * Promoted from osf::detail to osf:: in Phase 7b — the StreamingWriter
- * public API takes BinarySample as a parameter of write_timestamped_binary.
- * Phase 7a had this type in src/block_encode.hpp because the encoder was
- * the only consumer; with a public-API call site it belongs in include/osf/.
+ * Promoted from osf::detail to osf:: because the StreamingWriter public API
+ * takes BinarySample as a parameter of write_timestamped_binary. The type
+ * originated in src/block_encode.hpp where the encoder was the only
+ * consumer; with a public-API call site it belongs in include/osf/.
  *
  * Explicit construction only; no implicit conversion from
  * std::vector<std::uint8_t> to prevent the lifetime trap where a temporary

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 //
-// Integration tests for transparent OSFZ decompression on read (Phase 8).
+// Integration tests for transparent OSFZ decompression on read.
 // Re-compresses a real reference file to gzip and zlib in memory and
 // confirms it loads through DataManager identically to the plain source,
 // and loads the real gzip-OSFZ field sample weather_station.osfz.

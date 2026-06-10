@@ -59,14 +59,14 @@ osf/
 
 | Language | Target Platform | Reader | Writer | Status | Notes |
 |---|---|---|---|---|---|
-| Delphi | Windows desktop, legacy systems | ✅ | ✅ | In progress | First implementation; reference for the project |
+| Delphi | Windows desktop, legacy systems | ✅ | ✅ | Complete (reference) | Most complete implementation; reference for the project |
 | C | Embedded + desktop | ✅ | ✅ | Planned | Embedded: primarily Writer; Desktop: both |
-| C++ | Industrial measurement, Qt ecosystem | ✅ | ✅ | Planned | Builds on C implementation |
+| C++ | Industrial measurement, Qt ecosystem | ✅ | ✅ | Complete (§20) | Standalone from spec (see §20); not a C port |
 | C# / .NET | Windows desktop, industrial automation | ✅ | ✅ | Planned | Relevant for Beckhoff, Siemens environments |
-| Python | Data analytics, scripting | ✅ | ✅ | Planned | Reader + Block Writer; NumPy + pandas integration; AI/ML entry point |
+| Python | Data analytics, scripting | ✅ | ✅ | Functional (§18) | PyO3 bindings over the Rust core; reader + WriterBuilder + NumPy integration; AI/ML entry point |
 | Java | Enterprise, Android | ✅ | ✅ | Planned | |
 | Swift | iOS / macOS / iPadOS / watchOS | ✅ | ✅ | Planned | Reader on Mac/iPad/iPhone; Writer for sensor data on iPhone/Watch |
-| Rust | Systems programming, embedded | ✅ | ✅ | Planned | Growing relevance in embedded and cloud |
+| Rust | Systems programming, embedded | ✅ | ✅ | Complete (§18) | Foundation for Python bindings (§18); reader + writer + transparent OSFZ |
 | MATLAB | Engineering analysis | ✅ | — | Planned | Reader only |
 | JavaScript/TS | Browser + Node.js | ✅ | — | Planned | Primarily Reader; web dashboards, cloud visualization |
 
@@ -199,28 +199,58 @@ Implementations must document clearly that the convenience layer may lose precis
 
 ## 12. OSFZ Compression
 
-**Decision:** Readers must detect and decompress OSFZ files transparently. Writers never produce OSFZ output.
+**Decision:** Readers must detect and decompress OSFZ files transparently.
+When writers produce OSFZ output, the compressed container is **gzip
+(RFC 1952)**. For the `StreamingWriter`, compression is a **post-close**
+step, never inline inside the streaming write path. The `BlockWriter` may
+compress inline.
 
-**Why:** OSFZ is simply a zlib-compressed OSF file with no special magic header. Compression is the responsibility of downstream infrastructure (storage layer, transfer pipeline), not the OSF writer. Keeping writers simple maximizes their suitability for embedded use.
+**Reader requirement:** Implementations must transparently detect and
+decompress both:
+
+- zlib (RFC 1950) — magic bytes `0x78 0x01 / 0x5E / 0x9C / 0xDA`
+- gzip (RFC 1952) — magic bytes `0x1F 0x8B`
+
+Both are valid OSFZ. Detection is by leading magic bytes; the behaviour is
+identical after decompression.
+
+### Writer requirement: gzip output format and StreamingWriter / BlockWriter design
+
+The agreed design for producing OSFZ output is driven by streaming robustness
+against power loss. The output format for writer-produced OSFZ is
+**gzip (RFC 1952)** (matches deployed Optimeas devices).
+
+1. **The `StreamingWriter` writes the OSF file raw**, with per-block `fsync`.
+   A gzip stream that is truncated by a power loss would be undecompressable
+   and the best-effort truncation guarantee would be lost — so inline
+   compression in the `StreamingWriter` hot path is not permitted.
+2. **For the `StreamingWriter`, OSFZ compression happens only after the OSF
+   file is finalized** (all blocks written, the writer closed). Execution is
+   either:
+   - **(a) a low-priority background thread** started after file close — the
+     process must not exit until all gzip threads have been joined; or
+   - **(b) an external process** invoked via CLI after the file is closed.
+3. **The `BlockWriter` accumulates the entire file in memory and writes
+   atomically** at `write_to_file` / `write_to`. Because there is no
+   partial-stream or power-loss truncation risk, the `BlockWriter` **MAY
+   compress inline and emit OSFZ directly** without a separate post-close
+   step.
+4. **The source OSF file may only be deleted after the OSFZ file has been
+   successfully written and fsync'd** (robustness against a crash between the
+   two steps); no read-back or decompression verification is required.
+5. On embedded devices, completion of the OSF (and subsequently the OSFZ)
+   typically triggers further steps — transfer to a server, or collection
+   into a queue for later multi-destination transfer. Implementations should
+   expose a hook or callback that fires when the compressed file is ready
+   (downstream-trigger hook).
 
 ### Update 2026-05-06: Real-world OSFZ encoding
 
 The original wording "OSFZ is simply a zlib-compressed OSF file"
 reflects the formal spec, but field analysis of real Optimeas device
 output (`examples/weather_station.osfz`) shows that deployed devices
-emit **gzip-wrapped** OSF data, not raw zlib (RFC 1950).
-
-**Reader requirement (revised):** Implementations must transparently
-detect and decompress both:
-
-- zlib (RFC 1950) — magic bytes `0x78 0x01 / 0x5E / 0x9C / 0xDA`
-- gzip (RFC 1952) — magic bytes `0x1F 0x8B`
-
-Both are valid OSFZ. Detection is by leading magic bytes; the
-behaviour is identical after decompression.
-
-**Writer requirement (unchanged):** Implementations never produce OSFZ
-output — compression remains a downstream concern.
+emit **gzip-wrapped** OSF data, not raw zlib (RFC 1950). Both variants
+are therefore valid; the reader requirement above covers both.
 
 ---
 
@@ -407,6 +437,28 @@ When `std::expected` is broadly available (C++23 maturity across
 target compilers), the `tl::expected` typedef is swapped without API
 changes for consumers.
 
+### Naming Conventions
+
+The library follows a deliberate, consistent naming scheme throughout:
+
+- **Types** use `PascalCase` — `DataManager`, `BlockWriter`, `StreamingWriter`,
+  `DecompressingIStream`, `ControlKind`, `BlockKind`, etc.
+- **Functions and methods** use `snake_case` — `load_from_file()`,
+  `write_to_file()`, `add_channel()`, `next()`, etc.
+
+This mirrors the Rust reference implementation (where the same split is
+idiomatic) and the C ABI (`osf_load_file`, `osf_write_to_file`, …), so
+all three surfaces read consistently.
+
+The **`Kind` suffix** on variant-tag enumerations (`ControlKind`,
+`BlockKind`, `ChannelData::Kind`) is a deliberate idiom that avoids
+collisions between the enum type and the value names it exports. It is
+kept consistently across all such enumerations and is **not** renamed.
+
+> **Decision:** Renaming the public API would break the entire library surface
+> and the C ABI for no functional gain; the convention is documented here to
+> answer reviewer questions.
+
 ### Build System: CMake (>= 3.20)
 
 **Targets:**
@@ -423,7 +475,7 @@ changes for consumers.
 | `BUILD_SHARED_LIBS` | `OFF` | Static library by default; shared on demand |
 | `OSF_BUILD_TESTS` | `ON` | GoogleTest-based unit and integration tests |
 | `OSF_BUILD_EXAMPLES` | `ON` | Example executables (inspect, stats, dump, copy) |
-| `OSF_BUILD_C_API` | `OFF` | C ABI wrapper as separate shared library; disabled until Phase 2 |
+| `OSF_BUILD_C_API` | `OFF` | C ABI shared library (`osf-c`); opt-in, default OFF |
 | `OSF_USE_SYSTEM_ZLIB` | `OFF` | Prefer system zlib over `FetchContent` build |
 
 Static linkage is the default to avoid C++ ABI stability issues across
@@ -615,7 +667,7 @@ whole-file buffering; auto gzip/zlib header detection via
 before the magic-header parse and populate `ReaderStats::compressed` /
 `compression_format`; the low-level `parse_magic_header` stays
 non-decompressing by design. zlib provisioning honours the
-`OSF_USE_SYSTEM_ZLIB` option — default FetchContent zlib 1.3.1 (pinned
+`OSF_USE_SYSTEM_ZLIB` option — default FetchContent zlib 1.3.2 (pinned
 tarball + SHA256), `ON` uses `find_package(ZLIB)`; zlib is a PRIVATE
 dependency of `osf_core`. ctest 283 → **294/294 green** (0 warnings
 under MSVC `/W4 /permissive-`).

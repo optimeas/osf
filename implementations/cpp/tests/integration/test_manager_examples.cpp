@@ -2,10 +2,9 @@
 // Copyright (c) 2026 Optimeas GmbH
 //
 // Integration tests for osf::DataManager against real reference and
-// field-recorded OSF files. The Phase-6 success criterion is that
-// every shipped uncompressed OSF file loads end-to-end through the
-// DataManager API and produces a typed channel list with non-empty
-// samples on at least one channel per file.
+// field-recorded OSF files. Every shipped uncompressed OSF file must
+// load end-to-end through the DataManager API and produce a typed
+// channel list with non-empty samples on at least one channel per file.
 
 #include <gtest/gtest.h>
 
@@ -162,7 +161,7 @@ TEST_F(ManagerExamplesTest, steam_loco_osf_loads_clean) {
 }
 
 // ---------------------------------------------------------------------
-// OSFZ: weather_station.osfz loads transparently (Phase 8).
+// OSFZ: weather_station.osfz loads transparently.
 // ---------------------------------------------------------------------
 
 TEST_F(ManagerExamplesTest, weather_station_osfz_loads_transparently) {

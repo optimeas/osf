@@ -42,7 +42,7 @@ include(GoogleTest)
 gtest_discover_tests(test_error)
 
 # ---------------------------------------------------------------------------
-# test_header — magic-header parser unit tests (Phase 2b).
+# test_header — magic-header parser unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_header
@@ -59,7 +59,7 @@ osf_set_warnings(test_header)
 gtest_discover_tests(test_header)
 
 # ---------------------------------------------------------------------------
-# test_types — type-string parser unit tests (Phase 3b).
+# test_types — type-string parser unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_types
@@ -76,7 +76,7 @@ osf_set_warnings(test_types)
 gtest_discover_tests(test_types)
 
 # ---------------------------------------------------------------------------
-# test_metablock — OSF5 JSON metablock parser unit tests (Phase 3b).
+# test_metablock — OSF5 JSON metablock parser unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_metablock
@@ -93,7 +93,7 @@ osf_set_warnings(test_metablock)
 gtest_discover_tests(test_metablock)
 
 # ---------------------------------------------------------------------------
-# test_metablock_xml — OSF4 XML metablock parser unit tests (Phase 4).
+# test_metablock_xml — OSF4 XML metablock parser unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_metablock_xml
@@ -110,7 +110,7 @@ osf_set_warnings(test_metablock_xml)
 gtest_discover_tests(test_metablock_xml)
 
 # ---------------------------------------------------------------------------
-# test_block — block-model primitive unit tests (Phase 5).
+# test_block — block-model primitive unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_block
@@ -127,7 +127,7 @@ osf_set_warnings(test_block)
 gtest_discover_tests(test_block)
 
 # ---------------------------------------------------------------------------
-# test_stats — reader-stats helper unit tests (Phase 5).
+# test_stats — reader-stats helper unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_stats
@@ -144,8 +144,7 @@ osf_set_warnings(test_stats)
 gtest_discover_tests(test_stats)
 
 # ---------------------------------------------------------------------------
-# test_reader — BlockReader unit tests against synthetic byte sequences
-# (Phase 5).
+# test_reader — BlockReader unit tests against synthetic byte sequences.
 # ---------------------------------------------------------------------------
 
 add_executable(test_reader
@@ -162,7 +161,7 @@ osf_set_warnings(test_reader)
 gtest_discover_tests(test_reader)
 
 # ---------------------------------------------------------------------------
-# test_data_channel — typed channel model unit tests (Phase 6).
+# test_data_channel — typed channel model unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_data_channel
@@ -179,7 +178,7 @@ osf_set_warnings(test_data_channel)
 gtest_discover_tests(test_data_channel)
 
 # ---------------------------------------------------------------------------
-# test_manager — DataManager builder state-machine unit tests (Phase 6).
+# test_manager — DataManager builder state-machine unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_manager
@@ -196,7 +195,7 @@ osf_set_warnings(test_manager)
 gtest_discover_tests(test_manager)
 
 # ---------------------------------------------------------------------------
-# test_block_encode — block-encoder primitive unit tests (Phase 7a).
+# test_block_encode — block-encoder primitive unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_block_encode
@@ -208,7 +207,7 @@ target_link_libraries(test_block_encode PRIVATE
     GTest::gtest_main
 )
 
-# Phase-7a encoder lives in src/ (non-public header).
+# The encoder lives in src/ (non-public header).
 target_include_directories(test_block_encode PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../src"
 )
@@ -218,7 +217,7 @@ osf_set_warnings(test_block_encode)
 gtest_discover_tests(test_block_encode)
 
 # ---------------------------------------------------------------------------
-# test_durable_file — POSIX/Win32 RAII file wrapper unit tests (Phase 7b).
+# test_durable_file — POSIX/Win32 RAII file wrapper unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_durable_file
@@ -230,7 +229,7 @@ target_link_libraries(test_durable_file PRIVATE
     GTest::gtest_main
 )
 
-# Phase-7b DurableFile lives in src/ (non-public header).
+# DurableFile lives in src/ (non-public header).
 target_include_directories(test_durable_file PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../src"
 )
@@ -240,7 +239,7 @@ osf_set_warnings(test_durable_file)
 gtest_discover_tests(test_durable_file)
 
 # ---------------------------------------------------------------------------
-# test_streaming_writer — StreamingWriter lifecycle + write tests (Phase 7b).
+# test_streaming_writer — StreamingWriter lifecycle + write tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_streaming_writer
@@ -257,7 +256,7 @@ osf_set_warnings(test_streaming_writer)
 gtest_discover_tests(test_streaming_writer)
 
 # ---------------------------------------------------------------------------
-# test_block_writer — BlockWriter unit tests (Phase 7c).
+# test_block_writer — BlockWriter unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_block_writer
@@ -274,7 +273,7 @@ osf_set_warnings(test_block_writer)
 gtest_discover_tests(test_block_writer)
 
 # ---------------------------------------------------------------------------
-# test_stale_value_guard — StaleValueGuard unit tests (Phase 7d).
+# test_stale_value_guard — StaleValueGuard unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_stale_value_guard
@@ -291,7 +290,7 @@ osf_set_warnings(test_stale_value_guard)
 gtest_discover_tests(test_stale_value_guard)
 
 # ---------------------------------------------------------------------------
-# test_throwing — opt-in throwing convenience layer unit tests (Phase 9).
+# test_throwing — opt-in throwing convenience layer unit tests.
 # Includes integration/roundtrip_helper.hpp for the write round-trips.
 # ---------------------------------------------------------------------------
 
@@ -312,7 +311,7 @@ osf_set_warnings(test_throwing)
 gtest_discover_tests(test_throwing)
 
 # ---------------------------------------------------------------------------
-# test_writer_common — shared writer infrastructure unit tests (Phase 7c).
+# test_writer_common — shared writer infrastructure unit tests.
 # ---------------------------------------------------------------------------
 
 add_executable(test_writer_common
@@ -358,7 +357,7 @@ gtest_discover_tests(test_header_examples)
 
 # ---------------------------------------------------------------------------
 # test_metablock_examples — OSF5 metablock parser tests against
-# reference files in examples/generated/ (Phase 3b).
+# reference files in examples/generated/.
 # ---------------------------------------------------------------------------
 
 add_executable(test_metablock_examples
@@ -380,7 +379,7 @@ gtest_discover_tests(test_metablock_examples)
 # ---------------------------------------------------------------------------
 # test_metablock_xml_examples — OSF4 XML metablock parser tests against
 # reference files in examples/generated/ plus the motorbike/steam_loco
-# field samples (Phase 4).
+# field samples.
 # ---------------------------------------------------------------------------
 
 add_executable(test_metablock_xml_examples
@@ -402,7 +401,7 @@ gtest_discover_tests(test_metablock_xml_examples)
 # ---------------------------------------------------------------------------
 # test_reader_examples — BlockReader integration tests against the
 # generated reference files and the motorbike / steam_loco field
-# samples (Phase 5).
+# samples.
 # ---------------------------------------------------------------------------
 
 add_executable(test_reader_examples
@@ -424,7 +423,7 @@ gtest_discover_tests(test_reader_examples)
 # ---------------------------------------------------------------------------
 # test_manager_examples — DataManager integration tests against the
 # generated reference files and the motorbike / steam_loco field
-# samples (Phase 6).
+# samples.
 # ---------------------------------------------------------------------------
 
 add_executable(test_manager_examples
@@ -445,7 +444,7 @@ gtest_discover_tests(test_manager_examples)
 
 # ---------------------------------------------------------------------------
 # test_streaming_writer_examples — cross-implementation roundtrip
-# (Phase 7b Cat-F + Cat-G).
+# (StreamingWriter Cat-F + Cat-G).
 # ---------------------------------------------------------------------------
 
 add_executable(test_streaming_writer_examples
@@ -470,7 +469,7 @@ gtest_discover_tests(test_streaming_writer_examples)
 
 # ---------------------------------------------------------------------------
 # test_block_writer_examples — BlockWriter cross-implementation roundtrip
-# (Phase 7c Cat-A + Cat-B).
+# (BlockWriter Cat-A + Cat-B).
 # ---------------------------------------------------------------------------
 
 add_executable(test_block_writer_examples
@@ -494,8 +493,8 @@ osf_set_warnings(test_block_writer_examples)
 gtest_discover_tests(test_block_writer_examples)
 
 # ---------------------------------------------------------------------------
-# test_compression — DecompressingIStream + detect_compression unit tests
-# (Phase 8). Links zlib directly to build compressed fixtures.
+# test_compression — DecompressingIStream + detect_compression unit tests.
+# Links zlib directly to build compressed fixtures.
 # ---------------------------------------------------------------------------
 
 add_executable(test_compression
@@ -518,7 +517,7 @@ gtest_discover_tests(test_compression)
 
 # ---------------------------------------------------------------------------
 # test_compression_examples — transparent OSFZ decompression against real
-# files (Phase 8). Links zlib directly to re-compress reference files.
+# files. Links zlib directly to re-compress reference files.
 # ---------------------------------------------------------------------------
 
 add_executable(test_compression_examples
@@ -547,8 +546,8 @@ osf_set_warnings(test_compression_examples)
 gtest_discover_tests(test_compression_examples)
 
 # ---------------------------------------------------------------------------
-# test_c_api — C ABI smoke test (Phase 11). A standalone C99 program that
-# links the osf-c shared library; built only when OSF_BUILD_C_API=ON.
+# test_c_api — C ABI smoke test. A standalone C99 program that links the
+# osf-c shared library; built only when OSF_BUILD_C_API=ON.
 # Proves the header is C-compatible and the DLL/.so links + works.
 # ---------------------------------------------------------------------------
 

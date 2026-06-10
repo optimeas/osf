@@ -1,8 +1,9 @@
 # Claude Code Session State
 
-Last updated: 2026-06-04 (after C++ Phase 11 — the C ABI wrapper. The §20
-Implementation Order is now complete, phases 1–11; no next numbered C++
-phase — remaining C++ work is incremental/BACKLOG).
+Last updated: 2026-06-10 (C++ human-review round 1 delivered as PR #1 —
+docs/OSFZ-design fixes, "Phase N" cleanup, zlib 1.3.2 + nlohmann/json 3.12.0
+bumps, runnable `examples/`, opt-in Doxygen target. §20 stays complete
+(phases 1–11); ctest baseline is now **319/319** with `OSF_BUILD_C_API=ON`).
 
 This file is a hand-off document for the next Claude Code session. Read
 [STATUS.md](STATUS.md) and [DECISIONS.md](DECISIONS.md) for the
@@ -26,6 +27,39 @@ The repo currently advances on two independent tracks:
 A brief may also be repo-wide.
 
 ## Recent sessions (since 2026-05-22)
+
+### C++ human-review round 1 response (2026-06-10)
+
+Delivered as **PR #1** (`worktree-cpp-review-round1` → `main`, 8 commits,
+CI green), via subagent-driven-development in an `EnterWorktree` worktree.
+Addresses the round-1 reviewer items:
+
+- **Docs/spec:** DECISIONS §4 table fixed (dropped "C++ builds on C"); **§12
+  rewritten to the finalized post-close OSFZ writer design** — writers MAY
+  produce OSFZ = **gzip**; `StreamingWriter` compresses only AFTER file
+  finalization, **`BlockWriter` may inline**; source OSF deleted after the
+  OSFZ is written + `fsync`'d (no read-back verify); downstream-trigger hook.
+  `osf_general.md` EN+DE updated to match. C++17 "hard-pinned/fest verdrahtet"
+  softened. PascalCase-types / snake_case-methods + `Kind` convention
+  documented (kept, not renamed). `PHASE7_SNAPSHOT.md` removed.
+- **"Phase N" cleanup:** internal phase nomenclature stripped from all cpp
+  public headers/src/tests/per-package CHANGELOG (DECISIONS §20/STATUS
+  phase-plan + root CHANGELOG kept by design).
+- **Deps:** zlib 1.3.1→**1.3.2** (SHA `bb329a0a…d16`) + nlohmann/json
+  3.11.3→**3.12.0** (SHA `aaf127c0…de63`).
+- **Examples:** new `implementations/cpp/examples/` (inspect/dump/write/copy);
+  `OSF_BUILD_EXAMPLES` now actually builds them (was a no-op).
+- **Doxygen:** opt-in `OSF_BUILD_DOCS` → `doxygen_add_docs(osf-docs …)`,
+  graceful-skip when Doxygen absent (verified generating with Doxygen 1.17.0,
+  136 pages, 0 warnings).
+
+**319/319 ctest green** with `OSF_BUILD_C_API=ON`. Out-of-scope follow-ups
+parked: vcpkg/conan packaging + CMake `install()`; OSFZ post-close tooling
+(CLI `compress` verb + background-thread helper); class diagrams + "which
+class for what" guide + Docusaurus expansion; `reference_manifest.json`
+retrofit to C++. Env notes this session: the **Bash tool is broken** on this
+host (use PowerShell); scoped subagent build/commit allow-rules were added to
+`.claude/settings.local.json`.
 
 ### C++ Phase 11 — C ABI wrapper (2026-06-04)
 
@@ -77,7 +111,7 @@ stream by its leading two bytes and inflates on demand via a custom
 auto-detect; `z_stream` behind a PIMPL). `DataManager` wraps its input
 and sets `stats.compressed` / `compression_format`. zlib is a PRIVATE
 `osf_core` dependency via `OSF_USE_SYSTEM_ZLIB` (default FetchContent
-zlib 1.3.1). New `test_compression.cpp` + `test_compression_examples.cpp`;
+zlib 1.3.2). New `test_compression.cpp` + `test_compression_examples.cpp`;
 the former OSFZ-rejection stub tests were flipped/merged. ctest 283 →
 **294/294 green**. `weather_station.osfz` now loads. Branch
 `phase-8-osfz-read`. Next: Phase 9 (throwing convenience layer).
@@ -200,7 +234,7 @@ completed 2026-06-04)** all done — **the §20 Implementation Order is
 complete**. Both OSF5 writer classes, the optional freshness layer,
 transparent gzip/zlib decompression on read, the opt-in throwing layer,
 and the `osf-c` C ABI shared library are in place, and CI builds + tests
-them on Linux/macOS/Windows with warnings-as-errors. **305/305 ctest
+them on Linux/macOS/Windows with warnings-as-errors. **319/319 ctest
 green** on every leg with `OSF_BUILD_C_API=ON` (0 warnings under
 `/W4 /permissive-` locally; `/WX` / `-Werror` in CI).
 
@@ -235,7 +269,7 @@ auto-detect; `z_stream` behind a PIMPL so the header is zlib-free).
 `DataManager` wraps its input before the magic-header parse and sets
 `stats.compressed` / `compression_format`; `parse_magic_header` stays
 non-decompressing. zlib is a PRIVATE `osf_core` dependency via
-`OSF_USE_SYSTEM_ZLIB` (default FetchContent zlib 1.3.1, pinned tarball
+`OSF_USE_SYSTEM_ZLIB` (default FetchContent zlib 1.3.2, pinned tarball
 + SHA256; `ON` → `find_package(ZLIB)`). Mirrors the Rust `compression`
 module.
 
@@ -296,20 +330,20 @@ Push-Location $env:TEMP; New-Item -ItemType Directory -Force gtest-extract | Out
 Set-Location gtest-extract
 & "<cmake.exe>" -E tar xzf "$env:TEMP\googletest-v1.15.2.tar.gz"; Pop-Location
 
-# Phase 8 adds a second FetchContent dep: zlib 1.3.1 (transparent OSFZ read).
-Invoke-WebRequest -Uri "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz" `
-  -OutFile "$env:TEMP\zlib-1.3.1.tar.gz" -UseBasicParsing
+# Transparent OSFZ read uses zlib. FetchContent dep: zlib 1.3.2.
+Invoke-WebRequest -Uri "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz" `
+  -OutFile "$env:TEMP\zlib-1.3.2.tar.gz" -UseBasicParsing
 New-Item -ItemType Directory -Force "$env:TEMP\zlib-extract" | Out-Null
-Push-Location "$env:TEMP\zlib-extract"; & "<cmake.exe>" -E tar xzf "$env:TEMP\zlib-1.3.1.tar.gz"; Pop-Location
+Push-Location "$env:TEMP\zlib-extract"; & "<cmake.exe>" -E tar xzf "$env:TEMP\zlib-1.3.2.tar.gz"; Pop-Location
 
 cmake -B implementations\cpp\build -S implementations\cpp `
   -D FETCHCONTENT_SOURCE_DIR_GOOGLETEST="$env:TEMP\gtest-extract\googletest-1.15.2" `
-  -D FETCHCONTENT_SOURCE_DIR_ZLIB="$env:TEMP\zlib-extract\zlib-1.3.1"
+  -D FETCHCONTENT_SOURCE_DIR_ZLIB="$env:TEMP\zlib-extract\zlib-1.3.2"
 ```
 
 The cached extracts are reused across runs and survive reboots — no
 need to redownload unless `googletest` / `zlib` is bumped. (zlib's
-published SHA256 `9a93b2b7…72df23` is pinned in CMake; or build with
+published SHA256 `bb329a0a…d16` is pinned in CMake; or build with
 `-D OSF_USE_SYSTEM_ZLIB=ON` to use a system zlib instead.)
 
 ### C++ build flow (Windows)
@@ -365,10 +399,11 @@ Always remove `implementations\cpp\build` after a successful verify.
 2. Read `STATUS.md`, then this file, then `DECISIONS.md` §22 if you
    are about to add or modify Delphi logging code.
 3. If continuing the **C++ track**: read DECISIONS §20 + §6 + §7 (+ §23
-   for the C ABI), run the C++ build flow (304/304 baseline, or 305/305
-   with `-D OSF_BUILD_C_API=ON`; configure with the local
+   for the C ABI), run the C++ build flow (**319/319** with
+   `-D OSF_BUILD_C_API=ON`; configure with the local
    `FETCHCONTENT_SOURCE_DIR_ZLIB` + `FETCHCONTENT_SOURCE_DIR_GOOGLETEST`
-   overrides — see the network caveat below). **All eleven §20 phases are
+   overrides — see the network caveat below; note the zlib extract dir is
+   now `zlib-1.3.2`). **All eleven §20 phases are
    done** (writers, `StaleValueGuard`, OSFZ read, throwing layer, CI, and
    the `osf-c` C ABI) — there is no next numbered phase; remaining C++
    work is incremental/BACKLOG. CI runs on C++ pushes — verify

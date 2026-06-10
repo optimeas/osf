@@ -213,7 +213,7 @@ TEST(BlockEncodeStartData, OversizePayloadReturnsInvalidBlock) {
 }
 
 // ---------------------------------------------------------------------------
-// Post-Phase-7a coverage extensions (final-review nits N1/N2/N3)
+// Post-encoder coverage extensions (final-review nits N1/N2/N3)
 // ---------------------------------------------------------------------------
 
 // N1 — encode_continued_data has the same count==0 guard as encode_start_data;

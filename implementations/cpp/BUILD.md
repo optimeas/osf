@@ -79,9 +79,10 @@ Apple Silicon (arm64) and Intel (x86_64) hosts both build natively. Universal-bi
 |---|---|---|
 | `BUILD_SHARED_LIBS` | `OFF` | Build `osf::osf` as shared library instead of static. |
 | `OSF_BUILD_TESTS` | `ON` | Configure GoogleTest and the unit-test executables. |
-| `OSF_BUILD_EXAMPLES` | `ON` | Reserved for later phases. Currently has no effect because no examples ship yet. |
-| `OSF_BUILD_C_API` | `OFF` | Build the C ABI shared-library wrapper. Reserved for Phase 11; currently has no effect. |
-| `OSF_USE_SYSTEM_ZLIB` | `OFF` | Prefer the system zlib over a `FetchContent` build. Relevant once Phase 8 (OSFZ decompression) lands. |
+| `OSF_BUILD_EXAMPLES` | `ON` | Build the example executables under `examples/`. |
+| `OSF_BUILD_DOCS` | `OFF` | Generate the Doxygen API reference (requires Doxygen installed). |
+| `OSF_BUILD_C_API` | `OFF` | Build the `osf-c` C ABI shared-library wrapper (DECISIONS §23). Opt-in, default OFF. |
+| `OSF_USE_SYSTEM_ZLIB` | `OFF` | Prefer the system zlib over a `FetchContent` build (for OSFZ decompression). |
 
 Set with `-D<OPTION>=<VALUE>`, for example:
 
@@ -89,7 +90,25 @@ Set with `-D<OPTION>=<VALUE>`, for example:
 cmake -B build -DBUILD_SHARED_LIBS=ON -DOSF_BUILD_TESTS=OFF
 ```
 
-The C++ language standard is **not** a CMake option. C++17 is hard-pinned in `CMakeLists.txt`; moving to a newer standard is a deliberate library upgrade, not a build switch (see [DECISIONS.md §20](../../DECISIONS.md)).
+The C++ language standard is **not** a CMake option. C++17 is the firmly-defined language baseline (see [DECISIONS.md §20](../../DECISIONS.md)); moving to C++20 or later is a deliberate library upgrade, not a build switch.
+
+## Generating the API reference
+
+Install [Doxygen](https://www.doxygen.nl/download.html) (version 1.9 or newer recommended), then configure with `-D OSF_BUILD_DOCS=ON` and build the `osf-docs` target:
+
+```bash
+cmake -B build -D OSF_BUILD_DOCS=ON
+cmake --build build --target osf-docs
+```
+
+The generated HTML lands under `build/doxygen/html/index.html`. On Windows with a multi-config generator (Visual Studio), add `--config Debug` (or `Release`) to the build command:
+
+```powershell
+cmake -B build -D OSF_BUILD_DOCS=ON
+cmake --build build --target osf-docs --config Debug
+```
+
+If Doxygen is not found, CMake prints a STATUS message and the `osf-docs` target is silently skipped — the rest of the build is unaffected. The docs target is not part of the default `ALL` build and is never run by CI.
 
 ## FAQ
 
@@ -128,4 +147,4 @@ Keep the **same SHA256** so reproducibility is unaffected. No source patch is ne
 
 ### Cross-compilation
 
-Not exercised by our local builds. The Phase 1 code is plain C++17 with no system-specific dependencies, so it should configure under a CMake toolchain file (`-DCMAKE_TOOLCHAIN_FILE=…`) in principle. Once Phase 8 lands (OSFZ via zlib), cross-builds may need additional plumbing for the zlib build step. If you cross-build today and run into something, please open an issue.
+Not exercised by our local builds. The code is plain C++17 with no system-specific dependencies, so it should configure under a CMake toolchain file (`-DCMAKE_TOOLCHAIN_FILE=…`) in principle. Cross-builds that enable `OSF_BUILD_C_API` or transparent OSFZ decompression (zlib) may need additional plumbing for the zlib build step. If you cross-build and run into something, please open an issue.

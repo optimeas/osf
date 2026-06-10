@@ -36,10 +36,7 @@
 
 namespace osf {
 
-/// Compression format detected on the input stream. Mirrors the
-/// future `osf::compression::CompressionFormat` enum so callers do
-/// not need to import the lower-level type once OSFZ lands in
-/// Phase 8.
+/// Compression format detected on the input stream.
 enum class CompressionFormat {
     /// No compression — stream was a regular OSF file.
     None,
@@ -132,8 +129,6 @@ struct ReaderStats {
 
     /// Whether the source stream was OSFZ-compressed and went through
     /// transparent decompression on read. `false` for plain OSF.
-    /// Populated by the future OSFZ layer; default `false` keeps the
-    /// reader correct in the meantime.
     bool compressed = false;
     /// Detected compression format on the source stream.
     CompressionFormat compression_format = CompressionFormat::None;
