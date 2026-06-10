@@ -324,4 +324,82 @@ class BlockReaderTest {
         assertTrue(st.compressed());
         assertEquals("gzip", st.compressionFormat());
     }
+
+    // ---------------------------------------------------------------
+    // Best-effort contract: malformed-block conditions must not escape
+    // readAll — they must flag truncation and stop, returning any prior
+    // good blocks. Mirrors the Rust reference's invalid_block → Err path.
+    // ---------------------------------------------------------------
+
+    /**
+     * A {@code bcContinuedRelStampData} (control 7) block addressed to a
+     * {@code STRING} channel — {@code newValueArray} throws
+     * {@code OsfException.MalformedFile} because STRING is not a numeric type.
+     * The preceding good block must still be returned; truncation must be flagged;
+     * no exception must escape {@code readAll}.
+     */
+    @Test
+    void continuedRelStampDataOnNonNumericChannelFlagsGracefulStop() {
+        // Channel 0: STRING (non-numeric) — will trigger MalformedFile in newValueArray.
+        // Channel 1: INT64  (numeric)     — used for the good block that precedes the bad one.
+        var channels = channelsByIndex(
+                channel(0, DataType.STRING, 2),
+                channel(1, DataType.INT64, 2));
+
+        // Good block: single-sample AbsTs INT64 on channel 1.
+        byte[] goodBlock = absTsInt64Single(1, 2, 1000L, 42L);
+
+        // Bad block: multi-sample bcContinuedRelStampData (ctrl 0x87) on the STRING channel 0.
+        // body = [u32 N=1][u32 delta][...] — the decoder will try to call newValueArray(STRING, 1)
+        // which throws MalformedFile before reading any sample bytes.
+        byte[] badBody = buf().u32(1).u32(500).raw(utf8("x")).toBytes();
+        byte[] badBlock = frame(0, 2, CTRL_CONTINUED_REL | MULTI_BIT, badBody);
+
+        byte[] data = buf().raw(goodBlock).raw(badBlock).toBytes();
+
+        ReaderStats st = stats();
+        List<Block> blocks = BlockReader.readAll(data, OsfVersion.OSF5, channels, st);
+
+        // The good block (channel 1) must be returned.
+        assertEquals(1, blocks.size(),
+                "prior good block must survive a malformed subsequent block");
+        assertInstanceOf(Block.AbsTimestampData.class, blocks.get(0));
+        assertEquals(1, blocks.get(0).channelIndex());
+        // Truncation must be flagged — best-effort stopped by the bad block.
+        assertTrue(st.truncationSeen(),
+                "truncationSeen must be true after a malformed block body");
+        // The good block was counted; the bad block was not.
+        assertEquals(1, st.blocksRead());
+    }
+
+    /**
+     * A block whose u32 sample-count field encodes a value &gt; {@code Integer.MAX_VALUE}
+     * (i.e. bit 31 is set). {@code readSampleCount} must throw
+     * {@code OsfException.MalformedFile}; {@code readAll} must catch it and stop
+     * best-effort without throwing.
+     */
+    @Test
+    void oversizedSampleCountFlagsGracefulStop() {
+        // One good INT64 AbsTs block, then a multi-sample ContinuedData block whose
+        // u32 N prefix has bit 31 set (value 0x80000001 = 2147483649 > MAX_VALUE).
+        var channels = channelsByIndex(channel(0, DataType.INT64, 2));
+
+        byte[] goodBlock = absTsInt64Single(0, 2, 500L, 99L);
+
+        // Craft the bad block manually: ctrl = CONTINUED | MULTI_BIT (0x85),
+        // body starts with the u32 N = 0x80000001.
+        byte[] badBody = buf().u32(0x80000001L).toBytes(); // deliberately huge N
+        byte[] badBlock = frame(0, 2, CTRL_CONTINUED | MULTI_BIT, badBody);
+
+        byte[] data = buf().raw(goodBlock).raw(badBlock).toBytes();
+
+        ReaderStats st = stats();
+        List<Block> blocks = BlockReader.readAll(data, OsfVersion.OSF5, channels, st);
+
+        // Good block is returned; the bad block stops iteration gracefully.
+        assertEquals(1, blocks.size());
+        assertInstanceOf(Block.AbsTimestampData.class, blocks.get(0));
+        assertTrue(st.truncationSeen());
+        assertEquals(1, st.blocksRead());
+    }
 }

@@ -173,9 +173,15 @@ public final class BlockReader {
                 if (!(block instanceof Block.Skipped)) {
                     stats.incBlocksRead();
                 }
-            } catch (BufferUnderflowException | IndexOutOfBoundsException ex) {
-                // A short read inside a block body that the length field
-                // promised but the buffer did not deliver: best-effort stop.
+            } catch (BufferUnderflowException | IndexOutOfBoundsException
+                    | OsfException.MalformedFile | NegativeArraySizeException
+                    | IllegalArgumentException ex) {
+                // A short/garbled block body whose decode would otherwise escape
+                // readAll: best-effort stop. Covers buffer underruns, out-of-bounds
+                // accesses, non-numeric dataType reaching a numeric decoder
+                // (OsfException.MalformedFile from newValueArray), u32 sample-count
+                // overflow (NegativeArraySizeException / MalformedFile from
+                // readSampleCount), and any illegal argument from array allocation.
                 stats.markTruncated();
                 buf.position(blockStart); // leave the buffer at the bad block
                 break;
@@ -258,7 +264,13 @@ public final class BlockReader {
 
     private static int readSampleCount(boolean multi, ByteBuffer body) {
         if (!multi) return 1;
-        return body.getInt(); // u32 N (Java int; counts beyond 2^31 unsupported)
+        int raw = body.getInt(); // read as signed int (reinterpret of u32)
+        if (raw < 0) {
+            // The u32 value is in the range 2^31..2^32-1 — not supported.
+            throw new OsfException.MalformedFile(
+                    "sample count exceeds supported maximum");
+        }
+        return raw;
     }
 
     // --- bcStartData (numeric only) ---
