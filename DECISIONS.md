@@ -200,8 +200,10 @@ Implementations must document clearly that the convenience layer may lose precis
 ## 12. OSFZ Compression
 
 **Decision:** Readers must detect and decompress OSFZ files transparently.
-OSFZ compression is produced by a **post-close** step, never inline inside
-the streaming write path.
+When writers produce OSFZ output, the compressed container is **gzip
+(RFC 1952)**. For the `StreamingWriter`, compression is a **post-close**
+step, never inline inside the streaming write path. The `BlockWriter` may
+compress inline.
 
 **Reader requirement:** Implementations must transparently detect and
 decompress both:
@@ -212,23 +214,30 @@ decompress both:
 Both are valid OSFZ. Detection is by leading magic bytes; the behaviour is
 identical after decompression.
 
-### Writer requirement: post-close OSFZ design
+### Writer requirement: gzip output format and StreamingWriter / BlockWriter design
 
 The agreed design for producing OSFZ output is driven by streaming robustness
-against power loss:
+against power loss. The output format for writer-produced OSFZ is
+**gzip (RFC 1952)** (matches deployed Optimeas devices).
 
-1. **The streaming writer writes the OSF file raw**, with per-block `fsync`.
+1. **The `StreamingWriter` writes the OSF file raw**, with per-block `fsync`.
    A gzip stream that is truncated by a power loss would be undecompressable
    and the best-effort truncation guarantee would be lost — so inline
-   compression in the streaming hot path is not permitted.
-2. **OSFZ compression happens only after the OSF file is finalized** (all
-   blocks written, the writer closed).
-3. **The source OSF file may only be deleted after the OSFZ file has been
-   successfully created** (robustness against a crash between the two steps).
-4. Execution is either:
+   compression in the `StreamingWriter` hot path is not permitted.
+2. **For the `StreamingWriter`, OSFZ compression happens only after the OSF
+   file is finalized** (all blocks written, the writer closed). Execution is
+   either:
    - **(a) a low-priority background thread** started after file close — the
-     software must not exit until all compression threads have finished; or
+     process must not exit until all gzip threads have been joined; or
    - **(b) an external process** invoked via CLI after the file is closed.
+3. **The `BlockWriter` accumulates the entire file in memory and writes
+   atomically** at `write_to_file` / `write_to`. Because there is no
+   partial-stream or power-loss truncation risk, the `BlockWriter` **MAY
+   compress inline and emit OSFZ directly** without a separate post-close
+   step.
+4. **The source OSF file may only be deleted after the OSFZ file has been
+   successfully written and fsync'd** (robustness against a crash between the
+   two steps); no read-back or decompression verification is required.
 5. On embedded devices, completion of the OSF (and subsequently the OSFZ)
    typically triggers further steps — transfer to a server, or collection
    into a queue for later multi-destination transfer. Implementations should

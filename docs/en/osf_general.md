@@ -849,10 +849,22 @@ header (`OSF4`, `OSF5`, `OCEAN_STREAM_FORMAT4`, or
 
 ### Writing
 
-Writers never produce OSFZ files. Compression is the responsibility
-of the downstream storage or transport layer (file system,
-transmission protocol). This keeps the OSF write routines —
-particularly on embedded systems — simple and predictable.
+Writers MAY produce OSFZ output. When they do, the compressed container
+is **gzip (RFC 1952)**.
+
+**Streaming writers** (those that write blocks incrementally with per-block
+`fsync`) must treat compression as a **post-finalization** step, decoupled
+from the write path. Compressing inline would make a power-loss truncation
+undecompressable and defeat the best-effort durability guarantee. The
+compression step runs after the writer is closed, either as a low-priority
+background thread (the process must not exit before it completes) or as an
+external CLI process. The source OSF file must be retained until the OSFZ
+has been successfully written and fsync'd; no read-back verification is
+required before deletion.
+
+**Block writers** (those that buffer the entire file in memory and write it
+atomically) MAY compress inline and emit OSFZ directly, because there is no
+partial-stream or power-loss truncation risk.
 
 <br/>
 
