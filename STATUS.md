@@ -531,7 +531,7 @@ Standalone C++17 implementation, parallel to the Rust core — not a port from C
 
 | File | Purpose |
 |---|---|
-| `CMakeLists.txt` | Top-level config: project, C++17 hard-pin, five build options, both library targets, `add_subdirectory(tests)` gated by `OSF_BUILD_TESTS`; `osf_core` lists `error.cpp` + `header.cpp` + `metablock.cpp` + `types.cpp` |
+| `CMakeLists.txt` | Top-level config: project, C++17 baseline, seven build options, both library targets, `add_subdirectory(tests)`/`examples` gated by `OSF_BUILD_TESTS`/`OSF_BUILD_EXAMPLES` (+ opt-in `osf-docs` Doxygen target under `OSF_BUILD_DOCS`); `osf_core` lists `error.cpp` + `header.cpp` + `metablock.cpp` + `types.cpp` |
 | `cmake/CompilerWarnings.cmake` | `osf_set_warnings(target)` — MSVC `/W4 /permissive- /wd4100`; GCC/Clang `-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion` |
 | `cmake/version.hpp.in` | Template; `configure_file` emits `${BINARY_DIR}/generated/osf/version.hpp` with `OSF_VERSION_MAJOR/MINOR/PATCH` and `osf::version()` |
 | `include/osf/osf.hpp` | Umbrella header (re-exports `error.hpp` + `header.hpp` + `metablock.hpp` + `types.hpp` + `version.hpp`) |
