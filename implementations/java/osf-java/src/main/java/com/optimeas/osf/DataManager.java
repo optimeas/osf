@@ -5,6 +5,7 @@ package com.optimeas.osf;
 import com.optimeas.osf.internal.Block;
 import com.optimeas.osf.internal.BlockReader;
 import com.optimeas.osf.internal.ChannelAssembler;
+import com.optimeas.osf.internal.OsfzInputStream;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -30,9 +31,11 @@ import java.util.Optional;
  * {@code osf::DataManager}.
  *
  * <p>Construct with {@link #loadFromFile(Path)} for the convenience case (open
- * by path) or {@link #load(InputStream)} for streaming sources. Both assume a
- * plain (uncompressed) input; transparent OSFZ decompression is added by a
- * later task and will slot in front of the magic-header parse.
+ * by path) or {@link #load(InputStream)} for streaming sources. Both detect
+ * gzip/zlib-compressed OSFZ input transparently via
+ * {@link com.optimeas.osf.internal.OsfzInputStream} before parsing the magic
+ * header; {@link ReaderStats#compressed()} and
+ * {@link ReaderStats#compressionFormat()} reflect the detected format.
  */
 public final class DataManager {
 
@@ -67,14 +70,20 @@ public final class DataManager {
      * reader. A truncated/garbled trailing block stops the read and sets
      * {@link ReaderStats#truncationSeen()} rather than throwing.
      *
-     * @param in the input stream (plain, uncompressed)
+     * @param in the input stream (plain or gzip/zlib-compressed)
      * @return the assembled manager
      * @throws OsfException.MalformedFile on a malformed header/metablock, or an
      *         I/O error, or a metablock length exceeding {@code Integer.MAX_VALUE}
      */
     public static DataManager load(InputStream in) {
         try {
-            MagicHeader header = MagicHeaderParser.parse(in);
+            ReaderStats stats = new ReaderStats();
+            // Detect and transparently decompress gzip/zlib (OSFZ) input
+            // before the magic-header parse. The magic-header parser stays
+            // non-decompressing — it sees the decompressed bytes.
+            InputStream decompressed = OsfzInputStream.wrap(in, stats::setCompression);
+
+            MagicHeader header = MagicHeaderParser.parse(decompressed);
 
             long metaLen = header.metablockLength();
             if (metaLen > Integer.MAX_VALUE) {
@@ -82,17 +91,16 @@ public final class DataManager {
                         "metablock length " + Long.toUnsignedString(metaLen)
                         + " exceeds the supported maximum of " + Integer.MAX_VALUE);
             }
-            byte[] metaBytes = readExactly(in, (int) metaLen);
+            byte[] metaBytes = readExactly(decompressed, (int) metaLen);
             Metablock meta = MetablockParser.parse(header.version(), metaBytes);
 
-            byte[] rest = in.readAllBytes();
+            byte[] rest = decompressed.readAllBytes();
 
             Map<Integer, ChannelDef> channelsByIndex = new HashMap<>();
             for (ChannelDef def : meta.channels()) {
                 channelsByIndex.put(def.index(), def);
             }
 
-            ReaderStats stats = new ReaderStats();
             List<Block> blocks = BlockReader.readAll(rest, header.version(), channelsByIndex, stats);
             List<DataChannel> channels = ChannelAssembler.assemble(meta.channels(), blocks);
 
