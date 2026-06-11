@@ -39,14 +39,16 @@ import java.util.Optional;
  */
 public final class DataManager {
 
+    private final OsfVersion version;
     private final Map<String, String> metadata;
     private final List<DataChannel> channels;
     private final Map<String, DataChannel> byName;
     private final Map<Integer, DataChannel> byIndex;
     private final ReaderStats stats;
 
-    private DataManager(Map<String, String> metadata, List<DataChannel> channels,
-                        ReaderStats stats) {
+    private DataManager(OsfVersion version, Map<String, String> metadata,
+                        List<DataChannel> channels, ReaderStats stats) {
+        this.version = version;
         this.metadata = metadata;
         this.channels = channels;
         this.stats = stats;
@@ -104,7 +106,7 @@ public final class DataManager {
             List<Block> blocks = BlockReader.readAll(rest, header.version(), channelsByIndex, stats);
             List<DataChannel> channels = ChannelAssembler.assemble(meta.channels(), blocks);
 
-            return new DataManager(meta.metadata(), channels, stats);
+            return new DataManager(header.version(), meta.metadata(), channels, stats);
         } catch (IOException e) {
             throw new OsfException.MalformedFile("I/O error reading OSF stream: " + e.getMessage(), e);
         }
@@ -124,6 +126,11 @@ public final class DataManager {
             throw new OsfException.MalformedFile(
                     "I/O error opening OSF file " + path + ": " + e.getMessage(), e);
         }
+    }
+
+    /** On-disk format version (OSF4 or OSF5), derived from the magic header. */
+    public OsfVersion version() {
+        return version;
     }
 
     /** All channels in metablock order ({@code UNSUPPORTED} channels dropped). */
