@@ -1,0 +1,134 @@
+{
+  "osf4_equidistant.osf": {
+    "version": 4,
+    "channels": [
+      {"index": 0, "name": "Sensor/Vibration100Hz",  "dataType": "double", "sampleCount": 100, "mode": "equidistant"},
+      {"index": 1, "name": "Sensor/Vibration1kHz",   "dataType": "double", "sampleCount": 100, "mode": "equidistant"},
+      {"index": 2, "name": "Sensor/Vibration10kHz",  "dataType": "double", "sampleCount": 100, "mode": "equidistant"}
+    ]
+  },
+  "osf4_gpslocation.osf": {
+    "version": 4,
+    "channels": [
+      {"index": 0, "name": "Sensor/Position", "dataType": "gpslocation", "sampleCount": 100, "mode": "timestamped"}
+    ]
+  },
+  "osf4_mixed.osf": {
+    "version": 4,
+    "channels": [
+      {"index": 0, "name": "Sensor/TemperatureC",    "dataType": "double", "sampleCount": 100, "mode": "timestamped"},
+      {"index": 1, "name": "Sensor/PressureCounter", "dataType": "int16",  "sampleCount": 100, "mode": "timestamped"},
+      {"index": 2, "name": "Sensor/Vibration10Hz",   "dataType": "double", "sampleCount": 100, "mode": "equidistant"},
+      {"index": 3, "name": "Sensor/AlarmFlag",       "dataType": "bool",   "sampleCount": 100, "mode": "timestamped"}
+    ]
+  },
+  "osf4_scalar_int64.osf": {
+    "version": 4,
+    "channels": [
+      {"index": 0, "name": "Sensor/Int64Counter", "dataType": "int64", "sampleCount": 100, "mode": "timestamped"}
+    ]
+  },
+  "osf4_scalar_numeric.osf": {
+    "version": 4,
+    "channels": [
+      {"index": 0, "name": "Sensor/Double", "dataType": "double", "sampleCount": 100, "mode": "timestamped"},
+      {"index": 1, "name": "Sensor/Float",  "dataType": "float",  "sampleCount": 100, "mode": "timestamped"},
+      {"index": 2, "name": "Sensor/Int32",  "dataType": "int32",  "sampleCount": 100, "mode": "timestamped"},
+      {"index": 3, "name": "Sensor/Int16",  "dataType": "int16",  "sampleCount": 100, "mode": "timestamped"},
+      {"index": 4, "name": "Sensor/Int8",   "dataType": "int8",   "sampleCount": 100, "mode": "timestamped"},
+      {"index": 5, "name": "Sensor/Bool",   "dataType": "bool",   "sampleCount": 100, "mode": "timestamped"}
+    ]
+  },
+  "osf4_scalar_unsigned.osf": {
+    "version": 4,
+    "channels": [
+      {"index": 0, "name": "Sensor/UInt8",  "dataType": "uint8",  "sampleCount": 100, "mode": "timestamped"},
+      {"index": 1, "name": "Sensor/UInt16", "dataType": "uint16", "sampleCount": 100, "mode": "timestamped"},
+      {"index": 2, "name": "Sensor/UInt32", "dataType": "uint32", "sampleCount": 100, "mode": "timestamped"},
+      {"index": 3, "name": "Sensor/UInt64", "dataType": "uint64", "sampleCount": 100, "mode": "timestamped"}
+    ]
+  },
+  "osf4_timestamped_binary.osf": {
+    "version": 4,
+    "channels": [
+      {"index": 0, "name": "Sensor/Image", "dataType": "binary", "sampleCount": 100, "mode": "variable"}
+    ]
+  },
+  "osf4_timestamped_string.osf": {
+    "version": 4,
+    "channels": [
+      {"index": 0, "name": "Sensor/Message", "dataType": "string", "sampleCount": 100, "mode": "variable"}
+    ]
+  },
+  "osf5_equidistant.osf": {
+    "version": 5,
+    "channels": [
+      {"index": 0, "name": "Sensor/Vibration100Hz",  "dataType": "double", "sampleCount": 100, "mode": "equidistant"},
+      {"index": 1, "name": "Sensor/Vibration1kHz",   "dataType": "double", "sampleCount": 100, "mode": "equidistant"},
+      {"index": 2, "name": "Sensor/Vibration10kHz",  "dataType": "double", "sampleCount": 100, "mode": "equidistant"}
+    ]
+  },
+  "osf5_gpslocation.osf": {
+    "version": 5,
+    "channels": [
+      {"index": 0, "name": "Sensor/Position", "dataType": "gpslocation", "sampleCount": 100, "mode": "timestamped"}
+    ]
+  },
+  "osf5_mixed.osf": {
+    "version": 5,
+    "channels": [
+      {"index": 0, "name": "Sensor/TemperatureC",    "dataType": "double", "sampleCount": 100, "mode": "timestamped"},
+      {"index": 1, "name": "Sensor/PressureCounter", "dataType": "int16",  "sampleCount": 100, "mode": "timestamped"},
+      {"index": 2, "name": "Sensor/Vibration10Hz",   "dataType": "double", "sampleCount": 100, "mode": "equidistant"},
+      {"index": 3, "name": "Sensor/AlarmFlag",       "dataType": "bool",   "sampleCount": 100, "mode": "timestamped"}
+    ]
+  },
+  "osf5_mixed_extended.osf": {
+    "version": 5,
+    "channels": [
+      {"index": 0, "name": "Sensor/Temperature", "dataType": "double",      "sampleCount": 100, "mode": "timestamped"},
+      {"index": 1, "name": "Sensor/Counter",      "dataType": "int16",       "sampleCount": 100, "mode": "timestamped"},
+      {"index": 2, "name": "Sensor/AlarmFlag",    "dataType": "bool",        "sampleCount": 100, "mode": "timestamped"},
+      {"index": 3, "name": "Sensor/Message",      "dataType": "string",      "sampleCount": 100, "mode": "variable"},
+      {"index": 4, "name": "Sensor/Position",     "dataType": "gpslocation", "sampleCount": 100, "mode": "timestamped"}
+    ]
+  },
+  "osf5_scalar_int64.osf": {
+    "version": 5,
+    "channels": [
+      {"index": 0, "name": "Sensor/Int64Counter", "dataType": "int64", "sampleCount": 100, "mode": "timestamped"}
+    ]
+  },
+  "osf5_scalar_numeric.osf": {
+    "version": 5,
+    "channels": [
+      {"index": 0, "name": "Sensor/Double", "dataType": "double", "sampleCount": 100, "mode": "timestamped"},
+      {"index": 1, "name": "Sensor/Float",  "dataType": "float",  "sampleCount": 100, "mode": "timestamped"},
+      {"index": 2, "name": "Sensor/Int32",  "dataType": "int32",  "sampleCount": 100, "mode": "timestamped"},
+      {"index": 3, "name": "Sensor/Int16",  "dataType": "int16",  "sampleCount": 100, "mode": "timestamped"},
+      {"index": 4, "name": "Sensor/Int8",   "dataType": "int8",   "sampleCount": 100, "mode": "timestamped"},
+      {"index": 5, "name": "Sensor/Bool",   "dataType": "bool",   "sampleCount": 100, "mode": "timestamped"}
+    ]
+  },
+  "osf5_scalar_unsigned.osf": {
+    "version": 5,
+    "channels": [
+      {"index": 0, "name": "Sensor/UInt8",  "dataType": "uint8",  "sampleCount": 100, "mode": "timestamped"},
+      {"index": 1, "name": "Sensor/UInt16", "dataType": "uint16", "sampleCount": 100, "mode": "timestamped"},
+      {"index": 2, "name": "Sensor/UInt32", "dataType": "uint32", "sampleCount": 100, "mode": "timestamped"},
+      {"index": 3, "name": "Sensor/UInt64", "dataType": "uint64", "sampleCount": 100, "mode": "timestamped"}
+    ]
+  },
+  "osf5_timestamped_binary.osf": {
+    "version": 5,
+    "channels": [
+      {"index": 0, "name": "Sensor/Image", "dataType": "binary", "sampleCount": 100, "mode": "variable"}
+    ]
+  },
+  "osf5_timestamped_string.osf": {
+    "version": 5,
+    "channels": [
+      {"index": 0, "name": "Sensor/Message", "dataType": "string", "sampleCount": 100, "mode": "variable"}
+    ]
+  }
+}

@@ -27,6 +27,7 @@ on:
       - 'implementations/python/**'
       - 'implementations/rust/**'
       - 'implementations/cpp/**'
+      - 'implementations/java/**'
       - 'examples/**'
       - '.github/workflows/**'
   pull_request:
@@ -35,6 +36,7 @@ on:
       - 'implementations/python/**'
       - 'implementations/rust/**'
       - 'implementations/cpp/**'
+      - 'implementations/java/**'
       - 'examples/**'
       - '.github/workflows/**'
   workflow_dispatch:
@@ -91,6 +93,20 @@ jobs:
         run: cmake --build implementations/cpp/build --config Debug
       - name: Test
         run: ctest --test-dir implementations/cpp/build -C Debug --output-on-failure
+
+  test-java:
+    name: Java tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Build and test
+        working-directory: implementations/java
+        run: mvn -B -ntp verify
 
   build-wheels:
     name: Build + test wheel (${{ matrix.os }} / ${{ matrix.target }})
@@ -185,7 +201,7 @@ jobs:
 
   summary:
     name: CI summary
-    needs: [test-rust, test-cpp, build-wheels, build-sdist]
+    needs: [test-rust, test-cpp, test-java, build-wheels, build-sdist]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -193,10 +209,12 @@ jobs:
         run: |
           echo "test-rust:    ${{ needs.test-rust.result }}"
           echo "test-cpp:     ${{ needs.test-cpp.result }}"
+          echo "test-java:    ${{ needs.test-java.result }}"
           echo "build-wheels: ${{ needs.build-wheels.result }}"
           echo "build-sdist:  ${{ needs.build-sdist.result }}"
           if [ "${{ needs.test-rust.result }}" != "success" ] \
              || [ "${{ needs.test-cpp.result }}" != "success" ] \
+             || [ "${{ needs.test-java.result }}" != "success" ] \
              || [ "${{ needs.build-wheels.result }}" != "success" ] \
              || [ "${{ needs.build-sdist.result }}" != "success" ]; then
             exit 1
