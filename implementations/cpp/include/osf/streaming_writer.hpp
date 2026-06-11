@@ -128,14 +128,40 @@ public:
     StreamingWriter& operator=(StreamingWriter&&) noexcept;
 
     // ── Configuration phase (before start()) ──────────────────────────
+    //
+    // File-info setters populate the OSF5 metablock's `file` object.
+    // They take effect only when called BEFORE start() — the metablock
+    // is written to disk by start() and never rewritten. Calls after
+    // start() are silently ignored for the current file. All fields are
+    // optional; unset fields are omitted from the metablock (defaults
+    // per DECISIONS §13: creator = "osf-cpp/<version>", tag = "default").
 
+    /// Name of the writing device or application (`creator` field).
     void set_creator(std::string value);
+    /// Free-form tag (`tag` field; defaults to `"default"` when unset).
     void set_tag(std::string value);
+    /// Free-form text describing why the recording was made.
     void set_reason(std::string value);
+    /// Geolocation of the recording (`created_at_latitude` /
+    /// `_longitude` / `_altitude`); decimal degrees and meters.
     void set_location(double latitude, double longitude, double altitude);
+    /// Separator between path components in channel names (default `.`).
     void set_namespace_sep(std::string value);
+    /// Free-form file comment.
     void set_comment(std::string value);
 
+    /**
+     * @brief Declare a channel; returns the index used by all write
+     *        calls. Indices are assigned sequentially starting at 0.
+     *
+     * Allowed only in the Configure phase (before start()).
+     * Fails with `InvalidArgument` when the writer is past Configure,
+     * `def.size_of_length_value` is neither 2 nor 4, `def.data_type` /
+     * `def.channel_type` is `Unsupported`, or 65535 channels are
+     * already declared. Duplicate names are not rejected — OSF allows
+     * them, but `DataManager::channel(name)` on the read side will only
+     * find the first.
+     */
     [[nodiscard]] Result<std::uint16_t> add_channel(ChannelDef def);
 
     // ── Lifecycle ─────────────────────────────────────────────────────
@@ -169,24 +195,67 @@ public:
 
     // ── Equidistant writes (float / double only per spec) ────────────
 
+    /**
+     * @brief Open a new equidistant segment on @p channel — emits a
+     *        `bcStartData` block carrying @p start_timestamp_ns,
+     *        @p sample_rate_hz, and the first samples.
+     *
+     * Each call opens a NEW segment (spec rev 2026-05-04: multiple
+     * `bcStartData` per channel are explicit; gaps between segments
+     * are not interpolated). Sample counts exceeding the channel's
+     * block capacity are chunked automatically into `bcStartData` +
+     * `bcContinuedData` blocks — each chunk is one fsync.
+     *
+     * Fails with `InvalidArgument` when `count == 0`, the rate is not
+     * a positive finite double, or the channel is not an equidistant
+     * float/double channel of matching type.
+     */
     [[nodiscard]] Result<void> start_equidistant_segment(
         std::uint16_t channel, std::int64_t start_timestamp_ns,
         double sample_rate_hz, float const* samples, std::size_t count);
+    /// `double` overload — same semantics as the `float` form above.
     [[nodiscard]] Result<void> start_equidistant_segment(
         std::uint16_t channel, std::int64_t start_timestamp_ns,
         double sample_rate_hz, double const* samples, std::size_t count);
 
+    /**
+     * @brief Extend the channel's CURRENT segment — emits
+     *        `bcContinuedData` blocks (chunked when needed).
+     *
+     * Requires an open segment: fails with `InvalidBlock` ("append
+     * without start") when no `start_equidistant_segment` preceded it.
+     * Timing continues seamlessly at `1 / sample_rate_hz` per sample.
+     */
     [[nodiscard]] Result<void> append_equidistant_samples(
         std::uint16_t channel, float const* samples, std::size_t count);
+    /// `double` overload — same semantics as the `float` form above.
     [[nodiscard]] Result<void> append_equidistant_samples(
         std::uint16_t channel, double const* samples, std::size_t count);
 
     // ── Timestamped writes (numeric) — template, 11 instantiations ────
 
+    /**
+     * @brief Write one `(timestamp, value)` sample as a
+     *        `bcAbsTimeStampData` block (single-sample form, bit 7 = 0).
+     *
+     * T must be one of the 11 numeric types (bool, intN, uintN, float,
+     * double) — enforced by static_assert. The timestamp is nanoseconds
+     * since the Unix epoch (UTC); the writer does not validate
+     * monotonicity (the spec does not require it).
+     */
     template <typename T>
     [[nodiscard]] Result<void> write_timestamped_sample(
         std::uint16_t channel, std::int64_t timestamp_ns, T value);
 
+    /**
+     * @brief Write @p count `(timestamp, value)` pairs as multi-sample
+     *        `bcAbsTimeStampData` blocks, chunked to the channel's
+     *        block capacity (one fsync per block).
+     *
+     * @p timestamps_ns and @p values are parallel arrays of length
+     * @p count. Fails with `InvalidArgument` for `count == 0` or a
+     * channel/data-type mismatch.
+     */
     template <typename T>
     [[nodiscard]] Result<void> write_timestamped_samples(
         std::uint16_t channel, std::int64_t const* timestamps_ns,
@@ -194,20 +263,40 @@ public:
 
     // ── Timestamped writes (GPS) — separate non-template symbols ─────
 
+    /// GPS variant of write_timestamped_sample (24-byte
+    /// latitude/longitude/altitude wire format).
     [[nodiscard]] Result<void> write_timestamped_gps_sample(
         std::uint16_t channel, std::int64_t timestamp_ns,
         GpsLocation value);
 
+    /// GPS variant of write_timestamped_samples (chunked, parallel
+    /// arrays).
     [[nodiscard]] Result<void> write_timestamped_gps_samples(
         std::uint16_t channel, std::int64_t const* timestamps_ns,
         GpsLocation const* values, std::size_t count);
 
     // ── Timestamped writes (variable, single-sample only per spec) ───
 
+    /**
+     * @brief Write one string sample as a single-sample
+     *        `bcAbsTimeStampData` block. OSF5: no trailing `0x00` is
+     *        appended (spec rev 2026-05-24).
+     *
+     * One sample per block per spec — there is no multi-sample string
+     * write. Fails with `InvalidBlock` when the sample exceeds the
+     * single-block payload capacity of the channel's
+     * `size_of_length_value` (~64 KB for sov=2); declare
+     * `size_of_length_value = 4` at add_channel() time for channels
+     * that may carry larger payloads (the streaming writer cannot
+     * auto-bump — the metablock is already on disk).
+     */
     [[nodiscard]] Result<void> write_timestamped_string(
         std::uint16_t channel, std::int64_t timestamp_ns,
         std::string_view value);
 
+    /// Binary variant of write_timestamped_string. @p value is a
+    /// non-owning view — the bytes are copied into the block before
+    /// the call returns.
     [[nodiscard]] Result<void> write_timestamped_binary(
         std::uint16_t channel, std::int64_t timestamp_ns,
         BinarySample value);

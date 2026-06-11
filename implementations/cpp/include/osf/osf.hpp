@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
-//
-// osf.hpp — Umbrella header for the OSF C++ library.
-//
-// Including <osf/osf.hpp> brings in the public API. Individual headers
-// can also be included directly if a translation unit needs only a
-// subset.
+
+/// \file osf.hpp
+/// Umbrella header for the OSF C++ library.
+///
+/// Including `<osf/osf.hpp>` brings in the complete public read + write
+/// API. Individual headers can also be included directly if a
+/// translation unit needs only a subset.
+///
+/// Two headers are deliberately NOT part of the umbrella:
+/// - `<osf/throwing.hpp>` — the opt-in exception layer. Consumers who
+///   stay on the `Result<T>` core never pull in exception machinery.
+/// - `<osf/c_api.h>` — the pure-C99 ABI of the separate `osf-c` shared
+///   library (built only with `OSF_BUILD_C_API=ON`); it is not part of
+///   the C++ API surface.
 
 #pragma once
 

@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
-//
-// osf::Error and osf::Result<T> — the foundation error type used by
-// every fallible operation in the OSF C++ library.
-//
-// See DECISIONS.md §20 for the rationale (Result<T> as the core API,
-// throwing wrappers as opt-in).
+
+/// \file error.hpp
+/// `osf::Error` and `osf::Result<T>` — the foundation error type used by
+/// every fallible operation in the OSF C++ library.
+///
+/// The core API is exception-free: every operation that can fail returns
+/// `Result<T>` (= `tl::expected<T, Error>`); the caller checks the result
+/// before using the value. Consumers who prefer exceptions opt in via
+/// `<osf/throwing.hpp>` (`osf::throwing::unwrap` and friends), which is
+/// layered on top of this header — never the other way around.
+///
+/// See DECISIONS.md §20 for the rationale (Result<T> as the core API,
+/// throwing wrappers as opt-in).
 
 #pragma once
 
@@ -17,15 +24,41 @@
 
 namespace osf {
 
+/// Structured error: a stable category `Code` plus a human-readable
+/// `message` with the failure detail (offending value, channel index,
+/// parser diagnostic, …). Compare `code` programmatically; treat
+/// `message` as display-only text whose wording may change.
 struct Error {
     enum class Code {
+        /// Fallback when no more specific category applies. Also the
+        /// code of a default-constructed `Error`.
         Unknown,
+        /// The caller violated an API precondition: invalid
+        /// `ChannelDef`, unknown channel index passed to a writer,
+        /// zero-count write, writer used outside its lifecycle phase,
+        /// non-positive sample rate, ….
         InvalidArgument,
+        /// The underlying stream / file signalled a failure: file not
+        /// openable, read error, write error, fsync failure.
         IoError,
+        /// Generic parse failure that is neither a magic-header nor a
+        /// metablock problem. Rarely used; the more specific codes
+        /// below are preferred.
         ParseError,
+        /// A requested entity does not exist (reserved for lookup-style
+        /// APIs; channel lookups on `DataManager` return `nullptr`
+        /// instead).
         NotFound,
+        /// The first line of the stream is not a well-formed OSF magic
+        /// header (missing separator, unparseable length, non-ASCII
+        /// garbage). Almost always means "this is not an OSF file".
         InvalidMagicHeader,
+        /// The magic-header line parses, but its identifier is none of
+        /// the four accepted spellings (`OSF4`, `OSF5`,
+        /// `OCEAN_STREAM_FORMAT4`, `OCEAN_STREAMING_FORMAT4`).
         UnsupportedVersion,
+        /// No newline within `MAX_MAGIC_HEADER_LEN` bytes — the file
+        /// cannot start with a valid OSF magic header.
         MagicHeaderTooLong,
         /// Metablock body was structurally malformed: missing required
         /// field, unparseable number, invalid `sizeoflengthvalue`, etc.
@@ -81,13 +114,24 @@ struct Error {
         DataTypeMismatch,
     };
 
+    /// Stable error category — the field to branch on.
     Code code = Code::Unknown;
+    /// Human-readable detail (offending value, channel index, parser
+    /// diagnostic). Display-only; wording is not part of the API.
     std::string message;
 
     Error() = default;
     Error(Code c, std::string msg) : code(c), message(std::move(msg)) {}
 };
 
+/// Return type of every fallible operation in the core API.
+///
+/// Usage idiom:
+/// ```cpp
+/// auto r = osf::DataManager::load_from_file(path);
+/// if (!r) { /* r.error().code / r.error().message */ }
+/// osf::DataManager const& mgr = *r;   // or r.value()
+/// ```
 template <typename T>
 using Result = tl::expected<T, Error>;
 

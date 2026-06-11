@@ -61,38 +61,87 @@ public:
     BlockWriter& operator=(BlockWriter&&) noexcept;
 
     // ── Configuration ─────────────────────────────────────────────────
+    //
+    // File-info setters populate the OSF5 metablock's `file` object.
+    // Unlike StreamingWriter there is no phase restriction: the
+    // metablock is assembled at emit time, so setters may be called any
+    // time before write_to() / write_to_file(). Unset fields are
+    // omitted (defaults per DECISIONS §13).
 
+    /// Name of the writing device or application (`creator` field).
     void set_creator(std::string value);
+    /// Free-form tag (`tag` field; defaults to `"default"` when unset).
     void set_tag(std::string value);
+    /// Free-form text describing why the recording was made.
     void set_reason(std::string value);
+    /// Separator between path components in channel names (default `.`).
     void set_namespace_sep(std::string value);
+    /// Free-form file comment.
     void set_comment(std::string value);
+    /// Geolocation of the recording (`created_at_latitude` /
+    /// `_longitude` / `_altitude`); decimal degrees and meters.
     void set_location(double latitude, double longitude, double altitude);
 
     // ── Channel registration ───────────────────────────────────────────
 
+    /**
+     * @brief Declare a channel; returns the index used by all add_*
+     *        calls. Indices are assigned sequentially starting at 0.
+     *
+     * Fails with `InvalidArgument` when `def.size_of_length_value` is
+     * neither 2 nor 4, `def.data_type` / `def.channel_type` is
+     * `Unsupported`, or 65535 channels are already declared. Unlike
+     * StreamingWriter, a declared `size_of_length_value` of 2 is only a
+     * starting point for variable channels — emit auto-bumps it to 4
+     * when an accumulated sample needs it.
+     */
     [[nodiscard]] Result<std::uint16_t> add_channel(ChannelDef def);
 
+    /// Number of channels declared so far.
     [[nodiscard]] std::size_t channel_count() const noexcept;
 
+    /// Index of the channel registered under @p name, or `std::nullopt`
+    /// if no channel has that name. With duplicate names the first
+    /// registration wins.
     [[nodiscard]] std::optional<std::uint16_t>
     channel_index(std::string_view name) const;
 
     // ── Equidistant accumulation ───────────────────────────────────────
 
+    /**
+     * @brief Accumulate a new equidistant segment on @p channel
+     *        (in-memory; nothing is written until emit).
+     *
+     * Each call opens a NEW segment with its own start timestamp and
+     * sample rate (spec rev 2026-05-04). At emit time the segment
+     * becomes one `bcStartData` block, chunked into `bcContinuedData`
+     * follow-ups when it exceeds the channel's block capacity.
+     *
+     * Fails with `InvalidArgument` when `count == 0`, the rate is not
+     * a positive finite double, or the channel is not an equidistant
+     * float/double channel of matching type.
+     */
     [[nodiscard]] Result<void> add_equidistant_segment(
         std::uint16_t channel, std::int64_t start_ts_ns, double rate_hz,
         float const* samples, std::size_t count);
+    /// `double` overload — same semantics as the `float` form above.
     [[nodiscard]] Result<void> add_equidistant_segment(
         std::uint16_t channel, std::int64_t start_ts_ns, double rate_hz,
         double const* samples, std::size_t count);
 
     // ── Timestamped numeric accumulation — template, 11 instantiations ─
 
+    /// Accumulate one `(timestamp, value)` sample. T must be one of the
+    /// 11 numeric types (bool, intN, uintN, float, double) — enforced
+    /// by static_assert. Timestamps are nanoseconds since the Unix
+    /// epoch (UTC); monotonicity is not validated.
     template <typename T>
     [[nodiscard]] Result<void> add_timestamped_sample(
         std::uint16_t channel, std::int64_t timestamp_ns, T value);
 
+    /// Accumulate @p count `(timestamp, value)` pairs from parallel
+    /// arrays. Chunking into spec-sized `bcAbsTimeStampData` blocks
+    /// happens at emit time.
     template <typename T>
     [[nodiscard]] Result<void> add_timestamped_samples(
         std::uint16_t channel, std::int64_t const* timestamps_ns,
@@ -100,31 +149,60 @@ public:
 
     // ── Timestamped GPS accumulation ───────────────────────────────────
 
+    /// GPS variant of add_timestamped_sample (24-byte
+    /// latitude/longitude/altitude wire format).
     [[nodiscard]] Result<void> add_timestamped_gps_sample(
         std::uint16_t channel, std::int64_t timestamp_ns, GpsLocation value);
+    /// GPS variant of add_timestamped_samples (parallel arrays).
     [[nodiscard]] Result<void> add_timestamped_gps_samples(
         std::uint16_t channel, std::int64_t const* timestamps_ns,
         GpsLocation const* values, std::size_t count);
 
     // ── Variable accumulation (string + binary) ────────────────────────
+    //
+    // One sample per block per spec; emit writes each sample as its own
+    // single-sample bcAbsTimeStampData block, with no trailing 0x00
+    // (OSF5, spec rev 2026-05-24). Samples larger than the declared
+    // size_of_length_value allows trigger the automatic 2 -> 4 bump at
+    // emit time, so unlike StreamingWriter there is no hard size limit
+    // below the 4-byte length-field capacity.
 
+    /// Accumulate one string sample (copied into the writer).
     [[nodiscard]] Result<void> add_string_sample(
         std::uint16_t channel, std::int64_t timestamp_ns,
         std::string_view value);
+    /// Accumulate @p count string samples from parallel arrays.
     [[nodiscard]] Result<void> add_string_samples(
         std::uint16_t channel, std::int64_t const* timestamps_ns,
         std::string_view const* values, std::size_t count);
 
+    /// Accumulate one binary sample. @p value is a non-owning view —
+    /// the bytes are copied into the writer before the call returns.
     [[nodiscard]] Result<void> add_binary_sample(
         std::uint16_t channel, std::int64_t timestamp_ns,
         BinarySample value);
+    /// Accumulate @p count binary samples from parallel arrays.
     [[nodiscard]] Result<void> add_binary_samples(
         std::uint16_t channel, std::int64_t const* timestamps_ns,
         BinarySample const* values, std::size_t count);
 
     // ── Emit ───────────────────────────────────────────────────────────
 
+    /**
+     * @brief Serialise the accumulated state as a complete OSF5 file at
+     *        @p path (magic header + metablock + all blocks).
+     *
+     * `const` — emitting does not consume the writer; the same writer
+     * may be emitted multiple times (e.g. to a file and to a stream).
+     * Variable channels whose largest sample exceeds the u16 length
+     * field get their `sizeoflengthvalue` bumped 2 -> 4 for this emit.
+     * No fsync — durability is the caller's concern (contrast
+     * StreamingWriter). Fails with `IoError` when the file cannot be
+     * created or a write fails.
+     */
     [[nodiscard]] Result<void> write_to_file(std::filesystem::path path) const;
+    /// Stream variant of write_to_file — works against any
+    /// `std::ostream` (memory, socket, …).
     [[nodiscard]] Result<void> write_to(std::ostream& out) const;
 
     // ── Round-trip / copy ──────────────────────────────────────────────

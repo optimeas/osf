@@ -4,8 +4,38 @@
 #include "writer_common.hpp"
 
 #include "osf/types.hpp"
+#include "osf/version.hpp"
+
+#include <chrono>
+#include <cstdio>
+#include <ctime>
+#include <string>
 
 namespace osf::detail {
+
+namespace {
+
+// Current UTC time as ISO-8601 `YYYY-MM-DDTHH:MM:SSZ`, matching the
+// Rust writer's format_utc_now (sub-second precision intentionally
+// dropped — same rationale: the spec never needed it; extend
+// additively if a future revision does).
+std::string now_utc_iso8601() {
+    auto const now = std::chrono::system_clock::now();
+    std::time_t const t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+#if defined(_WIN32)
+    gmtime_s(&tm, &t);
+#else
+    gmtime_r(&t, &tm);
+#endif
+    char buf[24];
+    std::snprintf(buf, sizeof buf, "%04d-%02d-%02dT%02d:%02d:%02dZ",
+                  tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                  tm.tm_hour, tm.tm_min, tm.tm_sec);
+    return std::string{buf};
+}
+
+}  // namespace
 
 std::size_t max_samples_per_start_block(std::size_t value_size,
                                         std::uint8_t sov) noexcept {
@@ -46,8 +76,18 @@ MetaBlock build_metablock(FileInfoDraft const& fi,
                           std::vector<ChannelDef> const& channels) {
     MetaBlock meta;
     meta.file_info.version              = 5;
-    meta.file_info.creator             = fi.creator;
-    meta.file_info.tag                 = fi.tag;
+    // DECISIONS §13 metadata defaults (parity with the Rust writer):
+    // created_utc is always stamped at assembly time; creator falls
+    // back to "osf-cpp/<library-version>"; tag falls back to
+    // "default". reason and the created_at_* triple stay omitted when
+    // unset (not written as null).
+    meta.file_info.created_utc          = now_utc_iso8601();
+    meta.file_info.creator              = fi.creator.has_value()
+        ? fi.creator
+        : std::optional<std::string>{"osf-cpp/" + std::string{version()}};
+    meta.file_info.tag                  = fi.tag.has_value()
+        ? fi.tag
+        : std::optional<std::string>{"default"};
     meta.file_info.reason              = fi.reason;
     meta.file_info.created_at_latitude  = fi.created_at_latitude;
     meta.file_info.created_at_longitude = fi.created_at_longitude;

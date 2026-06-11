@@ -61,7 +61,9 @@ std::size_t max_samples_per_timestamped_block(std::size_t value_size,
 std::size_t variable_sample_capacity(std::uint8_t sov) noexcept;
 
 // Writer-controllable file-info fields. `created_utc` and `version`
-// are set by build_metablock at assembly time, not carried here.
+// are not carried here — build_metablock stamps them at assembly time
+// (version = 5; created_utc = current UTC, DECISIONS §13). Unset
+// `creator` / `tag` receive their §13 defaults at assembly time, too.
 // Must stay field-compatible with BlockWriter::FileInfoFields (block_writer.hpp).
 struct FileInfoDraft {
     std::optional<std::string> creator;
@@ -78,7 +80,10 @@ struct FileInfoDraft {
 // indices are assigned sequentially 0..N. channeltype is normalised to
 // the Delphi reference convention: `equidistant` for equidistant
 // channels, `scalar` for every other kind (timestamped numeric, GPS,
-// string, binary). Caller serialises via serialize_metablock_json.
+// string, binary). DECISIONS §13 metadata defaults are applied here:
+// created_utc is stamped with the current UTC time, unset creator
+// falls back to "osf-cpp/<version>", unset tag to "default".
+// Caller serialises via serialize_metablock_json.
 MetaBlock build_metablock(FileInfoDraft const& fi,
                           std::vector<ChannelDef> const& channels);
 

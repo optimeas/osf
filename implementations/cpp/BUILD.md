@@ -83,6 +83,7 @@ Apple Silicon (arm64) and Intel (x86_64) hosts both build natively. Universal-bi
 | `OSF_BUILD_DOCS` | `OFF` | Generate the Doxygen API reference (requires Doxygen installed). |
 | `OSF_BUILD_C_API` | `OFF` | Build the `osf-c` C ABI shared-library wrapper (DECISIONS §23). Opt-in, default OFF. |
 | `OSF_USE_SYSTEM_ZLIB` | `OFF` | Prefer the system zlib over a `FetchContent` build (for OSFZ decompression). |
+| `OSF_WARNINGS_AS_ERRORS` | `OFF` | Treat compiler warnings as errors (`/WX` on MSVC, `-Werror` on GCC/Clang). CI builds with `ON`; local builds stay lenient by default. |
 
 Set with `-D<OPTION>=<VALUE>`, for example:
 

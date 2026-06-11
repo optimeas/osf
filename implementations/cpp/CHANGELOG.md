@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **DECISIONS §13 file-metadata defaults** are now applied by
+  `detail::build_metablock` (shared by `StreamingWriter` and
+  `BlockWriter`): `created_utc` is always stamped with the current UTC
+  time (`YYYY-MM-DDTHH:MM:SSZ`, matching the Rust writer's format), an
+  unset `creator` falls back to `osf-cpp/<library-version>`, an unset
+  `tag` falls back to `"default"`. Previously written files carried no
+  `created_utc` at all. `reason` and the `created_at_*` triple remain
+  omitted-when-unset. Two new `test_writer_common` cases pin the
+  defaults and explicit-value precedence (ctest 319 → 321).
+
+### Changed
+
+- Doxygen documentation pass over the public headers: per-method docs
+  for the full `StreamingWriter` / `BlockWriter` write surface
+  (chunking, `sizeoflengthvalue` guidance, error conditions),
+  documented enumerators for every `Error::Code`, `Result<T>` usage
+  idiom in `error.hpp`, umbrella-header note on the deliberately
+  excluded `throwing.hpp` / `c_api.h`. Corrected a stale
+  `writer_common.hpp` comment; added the missing
+  `OSF_WARNINGS_AS_ERRORS` row to `BUILD.md`.
+
 ### Added
 
 - **C ABI wrapper (`osf-c`).** A separate
