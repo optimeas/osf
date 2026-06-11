@@ -3,6 +3,7 @@
 package com.optimeas.osf;
 
 import com.optimeas.osf.internal.Block;
+import com.optimeas.osf.internal.BlockChunking;
 import com.optimeas.osf.internal.BlockEncoder;
 import com.optimeas.osf.internal.MetablockBuilder;
 
@@ -68,14 +69,7 @@ public final class BlockWriter {
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").withZone(ZoneOffset.UTC);
 
     /** Largest payload (control byte + body) that fits a 2-byte length field. */
-    private static final int MAX_PAYLOAD_U16 = 0xFFFF;
-    /**
-     * Soft cap for the 4-byte length field — a single ~2&nbsp;GB block is
-     * already enormous; pinning it just below {@code Integer.MAX_VALUE} avoids
-     * overflow on the body-length conversion. Mirrors the Rust
-     * {@code MAX_BLOCK_PAYLOAD_U32}.
-     */
-    private static final int MAX_PAYLOAD_U32 = Integer.MAX_VALUE - 1024;
+    private static final int MAX_PAYLOAD_U16 = BlockChunking.MAX_PAYLOAD_U16;
 
     /** Block-family lock per channel, mirroring the reference's kind lock. */
     private enum Kind { UNSET, TIMESTAMPED, EQUIDISTANT, VARIABLE }
@@ -595,8 +589,8 @@ public final class BlockWriter {
         for (EqSegment seg : c.segments) {
             int valueSize = numericValueSize(seg.values);
             int total = seg.values.length();
-            int maxStart = Math.max(1, (maxPayload(sov) - (1 + 8 + 8 + 4)) / valueSize);
-            int maxCont = Math.max(1, (maxPayload(sov) - (1 + 4)) / valueSize);
+            int maxStart = BlockChunking.maxSamplesPerStart(valueSize, sov);
+            int maxCont = BlockChunking.maxSamplesPerContinued(valueSize, sov);
 
             int first = Math.min(total, maxStart);
             out.write(BlockEncoder.startDataBlock(idx, seg.startTimestampNs, seg.sampleRateHz,
@@ -616,8 +610,7 @@ public final class BlockWriter {
         long[] ts = toLongArray(c.timestamps);
         if (c.def.dataType() == DataType.GPS_LOCATION) {
             int total = c.gps.size();
-            int perSample = 8 + 24;
-            int maxPer = Math.max(1, (maxPayload(sov) - (1 + 4)) / perSample);
+            int maxPer = BlockChunking.maxSamplesPerTimestampedGps(sov);
             GpsLocation[] all = c.gps.toArray(new GpsLocation[0]);
             int written = 0;
             while (written < total) {
@@ -634,8 +627,7 @@ public final class BlockWriter {
             return;
         }
         int valueSize = numericValueSize(c.numericValues);
-        int perSample = 8 + valueSize;
-        int maxPer = Math.max(1, (maxPayload(sov) - (1 + 4)) / perSample);
+        int maxPer = BlockChunking.maxSamplesPerTimestamped(valueSize, sov);
         int written = 0;
         while (written < total) {
             int chunk = Math.min(total - written, maxPer);
@@ -686,10 +678,6 @@ public final class BlockWriter {
         }
         int needed = 1 + 8 + max; // [control][i64 ts][bytes]
         return (needed > MAX_PAYLOAD_U16) ? 4 : c.def.sizeOfLengthValue();
-    }
-
-    private static int maxPayload(int sov) {
-        return (sov == 2) ? MAX_PAYLOAD_U16 : MAX_PAYLOAD_U32;
     }
 
     // ---------------------------------------------------------------

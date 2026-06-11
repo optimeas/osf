@@ -3,6 +3,7 @@
 package com.optimeas.osf;
 
 import com.optimeas.osf.internal.Block;
+import com.optimeas.osf.internal.BlockChunking;
 import com.optimeas.osf.internal.BlockEncoder;
 import com.optimeas.osf.internal.MetablockBuilder;
 
@@ -17,31 +18,47 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Power-loss-safe, sample-by-sample OSF5 writer.
+ * Power-loss-safe, streaming OSF5 writer.
  *
  * <p>{@code StreamingWriter} is the streaming counterpart to the in-memory
- * {@code BlockWriter}: it writes the file preamble (magic-header line +
- * metablock) once up front and then emits one OSF5 data block per
- * {@code writeSample} call, calling {@link FileChannel#force(boolean)
- * force(true)} (fsync) immediately after each completed block reaches the
- * channel. A crash therefore leaves a prefix of whole, durable blocks on disk;
- * the best-effort reader recovers every block before the cut and flags
+ * {@link BlockWriter}: it writes the file preamble (magic-header line +
+ * metablock) once up front, then <b>batches samples into multi-sample blocks</b>
+ * and emits each completed block to the {@link FileChannel}, calling
+ * {@link FileChannel#force(boolean) force(true)} (fsync) immediately after the
+ * block reaches the channel. Durability is therefore <em>per block</em>: a crash
+ * leaves a prefix of whole, fsync'd blocks on disk; the best-effort reader
+ * recovers every block before the cut and flags
  * {@link ReaderStats#truncationSeen()} for any partial trailing bytes.
  *
+ * <p>The batching uses the <b>same chunking arithmetic as
+ * {@link BlockWriter}</b> ({@link BlockChunking}), so for the same channels,
+ * samples, {@code sizeoflengthvalue} and {@code created_utc}, the two writers
+ * produce <b>byte-identical OSF5</b> — that is the §7 "on-disk-identical"
+ * guarantee. See {@code WriterIdentityTest}.
+ *
+ * <p>A block is emitted (and fsync'd) when a channel's per-block accumulator
+ * reaches {@code maxSamplesPerBlock} for its datatype, when the channel's
+ * block-kind changes, or on {@link #flush()} / {@link #close()}. Variable
+ * {@code string} / {@code binary} samples are written one block per sample
+ * (variable payloads are never batched, matching the reference). Equidistant
+ * segments accumulate until the segment is superseded / flushed, then emit a
+ * {@code bcStartData} opener plus {@code bcContinuedData} chunks at the same
+ * granularity as {@link BlockWriter}.
+ *
  * <p>This is a faithful port of the C++ reference
- * {@code implementations/cpp/src/streaming_writer.cpp} (the
- * write-then-{@code force()} I/O gate {@code do_write_block}, the once-up-front
- * preamble in {@code start()}, the float/double-only equidistant restriction)
- * and the metablock/block shapes from
- * {@code implementations/rust/osf-core/src/writer.rs}. Like the reference, the
- * streaming writer fixes {@code sizeoflengthvalue} per channel up front and
- * <em>cannot</em> auto-bump it — a sample that would overflow the declared
- * length field is rejected rather than silently promoted.
+ * {@code implementations/cpp/src/streaming_writer.cpp} (the chunked write loops
+ * using {@code max_samples_per_*_block}, the per-block {@code do_write_block}
+ * fsync gate, the once-up-front preamble, the float/double-only equidistant
+ * restriction). Like the reference, the streaming writer fixes
+ * {@code sizeoflengthvalue} per channel up front and <em>cannot</em> auto-bump
+ * it — a variable sample that would overflow the declared length field is
+ * rejected rather than silently promoted.
  *
  * <h2>Lifecycle</h2>
  * <ol>
@@ -49,10 +66,10 @@ import java.util.Map;
  *       ({@code CREATE / TRUNCATE_EXISTING / WRITE}).</li>
  *   <li>Declare channels with {@link #addTimestampedChannel} /
  *       {@link #addEquidistantChannel} (Configure phase).</li>
- *   <li>The preamble is written lazily on the first {@code writeSample} /
- *       {@code startEquidistantSegment}, or eagerly via {@link #begin()}.</li>
+ *   <li>The preamble is written lazily on the first sample, or eagerly via
+ *       {@link #begin()}.</li>
  *   <li>Stream samples; each completed block is {@code force(true)}d.</li>
- *   <li>{@link #close()} forces and closes the channel.</li>
+ *   <li>{@link #close()} emits any buffered partial blocks, forces and closes.</li>
  * </ol>
  *
  * <p>Equidistant channels accept {@code float}/{@code double} only (spec rev
@@ -69,16 +86,37 @@ public final class StreamingWriter implements Closeable {
     /** Block-family lock per channel, mirroring the reference's kind lock. */
     private enum Kind { UNSET, TIMESTAMPED, EQUIDISTANT, VARIABLE }
 
+    /** One accumulated equidistant segment (float / double only). */
+    private static final class EqSegment {
+        final long startTimestampNs;
+        final double sampleRateHz;
+        Block.Values values;
+        EqSegment(long startTimestampNs, double sampleRateHz, Block.Values values) {
+            this.startTimestampNs = startTimestampNs;
+            this.sampleRateHz = sampleRateHz;
+            this.values = values;
+        }
+    }
+
     private static final class Chan {
         final ChannelDef def;
         Kind kind = Kind.UNSET;
-        boolean segmentOpen = false; // equidistant only
+
+        // Timestamped-numeric / GPS accumulator (parallel timestamps + values).
+        final List<Long> timestamps = new ArrayList<>();
+        Block.Values numericValues; // one concrete numeric variant, grown by append
+        final List<GpsLocation> gps = new ArrayList<>();
+
+        // Equidistant accumulator: the currently open segment (if any).
+        EqSegment openSegment;
+
         Chan(ChannelDef def) { this.def = def; }
     }
 
     private final FileChannel channel;
     private final Map<String, String> metadata = new LinkedHashMap<>();
     private final List<Chan> channels = new ArrayList<>();
+    private final Map<Integer, Double> rateByIndex = new LinkedHashMap<>();
     private Phase phase = Phase.CONFIGURE;
 
     private StreamingWriter(FileChannel channel) {
@@ -208,13 +246,10 @@ public final class StreamingWriter implements Closeable {
         long timeIncrementNs = Math.max(1L, Math.round(1.0e9 / sampleRateHz));
         ChannelDef def = new ChannelDef(channels.size(), name, type, ChannelType.EQUIDISTANT,
                 sizeOfLengthValue, timeIncrementNs, physicalUnit, copyAttrs(attributes));
-        // Remember the configured rate for the segment/append APIs.
         channels.add(new Chan(def));
         rateByIndex.put(def.index(), sampleRateHz);
         return def.index();
     }
-
-    private final Map<Integer, Double> rateByIndex = new LinkedHashMap<>();
 
     // ---------------------------------------------------------------
     // Preamble.
@@ -257,33 +292,53 @@ public final class StreamingWriter implements Closeable {
     }
 
     // ---------------------------------------------------------------
-    // writeSample — timestamped overloads. Each writes one block + force.
+    // writeSample — timestamped scalar overloads (accumulate; emit when full).
     // ---------------------------------------------------------------
 
     /** Write one timestamped {@code double} sample. */
     public void writeSample(int channelIndex, long timestampNs, double value) {
         Chan c = beginAndRequireTimestamped(channelIndex, DataType.DOUBLE);
-        emitTimestampedNumeric(c, timestampNs, new Block.DoubleValues(new double[]{value}));
+        c.timestamps.add(timestampNs);
+        c.numericValues = new Block.DoubleValues(append(asDoubles(c.numericValues), value));
+        maybeEmitTimestamped(c);
     }
 
-    /** Write one timestamped {@code long} ({@code int64}) sample. */
+    /** Write one timestamped {@code float} sample. */
+    public void writeSample(int channelIndex, long timestampNs, float value) {
+        Chan c = beginAndRequireTimestamped(channelIndex, DataType.FLOAT);
+        c.timestamps.add(timestampNs);
+        c.numericValues = new Block.FloatValues(append(asFloats(c.numericValues), value));
+        maybeEmitTimestamped(c);
+    }
+
+    /** Write one timestamped {@code boolean} sample. */
+    public void writeSample(int channelIndex, long timestampNs, boolean value) {
+        Chan c = beginAndRequireTimestamped(channelIndex, DataType.BOOL);
+        c.timestamps.add(timestampNs);
+        boolean[] cur = (c.numericValues instanceof Block.BoolValues b) ? b.values() : new boolean[0];
+        boolean[] next = Arrays.copyOf(cur, cur.length + 1);
+        next[cur.length] = value;
+        c.numericValues = new Block.BoolValues(next);
+        maybeEmitTimestamped(c);
+    }
+
+    /**
+     * Write one timestamped integer sample. The channel must be one of the
+     * integer data types ({@code int8..int64}, {@code uint8..uint64}); the value
+     * is narrowed to the channel's width on encode.
+     */
     public void writeSample(int channelIndex, long timestampNs, long value) {
         Chan c = require(channelIndex);
         DataType dt = c.def.dataType();
-        Block.Values v = switch (dt) {
-            case INT64 -> new Block.LongValues(new long[]{value});
-            case UINT64 -> new Block.ULongValues(new long[]{value});
-            case INT32 -> new Block.IntValues(new int[]{(int) value});
-            case UINT32 -> new Block.UIntValues(new int[]{(int) value});
-            case INT16 -> new Block.ShortValues(new short[]{(short) value});
-            case UINT16 -> new Block.UShortValues(new short[]{(short) value});
-            case INT8 -> new Block.ByteValues(new byte[]{(byte) value});
-            case UINT8 -> new Block.UByteValues(new byte[]{(byte) value});
-            default -> throw new OsfException("channel " + channelIndex
+        if (!isInteger(dt)) {
+            throw new OsfException("channel " + channelIndex
                     + ": writeSample(long) requires an integer data type, channel is " + dt);
-        };
+        }
         lockTimestamped(c, dt);
-        emitTimestampedNumeric(c, timestampNs, v);
+        beginIfNeeded();
+        c.timestamps.add(timestampNs);
+        appendInteger(c, dt, value);
+        maybeEmitTimestamped(c);
     }
 
     /** Write one timestamped {@code int} sample (widens to {@link #writeSample(int, long, long)}). */
@@ -291,25 +346,12 @@ public final class StreamingWriter implements Closeable {
         writeSample(channelIndex, timestampNs, (long) value);
     }
 
-    /** Write one timestamped {@code float} sample. */
-    public void writeSample(int channelIndex, long timestampNs, float value) {
-        Chan c = beginAndRequireTimestamped(channelIndex, DataType.FLOAT);
-        emitTimestampedNumeric(c, timestampNs, new Block.FloatValues(new float[]{value}));
-    }
-
-    /** Write one timestamped {@code boolean} sample. */
-    public void writeSample(int channelIndex, long timestampNs, boolean value) {
-        Chan c = beginAndRequireTimestamped(channelIndex, DataType.BOOL);
-        emitTimestampedNumeric(c, timestampNs, new Block.BoolValues(new boolean[]{value}));
-    }
-
     /** Write one timestamped GPS sample. */
     public void writeSample(int channelIndex, long timestampNs, GpsLocation value) {
         Chan c = beginAndRequireTimestamped(channelIndex, DataType.GPS_LOCATION);
-        byte[] block = BlockEncoder.timestampedGpsBlock(
-                channelIndex, new long[]{timestampNs}, new GpsLocation[]{value},
-                c.def.sizeOfLengthValue());
-        writeBlock(block);
+        c.timestamps.add(timestampNs);
+        c.gps.add(value);
+        maybeEmitTimestamped(c);
     }
 
     /** Write one timestamped {@code string} sample (one block per sample). */
@@ -343,12 +385,73 @@ public final class StreamingWriter implements Closeable {
     }
 
     // ---------------------------------------------------------------
+    // writeSamples — timestamped batch overloads (efficient bulk append).
+    // ---------------------------------------------------------------
+
+    /** Write a batch of timestamped {@code double} samples. */
+    public void writeSamples(int channelIndex, long[] timestampsNs, double[] values) {
+        requireSameLength(timestampsNs, values.length);
+        Chan c = beginAndRequireTimestamped(channelIndex, DataType.DOUBLE);
+        for (int i = 0; i < values.length; i++) {
+            c.timestamps.add(timestampsNs[i]);
+            c.numericValues = new Block.DoubleValues(append(asDoubles(c.numericValues), values[i]));
+            maybeEmitTimestamped(c);
+        }
+    }
+
+    /** Write a batch of timestamped {@code float} samples. */
+    public void writeSamples(int channelIndex, long[] timestampsNs, float[] values) {
+        requireSameLength(timestampsNs, values.length);
+        Chan c = beginAndRequireTimestamped(channelIndex, DataType.FLOAT);
+        for (int i = 0; i < values.length; i++) {
+            c.timestamps.add(timestampsNs[i]);
+            c.numericValues = new Block.FloatValues(append(asFloats(c.numericValues), values[i]));
+            maybeEmitTimestamped(c);
+        }
+    }
+
+    /**
+     * Write a batch of timestamped integer samples to an integer channel. Each
+     * value is narrowed to the channel's width on encode.
+     */
+    public void writeSamples(int channelIndex, long[] timestampsNs, long[] values) {
+        requireSameLength(timestampsNs, values.length);
+        Chan c = require(channelIndex);
+        DataType dt = c.def.dataType();
+        if (!isInteger(dt)) {
+            throw new OsfException("channel " + channelIndex
+                    + ": writeSamples(long[]) requires an integer data type, channel is " + dt);
+        }
+        lockTimestamped(c, dt);
+        beginIfNeeded();
+        for (int i = 0; i < values.length; i++) {
+            c.timestamps.add(timestampsNs[i]);
+            appendInteger(c, dt, values[i]);
+            maybeEmitTimestamped(c);
+        }
+    }
+
+    /** Write a batch of timestamped GPS samples. */
+    public void writeSamples(int channelIndex, long[] timestampsNs, GpsLocation[] values) {
+        requireSameLength(timestampsNs, values.length);
+        Chan c = beginAndRequireTimestamped(channelIndex, DataType.GPS_LOCATION);
+        for (int i = 0; i < values.length; i++) {
+            c.timestamps.add(timestampsNs[i]);
+            c.gps.add(values[i]);
+            maybeEmitTimestamped(c);
+        }
+    }
+
+    // ---------------------------------------------------------------
     // Equidistant.
     // ---------------------------------------------------------------
 
     /**
-     * Open an equidistant segment using the channel's configured sample rate,
-     * writing the samples as a {@code bcStartData} block at {@code startNs}.
+     * Open an equidistant segment using the channel's configured sample rate. The
+     * samples accumulate in memory and are emitted (as a {@code bcStartData}
+     * opener plus chunked {@code bcContinuedData} blocks) when the segment is
+     * superseded by another {@code startEquidistantSegment}, or on
+     * {@link #flush()} / {@link #close()} — exactly mirroring {@link BlockWriter}.
      *
      * @param channelIndex the equidistant channel
      * @param startNs      absolute start timestamp of the segment (ns)
@@ -363,12 +466,9 @@ public final class StreamingWriter implements Closeable {
         }
         lockEquidistant(c);
         beginIfNeeded();
+        flushEquidistant(c);
         double rate = rateByIndex.getOrDefault(channelIndex, 0.0);
-        byte[] block = BlockEncoder.startDataBlock(
-                channelIndex, startNs, rate, new Block.DoubleValues(samples.clone()),
-                c.def.sizeOfLengthValue());
-        writeBlock(block);
-        c.segmentOpen = true;
+        c.openSegment = new EqSegment(startNs, rate, new Block.DoubleValues(samples.clone()));
     }
 
     /**
@@ -387,17 +487,15 @@ public final class StreamingWriter implements Closeable {
         }
         lockEquidistant(c);
         beginIfNeeded();
+        flushEquidistant(c);
         double rate = rateByIndex.getOrDefault(channelIndex, 0.0);
-        byte[] block = BlockEncoder.startDataBlock(
-                channelIndex, startNs, rate, new Block.FloatValues(samples.clone()),
-                c.def.sizeOfLengthValue());
-        writeBlock(block);
-        c.segmentOpen = true;
+        c.openSegment = new EqSegment(startNs, rate, new Block.FloatValues(samples.clone()));
     }
 
     /**
      * Append {@code double} samples to the channel's currently open equidistant
-     * segment, writing them as a {@code bcContinuedData} block.
+     * segment. The samples join the open segment's in-memory buffer and are
+     * emitted at the next segment change / flush / close.
      *
      * @param channelIndex the equidistant channel
      * @param samples      additional samples for the open segment
@@ -406,14 +504,16 @@ public final class StreamingWriter implements Closeable {
     public void appendEquidistantSamples(int channelIndex, double[] samples) {
         Chan c = require(channelIndex);
         lockEquidistant(c);
-        if (!c.segmentOpen) {
+        if (c.openSegment == null) {
             throw new OsfException("channel " + channelIndex
                     + ": appendEquidistantSamples without an open segment "
                     + "(call startEquidistantSegment first)");
         }
-        byte[] block = BlockEncoder.continuedDataBlock(
-                channelIndex, new Block.DoubleValues(samples.clone()), c.def.sizeOfLengthValue());
-        writeBlock(block);
+        if (!(c.openSegment.values instanceof Block.DoubleValues dv)) {
+            throw new OsfException("channel " + channelIndex
+                    + ": appendEquidistantSamples(double[]) on a non-double segment");
+        }
+        c.openSegment.values = new Block.DoubleValues(concat(dv.values(), samples));
     }
 
     /**
@@ -426,26 +526,50 @@ public final class StreamingWriter implements Closeable {
     public void appendEquidistantSamples(int channelIndex, float[] samples) {
         Chan c = require(channelIndex);
         lockEquidistant(c);
-        if (!c.segmentOpen) {
+        if (c.openSegment == null) {
             throw new OsfException("channel " + channelIndex
                     + ": appendEquidistantSamples without an open segment "
                     + "(call startEquidistantSegment first)");
         }
-        byte[] block = BlockEncoder.continuedDataBlock(
-                channelIndex, new Block.FloatValues(samples.clone()), c.def.sizeOfLengthValue());
-        writeBlock(block);
+        if (!(c.openSegment.values instanceof Block.FloatValues fv)) {
+            throw new OsfException("channel " + channelIndex
+                    + ": appendEquidistantSamples(float[]) on a non-float segment");
+        }
+        c.openSegment.values = new Block.FloatValues(concat(fv.values(), samples));
     }
 
     // ---------------------------------------------------------------
-    // close.
+    // flush / close.
     // ---------------------------------------------------------------
 
     /**
-     * Flush, force and close the underlying file channel. Idempotent: a second
-     * call is a no-op. If no preamble was written (no channels or no samples),
-     * the file is still closed (leaving whatever bytes, if any, were written).
+     * Emit every channel's buffered partial blocks and {@code force(true)} the
+     * file. After {@code flush()} returns, all samples handed to the writer so far
+     * are durable as whole blocks on disk. A no-op before the preamble is written
+     * or after {@link #close()}.
      *
-     * @throws OsfException on I/O failure during the final force/close
+     * @throws OsfException on I/O failure
+     */
+    public void flush() {
+        if (phase != Phase.STREAMING) {
+            return;
+        }
+        for (Chan c : channels) {
+            switch (c.kind) {
+                case TIMESTAMPED -> flushTimestamped(c);
+                case EQUIDISTANT -> flushEquidistant(c);
+                default -> { /* VARIABLE already emits per sample; UNSET has nothing */ }
+            }
+        }
+        forceChannel();
+    }
+
+    /**
+     * Emit any buffered partial blocks, force and close the underlying file
+     * channel. Idempotent: a second call is a no-op. If no preamble was written
+     * (no channels or no samples), the file is still closed.
+     *
+     * @throws OsfException on I/O failure during the final flush/force/close
      */
     @Override
     public void close() {
@@ -453,12 +577,10 @@ public final class StreamingWriter implements Closeable {
             return;
         }
         try {
+            if (phase == Phase.STREAMING) {
+                flush();
+            }
             if (channel.isOpen()) {
-                // Final durability barrier for anything pending (already forced
-                // per block, but harmless and matches the reference's close()).
-                if (phase == Phase.STREAMING) {
-                    channel.force(true);
-                }
                 channel.close();
             }
         } catch (IOException e) {
@@ -469,8 +591,101 @@ public final class StreamingWriter implements Closeable {
     }
 
     // ---------------------------------------------------------------
-    // Internals.
+    // Emission internals.
     // ---------------------------------------------------------------
+
+    /**
+     * Emit one full multi-sample timestamped block whenever the channel's
+     * accumulator reaches {@code maxSamplesPerBlock}. Mirrors the reference's
+     * chunked write loop; partial remainders are emitted at {@link #flush()}.
+     */
+    private void maybeEmitTimestamped(Chan c) {
+        int sov = c.def.sizeOfLengthValue();
+        if (c.def.dataType() == DataType.GPS_LOCATION) {
+            int maxPer = BlockChunking.maxSamplesPerTimestampedGps(sov);
+            while (c.gps.size() >= maxPer) {
+                emitTimestampedGpsChunk(c, maxPer, sov);
+            }
+        } else {
+            int valueSize = numericValueSize(c.numericValues);
+            int maxPer = BlockChunking.maxSamplesPerTimestamped(valueSize, sov);
+            while (count(c.numericValues) >= maxPer) {
+                emitTimestampedNumericChunk(c, maxPer, sov);
+            }
+        }
+    }
+
+    /** Emit all buffered timestamped samples as a final (partial) block. */
+    private void flushTimestamped(Chan c) {
+        int sov = c.def.sizeOfLengthValue();
+        if (c.def.dataType() == DataType.GPS_LOCATION) {
+            if (!c.gps.isEmpty()) {
+                emitTimestampedGpsChunk(c, c.gps.size(), sov);
+            }
+        } else {
+            int n = count(c.numericValues);
+            if (n > 0) {
+                emitTimestampedNumericChunk(c, n, sov);
+            }
+        }
+    }
+
+    /** Emit the first {@code chunk} buffered numeric samples, then drop them. */
+    private void emitTimestampedNumericChunk(Chan c, int chunk, int sov) {
+        int idx = c.def.index();
+        long[] ts = new long[chunk];
+        for (int i = 0; i < chunk; i++) {
+            ts[i] = c.timestamps.get(i);
+        }
+        byte[] block = BlockEncoder.timestampedBlock(idx, ts, slice(c.numericValues, 0, chunk), sov);
+        writeBlock(block);
+        dropFront(c.timestamps, chunk);
+        c.numericValues = sliceFrom(c.numericValues, chunk);
+    }
+
+    /** Emit the first {@code chunk} buffered GPS samples, then drop them. */
+    private void emitTimestampedGpsChunk(Chan c, int chunk, int sov) {
+        int idx = c.def.index();
+        long[] ts = new long[chunk];
+        GpsLocation[] v = new GpsLocation[chunk];
+        for (int i = 0; i < chunk; i++) {
+            ts[i] = c.timestamps.get(i);
+            v[i] = c.gps.get(i);
+        }
+        byte[] block = BlockEncoder.timestampedGpsBlock(idx, ts, v, sov);
+        writeBlock(block);
+        dropFront(c.timestamps, chunk);
+        dropFront(c.gps, chunk);
+    }
+
+    /**
+     * Emit the channel's open equidistant segment (a {@code bcStartData} opener
+     * plus chunked {@code bcContinuedData} blocks) and clear it. Same chunk
+     * boundaries as {@link BlockWriter#emitChannel}.
+     */
+    private void flushEquidistant(Chan c) {
+        EqSegment seg = c.openSegment;
+        if (seg == null) {
+            return;
+        }
+        c.openSegment = null;
+        int idx = c.def.index();
+        int valueSize = numericValueSize(seg.values);
+        int total = seg.values.length();
+        int sov = c.def.sizeOfLengthValue();
+        int maxStart = BlockChunking.maxSamplesPerStart(valueSize, sov);
+        int maxCont = BlockChunking.maxSamplesPerContinued(valueSize, sov);
+
+        int first = Math.min(total, maxStart);
+        writeBlock(BlockEncoder.startDataBlock(idx, seg.startTimestampNs, seg.sampleRateHz,
+                slice(seg.values, 0, first), sov));
+        int written = first;
+        while (written < total) {
+            int chunk = Math.min(total - written, maxCont);
+            writeBlock(BlockEncoder.continuedDataBlock(idx, slice(seg.values, written, chunk), sov));
+            written += chunk;
+        }
+    }
 
     private Chan beginAndRequireTimestamped(int channelIndex, DataType expected) {
         Chan c = require(channelIndex);
@@ -481,12 +696,6 @@ public final class StreamingWriter implements Closeable {
         lockTimestamped(c, expected);
         beginIfNeeded();
         return c;
-    }
-
-    private void emitTimestampedNumeric(Chan c, long timestampNs, Block.Values value) {
-        byte[] block = BlockEncoder.timestampedBlock(
-                c.def.index(), new long[]{timestampNs}, value, c.def.sizeOfLengthValue());
-        writeBlock(block);
     }
 
     private Chan require(int channelIndex) {
@@ -567,6 +776,13 @@ public final class StreamingWriter implements Closeable {
         }
     }
 
+    private static void requireSameLength(long[] timestampsNs, int valueCount) {
+        if (timestampsNs.length != valueCount) {
+            throw new OsfException("writeSamples: timestamps.length=" + timestampsNs.length
+                    + " != values.length=" + valueCount);
+        }
+    }
+
     private static void validateChannel(String name, DataType type, int sizeOfLengthValue) {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("channel name must be non-empty");
@@ -582,5 +798,184 @@ public final class StreamingWriter implements Closeable {
 
     private static Map<String, String> copyAttrs(Map<String, String> attributes) {
         return (attributes == null) ? Map.of() : new LinkedHashMap<>(attributes);
+    }
+
+    private static boolean isInteger(DataType dt) {
+        return switch (dt) {
+            case INT8, INT16, INT32, INT64, UINT8, UINT16, UINT32, UINT64 -> true;
+            default -> false;
+        };
+    }
+
+    // ---------------------------------------------------------------
+    // Value-accumulator helpers over Block.Values.
+    // ---------------------------------------------------------------
+
+    private static int count(Block.Values v) {
+        return (v == null) ? 0 : v.length();
+    }
+
+    private static double[] asDoubles(Block.Values v) {
+        return (v instanceof Block.DoubleValues d) ? d.values() : new double[0];
+    }
+
+    private static float[] asFloats(Block.Values v) {
+        return (v instanceof Block.FloatValues f) ? f.values() : new float[0];
+    }
+
+    private void appendInteger(Chan c, DataType dt, long v) {
+        switch (dt) {
+            case INT64 -> {
+                long[] cur = (c.numericValues instanceof Block.LongValues x) ? x.values() : new long[0];
+                c.numericValues = new Block.LongValues(append(cur, v));
+            }
+            case UINT64 -> {
+                long[] cur = (c.numericValues instanceof Block.ULongValues x) ? x.values() : new long[0];
+                c.numericValues = new Block.ULongValues(append(cur, v));
+            }
+            case INT32 -> {
+                int[] cur = (c.numericValues instanceof Block.IntValues x) ? x.values() : new int[0];
+                c.numericValues = new Block.IntValues(append(cur, (int) v));
+            }
+            case UINT32 -> {
+                int[] cur = (c.numericValues instanceof Block.UIntValues x) ? x.values() : new int[0];
+                c.numericValues = new Block.UIntValues(append(cur, (int) v));
+            }
+            case INT16 -> {
+                short[] cur = (c.numericValues instanceof Block.ShortValues x) ? x.values() : new short[0];
+                c.numericValues = new Block.ShortValues(append(cur, (short) v));
+            }
+            case UINT16 -> {
+                short[] cur = (c.numericValues instanceof Block.UShortValues x) ? x.values() : new short[0];
+                c.numericValues = new Block.UShortValues(append(cur, (short) v));
+            }
+            case INT8 -> {
+                byte[] cur = (c.numericValues instanceof Block.ByteValues x) ? x.values() : new byte[0];
+                c.numericValues = new Block.ByteValues(append(cur, (byte) v));
+            }
+            case UINT8 -> {
+                byte[] cur = (c.numericValues instanceof Block.UByteValues x) ? x.values() : new byte[0];
+                c.numericValues = new Block.UByteValues(append(cur, (byte) v));
+            }
+            default -> throw new OsfException("appendInteger: non-integer data type " + dt);
+        }
+    }
+
+    private static int numericValueSize(Block.Values v) {
+        if (v instanceof Block.DoubleValues || v instanceof Block.LongValues
+                || v instanceof Block.ULongValues) {
+            return 8;
+        }
+        if (v instanceof Block.FloatValues || v instanceof Block.IntValues
+                || v instanceof Block.UIntValues) {
+            return 4;
+        }
+        if (v instanceof Block.ShortValues || v instanceof Block.UShortValues) {
+            return 2;
+        }
+        if (v instanceof Block.ByteValues || v instanceof Block.UByteValues
+                || v instanceof Block.BoolValues) {
+            return 1;
+        }
+        if (v instanceof Block.GpsValues) {
+            return BlockChunking.GPS_VALUE_SIZE;
+        }
+        // null or unknown — only reached when no numeric samples are buffered.
+        return 8;
+    }
+
+    /** {@code values[start, start+count)} as a new {@link Block.Values}. */
+    private static Block.Values slice(Block.Values v, int start, int count) {
+        int end = start + count;
+        if (v instanceof Block.DoubleValues x) {
+            return new Block.DoubleValues(Arrays.copyOfRange(x.values(), start, end));
+        } else if (v instanceof Block.FloatValues x) {
+            return new Block.FloatValues(Arrays.copyOfRange(x.values(), start, end));
+        } else if (v instanceof Block.LongValues x) {
+            return new Block.LongValues(Arrays.copyOfRange(x.values(), start, end));
+        } else if (v instanceof Block.ULongValues x) {
+            return new Block.ULongValues(Arrays.copyOfRange(x.values(), start, end));
+        } else if (v instanceof Block.IntValues x) {
+            return new Block.IntValues(Arrays.copyOfRange(x.values(), start, end));
+        } else if (v instanceof Block.UIntValues x) {
+            return new Block.UIntValues(Arrays.copyOfRange(x.values(), start, end));
+        } else if (v instanceof Block.ShortValues x) {
+            return new Block.ShortValues(Arrays.copyOfRange(x.values(), start, end));
+        } else if (v instanceof Block.UShortValues x) {
+            return new Block.UShortValues(Arrays.copyOfRange(x.values(), start, end));
+        } else if (v instanceof Block.ByteValues x) {
+            return new Block.ByteValues(Arrays.copyOfRange(x.values(), start, end));
+        } else if (v instanceof Block.UByteValues x) {
+            return new Block.UByteValues(Arrays.copyOfRange(x.values(), start, end));
+        } else if (v instanceof Block.BoolValues x) {
+            return new Block.BoolValues(Arrays.copyOfRange(x.values(), start, end));
+        }
+        throw new OsfException("slice: unsupported numeric Values "
+                + (v == null ? "null" : v.getClass().getSimpleName()));
+    }
+
+    /** The numeric accumulator with its first {@code drop} samples removed. */
+    private static Block.Values sliceFrom(Block.Values v, int drop) {
+        int len = v.length();
+        if (drop >= len) {
+            return null;
+        }
+        return slice(v, drop, len - drop);
+    }
+
+    private static void dropFront(List<?> list, int n) {
+        list.subList(0, n).clear();
+    }
+
+    // ---------------------------------------------------------------
+    // Primitive-array growth utilities.
+    // ---------------------------------------------------------------
+
+    private static double[] append(double[] a, double v) {
+        double[] r = Arrays.copyOf(a, a.length + 1);
+        r[a.length] = v;
+        return r;
+    }
+
+    private static float[] append(float[] a, float v) {
+        float[] r = Arrays.copyOf(a, a.length + 1);
+        r[a.length] = v;
+        return r;
+    }
+
+    private static long[] append(long[] a, long v) {
+        long[] r = Arrays.copyOf(a, a.length + 1);
+        r[a.length] = v;
+        return r;
+    }
+
+    private static int[] append(int[] a, int v) {
+        int[] r = Arrays.copyOf(a, a.length + 1);
+        r[a.length] = v;
+        return r;
+    }
+
+    private static short[] append(short[] a, short v) {
+        short[] r = Arrays.copyOf(a, a.length + 1);
+        r[a.length] = v;
+        return r;
+    }
+
+    private static byte[] append(byte[] a, byte v) {
+        byte[] r = Arrays.copyOf(a, a.length + 1);
+        r[a.length] = v;
+        return r;
+    }
+
+    private static double[] concat(double[] a, double[] b) {
+        double[] r = Arrays.copyOf(a, a.length + b.length);
+        System.arraycopy(b, 0, r, a.length, b.length);
+        return r;
+    }
+
+    private static float[] concat(float[] a, float[] b) {
+        float[] r = Arrays.copyOf(a, a.length + b.length);
+        System.arraycopy(b, 0, r, a.length, b.length);
+        return r;
     }
 }
