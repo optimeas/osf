@@ -719,7 +719,7 @@ rather than a numbered phase.
 ## 21. Java Implementation Architecture
 
 **Decision:** The Java implementation at `implementations/java/` is built on
-Java 25 with Maven, ships as a single Maven module, and supports both
+Java 21 (LTS) with Maven, ships as a single Maven module, and supports both
 block-write and streaming-write modes. It activates the Java Platform Module
 System (JPMS) for true encapsulation of internal classes.
 
@@ -732,11 +732,17 @@ situation §7 already documents for C++.
 
 ### Baseline platform
 
-- **Java 25.** Newest LTS, released September 2025. Includes records, sealed
-  classes, pattern matching for switch, virtual threads, sequenced
-  collections, and the modern primitive-pattern features. The project is
-  greenfield; targeting an older baseline would only carry weight if
-  existing customers required it, which is not the case.
+- **Java 21 (LTS, released September 2023).** Includes records, sealed classes,
+  pattern matching for switch, virtual threads, and sequenced collections —
+  everything this library uses. Although the project itself is greenfield, a
+  concrete existing consumer **does** constrain the baseline: the optiCloud
+  backend (`optimeas-tb`) compiles against **Java 21**, and a Java 25-compiled
+  artifact cannot be loaded by a Java 21 runtime (class-file version mismatch).
+  The library is intended to be adopted there (replacing optiCloud's hand-rolled
+  OSF4 reader/writer and giving it OSF5 for free), so Java 21 is the highest
+  baseline that keeps it consumable. *(This supersedes the original Java 25
+  decision; the optiCloud Java-21 constraint surfaced during implementation,
+  2026-06-11. Targeting Java 25 is reconsidered only if optiCloud moves up.)*
 - **Maven** as the build system. Library projects have a standardized
   lifecycle (compile, test, package, deploy to Maven Central) that Maven
   handles with minimal configuration. Maven `pom.xml` files are also more
@@ -786,7 +792,7 @@ Test scope (not shipped in the JAR):
   arrangements).
 
 Explicitly **not** used:
-- Lombok — invasive annotation processor; Java 25 records cover most of
+- Lombok — invasive annotation processor; Java 21 records cover most of
   the boilerplate Lombok would solve.
 - Apache Commons Lang / Guava — every needed utility is available in
   modern standard Java.
@@ -835,7 +841,7 @@ exported; `com.optimeas.osf.internal` stays hidden.
   (smaller reachability set).
 
 Multi-release-JAR with optional `module-info` was considered and rejected:
-the library targets Java 25, not Java 8 — consumers below the baseline
+the library targets Java 21, not Java 8 — consumers below the baseline
 cannot use it regardless of JPMS configuration.
 
 ### Binary I/O strategy
