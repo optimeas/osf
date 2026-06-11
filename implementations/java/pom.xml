@@ -40,12 +40,14 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <jackson.version>2.18.2</jackson.version>
     <slf4j.version>2.0.16</slf4j.version>
+    <picocli.version>4.7.6</picocli.version>
     <junit.version>5.11.4</junit.version>
     <assertj.version>3.27.0</assertj.version>
   </properties>
 
   <modules>
     <module>osf-java</module>
+    <module>osf-cli</module>
   </modules>
 
   <dependencyManagement>
@@ -71,6 +73,16 @@
         <groupId>org.assertj</groupId>
         <artifactId>assertj-core</artifactId>
         <version>${assertj.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>info.picocli</groupId>
+        <artifactId>picocli</artifactId>
+        <version>${picocli.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-simple</artifactId>
+        <version>${slf4j.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
