@@ -10,6 +10,30 @@
   <packaging>pom</packaging>
   <name>OSF Java (reactor)</name>
   <description>Optimeas Streaming Format — Java implementation</description>
+  <url>https://github.com/optimeas/osf</url>
+
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>https://opensource.org/licenses/MIT</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <scm>
+    <connection>scm:git:git://github.com/optimeas/osf.git</connection>
+    <developerConnection>scm:git:ssh://github.com/optimeas/osf.git</developerConnection>
+    <url>https://github.com/optimeas/osf</url>
+  </scm>
+
+  <developers>
+    <developer>
+      <name>Optimeas GmbH</name>
+      <email>info@optimeas.de</email>
+      <organization>Optimeas GmbH</organization>
+      <organizationUrl>https://www.optimeas.de</organizationUrl>
+    </developer>
+  </developers>
 
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
@@ -62,4 +86,71 @@
       </plugins>
     </pluginManagement>
   </build>
+
+  <!--
+    Release profile: activated only with -Prelease.
+    Attaches sources + javadoc jars, signs everything with GPG,
+    and stages to Maven Central via the central-publishing plugin.
+    The default build never signs or deploys anything.
+  -->
+  <profiles>
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>3.3.1</version>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <goals>
+                  <goal>jar-no-fork</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>3.11.2</version>
+            <executions>
+              <execution>
+                <id>attach-javadocs</id>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>3.2.7</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <version>0.7.0</version>
+            <extensions>true</extensions>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+              <autoPublish>false</autoPublish>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
 </project>
