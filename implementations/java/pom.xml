@@ -43,11 +43,13 @@
     <picocli.version>4.7.6</picocli.version>
     <junit.version>5.11.4</junit.version>
     <assertj.version>3.27.0</assertj.version>
+    <javafx.version>21.0.5</javafx.version>
   </properties>
 
   <modules>
     <module>osf-java</module>
     <module>osf-cli</module>
+    <module>osf-viewer</module>
   </modules>
 
   <dependencyManagement>
