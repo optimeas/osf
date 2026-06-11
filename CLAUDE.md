@@ -1,9 +1,12 @@
 # Claude Code Session State
 
-Last updated: 2026-06-10 (C++ human-review round 1 delivered as PR #1 —
-docs/OSFZ-design fixes, "Phase N" cleanup, zlib 1.3.2 + nlohmann/json 3.12.0
-bumps, runnable `examples/`, opt-in Doxygen target. §20 stays complete
-(phases 1–11); ctest baseline is now **319/319** with `OSF_BUILD_C_API=ON`).
+Last updated: 2026-06-12 (German C++ developer handbook —
+`docs/de/implementations/cpp/` with 8 detail pages + reworked `cpp.md`
+entry page; Doxygen comment pass over the public headers; **DECISIONS §13
+conformance fix**: C++ writers now stamp `created_utc` and default
+`creator`/`tag` like the Rust writer. §20 stays complete (phases 1–11);
+ctest baseline is now **321/321** with `OSF_BUILD_C_API=ON`. EN mirror of
+the new docs subtree is an open follow-up).
 
 This file is a hand-off document for the next Claude Code session. Read
 [STATUS.md](STATUS.md) and [DECISIONS.md](DECISIONS.md) for the
@@ -53,7 +56,8 @@ Addresses the round-1 reviewer items:
   graceful-skip when Doxygen absent (verified generating with Doxygen 1.17.0,
   136 pages, 0 warnings).
 
-**319/319 ctest green** with `OSF_BUILD_C_API=ON`. Out-of-scope follow-ups
+**321/321 ctest green** with `OSF_BUILD_C_API=ON` (319 before the two
+§13-defaults tests added 2026-06-12). Out-of-scope follow-ups
 parked: vcpkg/conan packaging + CMake `install()`; OSFZ post-close tooling
 (CLI `compress` verb + background-thread helper); class diagrams + "which
 class for what" guide + Docusaurus expansion; `reference_manifest.json`
@@ -234,7 +238,7 @@ completed 2026-06-04)** all done — **the §20 Implementation Order is
 complete**. Both OSF5 writer classes, the optional freshness layer,
 transparent gzip/zlib decompression on read, the opt-in throwing layer,
 and the `osf-c` C ABI shared library are in place, and CI builds + tests
-them on Linux/macOS/Windows with warnings-as-errors. **319/319 ctest
+them on Linux/macOS/Windows with warnings-as-errors. **321/321 ctest
 green** on every leg with `OSF_BUILD_C_API=ON` (0 warnings under
 `/W4 /permissive-` locally; `/WX` / `-Werror` in CI).
 
@@ -399,7 +403,7 @@ Always remove `implementations\cpp\build` after a successful verify.
 2. Read `STATUS.md`, then this file, then `DECISIONS.md` §22 if you
    are about to add or modify Delphi logging code.
 3. If continuing the **C++ track**: read DECISIONS §20 + §6 + §7 (+ §23
-   for the C ABI), run the C++ build flow (**319/319** with
+   for the C ABI), run the C++ build flow (**321/321** with
    `-D OSF_BUILD_C_API=ON`; configure with the local
    `FETCHCONTENT_SOURCE_DIR_ZLIB` + `FETCHCONTENT_SOURCE_DIR_GOOGLETEST`
    overrides — see the network caveat below; note the zlib extract dir is

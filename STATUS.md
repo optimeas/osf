@@ -603,23 +603,32 @@ cmake --build build
 ctest --test-dir build
 ```
 
-**Build verification (2026-06-04 after Phase 11):**
+**Build verification (2026-06-12):**
 
 - **CI (GitHub Actions)** builds + tests the C++ implementation on every
   change. The `test-cpp` job (ubuntu-latest / macos-14 / windows-latest)
   configures with `-D OSF_WARNINGS_AS_ERRORS=ON` (`/WX` / `-Werror`)
   **and `-D OSF_BUILD_C_API=ON`**, builds (incl. the shared `osf-c`), and
-  runs ctest. All three legs green — **305/305 ctest each** (304 + the C
-  ABI `c_api` test) — and the full CI run (Rust + C++ + wheels + sdist +
-  summary) is green. FetchContent fetches googletest + zlib over HTTPS on
+  runs ctest. FetchContent fetches googletest + zlib over HTTPS on
   the runners (no local-extract workaround needed there).
-- Local (MSVC 19.50.35730, Visual Studio 18, CMake 4.2.3): `ctest`
-  reports **304/304 passed** with 0 warnings under `/W4 /permissive-`.
-  zlib 1.3.2 comes via FetchContent with the local-extract workaround
-  (`FETCHCONTENT_SOURCE_DIR_ZLIB`) for the host's HTTPS-FetchContent
-  failure (the CI's MSVC is *older* than the local one, so the local
-  `/WX` build is not a complete proxy for the Windows CI leg — verify
-  Windows on CI).
+- Local (MSVC, Visual Studio 18, with `OSF_BUILD_C_API=ON`): `ctest`
+  reports **321/321 passed** (319 before the two DECISIONS-§13
+  metadata-defaults tests added 2026-06-12) with 0 warnings under
+  `/W4 /permissive-`. zlib 1.3.2 comes via FetchContent with the
+  local-extract workaround (`FETCHCONTENT_SOURCE_DIR_ZLIB`) for the
+  host's HTTPS-FetchContent failure (the CI's MSVC can differ from the
+  local one, so a local `/WX` build is not a complete proxy for the
+  Windows CI leg — verify Windows on CI).
+- **Writer metadata (2026-06-12):** both writers now apply the
+  DECISIONS §13 defaults at metablock assembly — `created_utc` is
+  stamped automatically (`YYYY-MM-DDTHH:MM:SSZ`), unset `creator` →
+  `osf-cpp/<version>`, unset `tag` → `default` (previously no
+  `created_utc` was written at all; parity with the Rust writer).
+- **Docs (2026-06-12):** German developer handbook at
+  `docs/de/implementations/cpp/` (8 pages: Architektur, Lesen,
+  Schreiben, Fehlerbehandlung, C-ABI, Bauen, Kochbuch, Interna) +
+  reworked `docs/de/implementations/cpp.md` entry page; Doxygen
+  comment pass over the public headers. EN mirror pending.
 
 **Constraints:**
 
@@ -771,7 +780,7 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 ## Next session priorities (as of 2026-06-04)
 
 Current state — **the C++ §20 Implementation Order is complete (phases
-1–11).** **305/305 ctest green** locally (MSVC `/W4 /permissive-`, with
+1–11).** **321/321 ctest green** locally (MSVC `/W4 /permissive-`, with
 `OSF_BUILD_C_API=ON`) and on CI across ubuntu-latest / macos-14 /
 windows-latest with warnings-as-errors + the C ABI. Phase 11 (this
 session) added the `osf-c` C ABI shared library (DECISIONS §23):
