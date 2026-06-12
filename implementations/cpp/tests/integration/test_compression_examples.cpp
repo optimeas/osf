@@ -94,7 +94,7 @@ TEST_F(CompressionExamplesTest, steam_loco_gzip_and_zlib_match_plain) {
             << c.label << ": " << got.error().message;
         EXPECT_TRUE(got->stats.compressed) << c.label;
         EXPECT_EQ(got->stats.compressionFormat, c.format) << c.label;
-        EXPECT_TRUE(osf_test::roundtripManagersEqual(*plain, *got))
+        EXPECT_TRUE(osftest::roundtripManagersEqual(*plain, *got))
             << c.label;
     }
 }

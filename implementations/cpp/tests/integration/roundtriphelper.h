@@ -24,7 +24,7 @@
 #include <string>
 #include <variant>
 
-namespace osf_test {
+namespace osftest {
 
 // ── Internal helpers ──────────────────────────────────────────────────
 
@@ -378,4 +378,4 @@ inline ::testing::AssertionResult roundtripManagersEqual(
     return ::testing::AssertionSuccess();
 }
 
-}  // namespace osf_test
+}  // namespace osftest

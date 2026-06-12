@@ -260,7 +260,7 @@ osf::ChannelType channelTypeFrom(osf::DataChannel const& ch) {
         return ::testing::AssertionFailure()
             << "load output failed: " << outMgr.error().message;
     }
-    return osf_test::roundtripManagersEqual(*srcMgr, *outMgr);
+    return osftest::roundtripManagersEqual(*srcMgr, *outMgr);
 }
 
 }  // namespace

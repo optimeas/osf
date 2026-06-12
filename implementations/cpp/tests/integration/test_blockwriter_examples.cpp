@@ -84,7 +84,7 @@ TEST_F(BlockWriterExamples, every_osf5_reference_file_roundtrips_via_block_write
             << "reload failed for " << filename << ": " << reloaded.error().message;
 
         // Compare both managers.
-        EXPECT_TRUE(osf_test::roundtripManagersEqual(*loaded, *reloaded))
+        EXPECT_TRUE(osftest::roundtripManagersEqual(*loaded, *reloaded))
             << "file: " << entry.path();
 
         ++tested;

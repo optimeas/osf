@@ -108,7 +108,7 @@ TEST(Throwing, write_to_file_round_trips) {
 
     auto const reloaded = osf::DataManager::loadFromFile(g.path);
     ASSERT_TRUE(reloaded.has_value()) << reloaded.error().message;
-    EXPECT_TRUE(osf_test::roundtripManagersEqual(src, *reloaded));
+    EXPECT_TRUE(osftest::roundtripManagersEqual(src, *reloaded));
 }
 
 TEST(Throwing, write_to_ostream_round_trips) {
@@ -121,7 +121,7 @@ TEST(Throwing, write_to_ostream_round_trips) {
     std::istringstream back(out.str(), std::ios::binary);
     auto const reloaded = osf::DataManager::loadFromStream(back);
     ASSERT_TRUE(reloaded.has_value()) << reloaded.error().message;
-    EXPECT_TRUE(osf_test::roundtripManagersEqual(src, *reloaded));
+    EXPECT_TRUE(osftest::roundtripManagersEqual(src, *reloaded));
 }
 
 // ── unwrap ────────────────────────────────────────────────────────────
