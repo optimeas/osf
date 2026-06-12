@@ -64,16 +64,16 @@ public:
               err.message.empty()
                   ? std::string(errorCategoryName(err.code))
                   : err.message),
-          error_(std::move(err)) {}
+          m_error(std::move(err)) {}
 
     /// The full structured error.
-    [[nodiscard]] Error const& error() const noexcept { return error_; }
+    [[nodiscard]] Error const& error() const noexcept { return m_error; }
 
     /// The error category code.
-    [[nodiscard]] Error::Code code() const noexcept { return error_.code; }
+    [[nodiscard]] Error::Code code() const noexcept { return m_error.code; }
 
 private:
-    Error error_;
+    Error m_error;
 };
 
 namespace throwing {

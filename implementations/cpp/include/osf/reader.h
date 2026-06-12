@@ -81,7 +81,7 @@ public:
     /// Opt in to capturing the raw payload bytes of skipped blocks.
     /// Default is `false` (zero allocation per skipped block).
     BlockReader& withCaptureSkippedPayload(bool enabled) noexcept {
-        capture_skipped_ = enabled;
+        m_captureSkipped = enabled;
         return *this;
     }
 
@@ -89,7 +89,7 @@ public:
     /// (e.g. the `stats` example) can show it. The reader does not
     /// use the value internally.
     BlockReader& withFileSize(std::uint64_t fileSizeBytes) noexcept {
-        stats_.fileSizeBytes = fileSizeBytes;
+        m_stats.fileSizeBytes = fileSizeBytes;
         return *this;
     }
 
@@ -112,18 +112,18 @@ public:
     /// Number of blocks the reader could not finish before the stream
     /// ended. Capped at 1 by construction.
     [[nodiscard]] std::uint64_t blocksTruncated() const noexcept {
-        return stats_.blocksTruncated;
+        return m_stats.blocksTruncated;
     }
 
     /// `true` if the reader consumed the optional `0xFFFF`
     /// info-data block.
     [[nodiscard]] bool trailerSeen() const noexcept {
-        return stats_.trailerSeen;
+        return m_stats.trailerSeen;
     }
 
     /// File size that was supplied via `withFileSize`, if any.
     [[nodiscard]] std::optional<std::uint64_t> fileSizeBytes() const noexcept {
-        return stats_.fileSizeBytes;
+        return m_stats.fileSizeBytes;
     }
 
     // -----------------------------------------------------------------
@@ -148,17 +148,17 @@ public:
         using pointer           = Result<Block>*;
         using reference         = Result<Block>&;
 
-        Iterator() noexcept : reader_(nullptr) {}
+        Iterator() noexcept : m_reader(nullptr) {}
         explicit Iterator(BlockReader& reader);
 
         Iterator& operator++();      // pre-increment
         void operator++(int);        // post-increment (void per InputIt)
 
-        Result<Block>& operator*() { return *current_; }
-        Result<Block>* operator->() { return &(*current_); }
+        Result<Block>& operator*() { return *m_current; }
+        Result<Block>* operator->() { return &(*m_current); }
 
         friend bool operator==(Iterator const& a, EndSentinel const&) noexcept {
-            return !a.current_.has_value();
+            return !a.m_current.has_value();
         }
         friend bool operator!=(Iterator const& a, EndSentinel const& b) noexcept {
             return !(a == b);
@@ -171,8 +171,8 @@ public:
         }
 
     private:
-        BlockReader* reader_;
-        std::optional<Result<Block>> current_;
+        BlockReader* m_reader;
+        std::optional<Result<Block>> m_current;
     };
 
     Iterator    begin() { return Iterator{*this}; }
@@ -204,17 +204,17 @@ private:
     void recordSkip(std::uint16_t channelIndex, std::uint32_t length,
                      SkipReason const& reason);
 
-    std::istream* stream_;
+    std::istream* m_stream;
     /// OSF file version derived from `meta.fileInfo.version`. Drives
     /// the version-deterministic null-terminator rule (spec rev
     /// 2026-05-24): OSF4 strips the last byte of every string/binary
     /// AbsTs payload, OSF5 leaves it alone.
-    OsfVersion osf_version_ = OsfVersion::Osf5;
-    std::unordered_map<std::uint16_t, ChannelInfo> channels_;
-    bool finished_ = false;
-    bool capture_skipped_ = false;
-    std::chrono::steady_clock::time_point started_;
-    ReaderStats stats_;
+    OsfVersion m_osfVersion = OsfVersion::Osf5;
+    std::unordered_map<std::uint16_t, ChannelInfo> m_channels;
+    bool m_finished = false;
+    bool m_captureSkipped = false;
+    std::chrono::steady_clock::time_point m_started;
+    ReaderStats m_stats;
 };
 
 }  // namespace osf

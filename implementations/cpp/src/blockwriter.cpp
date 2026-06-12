@@ -206,16 +206,16 @@ Result<void> encode_abs_ts_from_values(
 
 // ── File-info setters ────────────────────────────────────────────────
 
-void BlockWriter::setCreator(std::string v)       { file_info_.creator       = std::move(v); }
-void BlockWriter::setTag(std::string v)           { file_info_.tag           = std::move(v); }
-void BlockWriter::setReason(std::string v)        { file_info_.reason        = std::move(v); }
-void BlockWriter::setNamespaceSep(std::string v) { file_info_.namespaceSep = std::move(v); }
-void BlockWriter::setComment(std::string v)       { file_info_.comment       = std::move(v); }
+void BlockWriter::setCreator(std::string v)       { m_fileInfo.creator       = std::move(v); }
+void BlockWriter::setTag(std::string v)           { m_fileInfo.tag           = std::move(v); }
+void BlockWriter::setReason(std::string v)        { m_fileInfo.reason        = std::move(v); }
+void BlockWriter::setNamespaceSep(std::string v) { m_fileInfo.namespaceSep = std::move(v); }
+void BlockWriter::setComment(std::string v)       { m_fileInfo.comment       = std::move(v); }
 
 void BlockWriter::setLocation(double lat, double lon, double alt) {
-    file_info_.createdAtLatitude  = lat;
-    file_info_.createdAtLongitude = lon;
-    file_info_.createdAtAltitude  = alt;
+    m_fileInfo.createdAtLatitude  = lat;
+    m_fileInfo.createdAtLongitude = lon;
+    m_fileInfo.createdAtAltitude  = alt;
 }
 
 // ── addChannel ──────────────────────────────────────────────────────
@@ -236,31 +236,31 @@ Result<std::uint16_t> BlockWriter::addChannel(ChannelDef def) {
             Error::Code::InvalidArgument,
             "addChannel: channelType Unsupported is not writeable"));
     }
-    if (channels_.size() >= 0xFFFF) {
+    if (m_channels.size() >= 0xFFFF) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
             "addChannel: too many channels (max 65535)"));
     }
 
-    auto const idx = static_cast<std::uint16_t>(channels_.size());
+    auto const idx = static_cast<std::uint16_t>(m_channels.size());
     ChannelData cd;
     cd.datatype_lock = def.dataType;
-    name_to_index_.emplace(def.name, idx);
-    channels_.push_back(std::move(def));
-    channel_data_.push_back(std::move(cd));
+    m_nameToIndex.emplace(def.name, idx);
+    m_channels.push_back(std::move(def));
+    m_channelData.push_back(std::move(cd));
     return idx;
 }
 
 // ── channelCount / channelIndex ───────────────────────────────────
 
 std::size_t BlockWriter::channelCount() const noexcept {
-    return channels_.size();
+    return m_channels.size();
 }
 
 std::optional<std::uint16_t>
 BlockWriter::channelIndex(std::string_view name) const {
-    auto it = name_to_index_.find(std::string{name});
-    if (it == name_to_index_.end()) return std::nullopt;
+    auto it = m_nameToIndex.find(std::string{name});
+    if (it == m_nameToIndex.end()) return std::nullopt;
     return it->second;
 }
 
@@ -281,13 +281,13 @@ Result<void> BlockWriter::addEquidistantSegmentImpl(
             "addEquidistantSegment: sampleRateHz must be a "
             "positive finite double"));
     }
-    if (channel >= channels_.size()) {
+    if (channel >= m_channels.size()) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
             "addEquidistantSegment: channel index out of range"));
     }
 
-    auto& cd = channel_data_[channel];
+    auto& cd = m_channelData[channel];
 
     // Kind-lock: once a channel has an equidistant segment it stays equidistant.
     if (cd.kind != ChannelData::Kind::Empty &&
@@ -333,13 +333,13 @@ Result<void> BlockWriter::addTimestampedSamplesImpl(
             Error::Code::InvalidArgument,
             "addTimestampedSamples: count must be > 0"));
     }
-    if (channel >= channels_.size()) {
+    if (channel >= m_channels.size()) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
             "addTimestampedSamples: channel index out of range"));
     }
 
-    auto& cd = channel_data_[channel];
+    auto& cd = m_channelData[channel];
 
     // Kind-lock: once a channel has timestamped data it stays timestamped.
     if (cd.kind != ChannelData::Kind::Empty &&
@@ -387,13 +387,13 @@ Result<void> BlockWriter::addTimestampedGpsSamples(
             Error::Code::InvalidArgument,
             "addTimestampedGpsSamples: count must be > 0"));
     }
-    if (channel >= channels_.size()) {
+    if (channel >= m_channels.size()) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
             "addTimestampedGpsSamples: channel index out of range"));
     }
 
-    auto& cd = channel_data_[channel];
+    auto& cd = m_channelData[channel];
 
     // Kind-lock: once a channel has timestamped data it stays timestamped.
     if (cd.kind != ChannelData::Kind::Empty &&
@@ -430,13 +430,13 @@ Result<void> BlockWriter::addStringSamples(
             Error::Code::InvalidArgument,
             "addStringSamples: count must be > 0"));
     }
-    if (channel >= channels_.size()) {
+    if (channel >= m_channels.size()) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
             "addStringSamples: channel index out of range"));
     }
 
-    auto& cd = channel_data_[channel];
+    auto& cd = m_channelData[channel];
 
     // Kind-lock: once a channel has variable data it stays variable.
     if (cd.kind != ChannelData::Kind::Empty &&
@@ -475,13 +475,13 @@ Result<void> BlockWriter::addBinarySamples(
             Error::Code::InvalidArgument,
             "addBinarySamples: count must be > 0"));
     }
-    if (channel >= channels_.size()) {
+    if (channel >= m_channels.size()) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
             "addBinarySamples: channel index out of range"));
     }
 
-    auto& cd = channel_data_[channel];
+    auto& cd = m_channelData[channel];
 
     // Kind-lock: once a channel has variable data it stays variable.
     if (cd.kind != ChannelData::Kind::Empty &&
@@ -515,7 +515,7 @@ Result<void> BlockWriter::addBinarySample(
 void BlockWriter::autobumpSizeOfLengthValue(std::vector<ChannelDef>& defs) const {
     for (std::size_t i = 0; i < defs.size(); ++i) {
         if (defs[i].sizeOfLengthValue == 4) continue;
-        ChannelData const& cd = channel_data_[i];
+        ChannelData const& cd = m_channelData[i];
         if (cd.kind != ChannelData::Kind::Variable) continue;
         std::size_t max_sample = 0;
         for (auto const& s : cd.strings)  max_sample = std::max(max_sample, s.size());
@@ -646,26 +646,26 @@ Result<void> BlockWriter::emitChannel(std::ostream& out,
 // ── writeTo / writeToFile ─────────────────────────────────────────
 
 Result<void> BlockWriter::writeTo(std::ostream& out) const {
-    if (channels_.empty()) {
+    if (m_channels.empty()) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
             "writeTo: no channels declared"));
     }
 
     // Local copy of defs — autobumpSizeOfLengthValue may promote Variable channels to sov=4.
-    std::vector<ChannelDef> defs = channels_;
+    std::vector<ChannelDef> defs = m_channels;
     autobumpSizeOfLengthValue(defs);
 
     // Translate header-local file-info into detail::FileInfoDraft.
     detail::FileInfoDraft fi;
-    fi.creator               = file_info_.creator;
-    fi.tag                   = file_info_.tag;
-    fi.reason                = file_info_.reason;
-    fi.createdAtLatitude   = file_info_.createdAtLatitude;
-    fi.createdAtLongitude  = file_info_.createdAtLongitude;
-    fi.createdAtAltitude   = file_info_.createdAtAltitude;
-    fi.namespaceSep         = file_info_.namespaceSep;
-    fi.comment               = file_info_.comment;
+    fi.creator               = m_fileInfo.creator;
+    fi.tag                   = m_fileInfo.tag;
+    fi.reason                = m_fileInfo.reason;
+    fi.createdAtLatitude   = m_fileInfo.createdAtLatitude;
+    fi.createdAtLongitude  = m_fileInfo.createdAtLongitude;
+    fi.createdAtAltitude   = m_fileInfo.createdAtAltitude;
+    fi.namespaceSep         = m_fileInfo.namespaceSep;
+    fi.comment               = m_fileInfo.comment;
 
     MetaBlock meta = detail::build_metablock(fi, defs);
     std::string const json  = serializeMetablockJson(meta);
@@ -680,10 +680,10 @@ Result<void> BlockWriter::writeTo(std::ostream& out) const {
     }
 
     std::vector<std::uint8_t> buf;
-    for (std::size_t i = 0; i < channels_.size(); ++i) {
+    for (std::size_t i = 0; i < m_channels.size(); ++i) {
         auto const ci  = static_cast<std::uint16_t>(i);
         std::uint8_t const sov = defs[i].sizeOfLengthValue;
-        if (auto r = emitChannel(out, buf, ci, sov, channel_data_[i]); !r) return r;
+        if (auto r = emitChannel(out, buf, ci, sov, m_channelData[i]); !r) return r;
     }
 
     out.flush();
@@ -823,14 +823,14 @@ Result<BlockWriter> BlockWriter::fromManager(DataManager const& mgr) {
     BlockWriter b;
 
     // Copy writer-controllable file-info (NOT version/createdUtc).
-    b.file_info_.creator               = mgr.meta.fileInfo.creator;
-    b.file_info_.tag                   = mgr.meta.fileInfo.tag;
-    b.file_info_.reason                = mgr.meta.fileInfo.reason;
-    b.file_info_.createdAtLatitude   = mgr.meta.fileInfo.createdAtLatitude;
-    b.file_info_.createdAtLongitude  = mgr.meta.fileInfo.createdAtLongitude;
-    b.file_info_.createdAtAltitude   = mgr.meta.fileInfo.createdAtAltitude;
-    b.file_info_.namespaceSep         = mgr.meta.fileInfo.namespaceSep;
-    b.file_info_.comment               = mgr.meta.fileInfo.comment;
+    b.m_fileInfo.creator               = mgr.meta.fileInfo.creator;
+    b.m_fileInfo.tag                   = mgr.meta.fileInfo.tag;
+    b.m_fileInfo.reason                = mgr.meta.fileInfo.reason;
+    b.m_fileInfo.createdAtLatitude   = mgr.meta.fileInfo.createdAtLatitude;
+    b.m_fileInfo.createdAtLongitude  = mgr.meta.fileInfo.createdAtLongitude;
+    b.m_fileInfo.createdAtAltitude   = mgr.meta.fileInfo.createdAtAltitude;
+    b.m_fileInfo.namespaceSep         = mgr.meta.fileInfo.namespaceSep;
+    b.m_fileInfo.comment               = mgr.meta.fileInfo.comment;
 
     for (DataChannel const& dc : mgr.channels()) {
         ChannelDef def = channel_def_from_dc(dc);

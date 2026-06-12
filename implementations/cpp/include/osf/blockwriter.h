@@ -49,7 +49,7 @@ class DataManager;
 class BlockWriter {
 public:
     // Six special members declared here, defined out-of-line in the .cpp.
-    // Required because channel_data_ holds std::vector<ChannelData> and
+    // Required because m_channelData holds std::vector<ChannelData> and
     // ChannelData is only forward-declared in this header (incomplete type).
     // MSVC will not instantiate vector's special members against an incomplete
     // type, so = default in the header is illegal.
@@ -257,10 +257,10 @@ private:
     [[nodiscard]] Result<void> writeBlockBytes(std::ostream& out,
         std::vector<std::uint8_t> const& buf) const;
 
-    FileInfoFields                                    file_info_;
-    std::vector<ChannelDef>                           channels_;
-    std::vector<ChannelData>                          channel_data_;
-    std::unordered_map<std::string, std::uint16_t>    name_to_index_;
+    FileInfoFields                                    m_fileInfo;
+    std::vector<ChannelDef>                           m_channels;
+    std::vector<ChannelData>                          m_channelData;
+    std::unordered_map<std::string, std::uint16_t>    m_nameToIndex;
 };
 
 // ── IsTimestampedNumeric specializations ─────────────────────────────

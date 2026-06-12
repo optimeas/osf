@@ -10,19 +10,19 @@ namespace osf {
 
 StaleValueGuard::StaleValueGuard(StreamingWriter& writer,
                                  std::int64_t repeatIntervalNs)
-    : writer_{writer}, interval_ns_{repeatIntervalNs} {}
+    : m_writer{writer}, m_intervalNs{repeatIntervalNs} {}
 
 std::int64_t StaleValueGuard::repeatIntervalNs() const noexcept {
-    return interval_ns_;
+    return m_intervalNs;
 }
 
 Result<void> StaleValueGuard::writeTimestampedGpsSample(
         std::uint16_t channel, std::int64_t timestampNs,
         GpsLocation value) {
-    auto r = writer_.writeTimestampedGpsSample(channel, timestampNs,
+    auto r = m_writer.writeTimestampedGpsSample(channel, timestampNs,
                                                   value);
     if (r) {
-        tracked_[channel] = ChannelEntry{timestampNs, CachedValue{value}};
+        m_tracked[channel] = ChannelEntry{timestampNs, CachedValue{value}};
     }
     return r;
 }
@@ -30,10 +30,10 @@ Result<void> StaleValueGuard::writeTimestampedGpsSample(
 Result<void> StaleValueGuard::writeTimestampedGpsSamples(
         std::uint16_t channel, std::int64_t const* timestampsNs,
         GpsLocation const* values, std::size_t count) {
-    auto r = writer_.writeTimestampedGpsSamples(channel, timestampsNs,
+    auto r = m_writer.writeTimestampedGpsSamples(channel, timestampsNs,
                                                    values, count);
     if (r && count > 0) {
-        tracked_[channel] = ChannelEntry{timestampsNs[count - 1],
+        m_tracked[channel] = ChannelEntry{timestampsNs[count - 1],
                                          CachedValue{values[count - 1]}};
     }
     return r;
@@ -41,8 +41,8 @@ Result<void> StaleValueGuard::writeTimestampedGpsSamples(
 
 Result<std::size_t> StaleValueGuard::poll(std::int64_t nowNs) {
     std::size_t reemitted = 0;
-    for (auto& [channel, entry] : tracked_) {
-        if (nowNs - entry.lastActivityNs < interval_ns_) {
+    for (auto& [channel, entry] : m_tracked) {
+        if (nowNs - entry.lastActivityNs < m_intervalNs) {
             continue;
         }
         if (auto r = reemit(channel, nowNs, entry.value); !r) {
@@ -61,10 +61,10 @@ Result<void> StaleValueGuard::reemit(std::uint16_t channel,
         [&](auto const& value) -> Result<void> {
             using U = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<U, GpsLocation>) {
-                return writer_.writeTimestampedGpsSample(channel, nowNs,
+                return m_writer.writeTimestampedGpsSample(channel, nowNs,
                                                             value);
             } else {
-                return writer_.writeTimestampedSample<U>(channel, nowNs,
+                return m_writer.writeTimestampedSample<U>(channel, nowNs,
                                                            value);
             }
         },
@@ -72,15 +72,15 @@ Result<void> StaleValueGuard::reemit(std::uint16_t channel,
 }
 
 bool StaleValueGuard::isTracked(std::uint16_t channel) const noexcept {
-    return tracked_.find(channel) != tracked_.end();
+    return m_tracked.find(channel) != m_tracked.end();
 }
 
 void StaleValueGuard::forget(std::uint16_t channel) {
-    tracked_.erase(channel);
+    m_tracked.erase(channel);
 }
 
 void StaleValueGuard::clear() noexcept {
-    tracked_.clear();
+    m_tracked.clear();
 }
 
 }  // namespace osf

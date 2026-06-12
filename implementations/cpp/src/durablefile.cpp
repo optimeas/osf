@@ -70,7 +70,7 @@ Result<DurableFile> DurableFile::create(
             " (" + path.string() + ")"));
     }
     DurableFile f;
-    f.handle_ = h;
+    f.m_handle = h;
     return f;
 #else
     int const fd = ::open(path.c_str(),
@@ -82,7 +82,7 @@ Result<DurableFile> DurableFile::create(
             " (" + path.string() + ")"));
     }
     DurableFile f;
-    f.fd_ = fd;
+    f.m_fd = fd;
     return f;
 #endif
 }
@@ -91,11 +91,11 @@ Result<DurableFile> DurableFile::create(
 
 DurableFile::DurableFile(DurableFile&& other) noexcept {
 #ifdef _WIN32
-    handle_ = other.handle_;
-    other.handle_ = nullptr;
+    m_handle = other.m_handle;
+    other.m_handle = nullptr;
 #else
-    fd_ = other.fd_;
-    other.fd_ = -1;
+    m_fd = other.m_fd;
+    other.m_fd = -1;
 #endif
 }
 
@@ -103,11 +103,11 @@ DurableFile& DurableFile::operator=(DurableFile&& other) noexcept {
     if (this != &other) {
         (void) close();   // best-effort close of any prior handle
 #ifdef _WIN32
-        handle_ = other.handle_;
-        other.handle_ = nullptr;
+        m_handle = other.m_handle;
+        other.m_handle = nullptr;
 #else
-        fd_ = other.fd_;
-        other.fd_ = -1;
+        m_fd = other.m_fd;
+        other.m_fd = -1;
 #endif
     }
     return *this;
@@ -123,9 +123,9 @@ DurableFile::~DurableFile() {
 
 bool DurableFile::is_open() const noexcept {
 #ifdef _WIN32
-    return handle_ != nullptr;
+    return m_handle != nullptr;
 #else
-    return fd_ >= 0;
+    return m_fd >= 0;
 #endif
 }
 
@@ -144,7 +144,7 @@ Result<void> DurableFile::write(std::uint8_t const* data,
         DWORD const chunk = static_cast<DWORD>(
             (remaining > 0x7FFFFFFF) ? 0x7FFFFFFF : remaining);
         DWORD wrote = 0;
-        BOOL const ok = WriteFile(handle_, data + written, chunk,
+        BOOL const ok = WriteFile(m_handle, data + written, chunk,
                                   &wrote, nullptr);
         if (!ok) {
             DWORD const err = GetLastError();
@@ -157,7 +157,7 @@ Result<void> DurableFile::write(std::uint8_t const* data,
         }
         written += wrote;
 #else
-        ssize_t const n = ::write(fd_, data + written, remaining);
+        ssize_t const n = ::write(m_fd, data + written, remaining);
         if (n < 0) {
             if (errno == EINTR) continue;  // retry on signal interruption
             int const err = errno;
@@ -182,13 +182,13 @@ Result<void> DurableFile::force() {
             "DurableFile::force: file is closed"));
     }
 #ifdef _WIN32
-    if (!FlushFileBuffers(handle_)) {
+    if (!FlushFileBuffers(m_handle)) {
         DWORD const err = GetLastError();
         return tl::make_unexpected(io_error(
             "DurableFile::force: " + last_win32_error_message(err)));
     }
 #else
-    if (::fsync(fd_) != 0) {
+    if (::fsync(m_fd) != 0) {
         int const err = errno;
         return tl::make_unexpected(io_error(
             "DurableFile::force: " + last_errno_message(err)));
@@ -201,18 +201,18 @@ Result<void> DurableFile::force() {
 
 Result<void> DurableFile::close() {
 #ifdef _WIN32
-    if (handle_ == nullptr) return {};
-    HANDLE const h = handle_;
-    handle_ = nullptr;          // mark closed first; matches POSIX path
+    if (m_handle == nullptr) return {};
+    HANDLE const h = m_handle;
+    m_handle = nullptr;          // mark closed first; matches POSIX path
     if (!CloseHandle(h)) {
         DWORD const err = GetLastError();
         return tl::make_unexpected(io_error(
             "DurableFile::close: " + last_win32_error_message(err)));
     }
 #else
-    if (fd_ < 0) return {};
-    int const fd = fd_;
-    fd_ = -1;                    // mark closed first
+    if (m_fd < 0) return {};
+    int const fd = m_fd;
+    m_fd = -1;                    // mark closed first
     if (::close(fd) != 0) {
         int const err = errno;
         return tl::make_unexpected(io_error(

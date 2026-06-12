@@ -310,23 +310,23 @@ private:
     // Lifecycle state — definition in the .cpp.
     enum class State;
 
-    State state_;
-    std::filesystem::path path_;
-    std::unique_ptr<detail::DurableFile> durable_file_;
-    std::vector<ChannelDef> channels_;
-    std::vector<detail::ChannelState> channel_states_;
-    std::vector<std::uint8_t> scratch_buffer_;
-    std::optional<Error> sticky_error_;
+    State m_state;
+    std::filesystem::path m_path;
+    std::unique_ptr<detail::DurableFile> m_durableFile;
+    std::vector<ChannelDef> m_channels;
+    std::vector<detail::ChannelState> m_channelStates;
+    std::vector<std::uint8_t> m_scratchBuffer;
+    std::optional<Error> m_stickyError;
 
     // File-info setters write into these private fields.
-    std::optional<std::string> creator_;
-    std::optional<std::string> tag_;
-    std::optional<std::string> reason_;
-    std::optional<double>      created_at_latitude_;
-    std::optional<double>      created_at_longitude_;
-    std::optional<double>      created_at_altitude_;
-    std::optional<std::string> namespace_sep_;
-    std::optional<std::string> comment_;
+    std::optional<std::string> m_creator;
+    std::optional<std::string> m_tag;
+    std::optional<std::string> m_reason;
+    std::optional<double>      m_createdAtLatitude;
+    std::optional<double>      m_createdAtLongitude;
+    std::optional<double>      m_createdAtAltitude;
+    std::optional<std::string> m_namespaceSep;
+    std::optional<std::string> m_comment;
 
     // ── Type-agnostic helpers (defined in streamingwriter.cpp) ────────
     [[nodiscard]] Result<void> doWriteBlock(std::uint8_t const* data,

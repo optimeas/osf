@@ -151,9 +151,9 @@ private:
         CachedValue value;
     };
 
-    StreamingWriter& writer_;
-    std::int64_t interval_ns_;
-    std::map<std::uint16_t, ChannelEntry> tracked_;
+    StreamingWriter& m_writer;
+    std::int64_t m_intervalNs;
+    std::map<std::uint16_t, ChannelEntry> m_tracked;
 
     // Re-emit a cached value at nowNs by dispatching over the variant to
     // the matching writer method. Defined in the .cpp.
@@ -167,10 +167,10 @@ private:
 template <typename T>
 Result<void> StaleValueGuard::writeTimestampedSample(
         std::uint16_t channel, std::int64_t timestampNs, T value) {
-    auto r = writer_.writeTimestampedSample<T>(channel, timestampNs,
+    auto r = m_writer.writeTimestampedSample<T>(channel, timestampNs,
                                                  value);
     if (r) {
-        tracked_[channel] = ChannelEntry{timestampNs, CachedValue{value}};
+        m_tracked[channel] = ChannelEntry{timestampNs, CachedValue{value}};
     }
     return r;
 }
@@ -179,10 +179,10 @@ template <typename T>
 Result<void> StaleValueGuard::writeTimestampedSamples(
         std::uint16_t channel, std::int64_t const* timestampsNs,
         T const* values, std::size_t count) {
-    auto r = writer_.writeTimestampedSamples<T>(channel, timestampsNs,
+    auto r = m_writer.writeTimestampedSamples<T>(channel, timestampsNs,
                                                   values, count);
     if (r && count > 0) {
-        tracked_[channel] = ChannelEntry{timestampsNs[count - 1],
+        m_tracked[channel] = ChannelEntry{timestampsNs[count - 1],
                                          CachedValue{values[count - 1]}};
     }
     return r;

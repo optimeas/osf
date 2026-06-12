@@ -62,7 +62,7 @@ public:
 
     /// Read-only view of all channels in metablock order.
     [[nodiscard]] std::vector<DataChannel> const& channels() const noexcept {
-        return channels_;
+        return m_channels;
     }
 
     /// Look up a channel by its fully qualified name.
@@ -77,9 +77,9 @@ public:
     [[nodiscard]] DataChannel const* channelByIndex(std::uint16_t index) const;
 
 private:
-    std::vector<DataChannel> channels_;
-    std::unordered_map<std::string, std::size_t> by_name_;
-    std::unordered_map<std::uint16_t, std::size_t> by_index_;
+    std::vector<DataChannel> m_channels;
+    std::unordered_map<std::string, std::size_t> m_byName;
+    std::unordered_map<std::uint16_t, std::size_t> m_byIndex;
 
     DataManager() = default;
 

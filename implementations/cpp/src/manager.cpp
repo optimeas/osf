@@ -695,16 +695,16 @@ Result<DataManager> buildFromStreamImpl(std::istream& stream,
     mgr.stats.compressed           = input.isCompressed();
     mgr.stats.compressionFormat   = input.format();
 
-    mgr.channels_.reserve(builders.size());
+    mgr.m_channels.reserve(builders.size());
     for (auto& b : builders) {
         std::uint16_t const idx = b.index;
         std::string         name = b.name;  // copy for the lookup key
         auto chan = finalize_builder(std::move(b));
         if (!chan) continue;  // Unsupported — dropped
-        std::size_t const slot = mgr.channels_.size();
-        mgr.by_name_.emplace(std::move(name), slot);
-        mgr.by_index_.emplace(idx, slot);
-        mgr.channels_.push_back(std::move(*chan));
+        std::size_t const slot = mgr.m_channels.size();
+        mgr.m_byName.emplace(std::move(name), slot);
+        mgr.m_byIndex.emplace(idx, slot);
+        mgr.m_channels.push_back(std::move(*chan));
     }
 
     return mgr;
@@ -731,15 +731,15 @@ Result<DataManager> DataManager::loadFromStream(std::istream& stream) {
 }
 
 DataChannel const* DataManager::channel(std::string_view name) const {
-    auto it = by_name_.find(std::string{name});
-    if (it == by_name_.end()) return nullptr;
-    return &channels_[it->second];
+    auto it = m_byName.find(std::string{name});
+    if (it == m_byName.end()) return nullptr;
+    return &m_channels[it->second];
 }
 
 DataChannel const* DataManager::channelByIndex(std::uint16_t index) const {
-    auto it = by_index_.find(index);
-    if (it == by_index_.end()) return nullptr;
-    return &channels_[it->second];
+    auto it = m_byIndex.find(index);
+    if (it == m_byIndex.end()) return nullptr;
+    return &m_channels[it->second];
 }
 
 }  // namespace osf

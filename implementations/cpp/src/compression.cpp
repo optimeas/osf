@@ -59,105 +59,105 @@ CompressionFormat detectCompression(std::istream& source) {
 class DecompressingIStream::Streambuf final : public std::streambuf {
 public:
     explicit Streambuf(std::istream& source)
-        : src_(source), in_(kBufferSize), out_(kBufferSize) {
+        : m_src(source), m_in(kBufferSize), m_out(kBufferSize) {
         // Prime the input buffer and classify from the leading bytes.
-        src_.read(in_.data(), static_cast<std::streamsize>(in_.size()));
-        auto const n = static_cast<std::size_t>(src_.gcount());
-        in_avail_ = n;
-        in_pos_ = 0;
+        m_src.read(m_in.data(), static_cast<std::streamsize>(m_in.size()));
+        auto const n = static_cast<std::size_t>(m_src.gcount());
+        m_inAvail = n;
+        m_inPos = 0;
 
         if (n >= 2) {
-            format_ = classify(static_cast<std::uint8_t>(
-                                   static_cast<unsigned char>(in_[0])),
+            m_format = classify(static_cast<std::uint8_t>(
+                                   static_cast<unsigned char>(m_in[0])),
                                static_cast<std::uint8_t>(
-                                   static_cast<unsigned char>(in_[1])));
+                                   static_cast<unsigned char>(m_in[1])));
         }
 
-        if (format_ != CompressionFormat::None) {
-            zs_.zalloc = Z_NULL;
-            zs_.zfree = Z_NULL;
-            zs_.opaque = Z_NULL;
-            zs_.next_in = Z_NULL;
-            zs_.avail_in = 0;
+        if (m_format != CompressionFormat::None) {
+            m_zs.zalloc = Z_NULL;
+            m_zs.zfree = Z_NULL;
+            m_zs.opaque = Z_NULL;
+            m_zs.next_in = Z_NULL;
+            m_zs.avail_in = 0;
             // MAX_WBITS | 32 → automatic zlib / gzip header detection.
-            if (inflateInit2(&zs_, MAX_WBITS | 32) == Z_OK) {
-                inflate_active_ = true;
-                zs_.next_in = reinterpret_cast<Bytef*>(in_.data());
-                zs_.avail_in = static_cast<uInt>(n);
+            if (inflateInit2(&m_zs, MAX_WBITS | 32) == Z_OK) {
+                m_inflateActive = true;
+                m_zs.next_in = reinterpret_cast<Bytef*>(m_in.data());
+                m_zs.avail_in = static_cast<uInt>(n);
             } else {
                 // Initialisation failure (effectively only ENOMEM) —
                 // degrade to passing the raw bytes through.
-                format_ = CompressionFormat::None;
+                m_format = CompressionFormat::None;
             }
         }
     }
 
     ~Streambuf() override {
-        if (inflate_active_) {
-            inflateEnd(&zs_);
+        if (m_inflateActive) {
+            inflateEnd(&m_zs);
         }
     }
 
     Streambuf(Streambuf const&) = delete;
     Streambuf& operator=(Streambuf const&) = delete;
 
-    [[nodiscard]] CompressionFormat format() const noexcept { return format_; }
+    [[nodiscard]] CompressionFormat format() const noexcept { return m_format; }
 
 protected:
     int_type underflow() override {
         if (gptr() < egptr()) {
             return traits_type::to_int_type(*gptr());
         }
-        return (format_ == CompressionFormat::None) ? underflow_plain()
+        return (m_format == CompressionFormat::None) ? underflow_plain()
                                                     : underflow_inflate();
     }
 
 private:
     // Pass-through: serve the raw input buffer, refilling from the source.
     int_type underflow_plain() {
-        if (in_pos_ >= in_avail_) {
-            src_.read(in_.data(), static_cast<std::streamsize>(in_.size()));
-            in_avail_ = static_cast<std::size_t>(src_.gcount());
-            in_pos_ = 0;
-            if (in_avail_ == 0) {
+        if (m_inPos >= m_inAvail) {
+            m_src.read(m_in.data(), static_cast<std::streamsize>(m_in.size()));
+            m_inAvail = static_cast<std::size_t>(m_src.gcount());
+            m_inPos = 0;
+            if (m_inAvail == 0) {
                 return traits_type::eof();
             }
         }
-        char* const base = in_.data();
-        setg(base, base + in_pos_, base + in_avail_);
-        in_pos_ = in_avail_;
+        char* const base = m_in.data();
+        setg(base, base + m_inPos, base + m_inAvail);
+        m_inPos = m_inAvail;
         return traits_type::to_int_type(*gptr());
     }
 
     // Streaming inflate into the output buffer.
     int_type underflow_inflate() {
-        if (stream_end_) {
+        if (m_streamEnd) {
             return traits_type::eof();
         }
         for (;;) {
-            if (zs_.avail_in == 0 && !source_exhausted_) {
-                src_.read(in_.data(),
-                          static_cast<std::streamsize>(in_.size()));
-                auto const n = static_cast<std::size_t>(src_.gcount());
+            if (m_zs.avail_in == 0 && !m_sourceExhausted) {
+                m_src.read(m_in.data(),
+                          static_cast<std::streamsize>(m_in.size()));
+                auto const n = static_cast<std::size_t>(m_src.gcount());
                 if (n == 0) {
-                    source_exhausted_ = true;
+                    m_sourceExhausted = true;
                 } else {
-                    zs_.next_in = reinterpret_cast<Bytef*>(in_.data());
-                    zs_.avail_in = static_cast<uInt>(n);
+                    m_zs.next_in = reinterpret_cast<Bytef*>(m_in.data());
+                    m_zs.avail_in = static_cast<uInt>(n);
                 }
             }
 
-            zs_.next_out = reinterpret_cast<Bytef*>(out_.data());
-            zs_.avail_out = static_cast<uInt>(out_.size());
-            int const ret = inflate(&zs_, Z_NO_FLUSH);
-            std::size_t const produced = out_.size() - zs_.avail_out;
+            m_zs.next_out = reinterpret_cast<Bytef*>(m_out.data());
+            m_zs.avail_out = static_cast<uInt>(m_out.size());
+            int const ret = inflate(&m_zs, Z_NO_FLUSH);
+            std::size_t const produced = m_out.size() - m_zs.avail_out;
 
             if (ret == Z_STREAM_END) {
-                stream_end_ = true;
+                m_streamEnd = true;
             }
 
             if (produced > 0) {
-                char* const base = out_.data();
+                char* const base = m_out.data();
                 setg(base, base, base + produced);
                 return traits_type::to_int_type(*gptr());
             }
@@ -170,12 +170,12 @@ private:
                 // Need more input. If the source is drained, the stream
                 // was truncated — best-effort EOF (the reader is already
                 // best-effort at a truncated trailing block).
-                if (zs_.avail_in == 0 && source_exhausted_) {
+                if (m_zs.avail_in == 0 && m_sourceExhausted) {
                     return traits_type::eof();
                 }
                 // Z_BUF_ERROR with input still available means no forward
                 // progress is possible — bail rather than spin.
-                if (ret == Z_BUF_ERROR && zs_.avail_in != 0) {
+                if (ret == Z_BUF_ERROR && m_zs.avail_in != 0) {
                     return traits_type::eof();
                 }
                 continue;
@@ -186,18 +186,18 @@ private:
         }
     }
 
-    std::istream& src_;
-    CompressionFormat format_ = CompressionFormat::None;
+    std::istream& m_src;
+    CompressionFormat m_format = CompressionFormat::None;
 
-    std::vector<char> in_;
-    std::vector<char> out_;
-    std::size_t in_avail_ = 0;   // bytes held in in_ (plain path)
-    std::size_t in_pos_ = 0;     // consumed offset within in_ (plain path)
+    std::vector<char> m_in;
+    std::vector<char> m_out;
+    std::size_t m_inAvail = 0;   // bytes held in m_in (plain path)
+    std::size_t m_inPos = 0;     // consumed offset within m_in (plain path)
 
-    z_stream zs_{};
-    bool inflate_active_ = false;
-    bool stream_end_ = false;
-    bool source_exhausted_ = false;
+    z_stream m_zs{};
+    bool m_inflateActive = false;
+    bool m_streamEnd = false;
+    bool m_sourceExhausted = false;
 };
 
 // =====================================================================
@@ -205,18 +205,18 @@ private:
 // =====================================================================
 
 DecompressingIStream::DecompressingIStream(std::istream& source)
-    : std::istream(nullptr), buf_(std::make_unique<Streambuf>(source)) {
-    this->rdbuf(buf_.get());
+    : std::istream(nullptr), m_buf(std::make_unique<Streambuf>(source)) {
+    this->rdbuf(m_buf.get());
 }
 
 DecompressingIStream::~DecompressingIStream() = default;
 
 CompressionFormat DecompressingIStream::format() const noexcept {
-    return buf_->format();
+    return m_buf->format();
 }
 
 bool DecompressingIStream::isCompressed() const noexcept {
-    return buf_->format() != CompressionFormat::None;
+    return m_buf->format() != CompressionFormat::None;
 }
 
 }  // namespace osf

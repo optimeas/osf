@@ -69,9 +69,9 @@ constexpr DataType data_type_for() noexcept {
 // ── Ctor / dtor / move ───────────────────────────────────────────────
 
 StreamingWriter::StreamingWriter(std::filesystem::path path)
-    : state_{State::Configure},
-      path_{std::move(path)} {
-    // scratch_buffer_ default-constructed; allocation happens in start().
+    : m_state{State::Configure},
+      m_path{std::move(path)} {
+    // m_scratchBuffer default-constructed; allocation happens in start().
 }
 
 StreamingWriter::~StreamingWriter() {
@@ -79,66 +79,66 @@ StreamingWriter::~StreamingWriter() {
 }
 
 StreamingWriter::StreamingWriter(StreamingWriter&& other) noexcept
-    : state_{other.state_},
-      path_{std::move(other.path_)},
-      durable_file_{std::move(other.durable_file_)},
-      channels_{std::move(other.channels_)},
-      channel_states_{std::move(other.channel_states_)},
-      scratch_buffer_{std::move(other.scratch_buffer_)},
-      sticky_error_{std::move(other.sticky_error_)},
-      creator_{std::move(other.creator_)},
-      tag_{std::move(other.tag_)},
-      reason_{std::move(other.reason_)},
-      created_at_latitude_{other.created_at_latitude_},
-      created_at_longitude_{other.created_at_longitude_},
-      created_at_altitude_{other.created_at_altitude_},
-      namespace_sep_{std::move(other.namespace_sep_)},
-      comment_{std::move(other.comment_)} {
-    other.state_ = State::Closed;
+    : m_state{other.m_state},
+      m_path{std::move(other.m_path)},
+      m_durableFile{std::move(other.m_durableFile)},
+      m_channels{std::move(other.m_channels)},
+      m_channelStates{std::move(other.m_channelStates)},
+      m_scratchBuffer{std::move(other.m_scratchBuffer)},
+      m_stickyError{std::move(other.m_stickyError)},
+      m_creator{std::move(other.m_creator)},
+      m_tag{std::move(other.m_tag)},
+      m_reason{std::move(other.m_reason)},
+      m_createdAtLatitude{other.m_createdAtLatitude},
+      m_createdAtLongitude{other.m_createdAtLongitude},
+      m_createdAtAltitude{other.m_createdAtAltitude},
+      m_namespaceSep{std::move(other.m_namespaceSep)},
+      m_comment{std::move(other.m_comment)} {
+    other.m_state = State::Closed;
 }
 
 StreamingWriter& StreamingWriter::operator=(StreamingWriter&& other) noexcept {
     if (this != &other) {
         (void) close();
-        state_                 = other.state_;
-        path_                  = std::move(other.path_);
-        durable_file_          = std::move(other.durable_file_);
-        channels_              = std::move(other.channels_);
-        channel_states_        = std::move(other.channel_states_);
-        scratch_buffer_        = std::move(other.scratch_buffer_);
-        sticky_error_          = std::move(other.sticky_error_);
-        creator_               = std::move(other.creator_);
-        tag_                   = std::move(other.tag_);
-        reason_                = std::move(other.reason_);
-        created_at_latitude_   = other.created_at_latitude_;
-        created_at_longitude_  = other.created_at_longitude_;
-        created_at_altitude_   = other.created_at_altitude_;
-        namespace_sep_         = std::move(other.namespace_sep_);
-        comment_               = std::move(other.comment_);
-        other.state_ = State::Closed;
+        m_state                 = other.m_state;
+        m_path                  = std::move(other.m_path);
+        m_durableFile          = std::move(other.m_durableFile);
+        m_channels              = std::move(other.m_channels);
+        m_channelStates        = std::move(other.m_channelStates);
+        m_scratchBuffer        = std::move(other.m_scratchBuffer);
+        m_stickyError          = std::move(other.m_stickyError);
+        m_creator               = std::move(other.m_creator);
+        m_tag                   = std::move(other.m_tag);
+        m_reason                = std::move(other.m_reason);
+        m_createdAtLatitude   = other.m_createdAtLatitude;
+        m_createdAtLongitude  = other.m_createdAtLongitude;
+        m_createdAtAltitude   = other.m_createdAtAltitude;
+        m_namespaceSep         = std::move(other.m_namespaceSep);
+        m_comment               = std::move(other.m_comment);
+        other.m_state = State::Closed;
     }
     return *this;
 }
 
 // ── File-info setters ────────────────────────────────────────────────
 
-void StreamingWriter::setCreator(std::string value)       { creator_   = std::move(value); }
-void StreamingWriter::setTag(std::string value)           { tag_       = std::move(value); }
-void StreamingWriter::setReason(std::string value)        { reason_    = std::move(value); }
-void StreamingWriter::setNamespaceSep(std::string value) { namespace_sep_ = std::move(value); }
-void StreamingWriter::setComment(std::string value)       { comment_   = std::move(value); }
+void StreamingWriter::setCreator(std::string value)       { m_creator   = std::move(value); }
+void StreamingWriter::setTag(std::string value)           { m_tag       = std::move(value); }
+void StreamingWriter::setReason(std::string value)        { m_reason    = std::move(value); }
+void StreamingWriter::setNamespaceSep(std::string value) { m_namespaceSep = std::move(value); }
+void StreamingWriter::setComment(std::string value)       { m_comment   = std::move(value); }
 
 void StreamingWriter::setLocation(double latitude, double longitude,
                                    double altitude) {
-    created_at_latitude_  = latitude;
-    created_at_longitude_ = longitude;
-    created_at_altitude_  = altitude;
+    m_createdAtLatitude  = latitude;
+    m_createdAtLongitude = longitude;
+    m_createdAtAltitude  = altitude;
 }
 
 // ── addChannel ──────────────────────────────────────────────────────
 
 Result<std::uint16_t> StreamingWriter::addChannel(ChannelDef def) {
-    if (state_ != State::Configure) {
+    if (m_state != State::Configure) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
             "addChannel: writer is past the Configure phase"));
@@ -158,55 +158,55 @@ Result<std::uint16_t> StreamingWriter::addChannel(ChannelDef def) {
             Error::Code::InvalidArgument,
             "addChannel: channelType Unsupported is not writeable"));
     }
-    if (channels_.size() >= 0xFFFF) {
+    if (m_channels.size() >= 0xFFFF) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
             "addChannel: too many channels (max 65535)"));
     }
 
-    auto const idx = static_cast<std::uint16_t>(channels_.size());
+    auto const idx = static_cast<std::uint16_t>(m_channels.size());
     detail::ChannelState st;
     st.datatype_lock = def.dataType;
-    channels_.push_back(std::move(def));
-    channel_states_.push_back(st);
+    m_channels.push_back(std::move(def));
+    m_channelStates.push_back(st);
     return idx;
 }
 
 // ── start / close ────────────────────────────────────────────────────
 
 Result<void> StreamingWriter::start() {
-    if (state_ == State::Broken) {
-        return tl::make_unexpected(*sticky_error_);
+    if (m_state == State::Broken) {
+        return tl::make_unexpected(*m_stickyError);
     }
-    if (state_ != State::Configure) {
+    if (m_state != State::Configure) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
             "start: writer is past the Configure phase"));
     }
-    if (channels_.empty()) {
+    if (m_channels.empty()) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
             "start: no channels declared"));
     }
 
     // Open the file via DurableFile.
-    auto df = detail::DurableFile::create(path_);
+    auto df = detail::DurableFile::create(m_path);
     if (!df) {
         return tl::make_unexpected(df.error());
     }
-    durable_file_ = std::make_unique<detail::DurableFile>(std::move(*df));
+    m_durableFile = std::make_unique<detail::DurableFile>(std::move(*df));
 
     // Build the MetaBlock from configuration state.
     detail::FileInfoDraft fi;
-    fi.creator = creator_;
-    fi.tag = tag_;
-    fi.reason = reason_;
-    fi.createdAtLatitude = created_at_latitude_;
-    fi.createdAtLongitude = created_at_longitude_;
-    fi.createdAtAltitude = created_at_altitude_;
-    fi.namespaceSep = namespace_sep_;
-    fi.comment = comment_;
-    MetaBlock meta = detail::build_metablock(fi, channels_);
+    fi.creator = m_creator;
+    fi.tag = m_tag;
+    fi.reason = m_reason;
+    fi.createdAtLatitude = m_createdAtLatitude;
+    fi.createdAtLongitude = m_createdAtLongitude;
+    fi.createdAtAltitude = m_createdAtAltitude;
+    fi.namespaceSep = m_namespaceSep;
+    fi.comment = m_comment;
+    MetaBlock meta = detail::build_metablock(fi, m_channels);
 
     // Serialize the metablock and build the magic-header line.
     std::string const json_body = serializeMetablockJson(meta);
@@ -215,55 +215,55 @@ Result<void> StreamingWriter::start() {
 
     // Helper for best-effort unlink + failed-start cleanup.
     auto fail_with_unlink = [&](Error err) -> Result<void> {
-        (void) durable_file_->close();
-        durable_file_.reset();
+        (void) m_durableFile->close();
+        m_durableFile.reset();
         std::error_code ec;
-        std::filesystem::remove(path_, ec);
+        std::filesystem::remove(m_path, ec);
         return tl::make_unexpected(std::move(err));
     };
 
     // Write magic header.
-    if (auto wr = durable_file_->write(
+    if (auto wr = m_durableFile->write(
             reinterpret_cast<std::uint8_t const*>(magic_line.data()),
             magic_line.size()); !wr) {
         return fail_with_unlink(wr.error());
     }
     // Write metablock JSON body.
-    if (auto wr = durable_file_->write(
+    if (auto wr = m_durableFile->write(
             reinterpret_cast<std::uint8_t const*>(json_body.data()),
             json_body.size()); !wr) {
         return fail_with_unlink(wr.error());
     }
     // fsync.
-    if (auto sync = durable_file_->force(); !sync) {
+    if (auto sync = m_durableFile->force(); !sync) {
         return fail_with_unlink(sync.error());
     }
 
-    scratch_buffer_.reserve(4096);
-    state_ = State::Streaming;
+    m_scratchBuffer.reserve(4096);
+    m_state = State::Streaming;
     return {};
 }
 
 Result<void> StreamingWriter::close() {
-    if (state_ == State::Closed) {
+    if (m_state == State::Closed) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument, "close: writer already closed"));
     }
 
     Result<void> result{};
-    if (state_ == State::Broken) {
+    if (m_state == State::Broken) {
         // Sticky error is the result regardless of file-close outcome.
-        result = tl::make_unexpected(*sticky_error_);
+        result = tl::make_unexpected(*m_stickyError);
     }
 
-    if (durable_file_) {
-        if (auto cr = durable_file_->close(); !cr && state_ != State::Broken) {
+    if (m_durableFile) {
+        if (auto cr = m_durableFile->close(); !cr && m_state != State::Broken) {
             result = tl::make_unexpected(cr.error());
         }
-        durable_file_.reset();
+        m_durableFile.reset();
     }
 
-    state_ = State::Closed;
+    m_state = State::Closed;
     return result;
 }
 
@@ -271,23 +271,23 @@ Result<void> StreamingWriter::close() {
 
 Result<void> StreamingWriter::doWriteBlock(std::uint8_t const* data,
                                              std::size_t size) {
-    if (state_ == State::Broken) {
-        return tl::make_unexpected(*sticky_error_);
+    if (m_state == State::Broken) {
+        return tl::make_unexpected(*m_stickyError);
     }
-    if (state_ != State::Streaming) {
+    if (m_state != State::Streaming) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
             "doWriteBlock: writer not in Streaming state"));
     }
-    if (auto wr = durable_file_->write(data, size); !wr) {
-        state_ = State::Broken;
-        sticky_error_ = wr.error();
-        return tl::make_unexpected(*sticky_error_);
+    if (auto wr = m_durableFile->write(data, size); !wr) {
+        m_state = State::Broken;
+        m_stickyError = wr.error();
+        return tl::make_unexpected(*m_stickyError);
     }
-    if (auto sync = durable_file_->force(); !sync) {
-        state_ = State::Broken;
-        sticky_error_ = sync.error();
-        return tl::make_unexpected(*sticky_error_);
+    if (auto sync = m_durableFile->force(); !sync) {
+        m_state = State::Broken;
+        m_stickyError = sync.error();
+        return tl::make_unexpected(*m_stickyError);
     }
     return {};
 }
@@ -295,16 +295,16 @@ Result<void> StreamingWriter::doWriteBlock(std::uint8_t const* data,
 // ── require_* helpers ────────────────────────────────────────────────
 
 std::uint8_t StreamingWriter::sovFor(std::uint16_t channel) const noexcept {
-    assert(channel < channels_.size());
-    return channels_[channel].sizeOfLengthValue;
+    assert(channel < m_channels.size());
+    return m_channels[channel].sizeOfLengthValue;
 }
 
 std::optional<Error> StreamingWriter::requireStreamingState() const {
-    if (state_ == State::Broken) return *sticky_error_;
-    if (state_ == State::Closed) {
+    if (m_state == State::Broken) return *m_stickyError;
+    if (m_state == State::Closed) {
         return make_error(Error::Code::InvalidArgument, "writer is closed");
     }
-    if (state_ == State::Configure) {
+    if (m_state == State::Configure) {
         return make_error(Error::Code::InvalidArgument,
                           "call start() before write*");
     }
@@ -314,11 +314,11 @@ std::optional<Error> StreamingWriter::requireStreamingState() const {
 std::optional<Error> StreamingWriter::requireEquidistantChannel(
         std::uint16_t channel, DataType expected) {
     if (auto err = requireStreamingState()) return err;
-    if (channel >= channels_.size()) {
+    if (channel >= m_channels.size()) {
         return make_error(Error::Code::InvalidArgument,
                           "channel index out of range");
     }
-    auto& st = channel_states_[channel];
+    auto& st = m_channelStates[channel];
     if (st.kind_lock != detail::ChannelState::BlockKindLock::Unset &&
         st.kind_lock != detail::ChannelState::BlockKindLock::Equidistant) {
         return make_error(Error::Code::InvalidBlock,
@@ -337,11 +337,11 @@ std::optional<Error> StreamingWriter::requireEquidistantChannel(
 std::optional<Error> StreamingWriter::requireTimestampedChannel(
         std::uint16_t channel, DataType expected) {
     if (auto err = requireStreamingState()) return err;
-    if (channel >= channels_.size()) {
+    if (channel >= m_channels.size()) {
         return make_error(Error::Code::InvalidArgument,
                           "channel index out of range");
     }
-    auto& st = channel_states_[channel];
+    auto& st = m_channelStates[channel];
     if (st.kind_lock != detail::ChannelState::BlockKindLock::Unset &&
         st.kind_lock != detail::ChannelState::BlockKindLock::Timestamped) {
         return make_error(Error::Code::InvalidBlock,
@@ -360,11 +360,11 @@ std::optional<Error> StreamingWriter::requireTimestampedChannel(
 std::optional<Error> StreamingWriter::requireVariableChannel(
         std::uint16_t channel, DataType expected) {
     if (auto err = requireStreamingState()) return err;
-    if (channel >= channels_.size()) {
+    if (channel >= m_channels.size()) {
         return make_error(Error::Code::InvalidArgument,
                           "channel index out of range");
     }
-    auto& st = channel_states_[channel];
+    auto& st = m_channelStates[channel];
     if (st.kind_lock != detail::ChannelState::BlockKindLock::Unset &&
         st.kind_lock != detail::ChannelState::BlockKindLock::Variable) {
         return make_error(Error::Code::InvalidBlock,
@@ -433,14 +433,14 @@ Result<void> StreamingWriter::writeTimestampedGpsSamples(
     while (written < count) {
         std::size_t const chunk =
             std::min(count - written, max_per_block);
-        scratch_buffer_.clear();
+        m_scratchBuffer.clear();
         if (auto enc = osf::detail::encode_abs_timestamp_data_gps(
-                scratch_buffer_, channel, sov,
+                m_scratchBuffer, channel, sov,
                 timestampsNs + written, values + written, chunk); !enc) {
             return enc;
         }
-        if (auto wr = doWriteBlock(scratch_buffer_.data(),
-                                      scratch_buffer_.size()); !wr) {
+        if (auto wr = doWriteBlock(m_scratchBuffer.data(),
+                                      m_scratchBuffer.size()); !wr) {
             return wr;
         }
         written += chunk;
@@ -478,12 +478,12 @@ Result<void> StreamingWriter::writeTimestampedString(
                 "addChannel() time for channels that may carry larger "
                 "payloads."));
     }
-    scratch_buffer_.clear();
+    m_scratchBuffer.clear();
     if (auto enc = osf::detail::encode_abs_timestamp_data(
-            scratch_buffer_, channel, sov, timestampNs, value); !enc) {
+            m_scratchBuffer, channel, sov, timestampNs, value); !enc) {
         return enc;
     }
-    return doWriteBlock(scratch_buffer_.data(), scratch_buffer_.size());
+    return doWriteBlock(m_scratchBuffer.data(), m_scratchBuffer.size());
 }
 
 Result<void> StreamingWriter::writeTimestampedBinary(
@@ -505,12 +505,12 @@ Result<void> StreamingWriter::writeTimestampedBinary(
                 "addChannel() time for channels that may carry larger "
                 "payloads."));
     }
-    scratch_buffer_.clear();
+    m_scratchBuffer.clear();
     if (auto enc = osf::detail::encode_abs_timestamp_data(
-            scratch_buffer_, channel, sov, timestampNs, value); !enc) {
+            m_scratchBuffer, channel, sov, timestampNs, value); !enc) {
         return enc;
     }
-    return doWriteBlock(scratch_buffer_.data(), scratch_buffer_.size());
+    return doWriteBlock(m_scratchBuffer.data(), m_scratchBuffer.size());
 }
 
 // ── writeTimestampedSamplesImpl<T> ────────────────────────────────
@@ -537,14 +537,14 @@ Result<void> StreamingWriter::writeTimestampedSamplesImpl(
     while (written < count) {
         std::size_t const chunk =
             std::min(count - written, max_per_block);
-        scratch_buffer_.clear();
+        m_scratchBuffer.clear();
         if (auto enc = osf::detail::encode_abs_timestamp_data<T>(
-                scratch_buffer_, channel, sov,
+                m_scratchBuffer, channel, sov,
                 timestampsNs + written, values + written, chunk); !enc) {
             return enc;
         }
-        if (auto wr = doWriteBlock(scratch_buffer_.data(),
-                                      scratch_buffer_.size()); !wr) {
+        if (auto wr = doWriteBlock(m_scratchBuffer.data(),
+                                      m_scratchBuffer.size()); !wr) {
             return wr;
         }
         written += chunk;
@@ -582,31 +582,31 @@ Result<void> StreamingWriter::startEquidistantSegmentImpl(
 
     // First chunk as bcStartData.
     std::size_t const first = std::min(count, max_first);
-    scratch_buffer_.clear();
+    m_scratchBuffer.clear();
     if (auto enc = osf::detail::encode_start_data<T>(
-            scratch_buffer_, channel, sov, start_ts, rate,
+            m_scratchBuffer, channel, sov, start_ts, rate,
             samples, first); !enc) {
         return enc;
     }
-    if (auto wr = doWriteBlock(scratch_buffer_.data(),
-                                  scratch_buffer_.size()); !wr) {
+    if (auto wr = doWriteBlock(m_scratchBuffer.data(),
+                                  m_scratchBuffer.size()); !wr) {
         return wr;
     }
-    channel_states_[channel].segment_open = true;
+    m_channelStates[channel].segment_open = true;
 
     // Remaining chunks as bcContinuedData.
     std::size_t written = first;
     while (written < count) {
         std::size_t const chunk =
             std::min(count - written, max_cont);
-        scratch_buffer_.clear();
+        m_scratchBuffer.clear();
         if (auto enc = osf::detail::encode_continued_data<T>(
-                scratch_buffer_, channel, sov,
+                m_scratchBuffer, channel, sov,
                 samples + written, chunk); !enc) {
             return enc;
         }
-        if (auto wr = doWriteBlock(scratch_buffer_.data(),
-                                      scratch_buffer_.size()); !wr) {
+        if (auto wr = doWriteBlock(m_scratchBuffer.data(),
+                                      m_scratchBuffer.size()); !wr) {
             return wr;
         }
         written += chunk;
@@ -626,7 +626,7 @@ Result<void> StreamingWriter::appendEquidistantSamplesImpl(
             channel, data_type_for<T>())) {
         return tl::make_unexpected(*err);
     }
-    if (!channel_states_[channel].segment_open) {
+    if (!m_channelStates[channel].segment_open) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidBlock,
             "channel " + std::to_string(channel) +
@@ -641,14 +641,14 @@ Result<void> StreamingWriter::appendEquidistantSamplesImpl(
     while (written < count) {
         std::size_t const chunk =
             std::min(count - written, max_cont);
-        scratch_buffer_.clear();
+        m_scratchBuffer.clear();
         if (auto enc = osf::detail::encode_continued_data<T>(
-                scratch_buffer_, channel, sov,
+                m_scratchBuffer, channel, sov,
                 samples + written, chunk); !enc) {
             return enc;
         }
-        if (auto wr = doWriteBlock(scratch_buffer_.data(),
-                                      scratch_buffer_.size()); !wr) {
+        if (auto wr = doWriteBlock(m_scratchBuffer.data(),
+                                      m_scratchBuffer.size()); !wr) {
             return wr;
         }
         written += chunk;

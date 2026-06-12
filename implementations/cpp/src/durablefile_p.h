@@ -70,9 +70,9 @@ public:
 
 private:
 #ifdef _WIN32
-    void* handle_ = nullptr;   // HANDLE; nullptr means closed
+    void* m_handle = nullptr;   // HANDLE; nullptr means closed
 #else
-    int fd_ = -1;              // POSIX file descriptor; -1 means closed
+    int m_fd = -1;              // POSIX file descriptor; -1 means closed
 #endif
 
     DurableFile() = default;   // create() is the only public factory

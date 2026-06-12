@@ -76,7 +76,7 @@ public:
 
 private:
     class Streambuf;                       // defined in src/compression.cpp
-    std::unique_ptr<Streambuf> buf_;
+    std::unique_ptr<Streambuf> m_buf;
 };
 
 }  // namespace osf
