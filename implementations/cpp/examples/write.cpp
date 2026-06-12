@@ -12,7 +12,7 @@
 //
 // Prints the file size on success.
 
-#include <osf/osf.hpp>
+#include <osf/osf.h>
 
 #include <cmath>
 #include <cstdint>

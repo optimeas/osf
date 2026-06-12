@@ -3,7 +3,7 @@
 
 #include <gtest/gtest.h>
 
-#include <osf/osf.hpp>
+#include <osf/osf.h>
 
 #include <filesystem>
 #include <string>

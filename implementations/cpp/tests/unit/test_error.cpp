@@ -7,7 +7,7 @@
 
 #include <gtest/gtest.h>
 
-#include <osf/osf.hpp>
+#include <osf/osf.h>
 
 namespace {
 

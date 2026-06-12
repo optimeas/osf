@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 //
-// Unit tests for the stats helpers in <osf/stats.hpp>.
+// Unit tests for the stats helpers in <osf/stats.h>.
 
 #include <gtest/gtest.h>
 
-#include <osf/stats.hpp>
+#include <osf/stats.h>
 
 #include <chrono>
 #include <sstream>

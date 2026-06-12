@@ -9,7 +9,7 @@
 // Prints file-level metadata (version, creator, created_utc, compression)
 // and a one-line summary per channel.
 
-#include <osf/osf.hpp>
+#include <osf/osf.h>
 
 #include <algorithm>
 #include <cstddef>

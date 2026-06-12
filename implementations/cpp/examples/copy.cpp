@@ -10,7 +10,7 @@
 // writes a fresh OSF5 file to <out> via osf::write_to_file,
 // reloads <out> and confirms that channel counts match.
 
-#include <osf/osf.hpp>
+#include <osf/osf.h>
 
 #include <cstdint>
 #include <filesystem>

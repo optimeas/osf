@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
-#include <osf/stats.hpp>
+#include <osf/stats.h>
 
 #include <cstdio>
 #include <ostream>

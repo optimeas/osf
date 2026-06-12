@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
-#include <osf/metablock.hpp>
+#include <osf/metablock.h>
 
 #include <climits>
 #include <sstream>

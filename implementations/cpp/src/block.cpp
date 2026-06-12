@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
-#include <osf/block.hpp>
+#include <osf/block.h>
 
 namespace osf {
 

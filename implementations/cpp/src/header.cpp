@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
-#include <osf/header.hpp>
+#include <osf/header.h>
 
 #include <charconv>
 #include <fstream>

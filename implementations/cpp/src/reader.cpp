@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
-#include <osf/reader.hpp>
+#include <osf/reader.h>
 
-#include "binary_io.hpp"
+#include "binaryio_p.h"
 
 #include <cstring>
 #include <istream>

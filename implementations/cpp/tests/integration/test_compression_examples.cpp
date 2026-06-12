@@ -6,15 +6,15 @@
 // confirms it loads through DataManager identically to the plain source,
 // and loads the real gzip-OSFZ field sample weather_station.osfz.
 
-#include "roundtrip_helper.hpp"
+#include "roundtriphelper.h"
 
 #include <zlib.h>
 
 #include <gtest/gtest.h>
 
-#include <osf/compression.hpp>
-#include <osf/data_channel.hpp>
-#include <osf/manager.hpp>
+#include <osf/compression.h>
+#include <osf/datachannel.h>
+#include <osf/manager.h>
 
 #include <cstddef>
 #include <filesystem>

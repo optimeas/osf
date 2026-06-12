@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
-#include <osf/manager.hpp>
+#include <osf/manager.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -12,11 +12,11 @@
 #include <utility>
 #include <vector>
 
-#include <osf/block.hpp>
-#include <osf/compression.hpp>
-#include <osf/header.hpp>
-#include <osf/reader.hpp>
-#include <osf/types.hpp>
+#include <osf/block.h>
+#include <osf/compression.h>
+#include <osf/header.h>
+#include <osf/reader.h>
+#include <osf/types.h>
 
 namespace osf {
 

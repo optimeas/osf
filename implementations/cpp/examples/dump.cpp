@@ -10,7 +10,7 @@
 // max-samples defaults to 20.  String/binary channels are noted but not
 // printed sample-by-sample (they display a count + first/last timestamp).
 
-#include <osf/osf.hpp>
+#include <osf/osf.h>
 
 #include <cstdlib>
 #include <iomanip>

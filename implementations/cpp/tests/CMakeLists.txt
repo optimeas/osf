@@ -97,7 +97,7 @@ gtest_discover_tests(test_metablock)
 # ---------------------------------------------------------------------------
 
 add_executable(test_metablock_xml
-    unit/test_metablock_xml.cpp
+    unit/test_metablockxml.cpp
 )
 
 target_link_libraries(test_metablock_xml PRIVATE
@@ -165,7 +165,7 @@ gtest_discover_tests(test_reader)
 # ---------------------------------------------------------------------------
 
 add_executable(test_data_channel
-    unit/test_data_channel.cpp
+    unit/test_datachannel.cpp
 )
 
 target_link_libraries(test_data_channel PRIVATE
@@ -199,7 +199,7 @@ gtest_discover_tests(test_manager)
 # ---------------------------------------------------------------------------
 
 add_executable(test_block_encode
-    unit/test_block_encode.cpp
+    unit/test_blockencode.cpp
 )
 
 target_link_libraries(test_block_encode PRIVATE
@@ -221,7 +221,7 @@ gtest_discover_tests(test_block_encode)
 # ---------------------------------------------------------------------------
 
 add_executable(test_durable_file
-    unit/test_durable_file.cpp
+    unit/test_durablefile.cpp
 )
 
 target_link_libraries(test_durable_file PRIVATE
@@ -243,7 +243,7 @@ gtest_discover_tests(test_durable_file)
 # ---------------------------------------------------------------------------
 
 add_executable(test_streaming_writer
-    unit/test_streaming_writer.cpp
+    unit/test_streamingwriter.cpp
 )
 
 target_link_libraries(test_streaming_writer PRIVATE
@@ -260,7 +260,7 @@ gtest_discover_tests(test_streaming_writer)
 # ---------------------------------------------------------------------------
 
 add_executable(test_block_writer
-    unit/test_block_writer.cpp
+    unit/test_blockwriter.cpp
 )
 
 target_link_libraries(test_block_writer PRIVATE
@@ -277,7 +277,7 @@ gtest_discover_tests(test_block_writer)
 # ---------------------------------------------------------------------------
 
 add_executable(test_stale_value_guard
-    unit/test_stale_value_guard.cpp
+    unit/test_stalevalueguard.cpp
 )
 
 target_link_libraries(test_stale_value_guard PRIVATE
@@ -291,7 +291,7 @@ gtest_discover_tests(test_stale_value_guard)
 
 # ---------------------------------------------------------------------------
 # test_throwing — opt-in throwing convenience layer unit tests.
-# Includes integration/roundtrip_helper.hpp for the write round-trips.
+# Includes integration/roundtriphelper.h for the write round-trips.
 # ---------------------------------------------------------------------------
 
 add_executable(test_throwing
@@ -315,7 +315,7 @@ gtest_discover_tests(test_throwing)
 # ---------------------------------------------------------------------------
 
 add_executable(test_writer_common
-    unit/test_writer_common.cpp
+    unit/test_writercommon.cpp
 )
 
 target_link_libraries(test_writer_common PRIVATE
@@ -383,7 +383,7 @@ gtest_discover_tests(test_metablock_examples)
 # ---------------------------------------------------------------------------
 
 add_executable(test_metablock_xml_examples
-    integration/test_metablock_xml_examples.cpp
+    integration/test_metablockxml_examples.cpp
 )
 
 target_link_libraries(test_metablock_xml_examples PRIVATE
@@ -448,7 +448,7 @@ gtest_discover_tests(test_manager_examples)
 # ---------------------------------------------------------------------------
 
 add_executable(test_streaming_writer_examples
-    integration/test_streaming_writer_examples.cpp
+    integration/test_streamingwriter_examples.cpp
 )
 
 target_link_libraries(test_streaming_writer_examples PRIVATE
@@ -459,7 +459,7 @@ target_link_libraries(test_streaming_writer_examples PRIVATE
 target_compile_definitions(test_streaming_writer_examples PRIVATE
     OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
 
-# roundtrip_helper.hpp lives in the integration/ source dir.
+# roundtriphelper.h lives in the integration/ source dir.
 target_include_directories(test_streaming_writer_examples PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/integration")
 
@@ -473,7 +473,7 @@ gtest_discover_tests(test_streaming_writer_examples)
 # ---------------------------------------------------------------------------
 
 add_executable(test_block_writer_examples
-    integration/test_block_writer_examples.cpp
+    integration/test_blockwriter_examples.cpp
 )
 
 target_link_libraries(test_block_writer_examples PRIVATE
@@ -484,7 +484,7 @@ target_link_libraries(test_block_writer_examples PRIVATE
 target_compile_definitions(test_block_writer_examples PRIVATE
     OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
 
-# roundtrip_helper.hpp lives in the integration/ source dir.
+# roundtriphelper.h lives in the integration/ source dir.
 target_include_directories(test_block_writer_examples PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/integration")
 
@@ -533,7 +533,7 @@ target_link_libraries(test_compression_examples PRIVATE
 target_compile_definitions(test_compression_examples PRIVATE
     OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
 
-# roundtrip_helper.hpp lives in the integration/ source dir.
+# roundtriphelper.h lives in the integration/ source dir.
 target_include_directories(test_compression_examples PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/integration")
 
@@ -552,7 +552,7 @@ gtest_discover_tests(test_compression_examples)
 # ---------------------------------------------------------------------------
 
 if(OSF_BUILD_C_API)
-    add_executable(test_c_api c_api/test_c_api.c)
+    add_executable(test_c_api capi/test_capi.c)
     set_target_properties(test_c_api PROPERTIES LINKER_LANGUAGE C)
     target_link_libraries(test_c_api PRIVATE osf_c)
     target_compile_definitions(test_c_api PRIVATE

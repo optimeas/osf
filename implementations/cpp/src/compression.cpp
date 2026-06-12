@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
-#include "osf/compression.hpp"
+#include "osf/compression.h"
 
 #include <zlib.h>
 

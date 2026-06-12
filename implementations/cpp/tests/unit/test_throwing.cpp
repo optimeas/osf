@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
-#include "osf/throwing.hpp"
+#include "osf/throwing.h"
 
-#include "osf/block_writer.hpp"
-#include "osf/data_channel.hpp"
-#include "osf/error.hpp"
-#include "osf/manager.hpp"
-#include "osf/streaming_writer.hpp"
-#include "osf/types.hpp"
+#include "osf/blockwriter.h"
+#include "osf/datachannel.h"
+#include "osf/error.h"
+#include "osf/manager.h"
+#include "osf/streamingwriter.h"
+#include "osf/types.h"
 
-#include "roundtrip_helper.hpp"
+#include "roundtriphelper.h"
 
 #include <gtest/gtest.h>
 
