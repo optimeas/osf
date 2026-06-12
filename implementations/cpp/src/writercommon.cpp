@@ -19,7 +19,7 @@ namespace {
 // Rust writer's format_utc_now (sub-second precision intentionally
 // dropped — same rationale: the spec never needed it; extend
 // additively if a future revision does).
-std::string now_utc_iso8601() {
+std::string nowUtcIso8601() {
     auto const now = std::chrono::system_clock::now();
     std::time_t const t = std::chrono::system_clock::to_time_t(now);
     std::tm tm{};
@@ -39,42 +39,42 @@ std::string now_utc_iso8601() {
 
 }  // namespace
 
-std::size_t max_samples_per_start_block(std::size_t value_size,
+std::size_t maxSamplesPerStartBlock(std::size_t valueSize,
                                         std::uint8_t sov) noexcept {
     constexpr std::size_t OVERHEAD = 1u + 8u + 8u + 4u;
-    std::size_t const max_payload = max_payload_for_sov(sov);
-    if (max_payload <= OVERHEAD) return 1;
-    std::size_t const samples = (max_payload - OVERHEAD) / value_size;
+    std::size_t const maxPayload = maxPayloadForSov(sov);
+    if (maxPayload <= OVERHEAD) return 1;
+    std::size_t const samples = (maxPayload - OVERHEAD) / valueSize;
     return (samples == 0) ? 1u : samples;
 }
 
-std::size_t max_samples_per_continued_block(std::size_t value_size,
+std::size_t maxSamplesPerContinuedBlock(std::size_t valueSize,
                                             std::uint8_t sov) noexcept {
     constexpr std::size_t OVERHEAD = 1u + 4u;
-    std::size_t const max_payload = max_payload_for_sov(sov);
-    if (max_payload <= OVERHEAD) return 1;
-    std::size_t const samples = (max_payload - OVERHEAD) / value_size;
+    std::size_t const maxPayload = maxPayloadForSov(sov);
+    if (maxPayload <= OVERHEAD) return 1;
+    std::size_t const samples = (maxPayload - OVERHEAD) / valueSize;
     return (samples == 0) ? 1u : samples;
 }
 
-std::size_t max_samples_per_timestamped_block(std::size_t value_size,
+std::size_t maxSamplesPerTimestampedBlock(std::size_t valueSize,
                                               std::uint8_t sov) noexcept {
     constexpr std::size_t OVERHEAD = 1u + 4u;
-    std::size_t const per_sample = 8u + value_size;
-    std::size_t const max_payload = max_payload_for_sov(sov);
-    if (max_payload <= OVERHEAD) return 1;
-    std::size_t const samples = (max_payload - OVERHEAD) / per_sample;
+    std::size_t const perSample = 8u + valueSize;
+    std::size_t const maxPayload = maxPayloadForSov(sov);
+    if (maxPayload <= OVERHEAD) return 1;
+    std::size_t const samples = (maxPayload - OVERHEAD) / perSample;
     return (samples == 0) ? 1u : samples;
 }
 
-std::size_t variable_sample_capacity(std::uint8_t sov) noexcept {
-    std::size_t const max_payload = max_payload_for_sov(sov);
-    return (max_payload <= VARIABLE_BLOCK_OVERHEAD_BYTES)
+std::size_t variableSampleCapacity(std::uint8_t sov) noexcept {
+    std::size_t const maxPayload = maxPayloadForSov(sov);
+    return (maxPayload <= VARIABLE_BLOCK_OVERHEAD_BYTES)
                ? 0u
-               : (max_payload - VARIABLE_BLOCK_OVERHEAD_BYTES);
+               : (maxPayload - VARIABLE_BLOCK_OVERHEAD_BYTES);
 }
 
-MetaBlock build_metablock(FileInfoDraft const& fi,
+MetaBlock buildMetablock(FileInfoDraft const& fi,
                           std::vector<ChannelDef> const& channels) {
     MetaBlock meta;
     meta.fileInfo.version              = 5;
@@ -83,7 +83,7 @@ MetaBlock build_metablock(FileInfoDraft const& fi,
     // back to "osf-cpp/<library-version>"; tag falls back to
     // "default". reason and the created_at_* triple stay omitted when
     // unset (not written as null).
-    meta.fileInfo.createdUtc          = now_utc_iso8601();
+    meta.fileInfo.createdUtc          = nowUtcIso8601();
     meta.fileInfo.creator              = fi.creator.has_value()
         ? fi.creator
         : std::optional<std::string>{"osf-cpp/" + std::string{version()}};

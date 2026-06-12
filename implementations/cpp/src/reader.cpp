@@ -19,11 +19,11 @@ namespace osf {
 
 namespace {
 
-Error invalid_block(std::string msg) {
+Error invalidBlock(std::string msg) {
     return Error{Error::Code::InvalidBlock, std::move(msg)};
 }
 
-Error io_error(std::string msg) {
+Error ioError(std::string msg) {
     return Error{Error::Code::IoError, std::move(msg)};
 }
 
@@ -31,7 +31,7 @@ Error io_error(std::string msg) {
 // - `Ok(true)`  — full `len` bytes consumed.
 // - `Ok(false)` — stream truncated; reached EOF early.
 // - `Err`       — non-EOF I/O failure.
-Result<bool> stream_read_n(std::istream& s, void* dst, std::streamsize len) {
+Result<bool> streamReadN(std::istream& s, void* dst, std::streamsize len) {
     if (len == 0) return true;
     s.read(static_cast<char*>(dst), len);
     if (s.gcount() == len) return true;
@@ -39,7 +39,7 @@ Result<bool> stream_read_n(std::istream& s, void* dst, std::streamsize len) {
         s.clear();  // reset eofbit so subsequent calls behave predictably
         return false;
     }
-    return tl::make_unexpected(io_error("istream::read failed before EOF"));
+    return tl::make_unexpected(ioError("istream::read failed before EOF"));
 }
 
 // ---------------------------------------------------------------------
@@ -57,52 +57,52 @@ public:
     [[nodiscard]] std::size_t pos() const noexcept { return m_pos; }
     [[nodiscard]] std::uint8_t const* tail() const noexcept { return m_data + m_pos; }
 
-    std::optional<std::uint8_t> read_u8() {
+    std::optional<std::uint8_t> readU8() {
         if (remaining() < 1) return std::nullopt;
         return m_data[m_pos++];
     }
-    std::optional<std::uint16_t> read_u16() {
+    std::optional<std::uint16_t> readU16() {
         if (remaining() < 2) return std::nullopt;
-        auto v = osf::detail::read_le_u16(m_data + m_pos); m_pos += 2; return v;
+        auto v = osf::detail::readLeU16(m_data + m_pos); m_pos += 2; return v;
     }
-    std::optional<std::uint32_t> read_u32() {
+    std::optional<std::uint32_t> readU32() {
         if (remaining() < 4) return std::nullopt;
-        auto v = osf::detail::read_le_u32(m_data + m_pos); m_pos += 4; return v;
+        auto v = osf::detail::readLeU32(m_data + m_pos); m_pos += 4; return v;
     }
-    std::optional<std::uint64_t> read_u64() {
+    std::optional<std::uint64_t> readU64() {
         if (remaining() < 8) return std::nullopt;
-        auto v = osf::detail::read_le_u64(m_data + m_pos); m_pos += 8; return v;
+        auto v = osf::detail::readLeU64(m_data + m_pos); m_pos += 8; return v;
     }
-    std::optional<std::int8_t>  read_i8() {
-        auto v = read_u8();
+    std::optional<std::int8_t>  readI8() {
+        auto v = readU8();
         return v ? std::optional<std::int8_t>{static_cast<std::int8_t>(*v)}
                  : std::nullopt;
     }
-    std::optional<std::int16_t> read_i16() {
-        auto v = read_u16();
+    std::optional<std::int16_t> readI16() {
+        auto v = readU16();
         return v ? std::optional<std::int16_t>{static_cast<std::int16_t>(*v)}
                  : std::nullopt;
     }
-    std::optional<std::int32_t> read_i32() {
-        auto v = read_u32();
+    std::optional<std::int32_t> readI32() {
+        auto v = readU32();
         return v ? std::optional<std::int32_t>{static_cast<std::int32_t>(*v)}
                  : std::nullopt;
     }
-    std::optional<std::int64_t> read_i64() {
-        auto v = read_u64();
+    std::optional<std::int64_t> readI64() {
+        auto v = readU64();
         return v ? std::optional<std::int64_t>{static_cast<std::int64_t>(*v)}
                  : std::nullopt;
     }
-    std::optional<float>  read_f32() {
+    std::optional<float>  readF32() {
         if (remaining() < 4) return std::nullopt;
-        auto v = osf::detail::read_le_f32(m_data + m_pos); m_pos += 4; return v;
+        auto v = osf::detail::readLeF32(m_data + m_pos); m_pos += 4; return v;
     }
-    std::optional<double> read_f64() {
+    std::optional<double> readF64() {
         if (remaining() < 8) return std::nullopt;
-        auto v = osf::detail::read_le_f64(m_data + m_pos); m_pos += 8; return v;
+        auto v = osf::detail::readLeF64(m_data + m_pos); m_pos += 8; return v;
     }
-    std::optional<bool> read_bool() {
-        auto v = read_u8();
+    std::optional<bool> readBool() {
+        auto v = readU8();
         return v ? std::optional<bool>{*v != 0} : std::nullopt;
     }
 
@@ -116,10 +116,10 @@ private:
 // Sample-count reader. !multi → implicit N = 1; multi → u32 prefix.
 // ---------------------------------------------------------------------
 
-Result<std::size_t> read_sample_count(PayloadCursor& cur, bool multi) {
+Result<std::size_t> readSampleCount(PayloadCursor& cur, bool multi) {
     if (!multi) return std::size_t{1};
-    auto n = cur.read_u32();
-    if (!n) return tl::make_unexpected(invalid_block("multi-sample N: short read"));
+    auto n = cur.readU32();
+    if (!n) return tl::make_unexpected(invalidBlock("multi-sample N: short read"));
     return static_cast<std::size_t>(*n);
 }
 
@@ -135,29 +135,29 @@ Result<std::size_t> read_sample_count(PayloadCursor& cur, bool multi) {
         v.reserve(n);                                             \
         for (std::size_t i = 0; i < n; ++i) {                     \
             auto x = (READ_EXPR);                                 \
-            if (!x) return tl::make_unexpected(invalid_block(     \
+            if (!x) return tl::make_unexpected(invalidBlock(     \
                 "numeric run: short read"));                      \
             v.push_back(*x);                                      \
         }                                                         \
         return NumericPayload{std::move(v)};                      \
     }
 
-Result<NumericPayload> read_numeric_n(PayloadCursor& cur, DataType dt,
+Result<NumericPayload> readNumericN(PayloadCursor& cur, DataType dt,
                                      std::size_t n) {
     switch (dt) {
-        case DataType::Bool:   OSF_READ_RUN(bool,             cur.read_bool())
-        case DataType::Int8:   OSF_READ_RUN(std::int8_t,      cur.read_i8())
-        case DataType::Int16:  OSF_READ_RUN(std::int16_t,     cur.read_i16())
-        case DataType::Int32:  OSF_READ_RUN(std::int32_t,     cur.read_i32())
-        case DataType::Int64:  OSF_READ_RUN(std::int64_t,     cur.read_i64())
-        case DataType::UInt8:  OSF_READ_RUN(std::uint8_t,     cur.read_u8())
-        case DataType::UInt16: OSF_READ_RUN(std::uint16_t,    cur.read_u16())
-        case DataType::UInt32: OSF_READ_RUN(std::uint32_t,    cur.read_u32())
-        case DataType::UInt64: OSF_READ_RUN(std::uint64_t,    cur.read_u64())
-        case DataType::Float:  OSF_READ_RUN(float,            cur.read_f32())
-        case DataType::Double: OSF_READ_RUN(double,           cur.read_f64())
+        case DataType::Bool:   OSF_READ_RUN(bool,             cur.readBool())
+        case DataType::Int8:   OSF_READ_RUN(std::int8_t,      cur.readI8())
+        case DataType::Int16:  OSF_READ_RUN(std::int16_t,     cur.readI16())
+        case DataType::Int32:  OSF_READ_RUN(std::int32_t,     cur.readI32())
+        case DataType::Int64:  OSF_READ_RUN(std::int64_t,     cur.readI64())
+        case DataType::UInt8:  OSF_READ_RUN(std::uint8_t,     cur.readU8())
+        case DataType::UInt16: OSF_READ_RUN(std::uint16_t,    cur.readU16())
+        case DataType::UInt32: OSF_READ_RUN(std::uint32_t,    cur.readU32())
+        case DataType::UInt64: OSF_READ_RUN(std::uint64_t,    cur.readU64())
+        case DataType::Float:  OSF_READ_RUN(float,            cur.readF32())
+        case DataType::Double: OSF_READ_RUN(double,           cur.readF64())
         default:
-            return tl::make_unexpected(invalid_block(
+            return tl::make_unexpected(invalidBlock(
                 "equidistant blocks (bcStartData / bcContinuedData) only "
                 "support numeric datatypes"));
     }
@@ -174,11 +174,11 @@ Result<NumericPayload> read_numeric_n(PayloadCursor& cur, DataType dt,
         std::vector<std::pair<std::int64_t, VARIANT>> v;                 \
         v.reserve(n);                                                    \
         for (std::size_t i = 0; i < n; ++i) {                            \
-            auto ts = cur.read_i64();                                    \
-            if (!ts) return tl::make_unexpected(invalid_block(           \
+            auto ts = cur.readI64();                                     \
+            if (!ts) return tl::make_unexpected(invalidBlock(           \
                 "AbsTs ts: short read"));                                \
             auto value = (READ_EXPR);                                    \
-            if (!value) return tl::make_unexpected(invalid_block(        \
+            if (!value) return tl::make_unexpected(invalidBlock(        \
                 "AbsTs value: short read"));                             \
             v.emplace_back(*ts, *value);                                 \
         }                                                                \
@@ -194,7 +194,7 @@ Result<NumericPayload> read_numeric_n(PayloadCursor& cur, DataType dt,
 //   and there is no fallback path to take.
 // - OSF5: return `[p, p+n)` unchanged. A trailing `0x00` is a regular
 //   data byte, not a sentinel.
-std::vector<std::uint8_t> strip_osf4_terminator(std::uint8_t const* p,
+std::vector<std::uint8_t> stripOsf4Terminator(std::uint8_t const* p,
                                                 std::size_t n,
                                                 OsfVersion osf_version) {
     if (osf_version == OsfVersion::Osf4 && n > 0) {
@@ -203,7 +203,7 @@ std::vector<std::uint8_t> strip_osf4_terminator(std::uint8_t const* p,
     return std::vector<std::uint8_t>(p, p + n);
 }
 
-Result<TimestampedPayload> build_string_or_binary(
+Result<TimestampedPayload> buildStringOrBinary(
     DataType dt, std::vector<std::pair<std::int64_t,
                                        std::vector<std::uint8_t>>>&& raw) {
     if (dt == DataType::String) {
@@ -227,24 +227,24 @@ Result<TimestampedPayload> build_string_or_binary(
 // Null-terminator handling is version-deterministic per spec rev
 // 2026-05-24: OSF4 strips the last byte of every per-sample payload
 // unconditionally; OSF5 keeps the payload verbatim. See
-// strip_osf4_terminator for the rationale.
-Result<TimestampedPayload> parse_abs_ts_string_or_binary(
-    std::uint8_t const* body, std::size_t body_len, DataType dt, bool multi,
+// stripOsf4Terminator for the rationale.
+Result<TimestampedPayload> parseAbsTsStringOrBinary(
+    std::uint8_t const* body, std::size_t bodyLen, DataType dt, bool multi,
     OsfVersion osf_version) {
     std::size_t n = 1;
-    std::size_t rest_off = 0;
+    std::size_t restOff = 0;
 
     if (multi) {
-        if (body_len < 4) {
-            return tl::make_unexpected(invalid_block(
+        if (bodyLen < 4) {
+            return tl::make_unexpected(invalidBlock(
                 "AbsTs string/binary N: short read"));
         }
-        std::uint32_t const raw = osf::detail::read_le_u32(body);
+        std::uint32_t const raw = osf::detail::readLeU32(body);
         if (raw == 0) {
-            return build_string_or_binary(dt, {});
+            return buildStringOrBinary(dt, {});
         }
         n = static_cast<std::size_t>(raw);
-        rest_off = 4;
+        restOff = 4;
     }
     // !multi: bit-7 = 0 is the spec-canonical single-sample form
     // (implicit N=1, 4 bytes shorter than the bit-7 = 1 variant
@@ -252,105 +252,105 @@ Result<TimestampedPayload> parse_abs_ts_string_or_binary(
     // the C++ encoder and the Rust writer emit the canonical
     // bit-7 = 0 form, and either is accepted on input.
 
-    std::size_t const rest_len = body_len - rest_off;
-    std::uint8_t const* rest = body + rest_off;
+    std::size_t const restLen = bodyLen - restOff;
+    std::uint8_t const* rest = body + restOff;
 
     if (n == 1) {
-        if (rest_len < 8) {
-            return tl::make_unexpected(invalid_block(
+        if (restLen < 8) {
+            return tl::make_unexpected(invalidBlock(
                 "AbsTs string/binary ts: short read"));
         }
-        std::int64_t const ts = osf::detail::read_le_i64(rest);
-        auto payload = strip_osf4_terminator(rest + 8, rest_len - 8, osf_version);
+        std::int64_t const ts = osf::detail::readLeI64(rest);
+        auto payload = stripOsf4Terminator(rest + 8, restLen - 8, osf_version);
         std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>> raw;
         raw.emplace_back(ts, std::move(payload));
-        return build_string_or_binary(dt, std::move(raw));
+        return buildStringOrBinary(dt, std::move(raw));
     }
 
-    if (rest_len % n != 0) {
+    if (restLen % n != 0) {
         // Spec mandates equal-length segments; if the body length is
         // not divisible by N we cannot split it. Fall back to a single
         // sample (mirrors the Rust reference's warn-and-degrade path).
-        if (rest_len < 8) {
-            return tl::make_unexpected(invalid_block(
+        if (restLen < 8) {
+            return tl::make_unexpected(invalidBlock(
                 "AbsTs string/binary ts: short read"));
         }
-        std::int64_t const ts = osf::detail::read_le_i64(rest);
-        auto payload = strip_osf4_terminator(rest + 8, rest_len - 8, osf_version);
+        std::int64_t const ts = osf::detail::readLeI64(rest);
+        auto payload = stripOsf4Terminator(rest + 8, restLen - 8, osf_version);
         std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>> raw;
         raw.emplace_back(ts, std::move(payload));
-        return build_string_or_binary(dt, std::move(raw));
+        return buildStringOrBinary(dt, std::move(raw));
     }
 
-    std::size_t const per_sample = rest_len / n;
+    std::size_t const perSample = restLen / n;
     // OSF4 needs i64 ts (8) + at least one byte (the terminator alone
     // is a legal empty payload) = 9. OSF5 needs only i64 ts = 8.
-    std::size_t const min_per_sample =
+    std::size_t const minPerSample =
         (osf_version == OsfVersion::Osf4) ? 9u : 8u;
-    if (per_sample < min_per_sample) {
+    if (perSample < minPerSample) {
         std::ostringstream oss;
         oss << "AbsTs string/binary N=" << n
-            << ": per-sample size " << per_sample
-            << " is less than " << min_per_sample
+            << ": per-sample size " << perSample
+            << " is less than " << minPerSample
             << " (need i64 ts";
         if (osf_version == OsfVersion::Osf4) {
             oss << " + at least the OSF4 null terminator";
         }
         oss << ")";
-        return tl::make_unexpected(invalid_block(oss.str()));
+        return tl::make_unexpected(invalidBlock(oss.str()));
     }
 
     std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>> raw;
     raw.reserve(n);
     for (std::size_t i = 0; i < n; ++i) {
-        std::uint8_t const* chunk = rest + i * per_sample;
-        std::int64_t const ts = osf::detail::read_le_i64(chunk);
-        auto payload = strip_osf4_terminator(chunk + 8, per_sample - 8,
+        std::uint8_t const* chunk = rest + i * perSample;
+        std::int64_t const ts = osf::detail::readLeI64(chunk);
+        auto payload = stripOsf4Terminator(chunk + 8, perSample - 8,
                                              osf_version);
         raw.emplace_back(ts, std::move(payload));
     }
-    return build_string_or_binary(dt, std::move(raw));
+    return buildStringOrBinary(dt, std::move(raw));
 }
 
-Result<TimestampedPayload> parse_abs_timestamp_data(
-    std::uint8_t const* body, std::size_t body_len, DataType dt, bool multi,
+Result<TimestampedPayload> parseAbsTimestampData(
+    std::uint8_t const* body, std::size_t bodyLen, DataType dt, bool multi,
     OsfVersion osf_version) {
     if (dt == DataType::String || dt == DataType::Binary ||
         dt == DataType::ByteArray) {
-        return parse_abs_ts_string_or_binary(
-            body, body_len, dt == DataType::ByteArray ? DataType::Binary : dt,
+        return parseAbsTsStringOrBinary(
+            body, bodyLen, dt == DataType::ByteArray ? DataType::Binary : dt,
             multi, osf_version);
     }
 
-    PayloadCursor cur{body, body_len};
-    auto n_r = read_sample_count(cur, multi);
-    if (!n_r) return tl::make_unexpected(std::move(n_r).error());
-    std::size_t const n = *n_r;
+    PayloadCursor cur{body, bodyLen};
+    auto nR = readSampleCount(cur, multi);
+    if (!nR) return tl::make_unexpected(std::move(nR).error());
+    std::size_t const n = *nR;
 
     switch (dt) {
-        case DataType::Bool:   OSF_READ_TS_PAIRS(bool,           cur.read_bool())
-        case DataType::Int8:   OSF_READ_TS_PAIRS(std::int8_t,    cur.read_i8())
-        case DataType::Int16:  OSF_READ_TS_PAIRS(std::int16_t,   cur.read_i16())
-        case DataType::Int32:  OSF_READ_TS_PAIRS(std::int32_t,   cur.read_i32())
-        case DataType::Int64:  OSF_READ_TS_PAIRS(std::int64_t,   cur.read_i64())
-        case DataType::UInt8:  OSF_READ_TS_PAIRS(std::uint8_t,   cur.read_u8())
-        case DataType::UInt16: OSF_READ_TS_PAIRS(std::uint16_t,  cur.read_u16())
-        case DataType::UInt32: OSF_READ_TS_PAIRS(std::uint32_t,  cur.read_u32())
-        case DataType::UInt64: OSF_READ_TS_PAIRS(std::uint64_t,  cur.read_u64())
-        case DataType::Float:  OSF_READ_TS_PAIRS(float,          cur.read_f32())
-        case DataType::Double: OSF_READ_TS_PAIRS(double,         cur.read_f64())
+        case DataType::Bool:   OSF_READ_TS_PAIRS(bool,           cur.readBool())
+        case DataType::Int8:   OSF_READ_TS_PAIRS(std::int8_t,    cur.readI8())
+        case DataType::Int16:  OSF_READ_TS_PAIRS(std::int16_t,   cur.readI16())
+        case DataType::Int32:  OSF_READ_TS_PAIRS(std::int32_t,   cur.readI32())
+        case DataType::Int64:  OSF_READ_TS_PAIRS(std::int64_t,   cur.readI64())
+        case DataType::UInt8:  OSF_READ_TS_PAIRS(std::uint8_t,   cur.readU8())
+        case DataType::UInt16: OSF_READ_TS_PAIRS(std::uint16_t,  cur.readU16())
+        case DataType::UInt32: OSF_READ_TS_PAIRS(std::uint32_t,  cur.readU32())
+        case DataType::UInt64: OSF_READ_TS_PAIRS(std::uint64_t,  cur.readU64())
+        case DataType::Float:  OSF_READ_TS_PAIRS(float,          cur.readF32())
+        case DataType::Double: OSF_READ_TS_PAIRS(double,         cur.readF64())
         case DataType::GpsLocation: {
             std::vector<std::pair<std::int64_t, GpsLocation>> v;
             v.reserve(n);
             for (std::size_t i = 0; i < n; ++i) {
-                auto ts = cur.read_i64();
-                if (!ts) return tl::make_unexpected(invalid_block(
+                auto ts = cur.readI64();
+                if (!ts) return tl::make_unexpected(invalidBlock(
                     "AbsTs gps ts: short read"));
-                auto lat = cur.read_f64();
-                auto lon = cur.read_f64();
-                auto alt = cur.read_f64();
+                auto lat = cur.readF64();
+                auto lon = cur.readF64();
+                auto alt = cur.readF64();
                 if (!lat || !lon || !alt) {
-                    return tl::make_unexpected(invalid_block(
+                    return tl::make_unexpected(invalidBlock(
                         "AbsTs gps payload: short read"));
                 }
                 v.emplace_back(*ts, GpsLocation{*lat, *lon, *alt});
@@ -361,13 +361,13 @@ Result<TimestampedPayload> parse_abs_timestamp_data(
         case DataType::Binary:
         case DataType::ByteArray:
             // Already routed above.
-            return tl::make_unexpected(invalid_block(
+            return tl::make_unexpected(invalidBlock(
                 "string/binary reached the typed AbsTs branch (bug)"));
         case DataType::Unsupported:
-            return tl::make_unexpected(invalid_block(
+            return tl::make_unexpected(invalidBlock(
                 "AbsTimeStampData on Unsupported channel reached the typed parser"));
     }
-    return tl::make_unexpected(invalid_block(
+    return tl::make_unexpected(invalidBlock(
         "AbsTimeStampData: unhandled DataType"));
 }
 
@@ -382,38 +382,38 @@ Result<TimestampedPayload> parse_abs_timestamp_data(
         std::vector<std::pair<std::uint32_t, VARIANT>> v;                        \
         v.reserve(n);                                                            \
         for (std::size_t i = 0; i < n; ++i) {                                    \
-            auto dt_ns = cur.read_u32();                                         \
-            if (!dt_ns) return tl::make_unexpected(invalid_block(                \
+            auto dtNs = cur.readU32();                                           \
+            if (!dtNs) return tl::make_unexpected(invalidBlock(                 \
                 "RelTs delta: short read"));                                     \
             auto value = (READ_EXPR);                                            \
-            if (!value) return tl::make_unexpected(invalid_block(                \
+            if (!value) return tl::make_unexpected(invalidBlock(                \
                 "RelTs value: short read"));                                     \
-            v.emplace_back(*dt_ns, *value);                                      \
+            v.emplace_back(*dtNs, *value);                                       \
         }                                                                        \
         return RelTimestampedPayload{std::move(v)};                              \
     }
 
-Result<RelTimestampedPayload> parse_continued_rel_stamp_data(
-    std::uint8_t const* body, std::size_t body_len, DataType dt, bool multi) {
-    PayloadCursor cur{body, body_len};
-    auto n_r = read_sample_count(cur, multi);
-    if (!n_r) return tl::make_unexpected(std::move(n_r).error());
-    std::size_t const n = *n_r;
+Result<RelTimestampedPayload> parseContinuedRelStampData(
+    std::uint8_t const* body, std::size_t bodyLen, DataType dt, bool multi) {
+    PayloadCursor cur{body, bodyLen};
+    auto nR = readSampleCount(cur, multi);
+    if (!nR) return tl::make_unexpected(std::move(nR).error());
+    std::size_t const n = *nR;
 
     switch (dt) {
-        case DataType::Bool:   OSF_READ_REL_PAIRS(bool,          cur.read_bool())
-        case DataType::Int8:   OSF_READ_REL_PAIRS(std::int8_t,   cur.read_i8())
-        case DataType::Int16:  OSF_READ_REL_PAIRS(std::int16_t,  cur.read_i16())
-        case DataType::Int32:  OSF_READ_REL_PAIRS(std::int32_t,  cur.read_i32())
-        case DataType::Int64:  OSF_READ_REL_PAIRS(std::int64_t,  cur.read_i64())
-        case DataType::UInt8:  OSF_READ_REL_PAIRS(std::uint8_t,  cur.read_u8())
-        case DataType::UInt16: OSF_READ_REL_PAIRS(std::uint16_t, cur.read_u16())
-        case DataType::UInt32: OSF_READ_REL_PAIRS(std::uint32_t, cur.read_u32())
-        case DataType::UInt64: OSF_READ_REL_PAIRS(std::uint64_t, cur.read_u64())
-        case DataType::Float:  OSF_READ_REL_PAIRS(float,         cur.read_f32())
-        case DataType::Double: OSF_READ_REL_PAIRS(double,        cur.read_f64())
+        case DataType::Bool:   OSF_READ_REL_PAIRS(bool,          cur.readBool())
+        case DataType::Int8:   OSF_READ_REL_PAIRS(std::int8_t,   cur.readI8())
+        case DataType::Int16:  OSF_READ_REL_PAIRS(std::int16_t,  cur.readI16())
+        case DataType::Int32:  OSF_READ_REL_PAIRS(std::int32_t,  cur.readI32())
+        case DataType::Int64:  OSF_READ_REL_PAIRS(std::int64_t,  cur.readI64())
+        case DataType::UInt8:  OSF_READ_REL_PAIRS(std::uint8_t,  cur.readU8())
+        case DataType::UInt16: OSF_READ_REL_PAIRS(std::uint16_t, cur.readU16())
+        case DataType::UInt32: OSF_READ_REL_PAIRS(std::uint32_t, cur.readU32())
+        case DataType::UInt64: OSF_READ_REL_PAIRS(std::uint64_t, cur.readU64())
+        case DataType::Float:  OSF_READ_REL_PAIRS(float,         cur.readF32())
+        case DataType::Double: OSF_READ_REL_PAIRS(double,        cur.readF64())
         default:
-            return tl::make_unexpected(invalid_block(
+            return tl::make_unexpected(invalidBlock(
                 "bcContinuedRelStampData not allowed for non-numeric datatype"));
     }
 }
@@ -430,30 +430,30 @@ struct StartDataParsed {
     NumericPayload samples;
 };
 
-Result<StartDataParsed> parse_start_data(std::uint8_t const* body,
-                                         std::size_t body_len,
+Result<StartDataParsed> parseStartData(std::uint8_t const* body,
+                                         std::size_t bodyLen,
                                          DataType dt, bool multi) {
-    PayloadCursor cur{body, body_len};
-    auto ts = cur.read_i64();
-    if (!ts) return tl::make_unexpected(invalid_block(
+    PayloadCursor cur{body, bodyLen};
+    auto ts = cur.readI64();
+    if (!ts) return tl::make_unexpected(invalidBlock(
         "StartData timestamp: short read"));
-    auto rate = cur.read_f64();
-    if (!rate) return tl::make_unexpected(invalid_block(
+    auto rate = cur.readF64();
+    if (!rate) return tl::make_unexpected(invalidBlock(
         "StartData sample rate: short read"));
-    auto n_r = read_sample_count(cur, multi);
-    if (!n_r) return tl::make_unexpected(std::move(n_r).error());
-    auto samples = read_numeric_n(cur, dt, *n_r);
+    auto nR = readSampleCount(cur, multi);
+    if (!nR) return tl::make_unexpected(std::move(nR).error());
+    auto samples = readNumericN(cur, dt, *nR);
     if (!samples) return tl::make_unexpected(std::move(samples).error());
     return StartDataParsed{*ts, *rate, std::move(*samples)};
 }
 
-Result<NumericPayload> parse_continued_data(std::uint8_t const* body,
-                                            std::size_t body_len,
+Result<NumericPayload> parseContinuedData(std::uint8_t const* body,
+                                            std::size_t bodyLen,
                                             DataType dt, bool multi) {
-    PayloadCursor cur{body, body_len};
-    auto n_r = read_sample_count(cur, multi);
-    if (!n_r) return tl::make_unexpected(std::move(n_r).error());
-    return read_numeric_n(cur, dt, *n_r);
+    PayloadCursor cur{body, bodyLen};
+    auto nR = readSampleCount(cur, multi);
+    if (!nR) return tl::make_unexpected(std::move(nR).error());
+    return readNumericN(cur, dt, *nR);
 }
 
 // ---------------------------------------------------------------------
@@ -463,7 +463,7 @@ Result<NumericPayload> parse_continued_data(std::uint8_t const* body,
 // ---------------------------------------------------------------------
 
 std::optional<std::pair<std::int64_t, std::int64_t>>
-abs_timestamp_range(TimestampedPayload const& payload) {
+absTimestampRange(TimestampedPayload const& payload) {
     return std::visit([](auto const& v) -> std::optional<std::pair<std::int64_t, std::int64_t>> {
         if (v.empty()) return std::nullopt;
         return std::make_pair(v.front().first, v.back().first);
@@ -478,7 +478,7 @@ std::optional<SkipReason> unsupported_reason(BlockReader::Iterator const&) = del
 // (placeholder so the compiler errors loudly if someone tries to use the
 // private overload pattern from Rust — we use a simple free function below)
 
-std::optional<SkipReason> channel_unsupported_reason(ChannelType ct,
+std::optional<SkipReason> channelUnsupportedReason(ChannelType ct,
                                                     DataType dt) noexcept {
     if (dt == DataType::Unsupported) {
         return SkipReason{SkipReason::Kind::UnsupportedDataType, 0};
@@ -520,23 +520,23 @@ BlockReader::BlockReader(std::istream& stream, MetaBlock const& meta)
 }
 
 BlockReader::IoResult<std::uint32_t>
-BlockReader::readLengthField(std::uint8_t sizeof_field) {
-    if (sizeof_field == 2) {
+BlockReader::readLengthField(std::uint8_t sizeofField) {
+    if (sizeofField == 2) {
         std::uint8_t buf[2];
-        auto r = stream_read_n(*m_stream, buf, 2);
+        auto r = streamReadN(*m_stream, buf, 2);
         if (!r)             return tl::make_unexpected(std::move(r).error());
         if (!*r)            return std::optional<std::uint32_t>{};
-        return std::optional<std::uint32_t>{osf::detail::read_le_u16(buf)};
+        return std::optional<std::uint32_t>{osf::detail::readLeU16(buf)};
     }
-    if (sizeof_field == 4) {
+    if (sizeofField == 4) {
         std::uint8_t buf[4];
-        auto r = stream_read_n(*m_stream, buf, 4);
+        auto r = streamReadN(*m_stream, buf, 4);
         if (!r)             return tl::make_unexpected(std::move(r).error());
         if (!*r)            return std::optional<std::uint32_t>{};
-        return std::optional<std::uint32_t>{osf::detail::read_le_u32(buf)};
+        return std::optional<std::uint32_t>{osf::detail::readLeU32(buf)};
     }
     std::ostringstream oss;
-    oss << "channel sizeoflengthvalue=" << int{sizeof_field}
+    oss << "channel sizeoflengthvalue=" << int{sizeofField}
         << " reached the block reader; must be 2 or 4 "
            "(should have been validated in the metablock parser)";
     return tl::make_unexpected(Error{Error::Code::InvalidMetablock, oss.str()});
@@ -546,7 +546,7 @@ BlockReader::IoResult<std::vector<std::uint8_t>>
 BlockReader::readPayload(std::size_t len) {
     std::vector<std::uint8_t> buf(len);
     if (len == 0) return std::optional<std::vector<std::uint8_t>>{std::move(buf)};
-    auto r = stream_read_n(*m_stream, buf.data(), static_cast<std::streamsize>(len));
+    auto r = streamReadN(*m_stream, buf.data(), static_cast<std::streamsize>(len));
     if (!r)  return tl::make_unexpected(std::move(r).error());
     if (!*r) return std::optional<std::vector<std::uint8_t>>{};
     return std::optional<std::vector<std::uint8_t>>{std::move(buf)};
@@ -559,7 +559,7 @@ Result<bool> BlockReader::drain(std::uint64_t len) {
     while (left > 0) {
         std::size_t const want =
             (left > CHUNK) ? CHUNK : static_cast<std::size_t>(left);
-        auto r = stream_read_n(*m_stream, scratch,
+        auto r = streamReadN(*m_stream, scratch,
                                static_cast<std::streamsize>(want));
         if (!r)  return tl::make_unexpected(std::move(r).error());
         if (!*r) return false;  // truncated
@@ -576,7 +576,7 @@ Result<void> BlockReader::consumeTrailer() {
     m_stats.dataSectionSizeBytes += 4;
 
     std::uint8_t buf[4];
-    auto rr = stream_read_n(*m_stream, buf, 4);
+    auto rr = streamReadN(*m_stream, buf, 4);
     if (!rr)  return tl::make_unexpected(std::move(rr).error());
     if (!*rr) {
         if (m_stats.blocksTruncated < 1) m_stats.blocksTruncated = 1;
@@ -584,7 +584,7 @@ Result<void> BlockReader::consumeTrailer() {
         m_stats.trailerSeen = true;
         return {};
     }
-    std::uint32_t const length = osf::detail::read_le_u32(buf);
+    std::uint32_t const length = osf::detail::readLeU32(buf);
 
     auto drained = drain(length);
     if (!drained) return tl::make_unexpected(std::move(drained).error());
@@ -597,7 +597,7 @@ Result<void> BlockReader::consumeTrailer() {
     // Best-effort: try to consume the magic trailer if present. If the
     // file ends before then, we simply stop without error.
     std::uint8_t tail[MAGIC_TRAILER_LEN];
-    auto tr = stream_read_n(*m_stream, tail, MAGIC_TRAILER_LEN);
+    auto tr = streamReadN(*m_stream, tail, MAGIC_TRAILER_LEN);
     if (!tr) return tl::make_unexpected(std::move(tr).error());
     if (*tr) {
         m_stats.dataSectionSizeBytes += MAGIC_TRAILER_LEN;
@@ -630,12 +630,12 @@ Result<Block> BlockReader::skipBlock(std::uint16_t channelIndex,
                                       std::size_t length,
                                       SkipReason reason) {
     if (m_captureSkipped) {
-        auto buf_r = readPayload(length);
-        if (!buf_r) return tl::make_unexpected(std::move(buf_r).error());
-        if (!*buf_r) {
+        auto bufR = readPayload(length);
+        if (!bufR) return tl::make_unexpected(std::move(bufR).error());
+        if (!*bufR) {
             if (m_stats.blocksTruncated < 1) m_stats.blocksTruncated = 1;
             m_finished = true;
-            return tl::make_unexpected(io_error(
+            return tl::make_unexpected(ioError(
                 "stream truncated mid-skip-payload"));
         }
         m_stats.dataSectionSizeBytes += length;
@@ -645,7 +645,7 @@ Result<Block> BlockReader::skipBlock(std::uint16_t channelIndex,
         Skipped sk;
         sk.reason = reason;
         sk.bytesSkipped = length;
-        sk.payload = std::move(**buf_r);
+        sk.payload = std::move(**bufR);
         blk.kind = std::move(sk);
         return blk;
     }
@@ -654,7 +654,7 @@ Result<Block> BlockReader::skipBlock(std::uint16_t channelIndex,
     if (!*drained) {
         if (m_stats.blocksTruncated < 1) m_stats.blocksTruncated = 1;
         m_finished = true;
-        return tl::make_unexpected(io_error(
+        return tl::make_unexpected(ioError(
             "stream truncated mid-skip-payload"));
     }
     m_stats.dataSectionSizeBytes += length;
@@ -673,13 +673,13 @@ std::optional<Result<Block>> BlockReader::next() {
 
     // Step 1: 2-byte channel index. Clean EOF is the regular end of
     // the data section.
-    std::uint8_t ci_buf[2];
+    std::uint8_t ciBuf[2];
     {
-        auto r = stream_read_n(*m_stream, ci_buf, 2);
+        auto r = streamReadN(*m_stream, ciBuf, 2);
         if (!r) { m_finished = true; return Result<Block>{tl::make_unexpected(r.error())}; }
         if (!*r) { m_finished = true; return std::nullopt; }
     }
-    std::uint16_t const channelIndex = osf::detail::read_le_u16(ci_buf);
+    std::uint16_t const channelIndex = osf::detail::readLeU16(ciBuf);
     m_stats.dataSectionSizeBytes += 2;
 
     // Step 2: optional 0xFFFF trailer block.
@@ -702,14 +702,14 @@ std::optional<Result<Block>> BlockReader::next() {
     ChannelInfo const& info = it->second;
 
     // Step 4: per-channel length prefix.
-    auto len_r = readLengthField(info.sizeOfLengthValue);
-    if (!len_r) { m_finished = true; return Result<Block>{tl::make_unexpected(len_r.error())}; }
-    if (!*len_r) {
+    auto lenR = readLengthField(info.sizeOfLengthValue);
+    if (!lenR) { m_finished = true; return Result<Block>{tl::make_unexpected(lenR.error())}; }
+    if (!*lenR) {
         if (m_stats.blocksTruncated < 1) m_stats.blocksTruncated = 1;
         m_finished = true;
         return std::nullopt;
     }
-    std::uint32_t const length = **len_r;
+    std::uint32_t const length = **lenR;
     m_stats.dataSectionSizeBytes += info.sizeOfLengthValue;
 
     if (length == 0) {
@@ -724,33 +724,33 @@ std::optional<Result<Block>> BlockReader::next() {
         return Result<Block>{std::move(blk)};
     }
 
-    std::size_t const length_usize = length;
+    std::size_t const lengthUsize = length;
 
     // Step 5: forward-compat skip — Unsupported channel.
-    if (auto reason = channel_unsupported_reason(info.channelType, info.dataType)) {
-        auto r = skipBlock(channelIndex, length_usize, *reason);
+    if (auto reason = channelUnsupportedReason(info.channelType, info.dataType)) {
+        auto r = skipBlock(channelIndex, lengthUsize, *reason);
         if (!r) { m_finished = true; return Result<Block>{tl::make_unexpected(r.error())}; }
         return Result<Block>{std::move(*r)};
     }
 
     // Step 6: pull the full payload.
-    auto payload_r = readPayload(length_usize);
-    if (!payload_r) { m_finished = true; return Result<Block>{tl::make_unexpected(payload_r.error())}; }
-    if (!*payload_r) {
+    auto payloadR = readPayload(lengthUsize);
+    if (!payloadR) { m_finished = true; return Result<Block>{tl::make_unexpected(payloadR.error())}; }
+    if (!*payloadR) {
         if (m_stats.blocksTruncated < 1) m_stats.blocksTruncated = 1;
         m_finished = true;
         return std::nullopt;
     }
-    std::vector<std::uint8_t> payload = std::move(**payload_r);
+    std::vector<std::uint8_t> payload = std::move(**payloadR);
     m_stats.dataSectionSizeBytes += length;
 
     // Step 7: decode control byte and route.
-    std::uint8_t const control_raw = payload[0];
-    ControlByte const cb = decodeControlByte(control_raw);
+    std::uint8_t const controlRaw = payload[0];
+    ControlByte const cb = decodeControlByte(controlRaw);
     std::uint8_t const* body = payload.data() + 1;
-    std::size_t const body_len = payload.size() - 1;
+    std::size_t const bodyLen = payload.size() - 1;
 
-    auto make_skipped = [&](SkipReason::Kind kind, std::uint8_t raw) {
+    auto makeSkipped = [&](SkipReason::Kind kind, std::uint8_t raw) {
         SkipReason const reason{kind, raw};
         recordSkip(channelIndex, length, reason);
         Block blk;
@@ -759,7 +759,7 @@ std::optional<Result<Block>> BlockReader::next() {
         sk.reason = reason;
         sk.bytesSkipped = length;
         if (m_captureSkipped) {
-            sk.payload = std::vector<std::uint8_t>(body, body + body_len);
+            sk.payload = std::vector<std::uint8_t>(body, body + bodyLen);
         }
         blk.kind = std::move(sk);
         return blk;
@@ -768,19 +768,19 @@ std::optional<Result<Block>> BlockReader::next() {
     switch (cb.kind) {
         case ControlKind::Reserved:
         case ControlKind::TimebaseRealign:
-            return Result<Block>{make_skipped(
+            return Result<Block>{makeSkipped(
                 SkipReason::Kind::ReservedBlockType, cb.raw)};
         case ControlKind::TrustedTimestamp:
         case ControlKind::StatusEvent:
         case ControlKind::MessageEvent:
-            return Result<Block>{make_skipped(
+            return Result<Block>{makeSkipped(
                 SkipReason::Kind::DeprecatedBlockType, cb.raw)};
         case ControlKind::Unknown:
-            return Result<Block>{make_skipped(
+            return Result<Block>{makeSkipped(
                 SkipReason::Kind::ReservedBlockType, cb.raw)};
 
         case ControlKind::StartData: {
-            auto r = parse_start_data(body, body_len, info.dataType,
+            auto r = parseStartData(body, bodyLen, info.dataType,
                                       cb.multiSample);
             if (!r) return Result<Block>{tl::make_unexpected(r.error())};
             std::size_t const n = numericPayloadLen(r->samples);
@@ -808,7 +808,7 @@ std::optional<Result<Block>> BlockReader::next() {
             return Result<Block>{std::move(blk)};
         }
         case ControlKind::ContinuedData: {
-            auto r = parse_continued_data(body, body_len, info.dataType,
+            auto r = parseContinuedData(body, bodyLen, info.dataType,
                                           cb.multiSample);
             if (!r) return Result<Block>{tl::make_unexpected(r.error())};
             std::size_t const n = numericPayloadLen(*r);
@@ -825,7 +825,7 @@ std::optional<Result<Block>> BlockReader::next() {
             return Result<Block>{std::move(blk)};
         }
         case ControlKind::AbsTimeStampData: {
-            auto r = parse_abs_timestamp_data(body, body_len, info.dataType,
+            auto r = parseAbsTimestampData(body, bodyLen, info.dataType,
                                               cb.multiSample, m_osfVersion);
             if (!r) return Result<Block>{tl::make_unexpected(r.error())};
             std::size_t const n = timestampedPayloadLen(*r);
@@ -833,7 +833,7 @@ std::optional<Result<Block>> BlockReader::next() {
             ++cs.blocksRead;
             cs.bytesPayload += length;
             cs.samplesTotal += n;
-            if (auto range = abs_timestamp_range(*r)) {
+            if (auto range = absTimestampRange(*r)) {
                 cs.observeTimestamp(range->first);
                 cs.observeTimestamp(range->second);
             }
@@ -846,7 +846,7 @@ std::optional<Result<Block>> BlockReader::next() {
             return Result<Block>{std::move(blk)};
         }
         case ControlKind::ContinuedRelStampData: {
-            auto r = parse_continued_rel_stamp_data(body, body_len,
+            auto r = parseContinuedRelStampData(body, bodyLen,
                                                     info.dataType,
                                                     cb.multiSample);
             if (!r) return Result<Block>{tl::make_unexpected(r.error())};
@@ -864,7 +864,7 @@ std::optional<Result<Block>> BlockReader::next() {
             return Result<Block>{std::move(blk)};
         }
     }
-    return Result<Block>{tl::make_unexpected(invalid_block(
+    return Result<Block>{tl::make_unexpected(invalidBlock(
         "BlockReader::next: unhandled ControlKind"))};
 }
 

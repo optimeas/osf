@@ -3,8 +3,8 @@
 
 #include "osf/blockwriter.h"
 
-#include "blockencode_p.h"           // osf::detail::encode_start_data, encode_continued_data
-#include "writercommon_p.h"          // osf::detail chunking helpers + FileInfoDraft + build_metablock
+#include "blockencode_p.h"           // osf::detail::encodeStartData, encodeContinuedData
+#include "writercommon_p.h"          // osf::detail chunking helpers + FileInfoDraft + buildMetablock
 #include "osf/datachannel.h"       // NumericValues, numericValuesLen
 #include "osf/manager.h"            // DataManager (fromManager)
 #include "osf/metablock.h"          // serializeMetablockJson
@@ -22,20 +22,20 @@ namespace osf {
 
 struct BlockWriter::ChannelData {
     enum class Kind { Empty, Equidistant, Timestamped, Variable } kind = Kind::Empty;
-    DataType datatype_lock = DataType::Unsupported;
+    DataType datatypeLock = DataType::Unsupported;
 
     struct EqSegment {
         std::int64_t  startTimestampNs = 0;
         double        sampleRateHz = 0.0;
         NumericValues values;   // Float or Double only for equidistant
     };
-    std::vector<EqSegment> eq_segments;
+    std::vector<EqSegment> eqSegments;
 
-    // Timestamped numeric + GPS storage (ts_ns + ts_values) and variable
+    // Timestamped numeric + GPS storage (tsNs + tsValues) and variable
     // string/binary storage. Only the fields for this channel's locked
     // Kind are populated.
-    std::vector<std::int64_t> ts_ns;
-    NumericValues             ts_values;
+    std::vector<std::int64_t> tsNs;
+    NumericValues             tsValues;
     std::vector<std::string>  strings;
     std::vector<std::vector<std::uint8_t>> binaries;
 };
@@ -54,13 +54,13 @@ BlockWriter& BlockWriter::operator=(BlockWriter&&) noexcept    = default;
 
 namespace {
 
-Error make_error(Error::Code code, std::string msg) {
+Error makeError(Error::Code code, std::string msg) {
     return Error{code, std::move(msg)};
 }
 
 // Map a supported template T to its DataType enum. Compile-time dispatch.
 template <typename T>
-constexpr DataType data_type_for() noexcept {
+constexpr DataType dataTypeFor() noexcept {
     if constexpr (std::is_same_v<T, bool>)               return DataType::Bool;
     else if constexpr (std::is_same_v<T, std::int8_t>)   return DataType::Int8;
     else if constexpr (std::is_same_v<T, std::int16_t>)  return DataType::Int16;
@@ -77,60 +77,60 @@ constexpr DataType data_type_for() noexcept {
 
 // Returns the per-sample byte size for the active NumericValues alternative.
 // Returns sizeof(T) for all numeric alternatives and GpsLocation (== 24).
-std::size_t numeric_value_size(NumericValues const& v) noexcept {
+std::size_t numericValueSize(NumericValues const& v) noexcept {
     return std::visit([](auto const& vec) -> std::size_t {
         using T = typename std::decay_t<decltype(vec)>::value_type;
         return sizeof(T);
     }, v);
 }
 
-// Dispatch encode_start_data<T> from a NumericValues slice [offset, offset+count).
-Result<void> encode_start_from_values(
+// Dispatch encodeStartData<T> from a NumericValues slice [offset, offset+count).
+Result<void> encodeStartFromValues(
         std::vector<std::uint8_t>& buf,
         std::uint16_t ci, std::uint8_t sov,
-        std::int64_t start_ts, double rate,
+        std::int64_t startTs, double rate,
         NumericValues const& v, std::size_t offset, std::size_t count) {
     if (auto const* fv = std::get_if<std::vector<float>>(&v)) {
-        return osf::detail::encode_start_data<float>(
-            buf, ci, sov, start_ts, rate, fv->data() + offset, count);
+        return osf::detail::encodeStartData<float>(
+            buf, ci, sov, startTs, rate, fv->data() + offset, count);
     } else if (auto const* dv = std::get_if<std::vector<double>>(&v)) {
-        return osf::detail::encode_start_data<double>(
-            buf, ci, sov, start_ts, rate, dv->data() + offset, count);
+        return osf::detail::encodeStartData<double>(
+            buf, ci, sov, startTs, rate, dv->data() + offset, count);
     }
     // Defensive: equidistant channels only store float/double
     return tl::make_unexpected(
-        Error{Error::Code::InvalidBlock, "encode_start_from_values: non-float/double NumericValues"});
+        Error{Error::Code::InvalidBlock, "encodeStartFromValues: non-float/double NumericValues"});
 }
 
-// Dispatch encode_continued_data<T> from a NumericValues slice [offset, offset+count).
-Result<void> encode_continued_from_values(
+// Dispatch encodeContinuedData<T> from a NumericValues slice [offset, offset+count).
+Result<void> encodeContinuedFromValues(
         std::vector<std::uint8_t>& buf,
         std::uint16_t ci, std::uint8_t sov,
         NumericValues const& v, std::size_t offset, std::size_t count) {
     if (auto const* fv = std::get_if<std::vector<float>>(&v)) {
-        return osf::detail::encode_continued_data<float>(
+        return osf::detail::encodeContinuedData<float>(
             buf, ci, sov, fv->data() + offset, count);
     } else if (auto const* dv = std::get_if<std::vector<double>>(&v)) {
-        return osf::detail::encode_continued_data<double>(
+        return osf::detail::encodeContinuedData<double>(
             buf, ci, sov, dv->data() + offset, count);
     }
     // Defensive: equidistant channels only store float/double
     return tl::make_unexpected(
-        Error{Error::Code::InvalidBlock, "encode_continued_from_values: non-float/double NumericValues"});
+        Error{Error::Code::InvalidBlock, "encodeContinuedFromValues: non-float/double NumericValues"});
 }
 
 // Append T values into the correct NumericValues alternative — creating it
 // if still default-constructed (holds std::vector<double> by default).
 //
 // Precondition: the caller (addTimestampedSamplesImpl) has already
-// verified datatype_lock == data_type_for<T>(), so the variant either
+// verified datatypeLock == dataTypeFor<T>(), so the variant either
 // is empty/default (first append → create) or already holds vector<T>.
 //
 // Note: std::vector<bool> does not support pointer-range insert from
 // `bool const*` directly in all implementations; we push_back element by
 // element for that case.
 template <typename T>
-void append_timestamped_values(NumericValues& nv, T const* values, std::size_t count) {
+void appendTimestampedValues(NumericValues& nv, T const* values, std::size_t count) {
     if (auto* vec = std::get_if<std::vector<T>>(&nv)) {
         if constexpr (std::is_same_v<T, bool>) {
             vec->reserve(vec->size() + count);
@@ -153,7 +153,7 @@ void append_timestamped_values(NumericValues& nv, T const* values, std::size_t c
 
 // Append GpsLocation values into the GpsLocation alternative of NumericValues.
 // Switches from default (vector<double>) to vector<GpsLocation> on first call.
-void append_gps_values(NumericValues& nv, GpsLocation const* values, std::size_t count) {
+void appendGpsValues(NumericValues& nv, GpsLocation const* values, std::size_t count) {
     if (auto* vec = std::get_if<std::vector<GpsLocation>>(&nv)) {
         vec->insert(vec->end(), values, values + count);
     } else {
@@ -162,13 +162,13 @@ void append_gps_values(NumericValues& nv, GpsLocation const* values, std::size_t
     }
 }
 
-// Dispatch encode_abs_timestamp_data<T> from a NumericValues slice
+// Dispatch encodeAbsTimestampData<T> from a NumericValues slice
 // [offset, offset+count).
 //
 // Special case: std::vector<bool> has no .data() member (proxy-reference
 // specialisation). We materialise a genuine bool[] so the glvalue type
 // matches the object type — no strict-aliasing violation.
-Result<void> encode_abs_ts_from_values(
+Result<void> encodeAbsTsFromValues(
         std::vector<std::uint8_t>& buf,
         std::uint16_t ci, std::uint8_t sov,
         std::int64_t const* ts,
@@ -176,27 +176,27 @@ Result<void> encode_abs_ts_from_values(
     // Handle std::vector<bool> before the generic visit (no .data()).
     if (auto const* bv = std::get_if<std::vector<bool>>(&v)) {
         // std::vector<bool> has no .data() (proxy-reference specialisation);
-        // materialise a genuine bool[] so encode_abs_timestamp_data<bool>
+        // materialise a genuine bool[] so encodeAbsTimestampData<bool>
         // reads bool objects (no strict-aliasing violation).
         std::unique_ptr<bool[]> tmp(new bool[count]);
         for (std::size_t i = 0; i < count; ++i)
             tmp[i] = (*bv)[offset + i];
-        return osf::detail::encode_abs_timestamp_data<bool>(
+        return osf::detail::encodeAbsTimestampData<bool>(
             buf, ci, sov, ts, tmp.get(), count);
     }
     return std::visit([&](auto const& vec) -> Result<void> {
         using T = typename std::decay_t<decltype(vec)>::value_type;
         if constexpr (std::is_same_v<T, GpsLocation>) {
-            return osf::detail::encode_abs_timestamp_data_gps(
+            return osf::detail::encodeAbsTimestampDataGps(
                 buf, ci, sov, ts, vec.data() + offset, count);
         } else if constexpr (std::is_same_v<T, bool>) {
             // Handled above; this branch is unreachable but needed for
             // the constexpr-else chain.
             return tl::make_unexpected(
                 Error{Error::Code::InvalidBlock,
-                      "encode_abs_ts_from_values: bool fallthrough (unreachable)"});
+                      "encodeAbsTsFromValues: bool fallthrough (unreachable)"});
         } else {
-            return osf::detail::encode_abs_timestamp_data<T>(
+            return osf::detail::encodeAbsTimestampData<T>(
                 buf, ci, sov, ts, vec.data() + offset, count);
         }
     }, v);
@@ -222,29 +222,29 @@ void BlockWriter::setLocation(double lat, double lon, double alt) {
 
 Result<std::uint16_t> BlockWriter::addChannel(ChannelDef def) {
     if (def.sizeOfLengthValue != 2 && def.sizeOfLengthValue != 4) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addChannel: sizeOfLengthValue must be 2 or 4"));
     }
     if (def.dataType == DataType::Unsupported) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addChannel: dataType Unsupported is not writeable"));
     }
     if (def.channelType == ChannelType::Unsupported) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addChannel: channelType Unsupported is not writeable"));
     }
     if (m_channels.size() >= 0xFFFF) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addChannel: too many channels (max 65535)"));
     }
 
     auto const idx = static_cast<std::uint16_t>(m_channels.size());
     ChannelData cd;
-    cd.datatype_lock = def.dataType;
+    cd.datatypeLock = def.dataType;
     m_nameToIndex.emplace(def.name, idx);
     m_channels.push_back(std::move(def));
     m_channelData.push_back(std::move(cd));
@@ -271,18 +271,18 @@ Result<void> BlockWriter::addEquidistantSegmentImpl(
         std::uint16_t channel, std::int64_t startTsNs, double rateHz,
         T const* samples, std::size_t count) {
     if (count == 0) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addEquidistantSegment: count must be > 0"));
     }
     if (!(rateHz > 0.0) || !std::isfinite(rateHz)) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addEquidistantSegment: sampleRateHz must be a "
             "positive finite double"));
     }
     if (channel >= m_channels.size()) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addEquidistantSegment: channel index out of range"));
     }
@@ -292,7 +292,7 @@ Result<void> BlockWriter::addEquidistantSegmentImpl(
     // Kind-lock: once a channel has an equidistant segment it stays equidistant.
     if (cd.kind != ChannelData::Kind::Empty &&
         cd.kind != ChannelData::Kind::Equidistant) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidBlock,
             "channel " + std::to_string(channel) + ": mixed block types"));
     }
@@ -303,12 +303,12 @@ Result<void> BlockWriter::addEquidistantSegmentImpl(
     // public addEquidistantSegment overloads), so the runtime branch
     // would be dead code — a static_assert documents it without tripping
     // MSVC C4127 (constant conditional) under /WX.
-    constexpr DataType expected = data_type_for<T>();
+    constexpr DataType expected = dataTypeFor<T>();
     static_assert(expected == DataType::Float || expected == DataType::Double,
                   "addEquidistantSegmentImpl is only valid for "
                   "Float and Double");
-    if (cd.datatype_lock != expected) {
-        return tl::make_unexpected(make_error(
+    if (cd.datatypeLock != expected) {
+        return tl::make_unexpected(makeError(
             Error::Code::DataTypeMismatch,
             "channel " + std::to_string(channel) + ": datatype mismatch"));
     }
@@ -318,7 +318,7 @@ Result<void> BlockWriter::addEquidistantSegmentImpl(
     seg.startTimestampNs = startTsNs;
     seg.sampleRateHz     = rateHz;
     seg.values             = NumericValues{std::vector<T>(samples, samples + count)};
-    cd.eq_segments.push_back(std::move(seg));
+    cd.eqSegments.push_back(std::move(seg));
     return {};
 }
 
@@ -329,12 +329,12 @@ Result<void> BlockWriter::addTimestampedSamplesImpl(
         std::uint16_t channel, std::int64_t const* timestampsNs,
         T const* values, std::size_t count) {
     if (count == 0) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addTimestampedSamples: count must be > 0"));
     }
     if (channel >= m_channels.size()) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addTimestampedSamples: channel index out of range"));
     }
@@ -344,22 +344,22 @@ Result<void> BlockWriter::addTimestampedSamplesImpl(
     // Kind-lock: once a channel has timestamped data it stays timestamped.
     if (cd.kind != ChannelData::Kind::Empty &&
         cd.kind != ChannelData::Kind::Timestamped) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidBlock,
             "channel " + std::to_string(channel) + ": mixed block types"));
     }
 
     // Datatype must match what was declared at addChannel time.
-    constexpr DataType expected = data_type_for<T>();
-    if (cd.datatype_lock != expected) {
-        return tl::make_unexpected(make_error(
+    constexpr DataType expected = dataTypeFor<T>();
+    if (cd.datatypeLock != expected) {
+        return tl::make_unexpected(makeError(
             Error::Code::DataTypeMismatch,
             "channel " + std::to_string(channel) + ": datatype mismatch"));
     }
 
     cd.kind = ChannelData::Kind::Timestamped;
-    cd.ts_ns.insert(cd.ts_ns.end(), timestampsNs, timestampsNs + count);
-    append_timestamped_values<T>(cd.ts_values, values, count);
+    cd.tsNs.insert(cd.tsNs.end(), timestampsNs, timestampsNs + count);
+    appendTimestampedValues<T>(cd.tsValues, values, count);
     return {};
 }
 
@@ -383,12 +383,12 @@ Result<void> BlockWriter::addTimestampedGpsSamples(
         std::uint16_t channel, std::int64_t const* timestampsNs,
         GpsLocation const* values, std::size_t count) {
     if (count == 0) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addTimestampedGpsSamples: count must be > 0"));
     }
     if (channel >= m_channels.size()) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addTimestampedGpsSamples: channel index out of range"));
     }
@@ -398,20 +398,20 @@ Result<void> BlockWriter::addTimestampedGpsSamples(
     // Kind-lock: once a channel has timestamped data it stays timestamped.
     if (cd.kind != ChannelData::Kind::Empty &&
         cd.kind != ChannelData::Kind::Timestamped) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidBlock,
             "channel " + std::to_string(channel) + ": mixed block types"));
     }
     // Datatype must be GpsLocation.
-    if (cd.datatype_lock != DataType::GpsLocation) {
-        return tl::make_unexpected(make_error(
+    if (cd.datatypeLock != DataType::GpsLocation) {
+        return tl::make_unexpected(makeError(
             Error::Code::DataTypeMismatch,
             "channel " + std::to_string(channel) + ": datatype mismatch"));
     }
 
     cd.kind = ChannelData::Kind::Timestamped;
-    cd.ts_ns.insert(cd.ts_ns.end(), timestampsNs, timestampsNs + count);
-    append_gps_values(cd.ts_values, values, count);
+    cd.tsNs.insert(cd.tsNs.end(), timestampsNs, timestampsNs + count);
+    appendGpsValues(cd.tsValues, values, count);
     return {};
 }
 
@@ -426,12 +426,12 @@ Result<void> BlockWriter::addStringSamples(
         std::uint16_t channel, std::int64_t const* timestampsNs,
         std::string_view const* values, std::size_t count) {
     if (count == 0) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addStringSamples: count must be > 0"));
     }
     if (channel >= m_channels.size()) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addStringSamples: channel index out of range"));
     }
@@ -441,19 +441,19 @@ Result<void> BlockWriter::addStringSamples(
     // Kind-lock: once a channel has variable data it stays variable.
     if (cd.kind != ChannelData::Kind::Empty &&
         cd.kind != ChannelData::Kind::Variable) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidBlock,
             "channel " + std::to_string(channel) + ": mixed block types"));
     }
     // Datatype must be String.
-    if (cd.datatype_lock != DataType::String) {
-        return tl::make_unexpected(make_error(
+    if (cd.datatypeLock != DataType::String) {
+        return tl::make_unexpected(makeError(
             Error::Code::DataTypeMismatch,
             "channel " + std::to_string(channel) + ": datatype mismatch"));
     }
 
     cd.kind = ChannelData::Kind::Variable;
-    cd.ts_ns.insert(cd.ts_ns.end(), timestampsNs, timestampsNs + count);
+    cd.tsNs.insert(cd.tsNs.end(), timestampsNs, timestampsNs + count);
     for (std::size_t i = 0; i < count; ++i) {
         cd.strings.emplace_back(values[i]);
     }
@@ -471,12 +471,12 @@ Result<void> BlockWriter::addBinarySamples(
         std::uint16_t channel, std::int64_t const* timestampsNs,
         BinarySample const* values, std::size_t count) {
     if (count == 0) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addBinarySamples: count must be > 0"));
     }
     if (channel >= m_channels.size()) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "addBinarySamples: channel index out of range"));
     }
@@ -486,19 +486,19 @@ Result<void> BlockWriter::addBinarySamples(
     // Kind-lock: once a channel has variable data it stays variable.
     if (cd.kind != ChannelData::Kind::Empty &&
         cd.kind != ChannelData::Kind::Variable) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidBlock,
             "channel " + std::to_string(channel) + ": mixed block types"));
     }
     // Datatype must be Binary.
-    if (cd.datatype_lock != DataType::Binary) {
-        return tl::make_unexpected(make_error(
+    if (cd.datatypeLock != DataType::Binary) {
+        return tl::make_unexpected(makeError(
             Error::Code::DataTypeMismatch,
             "channel " + std::to_string(channel) + ": datatype mismatch"));
     }
 
     cd.kind = ChannelData::Kind::Variable;
-    cd.ts_ns.insert(cd.ts_ns.end(), timestampsNs, timestampsNs + count);
+    cd.tsNs.insert(cd.tsNs.end(), timestampsNs, timestampsNs + count);
     for (std::size_t i = 0; i < count; ++i) {
         cd.binaries.emplace_back(values[i].data, values[i].data + values[i].size);
     }
@@ -517,11 +517,11 @@ void BlockWriter::autobumpSizeOfLengthValue(std::vector<ChannelDef>& defs) const
         if (defs[i].sizeOfLengthValue == 4) continue;
         ChannelData const& cd = m_channelData[i];
         if (cd.kind != ChannelData::Kind::Variable) continue;
-        std::size_t max_sample = 0;
-        for (auto const& s : cd.strings)  max_sample = std::max(max_sample, s.size());
-        for (auto const& b : cd.binaries) max_sample = std::max(max_sample, b.size());
-        if (osf::detail::VARIABLE_BLOCK_OVERHEAD_BYTES + max_sample
-                > osf::detail::max_payload_for_sov(2)) {
+        std::size_t maxSample = 0;
+        for (auto const& s : cd.strings)  maxSample = std::max(maxSample, s.size());
+        for (auto const& b : cd.binaries) maxSample = std::max(maxSample, b.size());
+        if (osf::detail::VARIABLE_BLOCK_OVERHEAD_BYTES + maxSample
+                > osf::detail::maxPayloadForSov(2)) {
             defs[i].sizeOfLengthValue = 4;
         }
     }
@@ -534,7 +534,7 @@ Result<void> BlockWriter::writeBlockBytes(std::ostream& out,
     out.write(reinterpret_cast<char const*>(buf.data()),
               static_cast<std::streamsize>(buf.size()));
     if (!out) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::IoError, "writeBlockBytes: stream error"));
     }
     return {};
@@ -547,17 +547,17 @@ Result<void> BlockWriter::emitChannel(std::ostream& out,
         std::uint16_t ci, std::uint8_t sov,
         ChannelData const& cd) const {
     if (cd.kind == ChannelData::Kind::Equidistant) {
-        for (auto const& seg : cd.eq_segments) {
-            std::size_t const value_size = numeric_value_size(seg.values);
+        for (auto const& seg : cd.eqSegments) {
+            std::size_t const valueSize = numericValueSize(seg.values);
             std::size_t const total      = numericValuesLen(seg.values);
-            std::size_t const max_first  =
-                osf::detail::max_samples_per_start_block(value_size, sov);
-            std::size_t const max_cont   =
-                osf::detail::max_samples_per_continued_block(value_size, sov);
-            std::size_t const first = std::min(total, max_first);
+            std::size_t const maxFirst  =
+                osf::detail::maxSamplesPerStartBlock(valueSize, sov);
+            std::size_t const maxCont   =
+                osf::detail::maxSamplesPerContinuedBlock(valueSize, sov);
+            std::size_t const first = std::min(total, maxFirst);
 
             buf.clear();
-            if (auto e = encode_start_from_values(buf, ci, sov,
+            if (auto e = encodeStartFromValues(buf, ci, sov,
                     seg.startTimestampNs, seg.sampleRateHz,
                     seg.values, 0, first); !e) {
                 return e;
@@ -566,9 +566,9 @@ Result<void> BlockWriter::emitChannel(std::ostream& out,
 
             std::size_t written = first;
             while (written < total) {
-                std::size_t const chunk = std::min(total - written, max_cont);
+                std::size_t const chunk = std::min(total - written, maxCont);
                 buf.clear();
-                if (auto e = encode_continued_from_values(buf, ci, sov,
+                if (auto e = encodeContinuedFromValues(buf, ci, sov,
                         seg.values, written, chunk); !e) {
                     return e;
                 }
@@ -580,17 +580,17 @@ Result<void> BlockWriter::emitChannel(std::ostream& out,
     }
 
     if (cd.kind == ChannelData::Kind::Timestamped) {
-        std::size_t const value_size = numeric_value_size(cd.ts_values);
-        std::size_t const total      = cd.ts_ns.size();
-        std::size_t const max_per    =
-            osf::detail::max_samples_per_timestamped_block(value_size, sov);
+        std::size_t const valueSize = numericValueSize(cd.tsValues);
+        std::size_t const total      = cd.tsNs.size();
+        std::size_t const maxPer    =
+            osf::detail::maxSamplesPerTimestampedBlock(valueSize, sov);
         std::size_t written = 0;
         while (written < total) {
-            std::size_t const chunk = std::min(total - written, max_per);
+            std::size_t const chunk = std::min(total - written, maxPer);
             buf.clear();
-            if (auto e = encode_abs_ts_from_values(buf, ci, sov,
-                    cd.ts_ns.data() + written,
-                    cd.ts_values, written, chunk); !e) {
+            if (auto e = encodeAbsTsFromValues(buf, ci, sov,
+                    cd.tsNs.data() + written,
+                    cd.tsValues, written, chunk); !e) {
                 return e;
             }
             if (auto w = writeBlockBytes(out, buf); !w) return w;
@@ -601,36 +601,36 @@ Result<void> BlockWriter::emitChannel(std::ostream& out,
 
     if (cd.kind == ChannelData::Kind::Variable) {
         // Variable: one block per sample (no chunking — spec).
-        std::size_t const capacity = osf::detail::variable_sample_capacity(sov);
-        for (std::size_t i = 0; i < cd.ts_ns.size(); ++i) {
+        std::size_t const capacity = osf::detail::variableSampleCapacity(sov);
+        for (std::size_t i = 0; i < cd.tsNs.size(); ++i) {
             buf.clear();
-            // strings is non-empty iff datatype_lock == String; a Binary channel never populates strings (datatype-lock enforced at accumulation).
+            // strings is non-empty iff datatypeLock == String; a Binary channel never populates strings (datatype-lock enforced at accumulation).
             if (!cd.strings.empty()) {
                 std::string_view sv = cd.strings[i];
                 if (sv.size() > capacity) {
-                    return tl::make_unexpected(make_error(
+                    return tl::make_unexpected(makeError(
                         Error::Code::InvalidBlock,
                         "channel " + std::to_string(ci) +
                         ": variable string sample size " + std::to_string(sv.size()) +
                         " exceeds capacity " + std::to_string(capacity) +
                         " for sizeoflengthvalue=" + std::to_string(sov)));
                 }
-                if (auto e = osf::detail::encode_abs_timestamp_data(
-                        buf, ci, sov, cd.ts_ns[i], sv); !e) {
+                if (auto e = osf::detail::encodeAbsTimestampData(
+                        buf, ci, sov, cd.tsNs[i], sv); !e) {
                     return e;
                 }
             } else {
                 BinarySample bs{cd.binaries[i].data(), cd.binaries[i].size()};
                 if (bs.size > capacity) {
-                    return tl::make_unexpected(make_error(
+                    return tl::make_unexpected(makeError(
                         Error::Code::InvalidBlock,
                         "channel " + std::to_string(ci) +
                         ": variable binary sample size " + std::to_string(bs.size) +
                         " exceeds capacity " + std::to_string(capacity) +
                         " for sizeoflengthvalue=" + std::to_string(sov)));
                 }
-                if (auto e = osf::detail::encode_abs_timestamp_data(
-                        buf, ci, sov, cd.ts_ns[i], bs); !e) {
+                if (auto e = osf::detail::encodeAbsTimestampData(
+                        buf, ci, sov, cd.tsNs[i], bs); !e) {
                     return e;
                 }
             }
@@ -647,7 +647,7 @@ Result<void> BlockWriter::emitChannel(std::ostream& out,
 
 Result<void> BlockWriter::writeTo(std::ostream& out) const {
     if (m_channels.empty()) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::InvalidArgument,
             "writeTo: no channels declared"));
     }
@@ -667,14 +667,14 @@ Result<void> BlockWriter::writeTo(std::ostream& out) const {
     fi.namespaceSep         = m_fileInfo.namespaceSep;
     fi.comment               = m_fileInfo.comment;
 
-    MetaBlock meta = detail::build_metablock(fi, defs);
+    MetaBlock meta = detail::buildMetablock(fi, defs);
     std::string const json  = serializeMetablockJson(meta);
     std::string const magic = "OSF5 " + std::to_string(json.size()) + "\n";
 
     out.write(magic.data(), static_cast<std::streamsize>(magic.size()));
     out.write(json.data(),  static_cast<std::streamsize>(json.size()));
     if (!out) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::IoError,
             "writeTo: stream error writing header/metablock"));
     }
@@ -688,7 +688,7 @@ Result<void> BlockWriter::writeTo(std::ostream& out) const {
 
     out.flush();
     if (!out) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::IoError,
             "writeTo: stream error on final flush"));
     }
@@ -698,7 +698,7 @@ Result<void> BlockWriter::writeTo(std::ostream& out) const {
 Result<void> BlockWriter::writeToFile(std::filesystem::path path) const {
     std::ofstream f(path, std::ios::binary);
     if (!f) {
-        return tl::make_unexpected(make_error(
+        return tl::make_unexpected(makeError(
             Error::Code::IoError,
             "writeToFile: cannot open " + path.string()));
     }
@@ -711,7 +711,7 @@ namespace {
 
 /// Build a ChannelDef from a typed DataChannel read by the DataManager.
 /// Mirrors channel_def_from_manager_channel in the Rust writer.rs reference.
-osf::ChannelDef channel_def_from_dc(osf::DataChannel const& dc) {
+osf::ChannelDef channelDefFromDc(osf::DataChannel const& dc) {
     osf::ChannelMeta const& meta = osf::channelMeta(dc);
     osf::ChannelDef def;
     def.name                   = osf::channelName(dc);
@@ -733,28 +733,28 @@ osf::ChannelDef channel_def_from_dc(osf::DataChannel const& dc) {
 
 /// Copy all samples from a typed DataChannel into the builder.
 /// Mirrors copy_channel_data in the Rust writer.rs reference.
-osf::Result<void> copy_dc_data(osf::BlockWriter& b,
+osf::Result<void> copyDcData(osf::BlockWriter& b,
                                 osf::DataChannel const& dc,
-                                std::uint16_t target_idx) {
+                                std::uint16_t targetIdx) {
     if (auto const* eq = std::get_if<osf::EquidistantChannel>(&dc)) {
         // Equidistant: one addEquidistantSegment per segment; slice the
         // flat NumericValues by [startIndex, startIndex+sampleCount).
         for (auto const& seg : eq->segments) {
             if (seg.sampleCount == 0) continue;
             if (auto const* fv = std::get_if<std::vector<float>>(&eq->samples)) {
-                if (auto r = b.addEquidistantSegment(target_idx,
+                if (auto r = b.addEquidistantSegment(targetIdx,
                         seg.startTimestampNs, seg.sampleRateHz,
                         fv->data() + seg.startIndex, seg.sampleCount); !r)
                     return r;
             } else if (auto const* dv = std::get_if<std::vector<double>>(&eq->samples)) {
-                if (auto r = b.addEquidistantSegment(target_idx,
+                if (auto r = b.addEquidistantSegment(targetIdx,
                         seg.startTimestampNs, seg.sampleRateHz,
                         dv->data() + seg.startIndex, seg.sampleCount); !r)
                     return r;
             } else {
                 return tl::make_unexpected(osf::Error{
                     osf::Error::Code::InvalidBlock,
-                    "copy_dc_data: equidistant channel '" + eq->name +
+                    "copyDcData: equidistant channel '" + eq->name +
                     "' has non-float/double samples"});
             }
         }
@@ -765,21 +765,21 @@ osf::Result<void> copy_dc_data(osf::BlockWriter& b,
         // Timestamped numeric: dispatch on each NumericValues alternative.
         std::size_t const n = ts->timestampsNs.size();
         if (n == 0) return {};
-        auto const* ts_ptr = ts->timestampsNs.data();
+        auto const* tsPtr = ts->timestampsNs.data();
 
         return std::visit([&](auto const& vec) -> osf::Result<void> {
             using T = typename std::decay_t<decltype(vec)>::value_type;
             if constexpr (std::is_same_v<T, osf::GpsLocation>) {
-                return b.addTimestampedGpsSamples(target_idx, ts_ptr, vec.data(), n);
+                return b.addTimestampedGpsSamples(targetIdx, tsPtr, vec.data(), n);
             } else if constexpr (std::is_same_v<T, bool>) {
                 // std::vector<bool> has no .data() (proxy-reference specialisation);
                 // materialise a genuine bool[] so addTimestampedSamples<bool>
                 // reads bool objects without UB.
                 std::unique_ptr<bool[]> tmp(new bool[n]);
                 for (std::size_t i = 0; i < n; ++i) tmp[i] = vec[i];
-                return b.addTimestampedSamples<bool>(target_idx, ts_ptr, tmp.get(), n);
+                return b.addTimestampedSamples<bool>(targetIdx, tsPtr, tmp.get(), n);
             } else {
-                return b.addTimestampedSamples<T>(target_idx, ts_ptr, vec.data(), n);
+                return b.addTimestampedSamples<T>(targetIdx, tsPtr, vec.data(), n);
             }
         }, ts->values);
     }
@@ -787,32 +787,32 @@ osf::Result<void> copy_dc_data(osf::BlockWriter& b,
     if (auto const* var = std::get_if<osf::VariableChannel>(&dc)) {
         std::size_t const n = var->timestampsNs.size();
         if (n == 0) return {};
-        auto const* ts_ptr = var->timestampsNs.data();
+        auto const* tsPtr = var->timestampsNs.data();
 
         if (var->dataType == osf::DataType::String) {
             // Build a std::string_view array pointing into the stored strings.
-            auto strs_r = var->asStrings();
-            if (!strs_r) return tl::make_unexpected(strs_r.error());
+            auto strsR = var->asStrings();
+            if (!strsR) return tl::make_unexpected(strsR.error());
             std::vector<std::string_view> svs;
             svs.reserve(n);
-            for (auto const& s : **strs_r) svs.emplace_back(s);
-            return b.addStringSamples(target_idx, ts_ptr, svs.data(), n);
+            for (auto const& s : **strsR) svs.emplace_back(s);
+            return b.addStringSamples(targetIdx, tsPtr, svs.data(), n);
         } else {
             // Binary channel: build BinarySample views into the stored vectors.
-            auto bins_r = var->asBinaries();
-            if (!bins_r) return tl::make_unexpected(bins_r.error());
+            auto binsR = var->asBinaries();
+            if (!binsR) return tl::make_unexpected(binsR.error());
             std::vector<osf::BinarySample> bsv;
             bsv.reserve(n);
-            for (auto const& bv : **bins_r)
+            for (auto const& bv : **binsR)
                 bsv.push_back(osf::BinarySample{bv.data(), bv.size()});
-            return b.addBinarySamples(target_idx, ts_ptr, bsv.data(), n);
+            return b.addBinarySamples(targetIdx, tsPtr, bsv.data(), n);
         }
     }
 
     // Unknown variant — defensive; DataChannel is a closed variant set.
     return tl::make_unexpected(osf::Error{
         osf::Error::Code::InvalidBlock,
-        "copy_dc_data: unknown DataChannel variant"});
+        "copyDcData: unknown DataChannel variant"});
 }
 
 }  // namespace (fromManager helpers)
@@ -833,10 +833,10 @@ Result<BlockWriter> BlockWriter::fromManager(DataManager const& mgr) {
     b.m_fileInfo.comment               = mgr.meta.fileInfo.comment;
 
     for (DataChannel const& dc : mgr.channels()) {
-        ChannelDef def = channel_def_from_dc(dc);
+        ChannelDef def = channelDefFromDc(dc);
         auto idx = b.addChannel(def);
         if (!idx) return tl::make_unexpected(idx.error());
-        if (auto r = copy_dc_data(b, dc, *idx); !r)
+        if (auto r = copyDcData(b, dc, *idx); !r)
             return tl::make_unexpected(r.error());
     }
     return b;

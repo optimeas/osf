@@ -194,7 +194,7 @@ private:
     template <typename T>
     using IoResult = Result<std::optional<T>>;
 
-    IoResult<std::uint32_t> readLengthField(std::uint8_t sizeof_field);
+    IoResult<std::uint32_t> readLengthField(std::uint8_t sizeofField);
     IoResult<std::vector<std::uint8_t>> readPayload(std::size_t len);
     Result<bool> drain(std::uint64_t len);
     Result<void> consumeTrailer();

@@ -28,7 +28,7 @@ constexpr std::uint64_t GB = 1024 * MB;
 // Tiny snprintf-based formatter that does not pull <iomanip> /
 // <sstream> into the public header. Buffer of 64 is more than enough
 // for the two-digit-fraction formats we emit.
-std::string fmt_double(char const* spec, double v) {
+std::string fmtDouble(char const* spec, double v) {
     char buf[64];
     int const n = std::snprintf(buf, sizeof(buf), spec, v);
     if (n < 0) return {};
@@ -39,15 +39,15 @@ std::string fmt_double(char const* spec, double v) {
 
 std::string formatBytes(std::uint64_t bytes) {
     if (bytes >= GB) {
-        return fmt_double("%.2f GB", static_cast<double>(bytes) /
+        return fmtDouble("%.2f GB", static_cast<double>(bytes) /
                                        static_cast<double>(GB));
     }
     if (bytes >= MB) {
-        return fmt_double("%.2f MB", static_cast<double>(bytes) /
+        return fmtDouble("%.2f MB", static_cast<double>(bytes) /
                                        static_cast<double>(MB));
     }
     if (bytes >= KB) {
-        return fmt_double("%.2f KB", static_cast<double>(bytes) /
+        return fmtDouble("%.2f KB", static_cast<double>(bytes) /
                                        static_cast<double>(KB));
     }
     return std::to_string(bytes) + " B";
@@ -57,9 +57,9 @@ std::string formatDuration(std::chrono::nanoseconds d) {
     double const secs =
         std::chrono::duration<double>(d).count();
     if (secs < 1.0) {
-        return fmt_double("%.0f ms", secs * 1000.0);
+        return fmtDouble("%.0f ms", secs * 1000.0);
     }
-    return fmt_double("%.2f s", secs);
+    return fmtDouble("%.2f s", secs);
 }
 
 std::string_view compressionFormatName(CompressionFormat f) noexcept {

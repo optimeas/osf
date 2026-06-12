@@ -16,11 +16,11 @@ namespace osf {
 
 namespace {
 
-Error invalid_metablock(std::string msg) {
+Error invalidMetablock(std::string msg) {
     return Error{Error::Code::InvalidMetablock, std::move(msg)};
 }
 
-Error xml_parse_error(std::string msg) {
+Error xmlParseError(std::string msg) {
     return Error{Error::Code::XmlParseError, std::move(msg)};
 }
 
@@ -28,33 +28,33 @@ Error xml_parse_error(std::string msg) {
 // attribute does not exist; the explicit empty()-check on the
 // attribute object distinguishes "missing" from "present but empty".
 
-bool has_attr(pugi::xml_node const& n, char const* name) noexcept {
+bool hasAttr(pugi::xml_node const& n, char const* name) noexcept {
     return !n.attribute(name).empty();
 }
 
-std::optional<std::string> get_optional_string(pugi::xml_node const& n,
+std::optional<std::string> getOptionalString(pugi::xml_node const& n,
                                                char const* name) {
-    if (!has_attr(n, name)) return std::nullopt;
+    if (!hasAttr(n, name)) return std::nullopt;
     return std::string{n.attribute(name).as_string()};
 }
 
 // Parse a required string attribute. The metablock parser treats a
 // present-but-empty value as valid (e.g. `comment=""`).
-Result<std::string> get_required_string(pugi::xml_node const& n,
+Result<std::string> getRequiredString(pugi::xml_node const& n,
                                         char const* name,
                                         std::string const& context) {
-    if (!has_attr(n, name)) {
+    if (!hasAttr(n, name)) {
         std::ostringstream oss;
         oss << "OSF4 " << context << " is missing required attribute "
             << name;
-        return tl::make_unexpected(invalid_metablock(oss.str()));
+        return tl::make_unexpected(invalidMetablock(oss.str()));
     }
     return std::string{n.attribute(name).as_string()};
 }
 
-Result<std::optional<double>> parse_optional_double(pugi::xml_node const& n,
+Result<std::optional<double>> parseOptionalDouble(pugi::xml_node const& n,
                                                    char const* name) {
-    if (!has_attr(n, name)) return std::optional<double>{};
+    if (!hasAttr(n, name)) return std::optional<double>{};
     pugi::xml_attribute const& attr = n.attribute(name);
     // as_double returns 0.0 on malformed input — we re-parse via
     // strtod to detect that case explicitly.
@@ -65,14 +65,14 @@ Result<std::optional<double>> parse_optional_double(pugi::xml_node const& n,
         std::ostringstream oss;
         oss << "OSF4 attribute " << name << "=" << '"' << raw
             << "\" is not a valid floating-point number";
-        return tl::make_unexpected(invalid_metablock(oss.str()));
+        return tl::make_unexpected(invalidMetablock(oss.str()));
     }
     return std::optional<double>{v};
 }
 
-Result<std::optional<std::int64_t>> parse_optional_i64(pugi::xml_node const& n,
+Result<std::optional<std::int64_t>> parseOptionalI64(pugi::xml_node const& n,
                                                      char const* name) {
-    if (!has_attr(n, name)) return std::optional<std::int64_t>{};
+    if (!hasAttr(n, name)) return std::optional<std::int64_t>{};
     pugi::xml_attribute const& attr = n.attribute(name);
     char const* raw = attr.as_string();
     char* end = nullptr;
@@ -81,18 +81,18 @@ Result<std::optional<std::int64_t>> parse_optional_i64(pugi::xml_node const& n,
         std::ostringstream oss;
         oss << "OSF4 attribute " << name << "=" << '"' << raw
             << "\" is not a valid integer";
-        return tl::make_unexpected(invalid_metablock(oss.str()));
+        return tl::make_unexpected(invalidMetablock(oss.str()));
     }
     return std::optional<std::int64_t>{static_cast<std::int64_t>(v)};
 }
 
-Result<std::uint8_t> validate_size_of_length_value(std::int64_t raw,
+Result<std::uint8_t> validateSizeOfLengthValue(std::int64_t raw,
                                                   std::string const& channelName) {
     if (raw == 2 || raw == 4) return static_cast<std::uint8_t>(raw);
     std::ostringstream oss;
     oss << "OSF4 channel \"" << channelName
         << "\" sizeoflengthvalue must be 2 or 4, got " << raw;
-    return tl::make_unexpected(invalid_metablock(oss.str()));
+    return tl::make_unexpected(invalidMetablock(oss.str()));
 }
 
 // Channel-level fields removed in spec revision 2026-05-04 — readers
@@ -106,26 +106,26 @@ char const* const REMOVED_CHANNEL_FIELDS[] = {
     "physicaldimension1", "physicaldimension2", "physicaldimension3",
 };
 
-Result<FileInfo> parse_optimeas_attrs(pugi::xml_node const& root) {
+Result<FileInfo> parseOptimeasAttrs(pugi::xml_node const& root) {
     FileInfo info;
     info.version = 4;
 
-    info.createdUtc   = get_optional_string(root, "created_utc");
-    info.creator       = get_optional_string(root, "creator");
-    info.tag           = get_optional_string(root, "tag");
-    info.reason        = get_optional_string(root, "reason");
-    info.comment       = get_optional_string(root, "comment");
-    info.namespaceSep = get_optional_string(root, "namespacesep");
+    info.createdUtc   = getOptionalString(root, "created_utc");
+    info.creator       = getOptionalString(root, "creator");
+    info.tag           = getOptionalString(root, "tag");
+    info.reason        = getOptionalString(root, "reason");
+    info.comment       = getOptionalString(root, "comment");
+    info.namespaceSep = getOptionalString(root, "namespacesep");
 
-    auto lat = parse_optional_double(root, "created_at_latitude");
+    auto lat = parseOptionalDouble(root, "created_at_latitude");
     if (!lat) return tl::make_unexpected(std::move(lat).error());
     info.createdAtLatitude = *lat;
 
-    auto lon = parse_optional_double(root, "created_at_longitude");
+    auto lon = parseOptionalDouble(root, "created_at_longitude");
     if (!lon) return tl::make_unexpected(std::move(lon).error());
     info.createdAtLongitude = *lon;
 
-    auto alt = parse_optional_double(root, "created_at_altitude");
+    auto alt = parseOptionalDouble(root, "created_at_altitude");
     if (!alt) return tl::make_unexpected(std::move(alt).error());
     info.createdAtAltitude = *alt;
 
@@ -134,17 +134,17 @@ Result<FileInfo> parse_optimeas_attrs(pugi::xml_node const& root) {
     // field devices. Accept them as an alternative on read; writers
     // always emit the spec form.
     if (!info.createdAtLatitude) {
-        auto v = parse_optional_double(root, "latitude");
+        auto v = parseOptionalDouble(root, "latitude");
         if (!v) return tl::make_unexpected(std::move(v).error());
         info.createdAtLatitude = *v;
     }
     if (!info.createdAtLongitude) {
-        auto v = parse_optional_double(root, "longitude");
+        auto v = parseOptionalDouble(root, "longitude");
         if (!v) return tl::make_unexpected(std::move(v).error());
         info.createdAtLongitude = *v;
     }
     if (!info.createdAtAltitude) {
-        auto v = parse_optional_double(root, "altitude");
+        auto v = parseOptionalDouble(root, "altitude");
         if (!v) return tl::make_unexpected(std::move(v).error());
         info.createdAtAltitude = *v;
     }
@@ -152,81 +152,81 @@ Result<FileInfo> parse_optimeas_attrs(pugi::xml_node const& root) {
     return info;
 }
 
-Result<Channel> parse_channel(pugi::xml_node const& node, std::size_t position) {
+Result<Channel> parseChannel(pugi::xml_node const& node, std::size_t position) {
     Channel ch;
 
     // index — required, must fit u16
-    if (!has_attr(node, "index")) {
+    if (!hasAttr(node, "index")) {
         std::ostringstream oss;
         oss << "OSF4 <channel> at position " << position
             << " is missing required attribute index";
-        return tl::make_unexpected(invalid_metablock(oss.str()));
+        return tl::make_unexpected(invalidMetablock(oss.str()));
     }
-    char const* raw_idx = node.attribute("index").as_string();
-    char* idx_end = nullptr;
-    long long const idx_v = std::strtoll(raw_idx, &idx_end, 10);
-    if (idx_end == raw_idx || *idx_end != '\0' || idx_v < 0 ||
-        idx_v > static_cast<long long>(UINT16_MAX)) {
+    char const* rawIdx = node.attribute("index").as_string();
+    char* idxEnd = nullptr;
+    long long const idxV = std::strtoll(rawIdx, &idxEnd, 10);
+    if (idxEnd == rawIdx || *idxEnd != '\0' || idxV < 0 ||
+        idxV > static_cast<long long>(UINT16_MAX)) {
         std::ostringstream oss;
         oss << "OSF4 <channel> at position " << position << " has index="
-            << '"' << raw_idx << "\" out of range 0.." << UINT16_MAX;
-        return tl::make_unexpected(invalid_metablock(oss.str()));
+            << '"' << rawIdx << "\" out of range 0.." << UINT16_MAX;
+        return tl::make_unexpected(invalidMetablock(oss.str()));
     }
-    ch.index = static_cast<std::uint16_t>(idx_v);
+    ch.index = static_cast<std::uint16_t>(idxV);
 
-    std::ostringstream chan_ctx;
-    chan_ctx << "<channel index=" << ch.index << ">";
-    std::string const ctx = chan_ctx.str();
+    std::ostringstream chanCtx;
+    chanCtx << "<channel index=" << ch.index << ">";
+    std::string const ctx = chanCtx.str();
 
-    auto name = get_required_string(node, "name", ctx);
+    auto name = getRequiredString(node, "name", ctx);
     if (!name) return tl::make_unexpected(std::move(name).error());
     ch.name = std::move(*name);
 
-    auto ct = get_required_string(node, "channeltype", ctx);
+    auto ct = getRequiredString(node, "channeltype", ctx);
     if (!ct) return tl::make_unexpected(std::move(ct).error());
     ch.channelTypeRaw = *ct;
-    auto ct_r = parseChannelType(ch.channelTypeRaw);
-    if (!ct_r) return tl::make_unexpected(std::move(ct_r).error());
-    ch.channelType = *ct_r;
+    auto ctR = parseChannelType(ch.channelTypeRaw);
+    if (!ctR) return tl::make_unexpected(std::move(ctR).error());
+    ch.channelType = *ctR;
 
-    auto dt = get_required_string(node, "datatype", ctx);
+    auto dt = getRequiredString(node, "datatype", ctx);
     if (!dt) return tl::make_unexpected(std::move(dt).error());
     ch.dataTypeRaw = *dt;
-    auto dt_r = parseDataType(ch.dataTypeRaw);
-    if (!dt_r) return tl::make_unexpected(std::move(dt_r).error());
-    ch.dataType = *dt_r;
+    auto dtR = parseDataType(ch.dataTypeRaw);
+    if (!dtR) return tl::make_unexpected(std::move(dtR).error());
+    ch.dataType = *dtR;
 
-    auto sol = get_required_string(node, "sizeoflengthvalue", ctx);
+    auto sol = getRequiredString(node, "sizeoflengthvalue", ctx);
     if (!sol) return tl::make_unexpected(std::move(sol).error());
     {
-        char const* raw_sol = sol->c_str();
-        char* sol_end = nullptr;
-        long long const sol_v = std::strtoll(raw_sol, &sol_end, 10);
-        if (sol_end == raw_sol || *sol_end != '\0') {
+        char const* rawSol = sol->c_str();
+        char* solEnd = nullptr;
+        long long const solV = std::strtoll(rawSol, &solEnd, 10);
+        if (solEnd == rawSol || *solEnd != '\0') {
             std::ostringstream oss;
             oss << "OSF4 channel \"" << ch.name
-                << "\" sizeoflengthvalue=\"" << raw_sol
+                << "\" sizeoflengthvalue=\"" << rawSol
                 << "\" is not numeric";
-            return tl::make_unexpected(invalid_metablock(oss.str()));
+            return tl::make_unexpected(invalidMetablock(oss.str()));
         }
-        auto sol_v8 = validate_size_of_length_value(
-            static_cast<std::int64_t>(sol_v), ch.name);
-        if (!sol_v8) return tl::make_unexpected(std::move(sol_v8).error());
-        ch.sizeOfLengthValue = *sol_v8;
+        auto solV8 = validateSizeOfLengthValue(
+            static_cast<std::int64_t>(solV), ch.name);
+        if (!solV8) return tl::make_unexpected(std::move(solV8).error());
+        ch.sizeOfLengthValue = *solV8;
     }
 
-    auto ti = parse_optional_i64(node, "timeincrement");
+    auto ti = parseOptionalI64(node, "timeincrement");
     if (!ti) return tl::make_unexpected(std::move(ti).error());
     ch.timeIncrementNs = *ti;
 
-    ch.mimeType          = get_optional_string(node, "mimetype");
-    ch.physicalUnit      = get_optional_string(node, "physicalunit");
-    ch.physicalDimension = get_optional_string(node, "physicaldimension");
-    ch.displayName       = get_optional_string(node, "displayname");
-    ch.comment            = get_optional_string(node, "comment");
-    ch.reference          = get_optional_string(node, "reference");
+    ch.mimeType          = getOptionalString(node, "mimetype");
+    ch.physicalUnit      = getOptionalString(node, "physicalunit");
+    ch.physicalDimension = getOptionalString(node, "physicaldimension");
+    ch.displayName       = getOptionalString(node, "displayname");
+    ch.comment            = getOptionalString(node, "comment");
+    ch.reference          = getOptionalString(node, "reference");
 
-    if (has_attr(node, "spectrumtype")) {
+    if (hasAttr(node, "spectrumtype")) {
         ch.spectrumType = parseSpectrumType(
             node.attribute("spectrumtype").as_string());
     }
@@ -242,53 +242,53 @@ Result<Channel> parse_channel(pugi::xml_node const& node, std::size_t position) 
     return ch;
 }
 
-Result<std::vector<Channel>> parse_channels(pugi::xml_node const& channels_root) {
+Result<std::vector<Channel>> parseChannels(pugi::xml_node const& channelsRoot) {
     std::vector<Channel> out;
     std::size_t position = 0;
-    for (pugi::xml_node node = channels_root.first_child(); node;
+    for (pugi::xml_node node = channelsRoot.first_child(); node;
          node = node.next_sibling()) {
         if (node.type() != pugi::node_element) continue;
         if (std::strcmp(node.name(), "channel") != 0) {
             // Unknown child of <channels> — tolerate silently.
             continue;
         }
-        auto ch = parse_channel(node, position++);
+        auto ch = parseChannel(node, position++);
         if (!ch) return tl::make_unexpected(std::move(ch).error());
         out.push_back(std::move(*ch));
     }
     return out;
 }
 
-Result<Info> parse_info(pugi::xml_node const& node) {
+Result<Info> parseInfo(pugi::xml_node const& node) {
     Info info;
 
-    auto name = get_required_string(node, "name", "<info>");
+    auto name = getRequiredString(node, "name", "<info>");
     if (!name) return tl::make_unexpected(std::move(name).error());
     info.name = std::move(*name);
 
-    std::string dt_raw = "string";
-    if (has_attr(node, "datatype")) {
-        dt_raw = node.attribute("datatype").as_string();
+    std::string dtRaw = "string";
+    if (hasAttr(node, "datatype")) {
+        dtRaw = node.attribute("datatype").as_string();
     }
-    auto dt_r = parseDataType(dt_raw);
-    if (!dt_r) return tl::make_unexpected(std::move(dt_r).error());
-    info.dataType = *dt_r;
+    auto dtR = parseDataType(dtRaw);
+    if (!dtR) return tl::make_unexpected(std::move(dtR).error());
+    info.dataType = *dtR;
 
-    if (has_attr(node, "value")) {
+    if (hasAttr(node, "value")) {
         info.value = node.attribute("value").as_string();
     }
 
-    info.physicalUnit = get_optional_string(node, "physicalunit");
+    info.physicalUnit = getOptionalString(node, "physicalunit");
     return info;
 }
 
-Result<std::vector<Info>> parse_infos(pugi::xml_node const& infos_root) {
+Result<std::vector<Info>> parseInfos(pugi::xml_node const& infosRoot) {
     std::vector<Info> out;
-    for (pugi::xml_node node = infos_root.first_child(); node;
+    for (pugi::xml_node node = infosRoot.first_child(); node;
          node = node.next_sibling()) {
         if (node.type() != pugi::node_element) continue;
         if (std::strcmp(node.name(), "info") != 0) continue;
-        auto info = parse_info(node);
+        auto info = parseInfo(node);
         if (!info) return tl::make_unexpected(std::move(info).error());
         out.push_back(std::move(*info));
     }
@@ -317,37 +317,37 @@ Result<MetaBlock> parseMetablockXml(std::uint8_t const* data, std::size_t size) 
         std::ostringstream oss;
         oss << "OSF4 XML parse error at offset " << r.offset
             << ": " << r.description();
-        return tl::make_unexpected(xml_parse_error(oss.str()));
+        return tl::make_unexpected(xmlParseError(oss.str()));
     }
 
     pugi::xml_node root = doc.document_element();
     if (!root) {
-        return tl::make_unexpected(invalid_metablock(
+        return tl::make_unexpected(invalidMetablock(
             "OSF4 metablock is empty (no root element)"));
     }
     if (std::strcmp(root.name(), "optimeas") != 0) {
         std::ostringstream oss;
         oss << "OSF4 root element must be <optimeas>, got <"
             << root.name() << ">";
-        return tl::make_unexpected(invalid_metablock(oss.str()));
+        return tl::make_unexpected(invalidMetablock(oss.str()));
     }
 
     MetaBlock mb;
 
-    auto fileInfo = parse_optimeas_attrs(root);
+    auto fileInfo = parseOptimeasAttrs(root);
     if (!fileInfo) return tl::make_unexpected(std::move(fileInfo).error());
     mb.fileInfo = std::move(*fileInfo);
 
-    pugi::xml_node const channels_root = root.child("channels");
-    if (channels_root) {
-        auto channels = parse_channels(channels_root);
+    pugi::xml_node const channelsRoot = root.child("channels");
+    if (channelsRoot) {
+        auto channels = parseChannels(channelsRoot);
         if (!channels) return tl::make_unexpected(std::move(channels).error());
         mb.channels = std::move(*channels);
     }
 
-    pugi::xml_node const infos_root = root.child("infos");
-    if (infos_root) {
-        auto infos = parse_infos(infos_root);
+    pugi::xml_node const infosRoot = root.child("infos");
+    if (infosRoot) {
+        auto infos = parseInfos(infosRoot);
         if (!infos) return tl::make_unexpected(std::move(infos).error());
         mb.infos = std::move(*infos);
     }

@@ -36,32 +36,32 @@ constexpr std::size_t VARIABLE_BLOCK_OVERHEAD_BYTES = 9;
 // prefix is `sov` bytes wide. u16 -> 65535; u32 -> soft-capped at
 // i32::MAX - 1024 to avoid platform-dependent overflow on body-length
 // conversion.
-constexpr std::size_t max_payload_for_sov(std::uint8_t sov) noexcept {
+constexpr std::size_t maxPayloadForSov(std::uint8_t sov) noexcept {
     return (sov == 2)
                ? std::size_t{0xFFFFu}
                : static_cast<std::size_t>(0x7FFFFFFFu - 1024u);
 }
 
 // bcStartData multi-sample: payload = [u8 ctrl][i64 ts][f64 rate]
-// [u32 N][N * value_size]. Overhead = 21.
-std::size_t max_samples_per_start_block(std::size_t value_size,
+// [u32 N][N * valueSize]. Overhead = 21.
+std::size_t maxSamplesPerStartBlock(std::size_t valueSize,
                                         std::uint8_t sov) noexcept;
 
 // bcContinuedData multi-sample: payload = [u8 ctrl][u32 N]
-// [N * value_size]. Overhead = 5.
-std::size_t max_samples_per_continued_block(std::size_t value_size,
+// [N * valueSize]. Overhead = 5.
+std::size_t maxSamplesPerContinuedBlock(std::size_t valueSize,
                                             std::uint8_t sov) noexcept;
 
 // bcAbsTimeStampData multi-sample: payload = [u8 ctrl][u32 N]
-// [N * (8 + value_size)]. Overhead = 5.
-std::size_t max_samples_per_timestamped_block(std::size_t value_size,
+// [N * (8 + valueSize)]. Overhead = 5.
+std::size_t maxSamplesPerTimestampedBlock(std::size_t valueSize,
                                               std::uint8_t sov) noexcept;
 
 // Effective max sample size for a single-sample variable block.
-std::size_t variable_sample_capacity(std::uint8_t sov) noexcept;
+std::size_t variableSampleCapacity(std::uint8_t sov) noexcept;
 
 // Writer-controllable file-info fields. `createdUtc` and `version`
-// are not carried here — build_metablock stamps them at assembly time
+// are not carried here — buildMetablock stamps them at assembly time
 // (version = 5; createdUtc = current UTC, DECISIONS §13). Unset
 // `creator` / `tag` receive their §13 defaults at assembly time, too.
 // Must stay field-compatible with BlockWriter::FileInfoFields (blockwriter.h).
@@ -84,7 +84,7 @@ struct FileInfoDraft {
 // createdUtc is stamped with the current UTC time, unset creator
 // falls back to "osf-cpp/<version>", unset tag to "default".
 // Caller serialises via serializeMetablockJson.
-MetaBlock build_metablock(FileInfoDraft const& fi,
+MetaBlock buildMetablock(FileInfoDraft const& fi,
                           std::vector<ChannelDef> const& channels);
 
 }  // namespace osf::detail

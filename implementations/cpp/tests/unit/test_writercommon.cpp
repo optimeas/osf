@@ -29,7 +29,7 @@ TEST(WriterCommon, BuildMetablockNormalisesNonEquidistantToScalar) {
         ch("var", osf::DataType::String, osf::ChannelType::Scalar),
     };
 
-    osf::MetaBlock meta = osf::detail::build_metablock(fi, channels);
+    osf::MetaBlock meta = osf::detail::buildMetablock(fi, channels);
 
     ASSERT_EQ(meta.channels.size(), 3u);
     EXPECT_EQ(meta.channels[0].channelType, osf::ChannelType::Equidistant);
@@ -49,7 +49,7 @@ TEST(WriterCommon, BuildMetablockAppliesDecisions13Defaults) {
         ch("c", osf::DataType::Double, osf::ChannelType::Timestamped),
     };
 
-    osf::MetaBlock meta = osf::detail::build_metablock(fi, channels);
+    osf::MetaBlock meta = osf::detail::buildMetablock(fi, channels);
 
     // createdUtc: always present, ISO-8601 "YYYY-MM-DDTHH:MM:SSZ".
     ASSERT_TRUE(meta.fileInfo.createdUtc.has_value());
@@ -83,7 +83,7 @@ TEST(WriterCommon, BuildMetablockExplicitCreatorTagWin) {
         ch("c", osf::DataType::Double, osf::ChannelType::Timestamped),
     };
 
-    osf::MetaBlock meta = osf::detail::build_metablock(fi, channels);
+    osf::MetaBlock meta = osf::detail::buildMetablock(fi, channels);
 
     EXPECT_EQ(*meta.fileInfo.creator, "my-app/2.0");
     EXPECT_EQ(*meta.fileInfo.tag, "calibration");

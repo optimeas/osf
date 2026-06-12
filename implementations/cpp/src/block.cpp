@@ -8,14 +8,14 @@ namespace osf {
 namespace {
 
 template <typename Variant>
-std::size_t variant_vector_len(Variant const& v) noexcept {
+std::size_t variantVectorLen(Variant const& v) noexcept {
     return std::visit([](auto const& vec) noexcept { return vec.size(); }, v);
 }
 
 }  // anonymous namespace
 
 std::size_t numericPayloadLen(NumericPayload const& p) noexcept {
-    return variant_vector_len(p);
+    return variantVectorLen(p);
 }
 
 bool numericPayloadEmpty(NumericPayload const& p) noexcept {
@@ -23,7 +23,7 @@ bool numericPayloadEmpty(NumericPayload const& p) noexcept {
 }
 
 std::size_t timestampedPayloadLen(TimestampedPayload const& p) noexcept {
-    return variant_vector_len(p);
+    return variantVectorLen(p);
 }
 
 bool timestampedPayloadEmpty(TimestampedPayload const& p) noexcept {
@@ -31,7 +31,7 @@ bool timestampedPayloadEmpty(TimestampedPayload const& p) noexcept {
 }
 
 std::size_t relTimestampedPayloadLen(RelTimestampedPayload const& p) noexcept {
-    return variant_vector_len(p);
+    return variantVectorLen(p);
 }
 
 bool relTimestampedPayloadEmpty(RelTimestampedPayload const& p) noexcept {

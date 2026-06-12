@@ -80,7 +80,7 @@ std::optional<NumericValues> numericValuesEmptyFor(DataType dt) noexcept {
 
 namespace {
 
-NumericValueRef numeric_value_ref_at(NumericValues const& v, std::size_t idx) {
+NumericValueRef numericValueRefAt(NumericValues const& v, std::size_t idx) {
     return std::visit([idx](auto const& vec) -> NumericValueRef {
         return NumericValueRef{vec[idx]};
     }, v);
@@ -90,7 +90,7 @@ NumericValueRef numeric_value_ref_at(NumericValues const& v, std::size_t idx) {
 // start time and sample rate. Returns the segment start when the
 // rate is non-positive (defensive — would only happen on a
 // malformed file).
-std::int64_t segment_timestamp(Segment const& seg, std::size_t i) noexcept {
+std::int64_t segmentTimestamp(Segment const& seg, std::size_t i) noexcept {
     if (seg.sampleRateHz > 0.0 && i > 0) {
         double const offset = static_cast<double>(i) * 1.0e9 /
                               seg.sampleRateHz;
@@ -100,8 +100,8 @@ std::int64_t segment_timestamp(Segment const& seg, std::size_t i) noexcept {
     return seg.startTimestampNs;
 }
 
-Error access_mismatch(std::uint16_t channel, DataType requested,
-                      DataType actual) {
+Error accessMismatch(std::uint16_t channel, DataType requested,
+                     DataType actual) {
     std::ostringstream oss;
     oss << "channel " << channel
         << " flat-access mismatch: requested " << static_cast<int>(requested)
@@ -122,8 +122,8 @@ EquidistantChannel::samplesVector() const {
     for (auto const& seg : segments) {
         for (std::size_t i = 0; i < seg.sampleCount; ++i) {
             Sample<NumericValueRef> s;
-            s.timestampNs = segment_timestamp(seg, i);
-            s.value = numeric_value_ref_at(samples, seg.startIndex + i);
+            s.timestampNs = segmentTimestamp(seg, i);
+            s.value = numericValueRefAt(samples, seg.startIndex + i);
             out.push_back(std::move(s));
         }
     }
@@ -141,7 +141,7 @@ TimestampedChannel::samplesVector() const {
     for (std::size_t i = 0; i < timestampsNs.size(); ++i) {
         Sample<NumericValueRef> s;
         s.timestampNs = timestampsNs[i];
-        s.value = numeric_value_ref_at(values, i);
+        s.value = numericValueRefAt(values, i);
         out.push_back(std::move(s));
     }
     return out;
@@ -156,7 +156,7 @@ VariableChannel::asStrings() const {
     if (stringValues) {
         return &*stringValues;
     }
-    return tl::make_unexpected(access_mismatch(index, DataType::String,
+    return tl::make_unexpected(accessMismatch(index, DataType::String,
                                               dataType));
 }
 
@@ -165,7 +165,7 @@ VariableChannel::asBinaries() const {
     if (binaryValues) {
         return &*binaryValues;
     }
-    return tl::make_unexpected(access_mismatch(index, DataType::Binary,
+    return tl::make_unexpected(accessMismatch(index, DataType::Binary,
                                               dataType));
 }
 
@@ -253,7 +253,7 @@ ChannelMeta const& channelMeta(DataChannel const& c) noexcept {
         if (auto const* v = std::get_if<std::vector<TYPE>>(&c.samples)) {    \
             return *v;                                                       \
         }                                                                    \
-        return tl::make_unexpected(access_mismatch(                          \
+        return tl::make_unexpected(accessMismatch(                          \
             c.index, DT, numericValuesDataType(c.samples)));              \
     }                                                                        \
     Result<std::vector<std::pair<std::int64_t, TYPE>>>                       \
@@ -266,7 +266,7 @@ ChannelMeta const& channelMeta(DataChannel const& c) noexcept {
             }                                                                \
             return out;                                                      \
         }                                                                    \
-        return tl::make_unexpected(access_mismatch(                          \
+        return tl::make_unexpected(accessMismatch(                          \
             c.index, DT, numericValuesDataType(c.values)));               \
     }
 

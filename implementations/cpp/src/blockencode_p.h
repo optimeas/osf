@@ -46,7 +46,7 @@ using osf::BinarySample;
 // ── Equidistant numeric (float / double only per spec) ─────────────
 
 template <typename T>
-Result<void> encode_start_data(std::vector<std::uint8_t>& out,
+Result<void> encodeStartData(std::vector<std::uint8_t>& out,
                                std::uint16_t channelIndex,
                                std::uint8_t sizeoflengthvalue,
                                std::int64_t startTimestampNs,
@@ -55,7 +55,7 @@ Result<void> encode_start_data(std::vector<std::uint8_t>& out,
                                std::size_t count);
 
 template <typename T>
-Result<void> encode_continued_data(std::vector<std::uint8_t>& out,
+Result<void> encodeContinuedData(std::vector<std::uint8_t>& out,
                                    std::uint16_t channelIndex,
                                    std::uint8_t sizeoflengthvalue,
                                    T const* samples,
@@ -64,7 +64,7 @@ Result<void> encode_continued_data(std::vector<std::uint8_t>& out,
 // ── Timestamped numeric ────────────────────────────────────────────
 
 template <typename T>
-Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
+Result<void> encodeAbsTimestampData(std::vector<std::uint8_t>& out,
                                        std::uint16_t channelIndex,
                                        std::uint8_t sizeoflengthvalue,
                                        std::int64_t const* timestampsNs,
@@ -73,7 +73,7 @@ Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
 
 // ── Timestamped GPS ────────────────────────────────────────────────
 
-Result<void> encode_abs_timestamp_data_gps(std::vector<std::uint8_t>& out,
+Result<void> encodeAbsTimestampDataGps(std::vector<std::uint8_t>& out,
                                           std::uint16_t channelIndex,
                                           std::uint8_t sizeoflengthvalue,
                                           std::int64_t const* timestampsNs,
@@ -82,13 +82,13 @@ Result<void> encode_abs_timestamp_data_gps(std::vector<std::uint8_t>& out,
 
 // ── Timestamped variable-length (single-sample only per spec) ──────
 
-Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
+Result<void> encodeAbsTimestampData(std::vector<std::uint8_t>& out,
                                        std::uint16_t channelIndex,
                                        std::uint8_t sizeoflengthvalue,
                                        std::int64_t timestampNs,
                                        std::string_view sample);
 
-Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
+Result<void> encodeAbsTimestampData(std::vector<std::uint8_t>& out,
                                        std::uint16_t channelIndex,
                                        std::uint8_t sizeoflengthvalue,
                                        std::int64_t timestampNs,

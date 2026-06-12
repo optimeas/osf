@@ -10,7 +10,7 @@ namespace osf {
 
 namespace {
 
-Error make_removed_in_spec(std::string_view field,
+Error makeRemovedInSpec(std::string_view field,
                            std::string_view value,
                            std::string_view replacement) {
     std::string msg;
@@ -53,16 +53,16 @@ Result<DataType> parseDataType(std::string_view raw) {
     // produce wrong data, not best-effort recovery.
     if (raw == "gpsdata") {
         return tl::make_unexpected(
-            make_removed_in_spec("datatype", raw, "gpslocation"));
+            makeRemovedInSpec("datatype", raw, "gpslocation"));
     }
     if (raw == "pair" || raw == "triple") {
         return tl::make_unexpected(
-            make_removed_in_spec("datatype", raw,
+            makeRemovedInSpec("datatype", raw,
                                  "two or three separate double channels"));
     }
     if (raw == "candata") {
         return tl::make_unexpected(
-            make_removed_in_spec("datatype", raw,
+            makeRemovedInSpec("datatype", raw,
                                  "binary with an application-specific MIME type"));
     }
 

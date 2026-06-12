@@ -23,7 +23,7 @@ namespace osf::detail {
 namespace {
 
 #ifdef _WIN32
-std::string last_win32_error_message(DWORD err) {
+std::string lastWin32ErrorMessage(DWORD err) {
     LPSTR msg = nullptr;
     DWORD const n = FormatMessageA(
         FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
@@ -44,12 +44,12 @@ std::string last_win32_error_message(DWORD err) {
     return result;
 }
 #else
-std::string last_errno_message(int err) {
+std::string lastErrnoMessage(int err) {
     return std::string{std::strerror(err)};
 }
 #endif
 
-Error io_error(std::string what) {
+Error ioError(std::string what) {
     return Error{Error::Code::IoError, std::move(what)};
 }
 
@@ -65,8 +65,8 @@ Result<DurableFile> DurableFile::create(
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, /*template=*/nullptr);
     if (h == INVALID_HANDLE_VALUE) {
         DWORD const err = GetLastError();
-        return tl::make_unexpected(io_error(
-            "DurableFile::create: " + last_win32_error_message(err) +
+        return tl::make_unexpected(ioError(
+            "DurableFile::create: " + lastWin32ErrorMessage(err) +
             " (" + path.string() + ")"));
     }
     DurableFile f;
@@ -77,8 +77,8 @@ Result<DurableFile> DurableFile::create(
                           O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0) {
         int const err = errno;
-        return tl::make_unexpected(io_error(
-            "DurableFile::create: " + last_errno_message(err) +
+        return tl::make_unexpected(ioError(
+            "DurableFile::create: " + lastErrnoMessage(err) +
             " (" + path.string() + ")"));
     }
     DurableFile f;
@@ -134,7 +134,7 @@ bool DurableFile::is_open() const noexcept {
 Result<void> DurableFile::write(std::uint8_t const* data,
                                 std::size_t size) {
     if (!is_open()) {
-        return tl::make_unexpected(io_error(
+        return tl::make_unexpected(ioError(
             "DurableFile::write: file is closed"));
     }
     std::size_t written = 0;
@@ -148,11 +148,11 @@ Result<void> DurableFile::write(std::uint8_t const* data,
                                   &wrote, nullptr);
         if (!ok) {
             DWORD const err = GetLastError();
-            return tl::make_unexpected(io_error(
-                "DurableFile::write: " + last_win32_error_message(err)));
+            return tl::make_unexpected(ioError(
+                "DurableFile::write: " + lastWin32ErrorMessage(err)));
         }
         if (wrote == 0) {
-            return tl::make_unexpected(io_error(
+            return tl::make_unexpected(ioError(
                 "DurableFile::write: WriteFile returned 0 bytes written"));
         }
         written += wrote;
@@ -161,11 +161,11 @@ Result<void> DurableFile::write(std::uint8_t const* data,
         if (n < 0) {
             if (errno == EINTR) continue;  // retry on signal interruption
             int const err = errno;
-            return tl::make_unexpected(io_error(
-                "DurableFile::write: " + last_errno_message(err)));
+            return tl::make_unexpected(ioError(
+                "DurableFile::write: " + lastErrnoMessage(err)));
         }
         if (n == 0) {
-            return tl::make_unexpected(io_error(
+            return tl::make_unexpected(ioError(
                 "DurableFile::write: write(2) returned 0 bytes written"));
         }
         written += static_cast<std::size_t>(n);
@@ -178,20 +178,20 @@ Result<void> DurableFile::write(std::uint8_t const* data,
 
 Result<void> DurableFile::force() {
     if (!is_open()) {
-        return tl::make_unexpected(io_error(
+        return tl::make_unexpected(ioError(
             "DurableFile::force: file is closed"));
     }
 #ifdef _WIN32
     if (!FlushFileBuffers(m_handle)) {
         DWORD const err = GetLastError();
-        return tl::make_unexpected(io_error(
-            "DurableFile::force: " + last_win32_error_message(err)));
+        return tl::make_unexpected(ioError(
+            "DurableFile::force: " + lastWin32ErrorMessage(err)));
     }
 #else
     if (::fsync(m_fd) != 0) {
         int const err = errno;
-        return tl::make_unexpected(io_error(
-            "DurableFile::force: " + last_errno_message(err)));
+        return tl::make_unexpected(ioError(
+            "DurableFile::force: " + lastErrnoMessage(err)));
     }
 #endif
     return {};
@@ -206,8 +206,8 @@ Result<void> DurableFile::close() {
     m_handle = nullptr;          // mark closed first; matches POSIX path
     if (!CloseHandle(h)) {
         DWORD const err = GetLastError();
-        return tl::make_unexpected(io_error(
-            "DurableFile::close: " + last_win32_error_message(err)));
+        return tl::make_unexpected(ioError(
+            "DurableFile::close: " + lastWin32ErrorMessage(err)));
     }
 #else
     if (m_fd < 0) return {};
@@ -215,8 +215,8 @@ Result<void> DurableFile::close() {
     m_fd = -1;                    // mark closed first
     if (::close(fd) != 0) {
         int const err = errno;
-        return tl::make_unexpected(io_error(
-            "DurableFile::close: " + last_errno_message(err)));
+        return tl::make_unexpected(ioError(
+            "DurableFile::close: " + lastErrnoMessage(err)));
     }
 #endif
     return {};

@@ -22,10 +22,10 @@ namespace {
 
 using osf::GpsLocation;
 using osf::detail::BinarySample;
-using osf::detail::encode_abs_timestamp_data;
-using osf::detail::encode_abs_timestamp_data_gps;
-using osf::detail::encode_continued_data;
-using osf::detail::encode_start_data;
+using osf::detail::encodeAbsTimestampData;
+using osf::detail::encodeAbsTimestampDataGps;
+using osf::detail::encodeContinuedData;
+using osf::detail::encodeStartData;
 
 // Helper: compare a slice of a byte vector against an expected byte sequence.
 ::testing::AssertionResult bytes_eq(std::vector<std::uint8_t> const& got,
@@ -85,13 +85,13 @@ TEST(BlockEncodeSmoke, BinarySampleFromVector) {
 }
 
 // ---------------------------------------------------------------------------
-// Task 3: byte-exact tests for encode_start_data<float>
+// Task 3: byte-exact tests for encodeStartData<float>
 // ---------------------------------------------------------------------------
 
 TEST(BlockEncodeStartData, FloatSingleSample_Frame) {
     std::vector<std::uint8_t> out;
     float const samples[] = {1.5f};
-    auto r = encode_start_data<float>(out, /*ch=*/7, /*sizeoflengthvalue=*/2,
+    auto r = encodeStartData<float>(out, /*ch=*/7, /*sizeoflengthvalue=*/2,
                                       /*startTsNs=*/1'000'000'000LL,
                                       /*sampleRateHz=*/100.0,
                                       samples, /*count=*/1);
@@ -112,7 +112,7 @@ TEST(BlockEncodeStartData, FloatSingleSample_NoNPrefix) {
     // The 4 bytes immediately after sample_rate are the sample itself.
     std::vector<std::uint8_t> out;
     float const samples[] = {2.0f};
-    auto r = encode_start_data<float>(out, 0, 2, 0LL, 50.0, samples, 1);
+    auto r = encodeStartData<float>(out, 0, 2, 0LL, 50.0, samples, 1);
     ASSERT_TRUE(r.has_value());
 
     // Sample at offset 2 + 2 + 1 + 8 + 8 = 21 (last 4 bytes of the 25-byte frame).
@@ -126,7 +126,7 @@ TEST(BlockEncodeStartData, FloatSingleSample_NoNPrefix) {
 TEST(BlockEncodeStartData, FloatThreeSamples_Bit7Set) {
     std::vector<std::uint8_t> out;
     float const samples[] = {1.0f, 2.0f, 3.0f};
-    auto r = encode_start_data<float>(out, /*ch=*/0, /*sizeoflengthvalue=*/2,
+    auto r = encodeStartData<float>(out, /*ch=*/0, /*sizeoflengthvalue=*/2,
                                       /*ts=*/0LL, /*rate=*/10.0, samples, 3);
     ASSERT_TRUE(r.has_value());
 
@@ -139,13 +139,13 @@ TEST(BlockEncodeStartData, FloatThreeSamples_Bit7Set) {
 }
 
 // ---------------------------------------------------------------------------
-// Task 3: byte-exact tests for encode_continued_data<double>
+// Task 3: byte-exact tests for encodeContinuedData<double>
 // ---------------------------------------------------------------------------
 
 TEST(BlockEncodeContinuedData, DoubleSingleSample_Frame) {
     std::vector<std::uint8_t> out;
     double const samples[] = {3.14};
-    auto r = encode_continued_data<double>(out, /*ch=*/3, /*sizeoflengthvalue=*/2,
+    auto r = encodeContinuedData<double>(out, /*ch=*/3, /*sizeoflengthvalue=*/2,
                                             samples, /*count=*/1);
     ASSERT_TRUE(r.has_value());
 
@@ -160,7 +160,7 @@ TEST(BlockEncodeContinuedData, DoubleSingleSample_Frame) {
 TEST(BlockEncodeContinuedData, DoubleFiveSamples_Bit7Set) {
     std::vector<std::uint8_t> out;
     double const samples[] = {1.0, 2.0, 3.0, 4.0, 5.0};
-    auto r = encode_continued_data<double>(out, 0, 2, samples, 5);
+    auto r = encodeContinuedData<double>(out, 0, 2, samples, 5);
     ASSERT_TRUE(r.has_value());
 
     // 1 (ctrl) + 4 (N) + 40 (5 doubles) = 45 bytes. Frame = 2 + 2 + 45 = 49.
@@ -177,7 +177,7 @@ TEST(BlockEncodeContinuedData, DoubleFiveSamples_Bit7Set) {
 TEST(BlockEncodeStartData, ZeroCountReturnsInvalidArgument) {
     std::vector<std::uint8_t> out;
     float dummy = 0.0f;
-    auto r = encode_start_data<float>(out, 0, 2, 0LL, 100.0, &dummy, 0);
+    auto r = encodeStartData<float>(out, 0, 2, 0LL, 100.0, &dummy, 0);
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
     EXPECT_TRUE(out.empty()) << "encoder must not partial-write on error";
@@ -186,7 +186,7 @@ TEST(BlockEncodeStartData, ZeroCountReturnsInvalidArgument) {
 TEST(BlockEncodeStartData, BadSizeofLengthValueReturnsInvalidArgument) {
     std::vector<std::uint8_t> out;
     float samples[] = {1.0f};
-    auto r = encode_start_data<float>(out, 0, /*=3*/3, 0LL, 100.0, samples, 1);
+    auto r = encodeStartData<float>(out, 0, /*=3*/3, 0LL, 100.0, samples, 1);
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
     EXPECT_TRUE(out.empty());
@@ -199,7 +199,7 @@ TEST(BlockEncodeStartData, OversizePayloadReturnsInvalidBlock) {
     // so N >= 16379 trips the limit (21 + 16379*4 = 65537).
     std::vector<std::uint8_t> out;
     std::vector<float> big(16379, 1.0f);
-    auto r = encode_start_data<float>(out, 0, /*=2*/2, 0LL, 100.0,
+    auto r = encodeStartData<float>(out, 0, /*=2*/2, 0LL, 100.0,
                                       big.data(), big.size());
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidBlock);
@@ -207,7 +207,7 @@ TEST(BlockEncodeStartData, OversizePayloadReturnsInvalidBlock) {
     // Exactly at the boundary (N=16378) succeeds.
     out.clear();
     std::vector<float> ok(16378, 1.0f);
-    auto r2 = encode_start_data<float>(out, 0, 2, 0LL, 100.0,
+    auto r2 = encodeStartData<float>(out, 0, 2, 0LL, 100.0,
                                        ok.data(), ok.size());
     EXPECT_TRUE(r2.has_value());
 }
@@ -216,12 +216,12 @@ TEST(BlockEncodeStartData, OversizePayloadReturnsInvalidBlock) {
 // Post-encoder coverage extensions (final-review nits N1/N2/N3)
 // ---------------------------------------------------------------------------
 
-// N1 — encode_continued_data has the same count==0 guard as encode_start_data;
+// N1 — encodeContinuedData has the same count==0 guard as encodeStartData;
 // exercise it independently so the error-path matrix is fully covered.
 TEST(BlockEncodeContinuedData, ZeroCountReturnsInvalidArgument) {
     std::vector<std::uint8_t> out;
     float dummy = 0.0f;
-    auto r = encode_continued_data<float>(out, 0, 2, &dummy, 0);
+    auto r = encodeContinuedData<float>(out, 0, 2, &dummy, 0);
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
     EXPECT_TRUE(out.empty()) << "encoder must not partial-write on error";
@@ -233,7 +233,7 @@ TEST(BlockEncodeContinuedData, ZeroCountReturnsInvalidArgument) {
 TEST(BlockEncodeStartData, SizeofLengthValue4_U32LengthField) {
     std::vector<std::uint8_t> out;
     float const samples[] = {1.0f};
-    auto r = encode_start_data<float>(out, /*ch=*/0, /*sizeoflengthvalue=*/4,
+    auto r = encodeStartData<float>(out, /*ch=*/0, /*sizeoflengthvalue=*/4,
                                       /*ts=*/0LL, /*rate=*/100.0, samples, 1);
     ASSERT_TRUE(r.has_value());
 
@@ -251,7 +251,7 @@ TEST(BlockEncodeStartData, SizeofLengthValue4_U32LengthField) {
 TEST(BlockEncodeStartData, ChannelIndexHighByte) {
     std::vector<std::uint8_t> out;
     float const samples[] = {1.0f};
-    auto r = encode_start_data<float>(out, /*ch=*/0x0142, /*sizeoflengthvalue=*/2,
+    auto r = encodeStartData<float>(out, /*ch=*/0x0142, /*sizeoflengthvalue=*/2,
                                       /*ts=*/0LL, /*rate=*/100.0, samples, 1);
     ASSERT_TRUE(r.has_value());
 
@@ -266,7 +266,7 @@ TEST(BlockEncodeStartData, ChannelIndexHighByte) {
 TEST(BlockEncodeRoundtrip, StartDataFloat) {
     std::vector<std::uint8_t> out;
     float const samples[] = {1.5f, 2.5f, 3.5f};
-    auto r = encode_start_data<float>(out, 0, 2, 1'000'000'000LL,
+    auto r = encodeStartData<float>(out, 0, 2, 1'000'000'000LL,
                                       100.0, samples, 3);
     ASSERT_TRUE(r.has_value());
 
@@ -293,7 +293,7 @@ TEST(BlockEncodeRoundtrip, StartDataFloat) {
 TEST(BlockEncodeRoundtrip, ContinuedDataDouble) {
     std::vector<std::uint8_t> out;
     double const samples[] = {1.1, 2.2, 3.3, 4.4};
-    auto r = encode_continued_data<double>(out, 0, 4, samples, 4);
+    auto r = encodeContinuedData<double>(out, 0, 4, samples, 4);
     ASSERT_TRUE(r.has_value());
 
     auto meta = one_channel_meta(osf::DataType::Double,
@@ -314,14 +314,14 @@ TEST(BlockEncodeRoundtrip, ContinuedDataDouble) {
 }
 
 // ---------------------------------------------------------------------------
-// Task 4: byte-exact tests for encode_abs_timestamp_data<T>
+// Task 4: byte-exact tests for encodeAbsTimestampData<T>
 // ---------------------------------------------------------------------------
 
 TEST(BlockEncodeAbsTs, Int32SingleSample_Bit7Clear) {
     std::vector<std::uint8_t> out;
     std::int64_t const ts = 42;
     std::int32_t const samples[] = {-1};
-    auto r = encode_abs_timestamp_data<std::int32_t>(
+    auto r = encodeAbsTimestampData<std::int32_t>(
         out, /*ch=*/2, /*=2*/2, &ts, samples, 1);
     ASSERT_TRUE(r.has_value());
 
@@ -336,7 +336,7 @@ TEST(BlockEncodeAbsTs, DoubleThreeSamples_Bit7Set) {
     std::vector<std::uint8_t> out;
     std::int64_t const tss[] = {1, 2, 3};
     double const samples[] = {1.0, 2.0, 3.0};
-    auto r = encode_abs_timestamp_data<double>(out, 0, 2, tss, samples, 3);
+    auto r = encodeAbsTimestampData<double>(out, 0, 2, tss, samples, 3);
     ASSERT_TRUE(r.has_value());
 
     // 1 (ctrl) + 4 (N) + 3 * (8 ts + 8 double) = 1 + 4 + 48 = 53.
@@ -350,7 +350,7 @@ TEST(BlockEncodeAbsTs, BoolSingleSample_OneByte) {
     std::vector<std::uint8_t> out;
     std::int64_t const ts = 0;
     bool const samples[] = {true};
-    auto r = encode_abs_timestamp_data<bool>(out, 0, 2, &ts, samples, 1);
+    auto r = encodeAbsTimestampData<bool>(out, 0, 2, &ts, samples, 1);
     ASSERT_TRUE(r.has_value());
 
     // 1 (ctrl) + 8 (ts) + 1 (bool) = 10 -> u16=0x000A. Frame = 14.
@@ -360,14 +360,14 @@ TEST(BlockEncodeAbsTs, BoolSingleSample_OneByte) {
 }
 
 // ---------------------------------------------------------------------------
-// Task 4: error-path tests for encode_abs_timestamp_data
+// Task 4: error-path tests for encodeAbsTimestampData
 // ---------------------------------------------------------------------------
 
 TEST(BlockEncodeAbsTs, ZeroCountInvalidArgument) {
     std::vector<std::uint8_t> out;
     std::int64_t ts = 0;
     std::int32_t s = 0;
-    auto r = encode_abs_timestamp_data<std::int32_t>(out, 0, 2, &ts, &s, 0);
+    auto r = encodeAbsTimestampData<std::int32_t>(out, 0, 2, &ts, &s, 0);
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
     EXPECT_TRUE(out.empty());
@@ -383,7 +383,7 @@ template <typename T>
 void roundtrip_abs_ts_one(osf::DataType dt, T value) {
     std::vector<std::uint8_t> out;
     std::int64_t const ts = 12345;
-    auto r = encode_abs_timestamp_data<T>(out, 0, 2, &ts, &value, 1);
+    auto r = encodeAbsTimestampData<T>(out, 0, 2, &ts, &value, 1);
     ASSERT_TRUE(r.has_value()) << "encoder failed for " << static_cast<int>(dt);
 
     auto meta = one_channel_meta(dt, osf::ChannelType::Timestamped, 2);
@@ -437,7 +437,7 @@ TEST(BlockEncodeRoundtripAbsTs, MultiSampleInt32) {
     std::vector<std::uint8_t> out;
     std::int64_t const tss[] = {10, 20, 30, 40};
     std::int32_t const samples[] = {1, 2, 3, 4};
-    auto r = encode_abs_timestamp_data<std::int32_t>(out, 0, 2, tss, samples, 4);
+    auto r = encodeAbsTimestampData<std::int32_t>(out, 0, 2, tss, samples, 4);
     ASSERT_TRUE(r.has_value());
 
     auto meta = one_channel_meta(osf::DataType::Int32,
@@ -459,14 +459,14 @@ TEST(BlockEncodeRoundtripAbsTs, MultiSampleInt32) {
 }
 
 // ---------------------------------------------------------------------------
-// Task 5: byte-exact tests for encode_abs_timestamp_data_gps
+// Task 5: byte-exact tests for encodeAbsTimestampDataGps
 // ---------------------------------------------------------------------------
 
 TEST(BlockEncodeGps, SingleSample_Frame) {
     std::vector<std::uint8_t> out;
     std::int64_t const ts = 100;
     GpsLocation const samples[] = {{47.5, 9.5, 400.0}};
-    auto r = encode_abs_timestamp_data_gps(out, 0, 2, &ts, samples, 1);
+    auto r = encodeAbsTimestampDataGps(out, 0, 2, &ts, samples, 1);
     ASSERT_TRUE(r.has_value());
 
     // 1 (ctrl) + 8 (ts) + 24 (3 doubles) = 33. Frame = 37 bytes.
@@ -479,7 +479,7 @@ TEST(BlockEncodeGps, MultiSample_Bit7Set) {
     std::vector<std::uint8_t> out;
     std::int64_t const tss[] = {1, 2};
     GpsLocation const samples[] = {{47.0, 9.0, 100.0}, {48.0, 10.0, 200.0}};
-    auto r = encode_abs_timestamp_data_gps(out, 0, 2, tss, samples, 2);
+    auto r = encodeAbsTimestampDataGps(out, 0, 2, tss, samples, 2);
     ASSERT_TRUE(r.has_value());
 
     // 1 (ctrl) + 4 (N) + 2 * 32 = 69. Frame = 73.
@@ -496,7 +496,7 @@ TEST(BlockEncodeGps, ZeroCountInvalidArgument) {
     std::vector<std::uint8_t> out;
     std::int64_t ts = 0;
     GpsLocation s{0, 0, 0};
-    auto r = encode_abs_timestamp_data_gps(out, 0, 2, &ts, &s, 0);
+    auto r = encodeAbsTimestampDataGps(out, 0, 2, &ts, &s, 0);
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
     EXPECT_TRUE(out.empty());
@@ -506,7 +506,7 @@ TEST(BlockEncodeRoundtripGps, SingleAndMulti) {
     auto encode_and_read = [](std::vector<std::int64_t> const& tss,
                               std::vector<GpsLocation> const& samples) {
         std::vector<std::uint8_t> out;
-        auto r = encode_abs_timestamp_data_gps(
+        auto r = encodeAbsTimestampDataGps(
             out, 0, 2, tss.data(), samples.data(), samples.size());
         EXPECT_TRUE(r.has_value());
 
@@ -538,12 +538,12 @@ TEST(BlockEncodeRoundtripGps, SingleAndMulti) {
 }
 
 // ---------------------------------------------------------------------------
-// Task 6: byte-exact tests for encode_abs_timestamp_data(std::string_view)
+// Task 6: byte-exact tests for encodeAbsTimestampData(std::string_view)
 // ---------------------------------------------------------------------------
 
 TEST(BlockEncodeString, EmptyString_Frame) {
     std::vector<std::uint8_t> out;
-    auto r = encode_abs_timestamp_data(out, /*ch=*/0, /*=2*/2,
+    auto r = encodeAbsTimestampData(out, /*ch=*/0, /*=2*/2,
                                        /*ts=*/0LL, std::string_view{});
     ASSERT_TRUE(r.has_value());
 
@@ -555,7 +555,7 @@ TEST(BlockEncodeString, EmptyString_Frame) {
 
 TEST(BlockEncodeString, NonEmpty_NoTrailingZero) {
     std::vector<std::uint8_t> out;
-    auto r = encode_abs_timestamp_data(out, 0, 2, 1LL,
+    auto r = encodeAbsTimestampData(out, 0, 2, 1LL,
                                        std::string_view{"hello"});
     ASSERT_TRUE(r.has_value());
 
@@ -579,7 +579,7 @@ TEST(BlockEncodeString, PayloadEndingInZeroByteIsPreserved) {
     // end in 0x00 must be passed through verbatim.
     std::vector<std::uint8_t> out;
     char const data[] = {'a', '\x00', 'b'};  // 3 bytes, middle is zero
-    auto r = encode_abs_timestamp_data(out, 0, 2, 1LL,
+    auto r = encodeAbsTimestampData(out, 0, 2, 1LL,
                                        std::string_view{data, sizeof(data)});
     ASSERT_TRUE(r.has_value());
     // 1 (ctrl) + 8 (ts) + 3 (payload) = 12. Frame = 16.
@@ -590,13 +590,13 @@ TEST(BlockEncodeString, PayloadEndingInZeroByteIsPreserved) {
 }
 
 // ---------------------------------------------------------------------------
-// Task 6: byte-exact tests for encode_abs_timestamp_data(BinarySample)
+// Task 6: byte-exact tests for encodeAbsTimestampData(BinarySample)
 // ---------------------------------------------------------------------------
 
 TEST(BlockEncodeBinary, NonEmpty_NoTrailingZero) {
     std::vector<std::uint8_t> out;
     std::uint8_t const data[] = {0xDE, 0xAD, 0xBE, 0xEF};
-    auto r = encode_abs_timestamp_data(out, 0, 2, 0LL,
+    auto r = encodeAbsTimestampData(out, 0, 2, 0LL,
                                        BinarySample{data, sizeof(data)});
     ASSERT_TRUE(r.has_value());
 
@@ -609,7 +609,7 @@ TEST(BlockEncodeBinary, NonEmpty_NoTrailingZero) {
 TEST(BlockEncodeBinary, FromVectorFactory) {
     std::vector<std::uint8_t> out;
     std::vector<std::uint8_t> v = {0x01, 0x02};
-    auto r = encode_abs_timestamp_data(out, 0, 2, 0LL,
+    auto r = encodeAbsTimestampData(out, 0, 2, 0LL,
                                        BinarySample::fromVector(v));
     ASSERT_TRUE(r.has_value());
     ASSERT_EQ(out.size(), 15u);   // 2+2+11 = 15
@@ -623,7 +623,7 @@ TEST(BlockEncodeBinary, FromVectorFactory) {
 
 TEST(BlockEncodeVariable, BadSizeofLengthValueInvalidArgument) {
     std::vector<std::uint8_t> out;
-    auto r = encode_abs_timestamp_data(out, 0, /*=5*/5, 0LL,
+    auto r = encodeAbsTimestampData(out, 0, /*=5*/5, 0LL,
                                        std::string_view{"x"});
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidArgument);
@@ -636,7 +636,7 @@ TEST(BlockEncodeVariable, OversizePayloadInvalidBlock) {
     // payload size that just trips is 65527.
     std::vector<std::uint8_t> out;
     std::string big(65527, 'x');
-    auto r = encode_abs_timestamp_data(out, 0, 2, 0LL,
+    auto r = encodeAbsTimestampData(out, 0, 2, 0LL,
                                        std::string_view{big});
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, osf::Error::Code::InvalidBlock);
@@ -644,7 +644,7 @@ TEST(BlockEncodeVariable, OversizePayloadInvalidBlock) {
     // One byte less fits.
     out.clear();
     std::string ok(65526, 'x');
-    auto r2 = encode_abs_timestamp_data(out, 0, 2, 0LL,
+    auto r2 = encodeAbsTimestampData(out, 0, 2, 0LL,
                                         std::string_view{ok});
     EXPECT_TRUE(r2.has_value());
 }
@@ -655,7 +655,7 @@ TEST(BlockEncodeVariable, OversizePayloadInvalidBlock) {
 
 TEST(BlockEncodeRoundtripVariable, StringSingleSample) {
     std::vector<std::uint8_t> out;
-    auto r = encode_abs_timestamp_data(out, 0, 2, 42LL,
+    auto r = encodeAbsTimestampData(out, 0, 2, 42LL,
                                        std::string_view{"hello"});
     ASSERT_TRUE(r.has_value());
 
@@ -680,7 +680,7 @@ TEST(BlockEncodeRoundtripVariable, StringSingleSample) {
 TEST(BlockEncodeRoundtripVariable, BinarySingleSample) {
     std::vector<std::uint8_t> out;
     std::vector<std::uint8_t> data = {0x00, 0x01, 0x00, 0xFF, 0x00};
-    auto r = encode_abs_timestamp_data(out, 0, 2, 1LL,
+    auto r = encodeAbsTimestampData(out, 0, 2, 1LL,
                                        BinarySample::fromVector(data));
     ASSERT_TRUE(r.has_value());
 

@@ -18,7 +18,7 @@ namespace {
 constexpr std::size_t kBufferSize = 64u * 1024u;
 
 // Classify a two-byte header. Mirrors the Rust compression module.
-CompressionFormat classify(std::uint8_t b0, std::uint8_t b1) noexcept {
+CompressionFormat classifyFormat(std::uint8_t b0, std::uint8_t b1) noexcept {
     if (b0 == 0x1F && b1 == 0x8B) {
         return CompressionFormat::Gzip;
     }
@@ -48,7 +48,7 @@ CompressionFormat detectCompression(std::istream& source) {
     if (got < 2) {
         return CompressionFormat::None;
     }
-    return classify(static_cast<std::uint8_t>(head[0]),
+    return classifyFormat(static_cast<std::uint8_t>(head[0]),
                     static_cast<std::uint8_t>(head[1]));
 }
 
@@ -60,14 +60,14 @@ class DecompressingIStream::Streambuf final : public std::streambuf {
 public:
     explicit Streambuf(std::istream& source)
         : m_src(source), m_in(kBufferSize), m_out(kBufferSize) {
-        // Prime the input buffer and classify from the leading bytes.
+        // Prime the input buffer and classifyFormat from the leading bytes.
         m_src.read(m_in.data(), static_cast<std::streamsize>(m_in.size()));
         auto const n = static_cast<std::size_t>(m_src.gcount());
         m_inAvail = n;
         m_inPos = 0;
 
         if (n >= 2) {
-            m_format = classify(static_cast<std::uint8_t>(
+            m_format = classifyFormat(static_cast<std::uint8_t>(
                                    static_cast<unsigned char>(m_in[0])),
                                static_cast<std::uint8_t>(
                                    static_cast<unsigned char>(m_in[1])));
