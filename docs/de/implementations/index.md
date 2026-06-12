@@ -38,7 +38,7 @@ Legende: ✅ verfügbar · 🚧 in aktiver Entwicklung · 📋 geplant
 | **[Delphi](delphi.md)** | ✅ | Referenz-Implementierung — vollständige Library, Demos und die `osftool`-CLI (Windows / RAD Studio) |
 | **[Rust](rust.md)** (`osf-core`) | ✅ | Lesen, Schreiben und transparentes OSFZ; zugleich Fundament der Python-Anbindung |
 | **[Python](python.md)** (`osfdata`) | ✅ | PyO3-Bindings über den Rust-Kern, NumPy-Integration; siehe [Python-Integration](../integrations/python.md) |
-| **[C++](cpp.md)** | ✅ | Eigenständige C++17-Implementierung — Reader, beide Writer, C-ABI; CI auf Linux/macOS/Windows. Ausführliches Entwickler-Handbuch unter [C++ im Detail](cpp/architektur.md) |
+| **[C++](cpp.md)** | ✅ | Eigenständige C++17-Implementierung — Reader, beide Writer, C-ABI; CI auf Linux/macOS/Windows. Ausführliches Entwickler-Handbuch unter [C++ im Detail](cpp/architecture.md) |
 | **[Java](java.md)** | 📋 | Architektur entschieden (Java 25, Maven, JPMS); noch kein Code |
 | **[Weitere Sprachen](planned.md)** | 📋 | C, C#, MATLAB, JavaScript/TypeScript, Swift — geplant |
 

@@ -112,7 +112,7 @@ Private Implementierungsbausteine (unter `src/`, nicht installierbar):
 `blockencode_p.{h,cpp}` (OSF5-Block-Encoder), `writercommon_p.{h,cpp}`
 (Chunking-Mathematik + Metablock-Assembly), `durablefile_p.{h,cpp}`
 (RAII-Datei mit `fsync`), `binaryio_p.h` (Little-Endian-Helfer).
-Details siehe [Interna](interna.md).
+Details siehe [Interna](internals.md).
 
 ## Drei Datenmodelle — wer sieht was
 
@@ -190,7 +190,7 @@ Namen.
 Die Bibliothek zielt auch auf Embedded- und Industrie-Codebasen, in
 denen Exceptions deaktiviert oder unerwünscht sind. Der Kern wirft
 deshalb nie; `tl::expected` (vendort, CC0) liefert die Monade. Wer
-Exceptions bevorzugt, nimmt [`osf::throwing`](fehlerbehandlung.md) —
+Exceptions bevorzugt, nimmt [`osf::throwing`](error-handling.md) —
 eine dünne, header-only Schicht, die bewusst **nicht** in den
 Umbrella-Header aufgenommen wurde, damit Kern-Nutzer keine
 Exception-Maschinerie einziehen.
@@ -223,7 +223,7 @@ ausfallsicher) und `BlockWriter` (Analyst: sammelt im Speicher, emittiert
 am Ende, kann `sizeOfLengthValue` automatisch anheben) haben
 unvereinbare Invarianten — ein gemeinsamer Writer hätte beide Profile
 verwässert. Gemeinsame Bausteine (Chunking, Metablock-Assembly) leben
-in `src/writercommon_p.*`. Details auf der Seite [Schreiben](schreiben.md).
+in `src/writercommon_p.*`. Details auf der Seite [Schreiben](writing.md).
 
 ### Transparentes OSFZ nur beim Lesen
 
@@ -263,10 +263,10 @@ implementations/cpp/
 
 ## Weiterführend
 
-- [Lesen — DataManager, DataChannel, BlockReader, OSFZ](lesen.md)
-- [Schreiben — StreamingWriter, BlockWriter, StaleValueGuard](schreiben.md)
-- [Fehlerbehandlung — Result, Error-Katalog, throwing](fehlerbehandlung.md)
+- [Lesen — DataManager, DataChannel, BlockReader, OSFZ](reading.md)
+- [Schreiben — StreamingWriter, BlockWriter, StaleValueGuard](writing.md)
+- [Fehlerbehandlung — Result, Error-Katalog, throwing](error-handling.md)
 - [C-ABI — osf-c für C, C#, OCX](c-abi.md)
-- [Bauen & Einbinden — CMake, Optionen, CI](bauen.md)
-- [Kochbuch — Rezepte für typische Aufgaben](kochbuch.md)
-- [Interna — Encoder, Chunking, Builder-Zustandsmaschine](interna.md)
+- [Bauen & Einbinden — CMake, Optionen, CI](building.md)
+- [Kochbuch — Rezepte für typische Aufgaben](cookbook.md)
+- [Interna — Encoder, Chunking, Builder-Zustandsmaschine](internals.md)

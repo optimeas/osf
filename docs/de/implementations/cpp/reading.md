@@ -86,7 +86,7 @@ Dateien ein normaler Fall ist.
 - **Strukturfehler:** `InvalidMetablock`, `UnknownChannelIndex`,
   `ChannelMixedBlockTypes` usw. brechen das Laden mit einem
   strukturierten Fehler ab — siehe
-  [Fehlerbehandlung](fehlerbehandlung.md).
+  [Fehlerbehandlung](error-handling.md).
 
 ## `DataChannel` — die typisierten Kanäle
 

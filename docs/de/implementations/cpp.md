@@ -31,14 +31,14 @@ steht im Unterkapitel **C++ im Detail**:
 
 | Seite | Inhalt |
 |---|---|
-| [Architektur](cpp/architektur.md) | Schichtenmodell, Module, Datenmodell, Designentscheidungen, Thread-Sicherheit |
-| [Lesen](cpp/lesen.md) | `DataManager`, `DataChannel`, Segmente, `BlockReader`, `ReaderStats`, transparentes OSFZ |
-| [Schreiben](cpp/schreiben.md) | `StreamingWriter`, `BlockWriter`, `StaleValueGuard`, `ChannelDef`, Metadaten-Defaults, Round-Trip |
-| [Fehlerbehandlung](cpp/fehlerbehandlung.md) | `Result<T>`, vollständiger Fehlercode-Katalog, `osf::throwing` |
+| [Architektur](cpp/architecture.md) | Schichtenmodell, Module, Datenmodell, Designentscheidungen, Thread-Sicherheit |
+| [Lesen](cpp/reading.md) | `DataManager`, `DataChannel`, Segmente, `BlockReader`, `ReaderStats`, transparentes OSFZ |
+| [Schreiben](cpp/writing.md) | `StreamingWriter`, `BlockWriter`, `StaleValueGuard`, `ChannelDef`, Metadaten-Defaults, Round-Trip |
+| [Fehlerbehandlung](cpp/error-handling.md) | `Result<T>`, vollständiger Fehlercode-Katalog, `osf::throwing` |
 | [C-ABI](cpp/c-abi.md) | `osf-c` — Ownership-Regeln, Funktionskatalog, C- und P/Invoke-Beispiele |
-| [Bauen & Einbinden](cpp/bauen.md) | CMake-Optionen, Targets, `add_subdirectory`/FetchContent, Doxygen, CI |
-| [Kochbuch](cpp/kochbuch.md) | kopierfertige Rezepte von Inspektion bis Embedded-Schleife |
-| [Interna](cpp/interna.md) | Encoder, Chunking-Mathematik, Builder-Zustandsmaschine — für Mitwirkende |
+| [Bauen & Einbinden](cpp/building.md) | CMake-Optionen, Targets, `add_subdirectory`/FetchContent, Doxygen, CI |
+| [Kochbuch](cpp/cookbook.md) | kopierfertige Rezepte von Inspektion bis Embedded-Schleife |
+| [Interna](cpp/internals.md) | Encoder, Chunking-Mathematik, Builder-Zustandsmaschine — für Mitwirkende |
 :::
 
 ## Funktionsumfang
@@ -80,7 +80,7 @@ und CI baut und testet auf **Linux, macOS und Windows**.
 
 ## Architektur im Überblick
 
-Zwei API-Ebenen liegen auf einem gemeinsamen, exception-freien Kern (`osf::Result<T>`). Die Lese-Seite stellt aus dem Block-Stream typisierte Kanäle zusammen; die Schreib-Seite bietet zwei Writer-Klassen für unterschiedliche Einsatzprofile; und ein C-ABI macht das Ganze für Nicht-C++-Konsumenten zugänglich. Vertiefung: [Architektur](cpp/architektur.md).
+Zwei API-Ebenen liegen auf einem gemeinsamen, exception-freien Kern (`osf::Result<T>`). Die Lese-Seite stellt aus dem Block-Stream typisierte Kanäle zusammen; die Schreib-Seite bietet zwei Writer-Klassen für unterschiedliche Einsatzprofile; und ein C-ABI macht das Ganze für Nicht-C++-Konsumenten zugänglich. Vertiefung: [Architektur](cpp/architecture.md).
 
 ### Lesepfad
 
@@ -126,14 +126,14 @@ flowchart TB
 
 | Ich möchte … | Klasse | Hinweise |
 |---|---|---|
-| Datei lesen, typisierte Kanäle erhalten | `osf::DataManager` | Zentraler Einstiegspunkt — `loadFromFile()`, `channel("name")`. Liest `.osf` und `.osfz`. → [Lesen](cpp/lesen.md) |
-| Den rohen Block-Stream iterieren | `osf::BlockReader` | Niedrigere Ebene; für sehr große Dateien und Streaming-Konsumenten. → [Lesen](cpp/lesen.md) |
-| Samples eines Kanals halten | `osf::DataChannel` | Variante über Equidistant / Timestamped / Variable; typisierte Flat-Accessoren. → [Lesen](cpp/lesen.md) |
-| Auf einem Embedded-Gerät aufzeichnen | `osf::StreamingWriter` | `fsync` pro Block, konstanter Speicher, ausfallsicher bei Stromverlust. → [Schreiben](cpp/schreiben.md) |
-| Komplette Datei in einem Schritt schreiben | `osf::BlockWriter` | Sammelt im Speicher, schreibt bei `writeToFile()`; passt `sizeOfLengthValue` automatisch an. → [Schreiben](cpp/schreiben.md) |
-| Inaktive Kanäle „frisch" halten | `osf::StaleValueGuard` | Gibt den letzten Wert von Kanälen erneut aus, die einen Schwellwert überschritten haben. → [Schreiben](cpp/schreiben.md) |
-| Round-Trip / OSF4 → OSF5 | freie Funkt. `osf::writeToFile(mgr, …)` | Lädt einen `DataManager` in einen `BlockWriter` und schreibt OSF5. → [Kochbuch](cpp/kochbuch.md) |
-| Exceptions statt `Result<T>` verwenden | `osf::throwing` | Opt-in-Header; nicht in den Kern einkompiliert. → [Fehlerbehandlung](cpp/fehlerbehandlung.md) |
+| Datei lesen, typisierte Kanäle erhalten | `osf::DataManager` | Zentraler Einstiegspunkt — `loadFromFile()`, `channel("name")`. Liest `.osf` und `.osfz`. → [Lesen](cpp/reading.md) |
+| Den rohen Block-Stream iterieren | `osf::BlockReader` | Niedrigere Ebene; für sehr große Dateien und Streaming-Konsumenten. → [Lesen](cpp/reading.md) |
+| Samples eines Kanals halten | `osf::DataChannel` | Variante über Equidistant / Timestamped / Variable; typisierte Flat-Accessoren. → [Lesen](cpp/reading.md) |
+| Auf einem Embedded-Gerät aufzeichnen | `osf::StreamingWriter` | `fsync` pro Block, konstanter Speicher, ausfallsicher bei Stromverlust. → [Schreiben](cpp/writing.md) |
+| Komplette Datei in einem Schritt schreiben | `osf::BlockWriter` | Sammelt im Speicher, schreibt bei `writeToFile()`; passt `sizeOfLengthValue` automatisch an. → [Schreiben](cpp/writing.md) |
+| Inaktive Kanäle „frisch" halten | `osf::StaleValueGuard` | Gibt den letzten Wert von Kanälen erneut aus, die einen Schwellwert überschritten haben. → [Schreiben](cpp/writing.md) |
+| Round-Trip / OSF4 → OSF5 | freie Funkt. `osf::writeToFile(mgr, …)` | Lädt einen `DataManager` in einen `BlockWriter` und schreibt OSF5. → [Kochbuch](cpp/cookbook.md) |
+| Exceptions statt `Result<T>` verwenden | `osf::throwing` | Opt-in-Header; nicht in den Kern einkompiliert. → [Fehlerbehandlung](cpp/error-handling.md) |
 | Aus C, C#, OCX … aufrufen | `osf-c` (`osf/capi.h`) | Reines C99-ABI; mit `-D OSF_BUILD_C_API=ON` bauen. → [C-ABI](cpp/c-abi.md) |
 
 ### Lauffähige Beispiele
@@ -142,7 +142,7 @@ flowchart TB
 **`inspect`** (Header / Metadaten / Kanäle, transparentes OSFZ), **`dump`**
 (Sample-Werte), **`write`** (OSF5 synthetisieren und schreiben) und **`copy`**
 (Round-Trip). Sie werden mit `-D OSF_BUILD_EXAMPLES=ON` gebaut (standardmäßig aktiv).
-Ausgearbeitete Code-Rezepte: [Kochbuch](cpp/kochbuch.md).
+Ausgearbeitete Code-Rezepte: [Kochbuch](cpp/cookbook.md).
 
 ## Bauen — Schnellstart
 
@@ -154,7 +154,7 @@ ctest --test-dir build
 
 Plattform­spezifische Hinweise, CMake-Optionen und FAQ stehen in der
 mitgelieferten `BUILD.md` der Bibliothek und auf der Seite
-[Bauen & Einbinden](cpp/bauen.md).
+[Bauen & Einbinden](cpp/building.md).
 
 ### CMake-Optionen
 
@@ -181,14 +181,14 @@ Die Bibliothek exportiert zwei CMake-Ziele:
 - `osf::headers` — ein INTERFACE-Ziel mit den öffentlichen Include-Pfaden
 
 Einbindung per `add_subdirectory` oder `FetchContent` —
-Beispiel-Snippets auf [Bauen & Einbinden](cpp/bauen.md).
+Beispiel-Snippets auf [Bauen & Einbinden](cpp/building.md).
 
 ## API im Überblick
 
 Der Kern ist **exception-frei**: Operationen, die scheitern können, geben
 `osf::Result<T>` zurück (ein `tl::expected<T, osf::Error>`).
 Der vollständige Fehlercode-Katalog steht unter
-[Fehlerbehandlung](cpp/fehlerbehandlung.md).
+[Fehlerbehandlung](cpp/error-handling.md).
 
 ### Lesen
 
@@ -239,7 +239,7 @@ Für eingebettetes, ausfallsicheres Schreiben gibt es stattdessen den
 `StreamingWriter` (`fsync` pro Block). Ein geladener `DataManager` lässt
 sich mit der freien Funktion `osf::writeToFile(mgr, pfad)` direkt als
 OSF5 zurückschreiben (Round-Trip / OSF4 → OSF5). Alle Details und die
-Wahl des richtigen `sizeOfLengthValue`: [Schreiben](cpp/schreiben.md).
+Wahl des richtigen `sizeOfLengthValue`: [Schreiben](cpp/writing.md).
 
 ### C-ABI (`osf-c`)
 
@@ -267,6 +267,6 @@ ActiveX/OCX und künftige Sprach-Bindings. Funktionskatalog und Beispiele:
 - Quellcode: [github.com/optimeas/osf](https://github.com/optimeas/osf),
   Verzeichnis `implementations/cpp/`
 - Bauanleitung: `BUILD.md` im Bibliotheksverzeichnis — Zusammenfassung
-  unter [Bauen & Einbinden](cpp/bauen.md)
-- API-Referenz: Mit Doxygen über `-D OSF_BUILD_DOCS=ON` erzeugen (Ziel `osf-docs`) — siehe [Bauen & Einbinden](cpp/bauen.md)
+  unter [Bauen & Einbinden](cpp/building.md)
+- API-Referenz: Mit Doxygen über `-D OSF_BUILD_DOCS=ON` erzeugen (Ziel `osf-docs`) — siehe [Bauen & Einbinden](cpp/building.md)
 - Format-Spezifikation: Kapitel [OSF-Format](../osf_general.md)
