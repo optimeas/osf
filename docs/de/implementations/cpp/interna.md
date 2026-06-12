@@ -26,10 +26,10 @@ Wire-Format-Definitionen selbst stehen in der
 
 | Baustein | Dateien | Verwendet von |
 |---|---|---|
-| Block-Encoder | `block_encode.{hpp,cpp}` | beide Writer |
-| Writer-Gemeingut (Chunking, Metablock-Assembly) | `writer_common.{hpp,cpp}` | beide Writer |
-| Durable Datei-I/O | `durable_file.{hpp,cpp}` | nur `StreamingWriter` |
-| Little-Endian-Helfer | `binary_io.hpp` | Encoder |
+| Block-Encoder | `blockencode_p.{h,cpp}` | beide Writer |
+| Writer-Gemeingut (Chunking, Metablock-Assembly) | `writercommon_p.{h,cpp}` | beide Writer |
+| Durable Datei-I/O | `durablefile_p.{h,cpp}` | nur `StreamingWriter` |
+| Little-Endian-Helfer | `binaryio_p.h` | Encoder |
 | Dekompressions-Streambuf | `compression.cpp` (Klasse `DecompressingIStream::Streambuf`) | Lesepfad |
 | Builder-Zustandsmaschine | `manager.cpp` (Struct `ChannelBuilder`) | `DataManager` |
 
@@ -51,17 +51,17 @@ Konventionen: Bit 7 des Control-Bytes wird nur gesetzt, wenn die
 Multi-Sample-Form (u32-N-Präfix) benutzt wird; bei `count == 1`
 entfällt das Präfix (spart 4 Bytes pro Einzel-Sample-Block,
 Spec-Rev 2026-05-24). Die Writer rufen den Encoder ausschließlich mit
-vorab via `writer_common` berechneten, kapazitätskonformen
+vorab via `writercommon_p` berechneten, kapazitätskonformen
 Sample-Mengen auf.
 
-## Chunking-Mathematik (`writer_common`)
+## Chunking-Mathematik (`writercommon_p`)
 
-Das Längenfeld eines Blocks ist `sizeoflengthvalue` (2 oder 4) Bytes
+Das Längenfeld eines Blocks ist `sizeOfLengthValue` (2 oder 4) Bytes
 breit; daraus ergibt sich die maximale Payload pro Block:
 
 ```cpp
-max_payload_for_sov(2) == 0xFFFF;                  // 65 535 Bytes
-max_payload_for_sov(4) == 0x7FFFFFFF - 1024;       // soft-cap, vermeidet i32-Überlauf
+maxPayloadForSov(2) == 0xFFFF;                  // 65 535 Bytes
+maxPayloadForSov(4) == 0x7FFFFFFF - 1024;       // soft-cap, vermeidet i32-Überlauf
 ```
 
 Daraus leiten drei Helfer die maximale Sample-Anzahl pro Blocktyp ab
@@ -69,11 +69,11 @@ Daraus leiten drei Helfer die maximale Sample-Anzahl pro Blocktyp ab
 `bcContinuedData`/`bcAbsTimeStampData` 5 Bytes = ctrl + N; bei
 timestamped zählt jedes Sample 8 Bytes Zeitstempel extra). Für
 variable Einzel-Sample-Blöcke gilt
-`variable_sample_capacity(sov) = max_payload - 9` (ctrl + ts).
+`variableSampleCapacity(sov) = max_payload - 9` (ctrl + ts).
 Diese Funktionen sind die **einzige** Stelle, an der Blockgrößen
 berechnet werden — Streaming- und Block-Writer chunken damit identisch.
 
-`build_metablock(FileInfoDraft, ChannelDefs)` setzt den OSF5-Metablock
+`buildMetablock(FileInfoDraft, ChannelDefs)` setzt den OSF5-Metablock
 zusammen: Indizes sequenziell 0..N, `channeltype` normalisiert
 (`equidistant` bleibt, alles andere wird `scalar` — die etablierte
 Konvention der OSF-Referenzdateien), und die automatischen
@@ -97,7 +97,7 @@ Medium". Fehler aus `write`/`force` setzen den Writer in den
 `DecompressingIStream` versteckt einen custom `std::streambuf` hinter
 einem PIMPL, damit der öffentliche Header zlib-frei bleibt:
 
-- Klassifikation über die ersten zwei Bytes (`detect_compression`,
+- Klassifikation über die ersten zwei Bytes (`detectCompression`,
   nicht-konsumierend via read + seek-back — die Quelle muss seekbar
   sein).
 - `underflow()` inflatet on demand in einen festen Puffer —
@@ -176,16 +176,16 @@ zusätzlich GCC/AppleClang/MSVC mit `-Werror`/`/WX`.
 
 Falls eine künftige Spec-Revision einen Datentyp hinzufügt:
 
-1. `types.hpp/cpp` — Enumerator + Wire-Spelling in `parse_data_type`.
-2. `block.hpp` — Payload-Varianten (`NumericPayload`,
+1. `types.h/cpp` — Enumerator + Wire-Spelling in `parseDataType`.
+2. `block.h` — Payload-Varianten (`NumericPayload`,
    `TimestampedPayload`, ggf. `RelTimestampedPayload`) erweitern.
 3. `reader.cpp` — Dekoder-Zweig (Sample-Größe, Payload-Parser).
-4. `data_channel.hpp/cpp` — `NumericValues`, Flat-Accessor-Makro,
-   `numeric_values_empty_for`.
-5. `manager.cpp` — `*_payload_data_type`-Visitor erweitern.
-6. `block_encode` + Writer — Encoder-Instanziierung,
+4. `datachannel.h/cpp` — `NumericValues`, Flat-Accessor-Makro,
+   `numericValuesEmptyFor`.
+5. `manager.cpp` — `*PayloadDataType`-Visitor erweitern.
+6. `blockencode_p` + Writer — Encoder-Instanziierung,
    `IsTimestampedNumeric`-Spezialisierung in beiden Writer-Headern.
-7. `c_api` — ggf. `osf_data_type` + Konvertierungs-Reader.
+7. `capi` — ggf. `osf_data_type` + Konvertierungs-Reader.
 8. Tests auf jeder Ebene; Referenzdateien im Generator ergänzen.
 
 Dass die Liste lang ist, ist Absicht: Jede Schicht ist explizit

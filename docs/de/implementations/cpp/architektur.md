@@ -58,8 +58,8 @@ flowchart TB
     end
     subgraph LOW ["Niedrige Ebene"]
         BR["BlockReader<br/>roher Block-Strom"]
-        HDR["parse_magic_header"]
-        MB["parse_metablock_json / _xml"]
+        HDR["parseMagicHeader"]
+        MB["parseMetablockJson / parseMetablockXml"]
         CMP["DecompressingIStream"]
     end
     subgraph FOUND ["Fundament"]
@@ -89,29 +89,29 @@ eigene Werkzeuge bauen will, benutzt `BlockReader` direkt.
 
 | Header | Inhalt | Schicht |
 |---|---|---|
-| `osf/error.hpp` | `Error` (Code + Message), `Result<T>` | Fundament |
-| `osf/types.hpp` | `DataType`, `ChannelType`, `SpectrumType` + Parser | Fundament |
-| `osf/header.hpp` | Magic-Header: `OsfVersion`, `MagicHeader`, `parse_magic_header` | Niedrig |
-| `osf/metablock.hpp` | `MetaBlock`/`FileInfo`/`Channel`/`Info`; JSON- und XML-Parser; JSON-Serialisierung | Niedrig |
-| `osf/block.hpp` | Block-Datenmodell: `Block`, `BlockKind`, Payload-Varianten, Control-Byte-Decoder | Fundament |
-| `osf/reader.hpp` | `BlockReader` — Iterator über den Block-Strom | Niedrig |
-| `osf/stats.hpp` | `ReaderStats` / `ChannelStats` — Lese-Telemetrie | Niedrig |
-| `osf/compression.hpp` | `DecompressingIStream`, `detect_compression` — transparentes OSFZ | Niedrig |
-| `osf/data_channel.hpp` | `DataChannel`-Variante (Equidistant / Timestamped / Variable), `Segment`, Flat-Accessoren | Hoch |
-| `osf/manager.hpp` | `DataManager` — Laden + typisierte Kanalliste | Hoch |
-| `osf/streaming_writer.hpp` | `StreamingWriter` + `ChannelDef` | Hoch |
-| `osf/block_writer.hpp` | `BlockWriter` + freie Funktionen `write_to_file` / `write_to` | Hoch |
-| `osf/stale_value_guard.hpp` | `StaleValueGuard` — Frische-Schicht über `StreamingWriter` | Hoch |
-| `osf/binary_sample.hpp` | `BinarySample` — nicht-besitzende Byte-Sicht (Span-Ersatz) | Fundament |
-| `osf/throwing.hpp` | `osf::Exception`, `throwing::unwrap/load/write_to_file` — **nicht** im Umbrella | Komfort |
-| `osf/c_api.h` | reines C99-ABI der Bibliothek `osf-c` — **nicht** im Umbrella | Komfort |
-| `osf/osf.hpp` | Umbrella-Header (alles außer `throwing.hpp` und `c_api.h`) | — |
-| `osf/version.hpp` | generiert; `osf::version()` und `OSF_VERSION_*` | Fundament |
+| `osf/error.h` | `Error` (Code + Message), `Result<T>` | Fundament |
+| `osf/types.h` | `DataType`, `ChannelType`, `SpectrumType` + Parser | Fundament |
+| `osf/header.h` | Magic-Header: `OsfVersion`, `MagicHeader`, `parseMagicHeader` | Niedrig |
+| `osf/metablock.h` | `MetaBlock`/`FileInfo`/`Channel`/`Info`; JSON- und XML-Parser; JSON-Serialisierung | Niedrig |
+| `osf/block.h` | Block-Datenmodell: `Block`, `BlockKind`, Payload-Varianten, Control-Byte-Decoder | Fundament |
+| `osf/reader.h` | `BlockReader` — Iterator über den Block-Strom | Niedrig |
+| `osf/stats.h` | `ReaderStats` / `ChannelStats` — Lese-Telemetrie | Niedrig |
+| `osf/compression.h` | `DecompressingIStream`, `detectCompression` — transparentes OSFZ | Niedrig |
+| `osf/datachannel.h` | `DataChannel`-Variante (Equidistant / Timestamped / Variable), `Segment`, Flat-Accessoren | Hoch |
+| `osf/manager.h` | `DataManager` — Laden + typisierte Kanalliste | Hoch |
+| `osf/streamingwriter.h` | `StreamingWriter` + `ChannelDef` | Hoch |
+| `osf/blockwriter.h` | `BlockWriter` + freie Funktionen `writeToFile` / `writeTo` | Hoch |
+| `osf/stalevalueguard.h` | `StaleValueGuard` — Frische-Schicht über `StreamingWriter` | Hoch |
+| `osf/binarysample.h` | `BinarySample` — nicht-besitzende Byte-Sicht (Span-Ersatz) | Fundament |
+| `osf/throwing.h` | `osf::Exception`, `throwing::unwrap/load/writeToFile` — **nicht** im Umbrella | Komfort |
+| `osf/capi.h` | reines C99-ABI der Bibliothek `osf-c` — **nicht** im Umbrella | Komfort |
+| `osf/osf.h` | Umbrella-Header (alles außer `throwing.h` und `capi.h`) | — |
+| `osf/version.h` | generiert; `osf::version()` und `OSF_VERSION_*` | Fundament |
 
 Private Implementierungsbausteine (unter `src/`, nicht installierbar):
-`block_encode.{hpp,cpp}` (OSF5-Block-Encoder), `writer_common.{hpp,cpp}`
-(Chunking-Mathematik + Metablock-Assembly), `durable_file.{hpp,cpp}`
-(RAII-Datei mit `fsync`), `binary_io.hpp` (Little-Endian-Helfer).
+`blockencode_p.{h,cpp}` (OSF5-Block-Encoder), `writercommon_p.{h,cpp}`
+(Chunking-Mathematik + Metablock-Assembly), `durablefile_p.{h,cpp}`
+(RAII-Datei mit `fsync`), `binaryio_p.h` (Little-Endian-Helfer).
 Details siehe [Interna](interna.md).
 
 ## Drei Datenmodelle — wer sieht was
@@ -128,25 +128,25 @@ flowchart LR
     MB -.->|Meta-Felder| CHANNELS
 ```
 
-1. **`osf::MetaBlock`** (`metablock.hpp`) — die *Definitionen*:
+1. **`osf::MetaBlock`** (`metablock.h`) — die *Definitionen*:
    Datei-Metadaten (`FileInfo`), Kanal-Definitionen (`osf::Channel`)
    und optionale `Info`-Einträge. OSF4 (XML) und OSF5 (JSON)
    unterscheiden sich nur in der Serialisierung; beide Parser füllen
    dasselbe Modell symmetrisch.
-2. **`osf::Block`** (`block.hpp`) — die *Stream-Sicht*: ein dekodierter
+2. **`osf::Block`** (`block.h`) — die *Stream-Sicht*: ein dekodierter
    Block mit Kanalindex und `BlockKind`-Variante (`StartData`,
    `ContinuedData`, `AbsTimestampData`, `ContinuedRelStampData`,
    `Skipped`). Payloads sind ausgepackte, typisierte Vektoren — kein
    Zero-Copy (Blöcke sind KB bis wenige MB groß; die einfache
    Lebensdauer-Semantik wiegt die Allokation auf).
-3. **`osf::DataChannel`** (`data_channel.hpp`) — die *Kanal-Sicht*:
+3. **`osf::DataChannel`** (`datachannel.h`) — die *Kanal-Sicht*:
    eine `std::variant` über drei Speicher-Layouts, weil sich die
    Speicherung tatsächlich unterscheidet:
 
    | Variante | Speicherung |
    |---|---|
    | `EquidistantChannel` | flacher Sample-Vektor + `std::vector<Segment>` |
-   | `TimestampedChannel` | parallele Vektoren `timestamps_ns` + `values` |
+   | `TimestampedChannel` | parallele Vektoren `timestampsNs` + `values` |
    | `VariableChannel` | Timestamps + String- **oder** Binary-Samples |
 
 **Namenshinweis:** `osf::Channel` ist die *Kanal-Definition* aus dem
@@ -156,17 +156,30 @@ Namen.
 
 ## Namens- und API-Konventionen
 
-- **Typen** in PascalCase (`DataManager`, `BlockReader`), **Methoden
-  und freie Funktionen** in snake_case (`load_from_file`,
-  `channel_name`) — die im Projekt dokumentierte Konvention.
+- **Typen** in PascalCase (`DataManager`, `BlockReader`).
+- **Methoden und freie Funktionen** in camelCase (`loadFromFile`,
+  `channelName`, `asDoublesFlat`, `writeToFile`).
+- **Öffentliche Struct-Felder** in camelCase ohne Präfix (`blocksTotal`,
+  `sizeOfLengthValue`, `startTimestampNs`, `compressionFormat`).
+- **Private Member** mit `m_`-Präfix + camelCase (`m_channelData`,
+  `m_writer`).
+- **Konstanten** in UPPER_SNAKE_CASE (`MAX_MAGIC_HEADER_LEN`,
+  `GPS_WIRE_SIZE`).
+- **Header-Dateinamen** kleingeschrieben, ohne Trennzeichen, Endung
+  `.h` (`blockwriter.h`, `streamingwriter.h`, `datachannel.h`).
+  Interne Header im `src/`-Verzeichnis erhalten den `_p.h`-Suffix
+  (`blockencode_p.h`, `writercommon_p.h`).
+- Das **C-ABI** (`osf_*`-Symbole in `osf/capi.h`) folgt der
+  C-üblichen `snake_case`-Konvention und ist von den C++-Regeln
+  ausgenommen.
 - Diskriminatoren in Varianten heißen `kind` (`BlockKind`,
   `SkipReason::Kind`, `VariableValueRef::Kind`).
 - Alles Fehlbare gibt `Result<T>` zurück und ist `[[nodiscard]]`.
-- Konstruktion über statische Fabriken (`DataManager::load_from_file`)
-  oder Builder-artige Konfiguration (Writer: `set_*` → `add_channel` →
+- Konstruktion über statische Fabriken (`DataManager::loadFromFile`)
+  oder Builder-artige Konfiguration (Writer: `set*` → `addChannel` →
   Schreibphase).
-- Fluent-Setter am `BlockReader` (`with_capture_skipped_payload`,
-  `with_file_size`) geben `BlockReader&` zurück.
+- Fluent-Setter am `BlockReader` (`withCaptureSkippedPayload`,
+  `withFileSize`) geben `BlockReader&` zurück.
 - Zeitstempel sind durchgehend `std::int64_t` **Nanosekunden seit der
   Unix-Epoche (UTC)**; Abtastraten `double` in Hz.
 
@@ -190,13 +203,13 @@ Leser noch nicht kennt. Daraus folgen drei Verhaltensregeln:
 
 - **Trunkierung ist kein Fehler.** Endet die Datei mitten im Block,
   liefert der `BlockReader` alle vollständigen Blöcke, erhöht
-  `stats().blocks_truncated` auf 1 und beendet die Iteration sauber.
+  `stats().blocksTruncated` auf 1 und beendet die Iteration sauber.
 - **Unbekanntes wird übersprungen, nicht verschluckt.** Kanäle mit
   unbekanntem (zukünftigem) Datentyp parsen als
   `DataType::Unsupported`; ihre Blöcke erscheinen als
   `BlockKind::Skipped` (Payload-Bytes werden konsumiert, damit der
   Strom ausgerichtet bleibt). Die Original-Schreibweise bleibt auf
-  `Channel::data_type_raw` erhalten.
+  `Channel::dataTypeRaw` erhalten.
 - **Entfernte Spec-Elemente sind harte Fehler.** Datentypen, die die
   Spec-Revision 2026-05-04 entfernt hat (`pair`, `triple`, `candata`,
   `gpsdata`), werden mit `Error::Code::RemovedInSpec` abgelehnt —
@@ -207,10 +220,10 @@ Leser noch nicht kennt. Daraus folgen drei Verhaltensregeln:
 
 `StreamingWriter` (Embedded: `fsync` pro Block, konstanter Speicher,
 ausfallsicher) und `BlockWriter` (Analyst: sammelt im Speicher, emittiert
-am Ende, kann `sizeoflengthvalue` automatisch anheben) haben
+am Ende, kann `sizeOfLengthValue` automatisch anheben) haben
 unvereinbare Invarianten — ein gemeinsamer Writer hätte beide Profile
 verwässert. Gemeinsame Bausteine (Chunking, Metablock-Assembly) leben
-in `src/writer_common.*`. Details auf der Seite [Schreiben](schreiben.md).
+in `src/writercommon_p.*`. Details auf der Seite [Schreiben](schreiben.md).
 
 ### Transparentes OSFZ nur beim Lesen
 
@@ -237,7 +250,7 @@ Kompressions-Fehlermodi entkoppelt bleiben.
 implementations/cpp/
 ├── CMakeLists.txt           — Projekt, Optionen, Targets
 ├── BUILD.md                 — Bauanleitung (EN)
-├── cmake/                   — CompilerWarnings.cmake, version.hpp.in
+├── cmake/                   — CompilerWarnings.cmake, version.h.in
 ├── include/osf/             — öffentliche Header (API-Fläche)
 ├── src/                     — Implementierung + private Header
 ├── tests/

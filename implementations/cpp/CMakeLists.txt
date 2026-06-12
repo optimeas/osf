@@ -6,7 +6,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(osf
-    VERSION 0.0.1
+    VERSION 0.1.0
     DESCRIPTION "Open Streaming Format — C++ implementation"
     LANGUAGES CXX
 )

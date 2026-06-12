@@ -99,7 +99,7 @@ FetchContent_MakeAvailable(osf)
 target_link_libraries(meine_app PRIVATE osf::osf)
 ```
 
-Für Konsumenten genügt `#include <osf/osf.hpp>`; `osf::throwing` und
+Für Konsumenten genügt `#include <osf/osf.h>`; `osf::throwing` und
 das C-ABI werden bei Bedarf separat eingebunden.
 
 ## Vendorte Abhängigkeiten

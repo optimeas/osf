@@ -64,7 +64,7 @@ und CI baut und testet auf **Linux, macOS und Windows**.
 - `StreamingWriter` — eingebettet, Sample für Sample, `fsync` pro Block
   (ausfallsicher bei Stromverlust), konstanter Speicherbedarf
 - `BlockWriter` — analystenfreundlich, sammelt im Speicher und schreibt
-  die komplette Datei am Ende; passt `sizeoflengthvalue` bei Bedarf
+  die komplette Datei am Ende; passt `sizeOfLengthValue` bei Bedarf
   automatisch von 2 → 4 an
 - `StaleValueGuard` — optionale Frische-Schicht, die den letzten Wert
   inaktiver Kanäle erneut ausgibt
@@ -75,7 +75,7 @@ und CI baut und testet auf **Linux, macOS und Windows**.
 
 - Eine **werfende Komfort-Schicht** (`osf::throwing`) über dem
   `Result<T>`-Kern für Aufrufer, die Exceptions bevorzugen
-- Die **C-ABI-Bibliothek `osf-c`** (`osf/c_api.h`) — eine reine C99-Schicht
+- Die **C-ABI-Bibliothek `osf-c`** (`osf/capi.h`) — eine reine C99-Schicht
   für die sprachübergreifende Nutzung (DLL/Shared Object)
 
 ## Architektur im Überblick
@@ -87,14 +87,14 @@ Zwei API-Ebenen liegen auf einem gemeinsamen, exception-freien Kern (`osf::Resul
 ```mermaid
 flowchart LR
     F([".osf / .osfz file"]) --> D["DecompressingIStream<br/>gzip · zlib · plain<br/>(auto-detect)"]
-    D --> H["parse_magic_header"]
+    D --> H["parseMagicHeader"]
     H --> M["MetaBlock parser<br/>OSF5 JSON · OSF4 XML"]
     M --> B["BlockReader<br/>raw block stream"]
     B --> DM["DataManager<br/>typed channel assembly"]
     DM --> C["DataChannel<br/>Equidistant · Timestamped · Variable"]
 ```
 
-`DataManager::load_from_file()` steuert diese gesamte Pipeline; OSFZ wird automatisch erkannt und dekomprimiert, sodass `.osf` und `.osfz` denselben Aufruf verwenden.
+`DataManager::loadFromFile()` steuert diese gesamte Pipeline; OSFZ wird automatisch erkannt und dekomprimiert, sodass `.osf` und `.osfz` denselben Aufruf verwenden.
 
 ### Schreibpfad (OSF5)
 
@@ -105,9 +105,9 @@ flowchart TB
         SW["StreamingWriter<br/>embedded · fsync per block"]
         BW["BlockWriter<br/>analyst · in-memory"]
     end
-    SW --> WC["writer_common<br/>chunking · build_metablock"]
+    SW --> WC["writercommon_p<br/>chunking · buildMetablock"]
     BW --> WC
-    DM["DataManager (loaded)"] -. "osf::write_to_file(mgr, path)" .-> BW
+    DM["DataManager (loaded)"] -. "osf::writeToFile(mgr, path)" .-> BW
     WC --> OUT([".osf (OSF5)"])
 ```
 
@@ -118,7 +118,7 @@ flowchart TB
     APP["C++ application"] --> CORE["osf::osf core<br/>exception-free · Result&lt;T&gt;"]
     APP -. "opt-in" .-> THR["osf::throwing<br/>exception wrapper"]
     THR --> CORE
-    EXT["C · C#/P-Invoke · OCX consumer"] --> CAPI["osf-c<br/>pure C99 ABI · osf/c_api.h"]
+    EXT["C · C#/P-Invoke · OCX consumer"] --> CAPI["osf-c<br/>pure C99 ABI · osf/capi.h"]
     CAPI --> CORE
 ```
 
@@ -126,19 +126,19 @@ flowchart TB
 
 | Ich möchte … | Klasse | Hinweise |
 |---|---|---|
-| Datei lesen, typisierte Kanäle erhalten | `osf::DataManager` | Zentraler Einstiegspunkt — `load_from_file()`, `channel("name")`. Liest `.osf` und `.osfz`. → [Lesen](cpp/lesen.md) |
+| Datei lesen, typisierte Kanäle erhalten | `osf::DataManager` | Zentraler Einstiegspunkt — `loadFromFile()`, `channel("name")`. Liest `.osf` und `.osfz`. → [Lesen](cpp/lesen.md) |
 | Den rohen Block-Stream iterieren | `osf::BlockReader` | Niedrigere Ebene; für sehr große Dateien und Streaming-Konsumenten. → [Lesen](cpp/lesen.md) |
 | Samples eines Kanals halten | `osf::DataChannel` | Variante über Equidistant / Timestamped / Variable; typisierte Flat-Accessoren. → [Lesen](cpp/lesen.md) |
 | Auf einem Embedded-Gerät aufzeichnen | `osf::StreamingWriter` | `fsync` pro Block, konstanter Speicher, ausfallsicher bei Stromverlust. → [Schreiben](cpp/schreiben.md) |
-| Komplette Datei in einem Schritt schreiben | `osf::BlockWriter` | Sammelt im Speicher, schreibt bei `write_to_file()`; passt `sizeoflengthvalue` automatisch an. → [Schreiben](cpp/schreiben.md) |
+| Komplette Datei in einem Schritt schreiben | `osf::BlockWriter` | Sammelt im Speicher, schreibt bei `writeToFile()`; passt `sizeOfLengthValue` automatisch an. → [Schreiben](cpp/schreiben.md) |
 | Inaktive Kanäle „frisch" halten | `osf::StaleValueGuard` | Gibt den letzten Wert von Kanälen erneut aus, die einen Schwellwert überschritten haben. → [Schreiben](cpp/schreiben.md) |
-| Round-Trip / OSF4 → OSF5 | freie Funkt. `osf::write_to_file(mgr, …)` | Lädt einen `DataManager` in einen `BlockWriter` und schreibt OSF5. → [Kochbuch](cpp/kochbuch.md) |
+| Round-Trip / OSF4 → OSF5 | freie Funkt. `osf::writeToFile(mgr, …)` | Lädt einen `DataManager` in einen `BlockWriter` und schreibt OSF5. → [Kochbuch](cpp/kochbuch.md) |
 | Exceptions statt `Result<T>` verwenden | `osf::throwing` | Opt-in-Header; nicht in den Kern einkompiliert. → [Fehlerbehandlung](cpp/fehlerbehandlung.md) |
-| Aus C, C#, OCX … aufrufen | `osf-c` (`osf/c_api.h`) | Reines C99-ABI; mit `-D OSF_BUILD_C_API=ON` bauen. → [C-ABI](cpp/c-abi.md) |
+| Aus C, C#, OCX … aufrufen | `osf-c` (`osf/capi.h`) | Reines C99-ABI; mit `-D OSF_BUILD_C_API=ON` bauen. → [C-ABI](cpp/c-abi.md) |
 
 ### Lauffähige Beispiele
 
-`implementations/cpp/examples/` enthält vier kleine Programme über `<osf/osf.hpp>` —
+`implementations/cpp/examples/` enthält vier kleine Programme über `<osf/osf.h>` —
 **`inspect`** (Header / Metadaten / Kanäle, transparentes OSFZ), **`dump`**
 (Sample-Werte), **`write`** (OSF5 synthetisieren und schreiben) und **`copy`**
 (Round-Trip). Sie werden mit `-D OSF_BUILD_EXAMPLES=ON` gebaut (standardmäßig aktiv).
@@ -193,9 +193,9 @@ Der vollständige Fehlercode-Katalog steht unter
 ### Lesen
 
 ```cpp
-#include <osf/manager.hpp>
+#include <osf/manager.h>
 
-auto result = osf::DataManager::load_from_file("messung.osf");  // auch .osfz
+auto result = osf::DataManager::loadFromFile("messung.osf");  // auch .osfz
 if (!result) {
     // result.error().message  —  strukturierter Fehler, keine Exception
     return;
@@ -204,7 +204,7 @@ osf::DataManager const& mgr = *result;
 
 // Kanal über den Namen ansprechen (primäre Zugriffsform)
 if (osf::DataChannel const* ch = mgr.channel("Sensor.Temperatur")) {
-    auto werte = osf::as_doubles_flat(
+    auto werte = osf::asDoublesFlat(
         std::get<osf::TimestampedChannel>(*ch));   // typisierter Zugriff
 }
 ```
@@ -212,7 +212,7 @@ if (osf::DataChannel const* ch = mgr.channel("Sensor.Temperatur")) {
 Wer lieber mit Exceptions arbeitet, nutzt die opt-in-Schicht:
 
 ```cpp
-#include <osf/throwing.hpp>
+#include <osf/throwing.h>
 
 auto mgr = osf::throwing::load("messung.osf");   // wirft osf::Exception bei Fehler
 ```
@@ -220,31 +220,31 @@ auto mgr = osf::throwing::load("messung.osf");   // wirft osf::Exception bei Feh
 ### Schreiben (OSF5)
 
 ```cpp
-#include <osf/block_writer.hpp>
+#include <osf/blockwriter.h>
 
 osf::BlockWriter writer;
-writer.set_creator("mein-tool/1.0");
+writer.setCreator("mein-tool/1.0");
 
 osf::ChannelDef def;
-def.name         = "signale.sinus";
-def.data_type    = osf::DataType::Double;
-def.channel_type = osf::ChannelType::Scalar;
+def.name        = "signale.sinus";
+def.dataType    = osf::DataType::Double;
+def.channelType = osf::ChannelType::Scalar;
 
-auto idx = writer.add_channel(def);              // Result<uint16_t>
-// … Samples zu *idx hinzufügen (add_timestamped_sample, add_equidistant_segment, …)
-writer.write_to_file("ausgabe.osf");
+auto idx = writer.addChannel(def);              // Result<uint16_t>
+// … Samples zu *idx hinzufügen (addTimestampedSample, addEquidistantSegment, …)
+writer.writeToFile("ausgabe.osf");
 ```
 
 Für eingebettetes, ausfallsicheres Schreiben gibt es stattdessen den
 `StreamingWriter` (`fsync` pro Block). Ein geladener `DataManager` lässt
-sich mit der freien Funktion `osf::write_to_file(mgr, pfad)` direkt als
+sich mit der freien Funktion `osf::writeToFile(mgr, pfad)` direkt als
 OSF5 zurückschreiben (Round-Trip / OSF4 → OSF5). Alle Details und die
-Wahl des richtigen `sizeoflengthvalue`: [Schreiben](cpp/schreiben.md).
+Wahl des richtigen `sizeOfLengthValue`: [Schreiben](cpp/schreiben.md).
 
 ### C-ABI (`osf-c`)
 
 Mit `-D OSF_BUILD_C_API=ON` entsteht zusätzlich die Shared Library
-`osf-c` mit einer reinen C99-Schnittstelle (`osf/c_api.h`): opake Handles
+`osf-c` mit einer reinen C99-Schnittstelle (`osf/capi.h`): opake Handles
 (`osf_manager`, `osf_channel`), `osf_status`-Codes, eine thread-lokale
 `osf_last_error_message()` und Copy-out-Reader für Zeitstempel und Werte —
 plus `osf_write_to_file` für den Round-Trip-Schreibpfad. Keine C++-Exception

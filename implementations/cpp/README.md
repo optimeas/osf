@@ -25,7 +25,7 @@ A standalone C++17 implementation of the Open Streaming Format (OSF) — idiomat
 **Convenience and bindings:**
 
 - A throwing convenience layer (`osf::throwing`) over the `Result<T>` core for callers who prefer exceptions
-- The C ABI shared library `osf-c` (`osf/c_api.h`) — a pure C99 layer for cross-language consumption (built with `-D OSF_BUILD_C_API=ON`)
+- The C ABI shared library `osf-c` (`osf/capi.h`) — a pure C99 layer for cross-language consumption (built with `-D OSF_BUILD_C_API=ON`)
 
 ## Generating the API reference
 
@@ -52,4 +52,11 @@ Qt integration is intentionally **not** part of the core library. A separate Qt-
 
 ## Naming conventions
 
-Types use `PascalCase` (`DataManager`, `BlockWriter`, `ControlKind`, …) and functions/methods use `snake_case` (`load_from_file()`, `write_to_file()`, …) — matching the C ABI surface (`osf_load_file`, …). The `Kind` suffix on variant-tag enumerations (`BlockKind`, `ControlKind`, `ChannelData::Kind`) is a deliberate idiom and is kept consistently.
+- **Types** use `PascalCase` — `DataManager`, `BlockWriter`, `StreamingWriter`, `ControlKind`, etc.
+- **Methods and free functions** use `camelCase` — `loadFromFile()`, `writeToFile()`, `addChannel()`, `channelByIndex()`, `asDoublesFlat()`, etc.
+- **Public struct fields** use `camelCase` without a prefix — `blocksTotal`, `sizeOfLengthValue`, `startTimestampNs`, `compressionFormat`, etc.
+- **Private members** use `m_` prefix + `camelCase` — `m_channelData`, `m_writer`, etc.
+- **Constants** use `UPPER_SNAKE_CASE` — `MAX_MAGIC_HEADER_LEN`, `GPS_WIRE_SIZE`, etc.
+- **Header file names** are lowercase without separators, with the `.h` extension — `blockwriter.h`, `streamingwriter.h`, `stalevalueguard.h`, `datachannel.h`, `binarysample.h`. Internal (non-installed) headers in `src/` get a `_p.h` suffix.
+- The **C ABI** (`osf_*` symbols in `osf/capi.h`) keeps C-conventional `snake_case` — that surface is unaffected by the C++ naming rules.
+- The **`Kind` suffix** on variant-tag enumerations (`BlockKind`, `ControlKind`, `ChannelData::Kind`) is a deliberate idiom and is kept consistently.
