@@ -474,7 +474,7 @@ absTimestampRange(TimestampedPayload const& payload) {
 // Channel-info lookup helpers.
 // ---------------------------------------------------------------------
 
-std::optional<SkipReason> unsupported_reason(BlockReader::Iterator const&) = delete;
+std::optional<SkipReason> unsupportedReason(BlockReader::Iterator const&) = delete;
 // (placeholder so the compiler errors loudly if someone tries to use the
 // private overload pattern from Rust — we use a simple free function below)
 
@@ -791,10 +791,10 @@ std::optional<Result<Block>> BlockReader::next() {
             ++cs.segments;
             cs.observeTimestamp(r->startTimestampNs);
             if (n > 0 && r->sampleRateHz > 0.0) {
-                double const span_ns =
+                double const spanNs =
                     (static_cast<double>(n - 1) / r->sampleRateHz) * 1.0e9;
                 std::int64_t const last = r->startTimestampNs +
-                    static_cast<std::int64_t>(span_ns);
+                    static_cast<std::int64_t>(spanNs);
                 cs.observeTimestamp(last);
             }
             ++m_stats.blocksRead;

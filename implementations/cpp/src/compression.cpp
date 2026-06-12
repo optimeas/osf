@@ -108,13 +108,13 @@ protected:
         if (gptr() < egptr()) {
             return traits_type::to_int_type(*gptr());
         }
-        return (m_format == CompressionFormat::None) ? underflow_plain()
-                                                    : underflow_inflate();
+        return (m_format == CompressionFormat::None) ? underflowPlain()
+                                                    : underflowInflate();
     }
 
 private:
     // Pass-through: serve the raw input buffer, refilling from the source.
-    int_type underflow_plain() {
+    int_type underflowPlain() {
         if (m_inPos >= m_inAvail) {
             m_src.read(m_in.data(), static_cast<std::streamsize>(m_in.size()));
             m_inAvail = static_cast<std::size_t>(m_src.gcount());
@@ -130,7 +130,7 @@ private:
     }
 
     // Streaming inflate into the output buffer.
-    int_type underflow_inflate() {
+    int_type underflowInflate() {
         if (m_streamEnd) {
             return traits_type::eof();
         }

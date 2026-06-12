@@ -3,7 +3,7 @@
 
 #include "osf/streamingwriter.h"
 
-#include "blockencode_p.h"           // osf::detail::encode_*
+#include "blockencode_p.h"           // osf::detail::encode*
 #include "durablefile_p.h"           // osf::detail::DurableFile
 #include "writercommon_p.h"          // osf::detail chunking helpers + constants
 #include "osf/metablock.h"          // FileInfo, Channel, MetaBlock, serializeMetablockJson

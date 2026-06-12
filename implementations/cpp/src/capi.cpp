@@ -35,9 +35,9 @@ namespace {
 
 // Thread-local last-error message. Initialised non-null so c_str() is
 // always valid.
-thread_local std::string g_last_error;
+thread_local std::string gLastError;
 
-void setError(std::string msg) { g_last_error = std::move(msg); }
+void setError(std::string msg) { gLastError = std::move(msg); }
 
 osf_status statusFromCode(osf::Error::Code code) noexcept {
     using C = osf::Error::Code;
@@ -135,7 +135,7 @@ const char* osf_version(void) {
 }
 
 const char* osf_last_error_message(void) {
-    return g_last_error.c_str();
+    return gLastError.c_str();
 }
 
 // ── manager ──────────────────────────────────────────────────────────
