@@ -26,12 +26,11 @@ Fehlerbehandlung, C-ABI und Build haben eigene Seiten.
 
 ## Leitlinien
 
-Die Implementierung folgt vier Grundsätzen (festgehalten in
-[DECISIONS §20](https://github.com/optimeas/osf/blob/main/DECISIONS.md)):
+Die Implementierung folgt vier Grundsätzen:
 
-1. **Eigenständiges C++17** — kein FFI auf den Rust-Kern, keine
-   Portierung aus C. Idiomatisches modernes C++ mit der Rust-Implementierung
-   als *Verhaltensreferenz* (gleiche Semantik, nicht gleiche Struktur).
+1. **Eigenständiges C++17.** Idiomatisches modernes C++ ohne
+   Fremdsprach-Brücken und ohne externe Laufzeitabhängigkeiten; das
+   Verhalten ist allein durch die OSF-Format-Spezifikation definiert.
 2. **Exception-freier Kern.** Jede Operation, die scheitern kann, gibt
    `osf::Result<T>` zurück (ein `tl::expected<T, osf::Error>`).
    Exceptions gibt es nur in der opt-in-Schicht `osf::throwing`.
@@ -151,9 +150,9 @@ flowchart LR
    | `VariableChannel` | Timestamps + String- **oder** Binary-Samples |
 
 **Namenshinweis:** `osf::Channel` ist die *Kanal-Definition* aus dem
-Metablock; `osf::DataChannel` sind die *zusammengesetzten Samples*. Die
-Rust-Referenz trennt beide per Modul; in C++ teilen sie sich den
-Namespace `osf`, daher die unterschiedlichen Namen.
+Metablock; `osf::DataChannel` sind die *zusammengesetzten Samples*.
+Beide teilen sich den Namespace `osf`, daher die unterschiedlichen
+Namen.
 
 ## Namens- und API-Konventionen
 
@@ -218,7 +217,7 @@ in `src/writer_common.*`. Details auf der Seite [Schreiben](schreiben.md).
 OSFZ (= gzip- oder zlib-komprimiertes OSF) wird beim **Lesen**
 transparent erkannt und dekomprimiert (`DecompressingIStream` vor dem
 Magic-Header-Parse). Beim **Schreiben** komprimiert die Bibliothek
-bewusst nie inline (DECISIONS §12): Kompression ist ein nachgelagerter
+bewusst nie inline: Kompression ist ein nachgelagerter
 Schritt nach dem Datei-Abschluss, damit Schreib- und
 Kompressions-Fehlermodi entkoppelt bleiben.
 

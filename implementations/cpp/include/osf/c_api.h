@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Optimeas GmbH
 
 /*
- * c_api.h — C ABI for the OSF C++ library (DECISIONS §23).
+ * c_api.h — C ABI for the OSF C++ library.
  *
  * A C-callable surface over the C++ core, exposed by the separate shared
  * library `osf-c` (built only when OSF_BUILD_C_API=ON). Pure C99: depends
@@ -10,7 +10,7 @@
  * consumers. Intended for cross-language consumption — Windows DLL /
  * ActiveX-OCX and future language bindings.
  *
- * Ownership & lifetime (see DECISIONS §23):
+ * Ownership & lifetime:
  *   - osf_manager is heap-owned; free it with osf_manager_free().
  *   - osf_channel handles and every `const char*` returned by a getter are
  *     BORROWED from the owning manager and valid only until that manager is
@@ -153,7 +153,7 @@ OSF_C_API size_t osf_channel_read_gps(const osf_channel* c, double* out_lla, siz
 OSF_C_API const char*    osf_channel_string_at(const osf_channel* c, size_t i);
 OSF_C_API const uint8_t* osf_channel_binary_at(const osf_channel* c, size_t i, size_t* out_len);
 
-/* ── Write (round-trip; always OSF5, DECISIONS §6) ──────────────────── */
+/* ── Write (round-trip; always OSF5) ────────────────────────────────── */
 
 /* Re-export a loaded manager to `path` as an OSF5 file. */
 OSF_C_API osf_status osf_write_to_file(const osf_manager* m, const char* path);

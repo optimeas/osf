@@ -10,7 +10,7 @@
  * which fsyncs each block to disk and is suited for embedded / power-loss-safe
  * recording.
  *
- * Two writer classes serve the OSF5 write surface (DECISIONS §7):
+ * Two writer classes serve the OSF5 write surface:
  *   - StreamingWriter — embedded; per-block flush via OS fsync.
  *   - BlockWriter (this class) — analyst-style; accumulates samples in
  *     memory, emits the complete file at close.
@@ -65,8 +65,9 @@ public:
     // File-info setters populate the OSF5 metablock's `file` object.
     // Unlike StreamingWriter there is no phase restriction: the
     // metablock is assembled at emit time, so setters may be called any
-    // time before write_to() / write_to_file(). Unset fields are
-    // omitted (defaults per DECISIONS §13).
+    // time before write_to() / write_to_file(). Unset fields receive
+    // the same library defaults as in StreamingWriter (created_utc
+    // always stamped; creator/tag fallbacks).
 
     /// Name of the writing device or application (`creator` field).
     void set_creator(std::string value);
@@ -210,8 +211,8 @@ public:
     /// Build a BlockWriter from a loaded DataManager: copies file-info
     /// (creator, tag, reason, location, namespace_sep, comment) and every
     /// typed channel (equidistant segments, timestamped numeric/GPS,
-    /// string/binary). Always emits OSF5 (DECISIONS §6), even when the
-    /// source manager came from an OSF4 file.
+    /// string/binary). Always emits OSF5 (the library writes OSF5
+    /// only), even when the source manager came from an OSF4 file.
     [[nodiscard]] static Result<BlockWriter> from_manager(DataManager const& mgr);
 
 private:
@@ -303,7 +304,7 @@ Result<void> BlockWriter::add_timestamped_samples(
 
 // ── Free convenience functions ────────────────────────────────────────
 // Both build a BlockWriter via BlockWriter::from_manager and immediately
-// emit. Always writes OSF5 (DECISIONS §6).
+// emit. Always writes OSF5.
 
 /// Load \p mgr into a BlockWriter and write the result to \p path.
 [[nodiscard]] Result<void> write_to_file(DataManager const& mgr,

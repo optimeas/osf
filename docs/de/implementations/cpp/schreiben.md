@@ -16,7 +16,7 @@ last_update:
 
 # Schreiben
 
-Die Bibliothek schreibt **ausschließlich OSF5** (DECISIONS §6) — auch
+Die Bibliothek schreibt **ausschließlich OSF5** — auch
 dann, wenn die Quelle eine OSF4-Datei war. Zwei Writer-Klassen decken
 zwei sehr unterschiedliche Einsatzprofile ab:
 
@@ -117,7 +117,8 @@ Garantien und Verhalten:
 - **Metadaten-Setter nur vor `start()`** wirksam — der Metablock wird
   von `start()` geschrieben und nie wieder angefasst.
 - **Kein OSFZ:** Der Streaming-Writer schreibt rohe `.osf`-Dateien.
-  Kompression ist ein nachgelagerter Schritt (DECISIONS §12).
+  Kompression ist ein nachgelagerter Schritt — Schreib- und
+  Kompressions-Fehlermodi bleiben so entkoppelt.
 - Move-konstruier-/zuweisbar, nicht kopierbar. Nicht thread-safe —
   Zugriffe extern serialisieren.
 - Der Scratch-Puffer wächst auf die Größe des größten je geschriebenen
@@ -179,10 +180,10 @@ if (auto r = w.write_to(mem); !r) { /* … */ }
 - `channel_index("name")` und `channel_count()` helfen, wenn die
   Indizes nicht mitgeführt werden.
 
-## Metadaten-Defaults (DECISIONS §13)
+## Automatische Metadaten-Defaults
 
 Beide Writer wenden beim Zusammenbau des Metablocks dieselben
-Defaults an (Parität mit dem Rust-Writer):
+Defaults an:
 
 | Feld | Verhalten wenn nicht gesetzt |
 |---|---|
@@ -255,9 +256,8 @@ Kanalindex — der Writer vergibt sequenziell 0..N neu.
 
 ## Was die Writer bewusst nicht tun
 
-- **Kein OSF4-Output** — OSF5 ist das einzige Schreibformat
-  (DECISIONS §6).
-- **Kein OSFZ-Output** — Kompression ist nachgelagert (DECISIONS §12);
+- **Kein OSF4-Output** — OSF5 ist das einzige Schreibformat.
+- **Kein OSFZ-Output** — Kompression ist nachgelagert;
   ein Post-Close-Kompressor und ein `osf-compress`-CLI sind als
   Folgearbeit entworfen.
 - **Kein `bcContinuedRelStampData`** — das relative Zeitformat ist

@@ -81,7 +81,7 @@ Apple Silicon (arm64) and Intel (x86_64) hosts both build natively. Universal-bi
 | `OSF_BUILD_TESTS` | `ON` | Configure GoogleTest and the unit-test executables. |
 | `OSF_BUILD_EXAMPLES` | `ON` | Build the example executables under `examples/`. |
 | `OSF_BUILD_DOCS` | `OFF` | Generate the Doxygen API reference (requires Doxygen installed). |
-| `OSF_BUILD_C_API` | `OFF` | Build the `osf-c` C ABI shared-library wrapper (DECISIONS §23). Opt-in, default OFF. |
+| `OSF_BUILD_C_API` | `OFF` | Build the `osf-c` C ABI shared-library wrapper. Opt-in, default OFF. |
 | `OSF_USE_SYSTEM_ZLIB` | `OFF` | Prefer the system zlib over a `FetchContent` build (for OSFZ decompression). |
 | `OSF_WARNINGS_AS_ERRORS` | `OFF` | Treat compiler warnings as errors (`/WX` on MSVC, `-Werror` on GCC/Clang). CI builds with `ON`; local builds stay lenient by default. |
 
@@ -91,7 +91,7 @@ Set with `-D<OPTION>=<VALUE>`, for example:
 cmake -B build -DBUILD_SHARED_LIBS=ON -DOSF_BUILD_TESTS=OFF
 ```
 
-The C++ language standard is **not** a CMake option. C++17 is the firmly-defined language baseline (see [DECISIONS.md §20](../../DECISIONS.md)); moving to C++20 or later is a deliberate library upgrade, not a build switch.
+The C++ language standard is **not** a CMake option. C++17 is the firmly-defined language baseline; moving to C++20 or later is a deliberate library upgrade, not a build switch.
 
 ## Generating the API reference
 

@@ -10,9 +10,6 @@
 /// before using the value. Consumers who prefer exceptions opt in via
 /// `<osf/throwing.hpp>` (`osf::throwing::unwrap` and friends), which is
 /// layered on top of this header — never the other way around.
-///
-/// See DECISIONS.md §20 for the rationale (Result<T> as the core API,
-/// throwing wrappers as opt-in).
 
 #pragma once
 

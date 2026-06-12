@@ -16,13 +16,11 @@ last_update:
 
 # Interna
 
-Diese Seite beschreibt die privaten Bausteine unter
-`implementations/cpp/src/` — relevant für alle, die an der Bibliothek
-mitarbeiten oder ihr Verhalten bis auf die Byte-Ebene nachvollziehen
-wollen. Die Wire-Format-Definitionen selbst stehen in der
-[OSF-Spezifikation](../../osf_general.md); maßgeblich für
-Architektur-Entscheidungen ist
-[DECISIONS §20](https://github.com/optimeas/osf/blob/main/DECISIONS.md).
+Diese Seite beschreibt die privaten Bausteine im `src/`-Verzeichnis
+der Bibliothek — relevant für alle, die an ihr mitarbeiten oder ihr
+Verhalten bis auf die Byte-Ebene nachvollziehen wollen. Die
+Wire-Format-Definitionen selbst stehen in der
+[OSF-Spezifikation](../../osf_general.md).
 
 ## Übersicht der privaten Bausteine
 
@@ -76,10 +74,10 @@ Diese Funktionen sind die **einzige** Stelle, an der Blockgrößen
 berechnet werden — Streaming- und Block-Writer chunken damit identisch.
 
 `build_metablock(FileInfoDraft, ChannelDefs)` setzt den OSF5-Metablock
-zusammen: Indizes sequenziell 0..N, `channeltype` normalisiert auf die
-Delphi-Referenzkonvention (`equidistant` bleibt, alles andere wird
-`scalar`), und die Metadaten-Defaults aus DECISIONS §13 werden
-angewendet (`created_utc` = aktuelle UTC-Zeit als
+zusammen: Indizes sequenziell 0..N, `channeltype` normalisiert
+(`equidistant` bleibt, alles andere wird `scalar` — die etablierte
+Konvention der OSF-Referenzdateien), und die automatischen
+Metadaten-Defaults werden angewendet (`created_utc` = aktuelle UTC-Zeit als
 `YYYY-MM-DDTHH:MM:SSZ`, `creator`-Fallback `osf-cpp/<version>`,
 `tag`-Fallback `default`; `reason`/GPS-Tripel bleiben weggelassen
 statt `null`).
@@ -153,7 +151,7 @@ Kanal des deklarierten Typs materialisiert.
   `InvalidBlock` statt zu UB.
 - Multi-Sample-String/Binary-Blöcke (Bit 7 gesetzt) werden per
   Gleichlängen-Split zerlegt; bei nicht teilbarer Länge fällt der
-  Reader auf Einzel-Sample zurück (Verhalten der Rust-Referenz).
+  Reader auf Einzel-Sample zurück.
 - Der Null-Terminator wird versions-deterministisch behandelt
   (Feld `osf_version_` im Reader): OSF4 strippt das letzte Byte jeder
   String-/Binary-Payload, OSF5 nie (Spec-Rev 2026-05-24).

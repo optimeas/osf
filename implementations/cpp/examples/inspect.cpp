@@ -7,8 +7,7 @@
 //   inspect <file>
 //
 // Prints file-level metadata (version, creator, created_utc, compression)
-// and a one-line summary per channel. Mirrors the column layout of the
-// Rust `inspect` example (implementations/rust/osf-core/examples/inspect.rs).
+// and a one-line summary per channel.
 
 #include <osf/osf.hpp>
 

@@ -38,7 +38,7 @@ if (!result) {
 }
 osf::DataManager const& mgr = *result;
 
-// Kanal über den Namen ansprechen (verpflichtende Zugriffsform, DECISIONS §10)
+// Kanal über den Namen ansprechen (primäre Zugriffsform)
 if (osf::DataChannel const* ch = mgr.channel("Sensor.Temperatur")) {
     if (auto werte = osf::as_doubles_flat(std::get<osf::TimestampedChannel>(*ch))) {
         for (auto const& [ts_ns, wert] : *werte) { /* … */ }
@@ -70,7 +70,7 @@ mgr.channel("a.b.c");      // DataChannel const* — nullptr, wenn unbekannt (Pf
 mgr.channel_by_index(7);   // DataChannel const* — Index aus dem Metablock (optional)
 ```
 
-`channel(name)` ist die in DECISIONS §10 verpflichtende Zugriffsform;
+`channel(name)` ist die primäre Zugriffsform;
 `channel_by_index` ist Komfort. Beide geben `nullptr` statt eines
 Fehlers zurück, weil „Kanal nicht vorhanden" beim Erkunden fremder
 Dateien ein normaler Fall ist.
@@ -271,8 +271,8 @@ Nach jedem Ladevorgang (bzw. via `reader.stats()`):
 | `compressed` / `compression_format` | OSFZ-Erkennung |
 | `per_channel` | `ChannelStats` je Kanalindex: Name, Block-/Sample-/Byte-Zähler, Segmentanzahl, Zeitbereich |
 
-`operator<<` formatiert beide Strukturen mehrzeilig im Stil der
-Rust-Referenz; `format_bytes` / `format_duration` stehen einzeln zur
+`operator<<` formatiert beide Strukturen mehrzeilig für CLI-Ausgaben;
+`format_bytes` / `format_duration` stehen einzeln zur
 Verfügung.
 
 ```cpp
@@ -283,8 +283,8 @@ for (auto const& [idx, cs] : mgr.stats.per_channel)
 
 ## Performance-Hinweise
 
-- `steam_loco.osf` (reale Felddatei) lädt in Release-Builds in wenigen
-  Millisekunden — dieselbe Größenordnung wie die Rust-Referenz.
+- Reale Felddateien im einstelligen MB-Bereich laden in Release-Builds
+  in wenigen Millisekunden.
 - Der `DataManager` hält alle Samples im Speicher; als Faustregel
   braucht eine Datei etwa ihre entpackte Größe an RAM. Für größere
   Bestände: `BlockReader` streamend benutzen.

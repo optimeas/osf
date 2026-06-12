@@ -12,7 +12,7 @@
  * already best-effort on truncation (BlockReader bumps blocks_truncated
  * and yields cleanly at a partial block).
  *
- * Two writer classes serve the OSF5 write surface (DECISIONS §7):
+ * Two writer classes serve the OSF5 write surface:
  *   - StreamingWriter (this class) — embedded; per-block flush via OS
  *     fsync. Constant memory footprint regardless of recording length.
  *     Compression is intentionally out of scope.
@@ -23,8 +23,8 @@
  * Compression is intentionally out of scope. The StreamingWriter writes
  * raw .osf files. Compression to .osfz (gzip) is left to the
  * application layer, typically as a separate post-processing step
- * after close(). See the design spec §3.1 for the full rationale
- * (decoupling of write-time and compress-time failure modes).
+ * after close() — write-time and compress-time failure modes stay
+ * decoupled that way.
  *
  * Thread safety: StreamingWriter is not thread-safe. Methods must be
  * called from a single thread, or the caller must serialize access
@@ -133,8 +133,9 @@ public:
     // They take effect only when called BEFORE start() — the metablock
     // is written to disk by start() and never rewritten. Calls after
     // start() are silently ignored for the current file. All fields are
-    // optional; unset fields are omitted from the metablock (defaults
-    // per DECISIONS §13: creator = "osf-cpp/<version>", tag = "default").
+    // optional; the library applies defaults at metablock assembly:
+    // created_utc is always stamped automatically, an unset creator
+    // falls back to "osf-cpp/<version>", an unset tag to "default".
 
     /// Name of the writing device or application (`creator` field).
     void set_creator(std::string value);

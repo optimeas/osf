@@ -4,7 +4,7 @@
 /**
  * @file throwing.hpp
  * @brief Opt-in, exception-throwing convenience layer over the
- *        Result-based core API (DECISIONS §20).
+ *        Result-based core API.
  *
  * The entire OSF C++ core API is `Result<T>` (= `tl::expected<T, Error>`)
  * based: every fallible operation returns a `Result` the caller inspects.
@@ -54,8 +54,8 @@ namespace osf {
  *
  * `what()` is the underlying `Error`'s message (or the stable category
  * name when the message is empty); `code()` / `error()` expose the
- * structured detail. Lives in namespace `osf` (not `osf::throwing`) per
- * DECISIONS §20.
+ * structured detail. Lives in namespace `osf` (not `osf::throwing`) by
+ * design.
  */
 class Exception : public std::runtime_error {
 public:
@@ -119,7 +119,7 @@ inline DataManager load(std::istream& in) {
     return unwrap(DataManager::load_from_stream(in));
 }
 
-// ── Write (always OSF5 — DECISIONS §6) ────────────────────────────────
+// ── Write (always OSF5) ───────────────────────────────────────────────
 
 /// Write \p mgr to \p path as OSF5, or throw `osf::Exception`.
 inline void write_to_file(DataManager const& mgr,

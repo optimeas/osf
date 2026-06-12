@@ -7,7 +7,7 @@
 /// These mirror the spec revision **2026-05-04** datatype set. Removed
 /// datatypes (`pair`, `triple`, `candata`, `gpsdata`) are intentionally
 /// absent — readers must reject those legacy strings rather than silently
-/// mapping them to a current type. See DECISIONS.md §16.
+/// mapping them to a current type.
 ///
 /// Forward-compatible variants `DataType::Unsupported` and
 /// `ChannelType::Unsupported` exist so a file using a future-spec

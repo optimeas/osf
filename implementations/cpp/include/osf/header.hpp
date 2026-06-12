@@ -24,8 +24,8 @@
 /// Optimeas devices emit `OCEAN_STREAM_FORMAT4` in production;
 /// field files in `examples/` use it.
 ///
-/// See `docs/de/osf_general.md` for the full specification and
-/// `DECISIONS.md` §20 for the C++ implementation architecture.
+/// See the OSF format specification (`osf_general`) for the full
+/// magic-header definition.
 
 #pragma once
 
@@ -47,8 +47,7 @@ namespace osf {
 ///
 /// Soft limit semantics: the parser tolerates up to and including
 /// MAX_MAGIC_HEADER_LEN bytes before the terminating newline; only
-/// strictly more triggers `Error::Code::MagicHeaderTooLong`. Matches
-/// the behaviour of the Rust reference implementation.
+/// strictly more triggers `Error::Code::MagicHeaderTooLong`.
 inline constexpr std::size_t MAX_MAGIC_HEADER_LEN = 128;
 
 /// On-disk OSF format version, derived from the magic header.

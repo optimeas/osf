@@ -11,9 +11,8 @@
 /// and downstream tooling see `MetaBlock` only; the format split stops
 /// here.
 ///
-/// See `docs/en/references/osf5.md` for the OSF5 JSON wire form and
-/// DECISIONS.md §16 for the spec revision 2026-05-04 that pins the
-/// supported field set.
+/// See the OSF5 reference in the OSF format specification for the JSON
+/// wire form; spec revision 2026-05-04 pins the supported field set.
 
 #pragma once
 
@@ -28,7 +27,7 @@
 
 namespace osf {
 
-/// File-level metadata. Mirrors DECISIONS.md §13.
+/// File-level metadata.
 struct FileInfo {
     /// On-disk format version: 4 or 5. Populated by the metablock
     /// parser, not derived from the magic header alone.
@@ -198,7 +197,7 @@ struct MetaBlock {
 /// so a round-trip (serialise → parse) preserves every populated field
 /// up to optional-field presence and JSON pretty-printing whitespace.
 ///
-/// The writer is OSF5-only (DECISIONS §6), so this helper always emits
+/// The writer is OSF5-only, so this helper always emits
 /// `"osf5"` / `5` regardless of `meta.file_info.version`. Optional
 /// fields (`creator`, `created_utc`, the `created_at_*` triple,
 /// `reason`, `namespace_sep`, `tag`, `comment`, per-channel

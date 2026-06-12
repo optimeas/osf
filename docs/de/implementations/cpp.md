@@ -20,9 +20,10 @@ last_update:
 # C++-Implementierung
 
 Eine **eigenständige C++17-Implementierung** des Open Streaming Format —
-kein FFI, keine Rust-Abhängigkeit, idiomatisches modernes C++. Sie liest
-`.osf`- und `.osfz`-Dateien und schreibt OSF5. Die Implementierung ist als
-Parallel-Implementierung zum Rust-Kern entstanden, nicht als Portierung.
+idiomatisches modernes C++ ohne externe Laufzeitabhängigkeiten. Sie liest
+`.osf`- und `.osfz`-Dateien und schreibt OSF5. Die Bibliothek ist komplett
+selbstständig nutzbar und distributierbar; ihr Verhalten ist allein durch
+die OSF-Format-Spezifikation definiert.
 
 :::tip Entwickler-Handbuch
 Diese Seite ist der Überblick. Die ausführliche Entwicklerdokumentation
@@ -42,9 +43,8 @@ steht im Unterkapitel **C++ im Detail**:
 
 ## Funktionsumfang
 
-Die geplante Implementierungs-Reihenfolge (siehe
-[DECISIONS §20](https://github.com/optimeas/osf/blob/main/DECISIONS.md)) ist
-**vollständig abgeschlossen**. Lese- und Schreibpfad sind durch eine
+Die Implementierung ist **funktional vollständig**.
+Lese- und Schreibpfad sind durch eine
 GoogleTest-/ctest-Suite abgedeckt (0 Warnungen unter MSVC `/W4 /permissive-`),
 und CI baut und testet auf **Linux, macOS und Windows**.
 
@@ -68,7 +68,7 @@ und CI baut und testet auf **Linux, macOS und Windows**.
   automatisch von 2 → 4 an
 - `StaleValueGuard` — optionale Frische-Schicht, die den letzten Wert
   inaktiver Kanäle erneut ausgibt
-- Metadaten-Defaults nach DECISIONS §13: `created_utc` wird automatisch
+- Automatische Metadaten-Defaults: `created_utc` wird beim Schreiben
   gestempelt; `creator`/`tag` erhalten Fallbacks, wenn nicht gesetzt
 
 **Komfort und Anbindung**
@@ -152,9 +152,9 @@ cmake --build build
 ctest --test-dir build
 ```
 
-Plattform­spezifische Hinweise, CMake-Optionen und FAQ stehen in
-[`BUILD.md`](https://github.com/optimeas/osf/blob/main/implementations/cpp/BUILD.md)
-und auf der Seite [Bauen & Einbinden](cpp/bauen.md).
+Plattform­spezifische Hinweise, CMake-Optionen und FAQ stehen in der
+mitgelieferten `BUILD.md` der Bibliothek und auf der Seite
+[Bauen & Einbinden](cpp/bauen.md).
 
 ### CMake-Optionen
 
@@ -202,7 +202,7 @@ if (!result) {
 }
 osf::DataManager const& mgr = *result;
 
-// Kanal über den Namen ansprechen (verpflichtend, DECISIONS §10)
+// Kanal über den Namen ansprechen (primäre Zugriffsform)
 if (osf::DataChannel const* ch = mgr.channel("Sensor.Temperatur")) {
     auto werte = osf::as_doubles_flat(
         std::get<osf::TimestampedChannel>(*ch));   // typisierter Zugriff
@@ -254,9 +254,9 @@ ActiveX/OCX und künftige Sprach-Bindings. Funktionskatalog und Beispiele:
 
 ## Hinweise
 
-- **Nur OSF5 wird geschrieben** (DECISIONS §6) — auch wenn die Quelle eine
+- **Nur OSF5 wird geschrieben** — auch wenn die Quelle eine
   OSF4-Datei war.
-- **OSFZ beim Schreiben ist ein nachgelagerter Schritt** (DECISIONS §12): Die Writer komprimieren nie inline; OSFZ (gzip) entsteht *nach* dem Abschluss der `.osf`-Datei — durch einen zukünftigen Post-Close-Kompressor (Hintergrund-Thread) oder ein eigenständiges Compress-CLI. OSFZ wird **gelesen** transparent.
+- **OSFZ beim Schreiben ist ein nachgelagerter Schritt**: Die Writer komprimieren nie inline; OSFZ (gzip) entsteht *nach* dem Abschluss der `.osf`-Datei — durch einen zukünftigen Post-Close-Kompressor (Hintergrund-Thread) oder ein eigenständiges Compress-CLI. OSFZ wird **gelesen** transparent.
 - **Best-Effort beim Lesen**: abgeschnittene Dateien liefern alle Daten bis
   zum letzten vollständig lesbaren Block, ohne Absturz.
 - Die Bibliothek ist **Qt-neutral**; ein Qt-naher Zusatz kann später als
@@ -264,11 +264,9 @@ ActiveX/OCX und künftige Sprach-Bindings. Funktionskatalog und Beispiele:
 
 ## Quellcode und weiterführende Informationen
 
-- Quellcode auf GitHub: [github.com/optimeas/osf](https://github.com/optimeas/osf),
+- Quellcode: [github.com/optimeas/osf](https://github.com/optimeas/osf),
   Verzeichnis `implementations/cpp/`
-- Bauanleitung: [`BUILD.md`](https://github.com/optimeas/osf/blob/main/implementations/cpp/BUILD.md)
+- Bauanleitung: `BUILD.md` im Bibliotheksverzeichnis — Zusammenfassung
+  unter [Bauen & Einbinden](cpp/bauen.md)
 - API-Referenz: Mit Doxygen über `-D OSF_BUILD_DOCS=ON` erzeugen (Ziel `osf-docs`) — siehe [Bauen & Einbinden](cpp/bauen.md)
-- Architektur und phasenweiser Plan:
-  [DECISIONS §20](https://github.com/optimeas/osf/blob/main/DECISIONS.md) und
-  die C-ABI in §23
 - Format-Spezifikation: Kapitel [OSF-Format](../osf_general.md)

@@ -19,7 +19,7 @@ last_update:
 `osf-c` ist eine separate Shared Library (DLL / `.so` / `.dylib`) mit
 einer **reinen C99-Schnittstelle** über dem C++-Kern — gedacht für
 Konsumenten, die kein C++ sprechen: C-Programme, C#/P-Invoke,
-ActiveX/OCX und künftige Sprach-Bindings. Vertrag: DECISIONS §23.
+ActiveX/OCX und künftige Sprach-Bindings.
 
 ```bash
 cmake -B build -D OSF_BUILD_C_API=ON
@@ -101,10 +101,11 @@ geben diese Anzahl zurück — das übliche Muster ist „erst
 
 | Funktion | Zweck |
 |---|---|
-| `osf_write_to_file(m, path)` | geladenen Manager als **OSF5** exportieren (DECISIONS §6) — auch als OSF4 → OSF5-Konverter nutzbar |
+| `osf_write_to_file(m, path)` | geladenen Manager als **OSF5** exportieren — auch als OSF4 → OSF5-Konverter nutzbar |
 
 Ein vollwertiger Sample-für-Sample-C-Builder ist bewusst nicht Teil
-des aktuellen Umfangs (BACKLOG); das ABI deckt Lesen + Re-Export ab.
+des aktuellen Umfangs (geplante Erweiterung); das ABI deckt Lesen +
+Re-Export ab.
 
 ## Vollständiges C-Beispiel
 

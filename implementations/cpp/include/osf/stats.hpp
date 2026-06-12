@@ -6,7 +6,7 @@
 ///
 /// `ReaderStats` is populated by `BlockReader` during iteration. The
 /// fields are deliberately concrete (counts and sizes, not opaque
-/// metric handles) so any application using `osf-core` can format the
+/// metric handles) so any consuming application can format the
 /// values without having to introspect.
 ///
 /// Skip reasons are tracked separately rather than under a single
@@ -17,8 +17,7 @@
 ///   file uses a future-spec datatype this build does not yet handle.
 /// - **Deprecated block types** (`bcTrustedTimestamp`,
 ///   `bcStatusEvent`, `bcMessageEvent`) appear in older field files
-///   such as `examples/motorbike.osf` and tell you the file predates
-///   spec rev 2026-05-04.
+///   and tell you the file predates spec rev 2026-05-04.
 /// - **Reserved block types** (`bcReserved`, `bcTimebaseRealign`,
 ///   anything with bits 0–6 ≥ 9) are either spec-internal or
 ///   genuinely unknown.
@@ -139,23 +138,19 @@ struct ReaderStats {
     std::unordered_map<std::uint16_t, ChannelStats> per_channel;
 };
 
-/// Format a byte count using the `1.23 MB` style used by the reference
-/// implementations (binary KB / MB / GB thresholds).
+/// Format a byte count using the `1.23 MB` style (binary KB / MB / GB thresholds).
 [[nodiscard]] std::string format_bytes(std::uint64_t bytes);
 
-/// Format a duration using the `7 ms` / `1.23 s` style used by the
-/// reference implementations.
+/// Format a duration using the `7 ms` / `1.23 s` style.
 [[nodiscard]] std::string format_duration(std::chrono::nanoseconds d);
 
 /// String name of a compression format (`none` / `zlib` / `gzip`).
 [[nodiscard]] std::string_view compression_format_name(CompressionFormat f) noexcept;
 
-/// Multi-line summary suitable for CLI output. Mirrors the Rust
-/// `Display for ReaderStats` impl.
+/// Multi-line summary suitable for CLI output.
 std::ostream& operator<<(std::ostream& os, ReaderStats const& s);
 
-/// One-line summary suitable for per-channel listings. Mirrors the
-/// Rust `Display for ChannelStats` impl.
+/// One-line summary suitable for per-channel listings.
 std::ostream& operator<<(std::ostream& os, ChannelStats const& s);
 
 }  // namespace osf

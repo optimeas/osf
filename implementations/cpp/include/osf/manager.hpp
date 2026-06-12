@@ -12,9 +12,8 @@
 /// timestamped samples with parallel timestamp / value vectors,
 /// string / binary samples as `(timestamp, value)` pairs.
 ///
-/// Channel-by-name lookup is the documented entry point per
-/// DECISIONS §10; lookup by index is provided as an optional
-/// convenience.
+/// Channel-by-name lookup is the primary documented entry point;
+/// lookup by index is provided as an optional convenience.
 
 #pragma once
 
@@ -68,14 +67,13 @@ public:
 
     /// Look up a channel by its fully qualified name.
     ///
-    /// **Mandatory access form** per DECISIONS §10. Returns `nullptr`
-    /// when no channel with that name exists.
+    /// **Primary access form.** Returns `nullptr` when no channel with
+    /// that name exists.
     [[nodiscard]] DataChannel const* channel(std::string_view name) const;
 
     /// Look up a channel by its on-disk index (the integer `index`
     /// attribute from the metablock). Returns `nullptr` when no
-    /// channel has that index — optional access form per
-    /// DECISIONS §10.
+    /// channel has that index — the optional access form.
     [[nodiscard]] DataChannel const* channel_by_index(std::uint16_t index) const;
 
 private:

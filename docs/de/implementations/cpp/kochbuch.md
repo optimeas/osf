@@ -17,10 +17,9 @@ last_update:
 # Kochbuch
 
 Kompakte, kopierfertige Rezepte. Vier davon existieren als lauffähige
-Programme unter
-[`implementations/cpp/examples/`](https://github.com/optimeas/osf/tree/main/implementations/cpp/examples)
+Programme im `examples/`-Verzeichnis der Bibliothek
 (`inspect`, `dump`, `write`, `copy`) — bei Abweichungen gilt der
-Beispiel-Code im Repository.
+mitgelieferte Beispiel-Code.
 
 Alle Rezepte setzen `#include <osf/osf.hpp>` voraus, sofern nicht
 anders angegeben; Fehlerbehandlung ist auf das Minimum gekürzt.
@@ -107,7 +106,7 @@ for (auto const& [t, v] : *paare) csv << t << ";" << v << "\n";
 auto mgr = osf::DataManager::load_from_file("alt_osf4.osf");
 if (!mgr) { /* … */ }
 if (auto r = osf::write_to_file(*mgr, "neu_osf5.osf"); !r) { /* … */ }
-// Samples bitgenau erhalten; Ausgabe immer OSF5 (DECISIONS §6)
+// Samples bitgenau erhalten; Ausgabe immer OSF5
 ```
 
 Das Beispielprogramm `copy` macht genau das und verifiziert per

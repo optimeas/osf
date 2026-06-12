@@ -16,11 +16,10 @@ last_update:
 
 # Bauen & Einbinden
 
-Die maßgebliche, laufend gepflegte Bauanleitung liegt im Repository:
-[`implementations/cpp/BUILD.md`](https://github.com/optimeas/osf/blob/main/implementations/cpp/BUILD.md)
-(inkl. FAQ zu Proxy-Umgebungen, Linker-Warnungen und
-Cross-Compilation). Diese Seite fasst das Wichtigste zusammen und
-ergänzt die Einbindungs-Szenarien.
+Die maßgebliche, laufend gepflegte Bauanleitung ist die `BUILD.md`
+direkt im Bibliotheksverzeichnis (inkl. FAQ zu Proxy-Umgebungen,
+Linker-Warnungen und Cross-Compilation). Diese Seite fasst das
+Wichtigste zusammen und ergänzt die Einbindungs-Szenarien.
 
 ## Voraussetzungen
 
@@ -63,7 +62,7 @@ ctest --test-dir build -C Debug
 | `OSF_WARNINGS_AS_ERRORS` | `OFF` | `/WX` bzw. `-Werror`; in CI `ON`, lokal bewusst nachsichtig |
 
 **C++17 ist keine Option,** sondern die fest definierte Baseline der
-Bibliothek (DECISIONS §20) — ein Wechsel auf C++20+ wäre ein bewusstes
+Bibliothek — ein Wechsel auf C++20+ wäre ein bewusstes
 Library-Upgrade, kein Build-Schalter.
 
 ## Targets
@@ -77,9 +76,9 @@ Library-Upgrade, kein Build-Schalter.
 
 ## In das eigene Projekt einbinden
 
-Der direkte Weg ist heute `add_subdirectory` auf den Repo-Checkout
-(ein `cmake --install`-/Package-Workflow ist als Folgearbeit im
-BACKLOG vermerkt):
+Der direkte Weg ist heute `add_subdirectory` auf einen Checkout
+(ein `cmake --install`-/Package-Workflow ist als künftige Erweiterung
+vorgesehen):
 
 ```cmake
 # Variante A: Repo als Submodul/Checkout neben dem eigenen Code

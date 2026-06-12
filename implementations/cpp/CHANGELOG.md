@@ -20,6 +20,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Standalone-distribution cleanup:** the consumer-facing surface
+  (public headers in `include/osf/`, `README.md`, `BUILD.md`, the
+  examples, and the German developer handbook) no longer references
+  repo-internal governance documents (`DECISIONS.md`, `BACKLOG`) or
+  other OSF implementations (Rust/Delphi comparisons). Decision
+  citations were replaced by the decision content itself (e.g. "the
+  library writes OSF5 only"); spec pointers now reference the OSF
+  format specification generically instead of repo-relative
+  `docs/…` paths. The library tree is self-contained and can be
+  distributed including its documentation without the surrounding
+  repository. Comments/docs only — no behaviour change.
 - Doxygen documentation pass over the public headers: per-method docs
   for the full `StreamingWriter` / `BlockWriter` write surface
   (chunking, `sizeoflengthvalue` guidance, error conditions),

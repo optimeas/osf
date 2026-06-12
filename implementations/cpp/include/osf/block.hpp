@@ -9,7 +9,7 @@
 /// `sizeoflengthvalue`), a 1-byte control byte, and a payload. This
 /// header defines the typed representation a block lands in once the
 /// reader has decoded it. The on-disk encoding itself is documented in
-/// `docs/en/osf_general.md` §"Control byte" / "Data structure per
+/// the OSF format specification §"Control byte" / "Data structure per
 /// control type".
 ///
 /// Two design choices are intentional:

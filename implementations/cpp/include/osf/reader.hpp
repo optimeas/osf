@@ -7,7 +7,7 @@
 /// `BlockReader` consumes an `std::istream` whose cursor is positioned
 /// at the first byte after the metablock and yields one `Block` per
 /// call to `next()`. The block-stream format is documented in
-/// `docs/en/osf_general.md` §"Control byte" / "Data structure per
+/// the OSF format specification §"Control byte" / "Data structure per
 /// control type".
 ///
 /// Design choices for this layer:
