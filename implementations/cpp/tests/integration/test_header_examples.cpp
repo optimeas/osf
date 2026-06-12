@@ -20,7 +20,7 @@ protected:
             << "examples/motorbike.osf missing — OSF_EXAMPLES_DIR misconfigured?";
     }
 
-    static std::filesystem::path examples_dir() {
+    static std::filesystem::path examplesDir() {
         return std::filesystem::path{OSF_EXAMPLES_DIR};
     }
 };
@@ -30,7 +30,7 @@ protected:
 // ----- 1: motorbike.osf — production OSF4 file -----
 
 TEST_F(HeaderExamplesTest, motorbike_osf_has_valid_header) {
-    auto result = osf::parseMagicHeader(examples_dir() / "motorbike.osf");
+    auto result = osf::parseMagicHeader(examplesDir() / "motorbike.osf");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf4);
     EXPECT_GT(result->metablockLen, 0u);
@@ -39,7 +39,7 @@ TEST_F(HeaderExamplesTest, motorbike_osf_has_valid_header) {
 // ----- 2: steam_loco.osf — production OSF4 file -----
 
 TEST_F(HeaderExamplesTest, steam_loco_osf_has_valid_header) {
-    auto result = osf::parseMagicHeader(examples_dir() / "steam_loco.osf");
+    auto result = osf::parseMagicHeader(examplesDir() / "steam_loco.osf");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf4);
     EXPECT_GT(result->metablockLen, 0u);
@@ -53,7 +53,7 @@ TEST_F(HeaderExamplesTest, steam_loco_osf_has_valid_header) {
 // as a plain OSF magic header; this is by design.
 
 TEST_F(HeaderExamplesTest, weather_station_osfz_not_parseable_as_plain_header) {
-    auto result = osf::parseMagicHeader(examples_dir() / "weather_station.osfz");
+    auto result = osf::parseMagicHeader(examplesDir() / "weather_station.osfz");
     ASSERT_FALSE(result.has_value())
         << "raw OSFZ bytes are not a valid plain OSF magic header";
     // The gzip magic 0x1F 0x8B and the high-entropy bytes that follow
@@ -69,7 +69,7 @@ TEST_F(HeaderExamplesTest, weather_station_osfz_not_parseable_as_plain_header) {
 // ----- 4: generated reference files — all parse, version per filename -----
 
 TEST_F(HeaderExamplesTest, generated_files_all_parse) {
-    auto generated = examples_dir() / "generated";
+    auto generated = examplesDir() / "generated";
     ASSERT_TRUE(std::filesystem::exists(generated))
         << "examples/generated/ missing";
 

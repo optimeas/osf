@@ -27,11 +27,11 @@ protected:
             << "OSF_EXAMPLES_DIR does not exist: " << dir;
     }
 
-    static std::filesystem::path examples_dir() {
+    static std::filesystem::path examplesDir() {
         return std::filesystem::path{OSF_EXAMPLES_DIR};
     }
 
-    static std::vector<std::uint8_t> read_metablock(std::filesystem::path const& path) {
+    static std::vector<std::uint8_t> readMetablock(std::filesystem::path const& path) {
         auto header = osf::parseMagicHeader(path);
         EXPECT_TRUE(header.has_value())
             << "magic header parse failed for " << path << ": "
@@ -66,7 +66,7 @@ protected:
 // ---------------------------------------------------------------------
 
 TEST_F(MetablockXmlExamplesTest, osf4_equidistant_snapshot) {
-    auto bytes = read_metablock(examples_dir() / "generated" / "osf4_equidistant.osf");
+    auto bytes = readMetablock(examplesDir() / "generated" / "osf4_equidistant.osf");
     ASSERT_FALSE(bytes.empty());
 
     auto mb = osf::parseMetablockXml(bytes.data(), bytes.size());
@@ -95,7 +95,7 @@ TEST_F(MetablockXmlExamplesTest, osf4_equidistant_snapshot) {
 // ---------------------------------------------------------------------
 
 TEST_F(MetablockXmlExamplesTest, all_osf4_generated_files_parse) {
-    auto generated = examples_dir() / "generated";
+    auto generated = examplesDir() / "generated";
     ASSERT_TRUE(std::filesystem::exists(generated))
         << "examples/generated/ missing";
 
@@ -107,7 +107,7 @@ TEST_F(MetablockXmlExamplesTest, all_osf4_generated_files_parse) {
 
         SCOPED_TRACE("file: " + filename);
 
-        auto bytes = read_metablock(entry.path());
+        auto bytes = readMetablock(entry.path());
         ASSERT_FALSE(bytes.empty());
 
         auto mb = osf::parseMetablockXml(bytes.data(), bytes.size());
@@ -136,20 +136,20 @@ TEST_F(MetablockXmlExamplesTest, all_osf4_generated_files_parse) {
 // ---------------------------------------------------------------------
 
 TEST_F(MetablockXmlExamplesTest, osf4_gpslocation_file_declares_gpslocation_channel) {
-    auto bytes = read_metablock(examples_dir() / "generated" / "osf4_gpslocation.osf");
+    auto bytes = readMetablock(examplesDir() / "generated" / "osf4_gpslocation.osf");
     ASSERT_FALSE(bytes.empty());
 
     auto mb = osf::parseMetablockXml(bytes.data(), bytes.size());
     ASSERT_TRUE(mb.has_value()) << mb.error().message;
 
-    bool saw_gps = false;
+    bool sawGps = false;
     for (auto const& ch : mb->channels) {
         if (ch.dataType == osf::DataType::GpsLocation) {
-            saw_gps = true;
+            sawGps = true;
             EXPECT_EQ(ch.dataTypeRaw, "gpslocation");
         }
     }
-    EXPECT_TRUE(saw_gps)
+    EXPECT_TRUE(sawGps)
         << "osf4_gpslocation.osf produced no GpsLocation channel";
 }
 
@@ -162,11 +162,11 @@ TEST_F(MetablockXmlExamplesTest, osf4_gpslocation_file_declares_gpslocation_chan
 // ---------------------------------------------------------------------
 
 TEST_F(MetablockXmlExamplesTest, motorbike_osf_metablock_parses) {
-    auto path = examples_dir() / "motorbike.osf";
+    auto path = examplesDir() / "motorbike.osf";
     if (!std::filesystem::exists(path)) {
         GTEST_SKIP() << "motorbike.osf not present";
     }
-    auto bytes = read_metablock(path);
+    auto bytes = readMetablock(path);
     ASSERT_FALSE(bytes.empty());
     auto mb = osf::parseMetablockXml(bytes.data(), bytes.size());
     ASSERT_TRUE(mb.has_value()) << mb.error().message;
@@ -175,11 +175,11 @@ TEST_F(MetablockXmlExamplesTest, motorbike_osf_metablock_parses) {
 }
 
 TEST_F(MetablockXmlExamplesTest, steam_loco_osf_metablock_parses) {
-    auto path = examples_dir() / "steam_loco.osf";
+    auto path = examplesDir() / "steam_loco.osf";
     if (!std::filesystem::exists(path)) {
         GTEST_SKIP() << "steam_loco.osf not present";
     }
-    auto bytes = read_metablock(path);
+    auto bytes = readMetablock(path);
     ASSERT_FALSE(bytes.empty());
     auto mb = osf::parseMetablockXml(bytes.data(), bytes.size());
     ASSERT_TRUE(mb.has_value()) << mb.error().message;
@@ -195,20 +195,20 @@ TEST_F(MetablockXmlExamplesTest, steam_loco_osf_metablock_parses) {
 // ---------------------------------------------------------------------
 
 TEST_F(MetablockXmlExamplesTest, equidistant_osf4_and_osf5_have_matching_channels) {
-    auto bytes_4 = read_metablock(examples_dir() / "generated" / "osf4_equidistant.osf");
-    auto bytes_5 = read_metablock(examples_dir() / "generated" / "osf5_equidistant.osf");
-    ASSERT_FALSE(bytes_4.empty());
-    ASSERT_FALSE(bytes_5.empty());
+    auto bytes4 = readMetablock(examplesDir() / "generated" / "osf4_equidistant.osf");
+    auto bytes5 = readMetablock(examplesDir() / "generated" / "osf5_equidistant.osf");
+    ASSERT_FALSE(bytes4.empty());
+    ASSERT_FALSE(bytes5.empty());
 
-    auto mb_4 = osf::parseMetablockXml(bytes_4.data(), bytes_4.size());
-    auto mb_5 = osf::parseMetablockJson(bytes_5.data(), bytes_5.size());
-    ASSERT_TRUE(mb_4.has_value()) << mb_4.error().message;
-    ASSERT_TRUE(mb_5.has_value()) << mb_5.error().message;
+    auto mb4 = osf::parseMetablockXml(bytes4.data(), bytes4.size());
+    auto mb5 = osf::parseMetablockJson(bytes5.data(), bytes5.size());
+    ASSERT_TRUE(mb4.has_value()) << mb4.error().message;
+    ASSERT_TRUE(mb5.has_value()) << mb5.error().message;
 
-    ASSERT_EQ(mb_4->channels.size(), mb_5->channels.size());
-    for (std::size_t i = 0; i < mb_4->channels.size(); ++i) {
-        auto const& c4 = mb_4->channels[i];
-        auto const& c5 = mb_5->channels[i];
+    ASSERT_EQ(mb4->channels.size(), mb5->channels.size());
+    for (std::size_t i = 0; i < mb4->channels.size(); ++i) {
+        auto const& c4 = mb4->channels[i];
+        auto const& c5 = mb5->channels[i];
         EXPECT_EQ(c4.index, c5.index) << "channel " << i << " index";
         EXPECT_EQ(c4.name, c5.name)   << "channel " << i << " name";
         EXPECT_EQ(c4.channelType, c5.channelType)

@@ -28,7 +28,7 @@ using osf::detail::encodeContinuedData;
 using osf::detail::encodeStartData;
 
 // Helper: compare a slice of a byte vector against an expected byte sequence.
-::testing::AssertionResult bytes_eq(std::vector<std::uint8_t> const& got,
+::testing::AssertionResult bytesEq(std::vector<std::uint8_t> const& got,
                                     std::size_t offset,
                                     std::vector<std::uint8_t> const& expected) {
     if (got.size() < offset + expected.size()) {
@@ -48,12 +48,12 @@ using osf::detail::encodeStartData;
 }
 
 // Build a one-channel MetaBlock for the synthetic-bytes roundtrip pattern.
-osf::MetaBlock one_channel_meta(osf::DataType dt,
+osf::MetaBlock oneChannelMeta(osf::DataType dt,
                                 osf::ChannelType ct,
                                 std::uint8_t sizeoflengthvalue,
-                                int osf_version = 5) {
+                                int osfVersion = 5) {
     osf::MetaBlock m;
-    m.fileInfo.version = static_cast<std::uint32_t>(osf_version);
+    m.fileInfo.version = static_cast<std::uint32_t>(osfVersion);
     osf::Channel ch;
     ch.index = 0;
     ch.name = "test_channel";
@@ -102,8 +102,8 @@ TEST(BlockEncodeStartData, FloatSingleSample_Frame) {
     // Total frame = 2 (ci) + 2 (len) + 21 (payload) = 25 bytes.
     ASSERT_EQ(out.size(), 25u);
 
-    EXPECT_TRUE(bytes_eq(out, 0, {0x07, 0x00}));         // channelIndex=7
-    EXPECT_TRUE(bytes_eq(out, 2, {0x15, 0x00}));         // payload_length u16
+    EXPECT_TRUE(bytesEq(out, 0, {0x07, 0x00}));         // channelIndex=7
+    EXPECT_TRUE(bytesEq(out, 2, {0x15, 0x00}));         // payload_length u16
     EXPECT_EQ(out[4], 0x06);                              // bcStartData, bit-7=0
 }
 
@@ -135,7 +135,7 @@ TEST(BlockEncodeStartData, FloatThreeSamples_Bit7Set) {
     ASSERT_EQ(out.size(), 37u);
 
     EXPECT_EQ(out[4], 0x86);                              // bcStartData | bit-7
-    EXPECT_TRUE(bytes_eq(out, 21, {0x03, 0x00, 0x00, 0x00}));  // N=3 u32 LE
+    EXPECT_TRUE(bytesEq(out, 21, {0x03, 0x00, 0x00, 0x00}));  // N=3 u32 LE
 }
 
 // ---------------------------------------------------------------------------
@@ -152,8 +152,8 @@ TEST(BlockEncodeContinuedData, DoubleSingleSample_Frame) {
     // 1 (ctrl) + 8 (double) = 9 -> u16=0x0009. Frame = 2 + 2 + 9 = 13.
     ASSERT_EQ(out.size(), 13u);
 
-    EXPECT_TRUE(bytes_eq(out, 0, {0x03, 0x00}));         // channelIndex=3
-    EXPECT_TRUE(bytes_eq(out, 2, {0x09, 0x00}));         // payload_length u16
+    EXPECT_TRUE(bytesEq(out, 0, {0x03, 0x00}));         // channelIndex=3
+    EXPECT_TRUE(bytesEq(out, 2, {0x09, 0x00}));         // payload_length u16
     EXPECT_EQ(out[4], 0x05);                              // bcContinuedData, bit-7=0
 }
 
@@ -167,7 +167,7 @@ TEST(BlockEncodeContinuedData, DoubleFiveSamples_Bit7Set) {
     ASSERT_EQ(out.size(), 49u);
 
     EXPECT_EQ(out[4], 0x85);                              // bcContinuedData | bit-7
-    EXPECT_TRUE(bytes_eq(out, 5, {0x05, 0x00, 0x00, 0x00}));  // N=5
+    EXPECT_TRUE(bytesEq(out, 5, {0x05, 0x00, 0x00, 0x00}));  // N=5
 }
 
 // ---------------------------------------------------------------------------
@@ -240,8 +240,8 @@ TEST(BlockEncodeStartData, SizeofLengthValue4_U32LengthField) {
     // Frame: [ci u16=0][len u32=21][ctrl=0x06][ts 8B][rate 8B][float 4B]
     // = 2 + 4 + 1 + 8 + 8 + 4 = 27 bytes.
     ASSERT_EQ(out.size(), 27u);
-    EXPECT_TRUE(bytes_eq(out, 0, {0x00, 0x00}));                      // channelIndex=0
-    EXPECT_TRUE(bytes_eq(out, 2, {0x15, 0x00, 0x00, 0x00}));          // payload_length u32=21
+    EXPECT_TRUE(bytesEq(out, 0, {0x00, 0x00}));                      // channelIndex=0
+    EXPECT_TRUE(bytesEq(out, 2, {0x15, 0x00, 0x00, 0x00}));          // payload_length u32=21
     EXPECT_EQ(out[6], 0x06);                                           // bcStartData, bit-7=0
 }
 
@@ -256,7 +256,7 @@ TEST(BlockEncodeStartData, ChannelIndexHighByte) {
     ASSERT_TRUE(r.has_value());
 
     // First two bytes are channelIndex in little-endian: 0x0142 -> {0x42, 0x01}.
-    EXPECT_TRUE(bytes_eq(out, 0, {0x42, 0x01}));
+    EXPECT_TRUE(bytesEq(out, 0, {0x42, 0x01}));
 }
 
 // ---------------------------------------------------------------------------
@@ -270,15 +270,15 @@ TEST(BlockEncodeRoundtrip, StartDataFloat) {
                                       100.0, samples, 3);
     ASSERT_TRUE(r.has_value());
 
-    auto meta = one_channel_meta(osf::DataType::Float,
+    auto meta = oneChannelMeta(osf::DataType::Float,
                                  osf::ChannelType::Equidistant, 2);
     std::string s(reinterpret_cast<char const*>(out.data()), out.size());
     std::istringstream in(s);
     osf::BlockReader rdr(in, meta);
-    auto block_opt = rdr.next();
-    ASSERT_TRUE(block_opt.has_value());
-    ASSERT_TRUE(block_opt->has_value());
-    auto* sd = std::get_if<osf::StartData>(&block_opt->value().kind);
+    auto blockOpt = rdr.next();
+    ASSERT_TRUE(blockOpt.has_value());
+    ASSERT_TRUE(blockOpt->has_value());
+    auto* sd = std::get_if<osf::StartData>(&blockOpt->value().kind);
     ASSERT_NE(sd, nullptr);
     EXPECT_EQ(sd->startTimestampNs, 1'000'000'000LL);
     EXPECT_DOUBLE_EQ(sd->sampleRateHz, 100.0);
@@ -296,15 +296,15 @@ TEST(BlockEncodeRoundtrip, ContinuedDataDouble) {
     auto r = encodeContinuedData<double>(out, 0, 4, samples, 4);
     ASSERT_TRUE(r.has_value());
 
-    auto meta = one_channel_meta(osf::DataType::Double,
+    auto meta = oneChannelMeta(osf::DataType::Double,
                                  osf::ChannelType::Equidistant, 4);
     std::string s(reinterpret_cast<char const*>(out.data()), out.size());
     std::istringstream in(s);
     osf::BlockReader rdr(in, meta);
-    auto block_opt = rdr.next();
-    ASSERT_TRUE(block_opt.has_value());
-    ASSERT_TRUE(block_opt->has_value());
-    auto* cd = std::get_if<osf::ContinuedData>(&block_opt->value().kind);
+    auto blockOpt = rdr.next();
+    ASSERT_TRUE(blockOpt.has_value());
+    ASSERT_TRUE(blockOpt->has_value());
+    auto* cd = std::get_if<osf::ContinuedData>(&blockOpt->value().kind);
     ASSERT_NE(cd, nullptr);
     auto* dv = std::get_if<std::vector<double>>(&cd->samples);
     ASSERT_NE(dv, nullptr);
@@ -327,8 +327,8 @@ TEST(BlockEncodeAbsTs, Int32SingleSample_Bit7Clear) {
 
     // 1 (ctrl) + 8 (ts) + 4 (i32) = 13 -> u16=0x000D. Frame = 2 + 2 + 13 = 17.
     ASSERT_EQ(out.size(), 17u);
-    EXPECT_TRUE(bytes_eq(out, 0, {0x02, 0x00}));    // ci=2
-    EXPECT_TRUE(bytes_eq(out, 2, {0x0D, 0x00}));    // len=13
+    EXPECT_TRUE(bytesEq(out, 0, {0x02, 0x00}));    // ci=2
+    EXPECT_TRUE(bytesEq(out, 2, {0x0D, 0x00}));    // len=13
     EXPECT_EQ(out[4], 0x08);                         // bcAbsTimeStampData, bit-7=0
 }
 
@@ -343,7 +343,7 @@ TEST(BlockEncodeAbsTs, DoubleThreeSamples_Bit7Set) {
     // Frame = 2 + 2 + 53 = 57.
     ASSERT_EQ(out.size(), 57u);
     EXPECT_EQ(out[4], 0x88);                         // bcAbsTimeStampData | bit-7
-    EXPECT_TRUE(bytes_eq(out, 5, {0x03, 0x00, 0x00, 0x00}));  // N=3
+    EXPECT_TRUE(bytesEq(out, 5, {0x03, 0x00, 0x00, 0x00}));  // N=3
 }
 
 TEST(BlockEncodeAbsTs, BoolSingleSample_OneByte) {
@@ -380,20 +380,20 @@ TEST(BlockEncodeAbsTs, ZeroCountInvalidArgument) {
 namespace {
 
 template <typename T>
-void roundtrip_abs_ts_one(osf::DataType dt, T value) {
+void roundtripAbsTsOne(osf::DataType dt, T value) {
     std::vector<std::uint8_t> out;
     std::int64_t const ts = 12345;
     auto r = encodeAbsTimestampData<T>(out, 0, 2, &ts, &value, 1);
     ASSERT_TRUE(r.has_value()) << "encoder failed for " << static_cast<int>(dt);
 
-    auto meta = one_channel_meta(dt, osf::ChannelType::Timestamped, 2);
+    auto meta = oneChannelMeta(dt, osf::ChannelType::Timestamped, 2);
     std::string s(reinterpret_cast<char const*>(out.data()), out.size());
     std::istringstream in(s);
     osf::BlockReader rdr(in, meta);
-    auto block_opt = rdr.next();
-    ASSERT_TRUE(block_opt.has_value());
-    ASSERT_TRUE(block_opt->has_value());
-    auto* ats = std::get_if<osf::AbsTimestampData>(&block_opt->value().kind);
+    auto blockOpt = rdr.next();
+    ASSERT_TRUE(blockOpt.has_value());
+    ASSERT_TRUE(blockOpt->has_value());
+    auto* ats = std::get_if<osf::AbsTimestampData>(&blockOpt->value().kind);
     ASSERT_NE(ats, nullptr);
     auto* pairs = std::get_if<std::vector<std::pair<std::int64_t, T>>>(
         &ats->samples);
@@ -417,20 +417,20 @@ void roundtrip_abs_ts_one(osf::DataType dt, T value) {
 }  // namespace
 
 TEST(BlockEncodeRoundtripAbsTs, AllNumericTypes) {
-    roundtrip_abs_ts_one<bool>(osf::DataType::Bool, true);
-    roundtrip_abs_ts_one<std::int8_t>(osf::DataType::Int8, -7);
-    roundtrip_abs_ts_one<std::int16_t>(osf::DataType::Int16, -2000);
-    roundtrip_abs_ts_one<std::int32_t>(osf::DataType::Int32, -2'000'000);
-    roundtrip_abs_ts_one<std::int64_t>(osf::DataType::Int64, -2'000'000'000LL);
-    roundtrip_abs_ts_one<std::uint8_t>(osf::DataType::UInt8, 200);
-    roundtrip_abs_ts_one<std::uint16_t>(osf::DataType::UInt16, 60000);
-    roundtrip_abs_ts_one<std::uint32_t>(osf::DataType::UInt32, 4'000'000'000u);
-    roundtrip_abs_ts_one<std::uint64_t>(osf::DataType::UInt64, 0xDEADBEEF'CAFEBABEull);
+    roundtripAbsTsOne<bool>(osf::DataType::Bool, true);
+    roundtripAbsTsOne<std::int8_t>(osf::DataType::Int8, -7);
+    roundtripAbsTsOne<std::int16_t>(osf::DataType::Int16, -2000);
+    roundtripAbsTsOne<std::int32_t>(osf::DataType::Int32, -2'000'000);
+    roundtripAbsTsOne<std::int64_t>(osf::DataType::Int64, -2'000'000'000LL);
+    roundtripAbsTsOne<std::uint8_t>(osf::DataType::UInt8, 200);
+    roundtripAbsTsOne<std::uint16_t>(osf::DataType::UInt16, 60000);
+    roundtripAbsTsOne<std::uint32_t>(osf::DataType::UInt32, 4'000'000'000u);
+    roundtripAbsTsOne<std::uint64_t>(osf::DataType::UInt64, 0xDEADBEEF'CAFEBABEull);
 }
 
 TEST(BlockEncodeRoundtripAbsTs, FloatDouble) {
-    roundtrip_abs_ts_one<float>(osf::DataType::Float, 3.14f);
-    roundtrip_abs_ts_one<double>(osf::DataType::Double, 2.71828);
+    roundtripAbsTsOne<float>(osf::DataType::Float, 3.14f);
+    roundtripAbsTsOne<double>(osf::DataType::Double, 2.71828);
 }
 
 TEST(BlockEncodeRoundtripAbsTs, MultiSampleInt32) {
@@ -440,15 +440,15 @@ TEST(BlockEncodeRoundtripAbsTs, MultiSampleInt32) {
     auto r = encodeAbsTimestampData<std::int32_t>(out, 0, 2, tss, samples, 4);
     ASSERT_TRUE(r.has_value());
 
-    auto meta = one_channel_meta(osf::DataType::Int32,
+    auto meta = oneChannelMeta(osf::DataType::Int32,
                                  osf::ChannelType::Timestamped, 2);
     std::string s(reinterpret_cast<char const*>(out.data()), out.size());
     std::istringstream in(s);
     osf::BlockReader rdr(in, meta);
-    auto block_opt = rdr.next();
-    ASSERT_TRUE(block_opt.has_value());
-    ASSERT_TRUE(block_opt->has_value());
-    auto* ats = std::get_if<osf::AbsTimestampData>(&block_opt->value().kind);
+    auto blockOpt = rdr.next();
+    ASSERT_TRUE(blockOpt.has_value());
+    ASSERT_TRUE(blockOpt->has_value());
+    auto* ats = std::get_if<osf::AbsTimestampData>(&blockOpt->value().kind);
     ASSERT_NE(ats, nullptr);
     auto* pairs = std::get_if<std::vector<std::pair<std::int64_t, std::int32_t>>>(
         &ats->samples);
@@ -472,7 +472,7 @@ TEST(BlockEncodeGps, SingleSample_Frame) {
     // 1 (ctrl) + 8 (ts) + 24 (3 doubles) = 33. Frame = 37 bytes.
     ASSERT_EQ(out.size(), 37u);
     EXPECT_EQ(out[4], 0x08);                                  // bcAbsTimeStampData, bit-7=0
-    EXPECT_TRUE(bytes_eq(out, 2, {0x21, 0x00}));              // len=33
+    EXPECT_TRUE(bytesEq(out, 2, {0x21, 0x00}));              // len=33
 }
 
 TEST(BlockEncodeGps, MultiSample_Bit7Set) {
@@ -485,7 +485,7 @@ TEST(BlockEncodeGps, MultiSample_Bit7Set) {
     // 1 (ctrl) + 4 (N) + 2 * 32 = 69. Frame = 73.
     ASSERT_EQ(out.size(), 73u);
     EXPECT_EQ(out[4], 0x88);                                  // bcAbsTimeStampData | bit-7
-    EXPECT_TRUE(bytes_eq(out, 5, {0x02, 0x00, 0x00, 0x00}));
+    EXPECT_TRUE(bytesEq(out, 5, {0x02, 0x00, 0x00, 0x00}));
 }
 
 // ---------------------------------------------------------------------------
@@ -503,22 +503,22 @@ TEST(BlockEncodeGps, ZeroCountInvalidArgument) {
 }
 
 TEST(BlockEncodeRoundtripGps, SingleAndMulti) {
-    auto encode_and_read = [](std::vector<std::int64_t> const& tss,
+    auto encodeAndRead = [](std::vector<std::int64_t> const& tss,
                               std::vector<GpsLocation> const& samples) {
         std::vector<std::uint8_t> out;
         auto r = encodeAbsTimestampDataGps(
             out, 0, 2, tss.data(), samples.data(), samples.size());
         EXPECT_TRUE(r.has_value());
 
-        auto meta = one_channel_meta(osf::DataType::GpsLocation,
+        auto meta = oneChannelMeta(osf::DataType::GpsLocation,
                                      osf::ChannelType::Timestamped, 2);
         std::string s(reinterpret_cast<char const*>(out.data()), out.size());
         std::istringstream in(s);
         osf::BlockReader rdr(in, meta);
-        auto block_opt = rdr.next();
-        ASSERT_TRUE(block_opt.has_value());
-        ASSERT_TRUE(block_opt->has_value());
-        auto* ats = std::get_if<osf::AbsTimestampData>(&block_opt->value().kind);
+        auto blockOpt = rdr.next();
+        ASSERT_TRUE(blockOpt.has_value());
+        ASSERT_TRUE(blockOpt->has_value());
+        auto* ats = std::get_if<osf::AbsTimestampData>(&blockOpt->value().kind);
         ASSERT_NE(ats, nullptr);
         auto* gps = std::get_if<std::vector<std::pair<std::int64_t, GpsLocation>>>(
             &ats->samples);
@@ -532,8 +532,8 @@ TEST(BlockEncodeRoundtripGps, SingleAndMulti) {
         }
     };
 
-    encode_and_read({100}, {{47.5, 9.5, 400.0}});
-    encode_and_read({1, 2, 3}, {{47.0, 9.0, 100.0}, {47.5, 9.5, 200.0},
+    encodeAndRead({100}, {{47.5, 9.5, 400.0}});
+    encodeAndRead({1, 2, 3}, {{47.0, 9.0, 100.0}, {47.5, 9.5, 200.0},
                                 {48.0, 10.0, 300.0}});
 }
 
@@ -550,7 +550,7 @@ TEST(BlockEncodeString, EmptyString_Frame) {
     // 1 (ctrl) + 8 (ts) + 0 (empty payload) = 9. Frame = 13.
     ASSERT_EQ(out.size(), 13u);
     EXPECT_EQ(out[4], 0x08);                              // bcAbsTimeStampData, bit-7=0
-    EXPECT_TRUE(bytes_eq(out, 2, {0x09, 0x00}));          // len=9
+    EXPECT_TRUE(bytesEq(out, 2, {0x09, 0x00}));          // len=9
 }
 
 TEST(BlockEncodeString, NonEmpty_NoTrailingZero) {
@@ -603,7 +603,7 @@ TEST(BlockEncodeBinary, NonEmpty_NoTrailingZero) {
     // 1 (ctrl) + 8 (ts) + 4 (payload) = 13. Frame = 17.
     ASSERT_EQ(out.size(), 17u);
     EXPECT_EQ(out[4], 0x08);                              // bcAbsTimeStampData, bit-7=0
-    EXPECT_TRUE(bytes_eq(out, 13, {0xDE, 0xAD, 0xBE, 0xEF}));
+    EXPECT_TRUE(bytesEq(out, 13, {0xDE, 0xAD, 0xBE, 0xEF}));
 }
 
 TEST(BlockEncodeBinary, FromVectorFactory) {
@@ -659,15 +659,15 @@ TEST(BlockEncodeRoundtripVariable, StringSingleSample) {
                                        std::string_view{"hello"});
     ASSERT_TRUE(r.has_value());
 
-    auto meta = one_channel_meta(osf::DataType::String,
+    auto meta = oneChannelMeta(osf::DataType::String,
                                  osf::ChannelType::Timestamped, 2);
     std::string s(reinterpret_cast<char const*>(out.data()), out.size());
     std::istringstream in(s);
     osf::BlockReader rdr(in, meta);
-    auto block_opt = rdr.next();
-    ASSERT_TRUE(block_opt.has_value());
-    ASSERT_TRUE(block_opt->has_value());
-    auto* ats = std::get_if<osf::AbsTimestampData>(&block_opt->value().kind);
+    auto blockOpt = rdr.next();
+    ASSERT_TRUE(blockOpt.has_value());
+    ASSERT_TRUE(blockOpt->has_value());
+    auto* ats = std::get_if<osf::AbsTimestampData>(&blockOpt->value().kind);
     ASSERT_NE(ats, nullptr);
     auto* strs = std::get_if<std::vector<std::pair<std::int64_t,
                                                    std::string>>>(&ats->samples);
@@ -684,15 +684,15 @@ TEST(BlockEncodeRoundtripVariable, BinarySingleSample) {
                                        BinarySample::fromVector(data));
     ASSERT_TRUE(r.has_value());
 
-    auto meta = one_channel_meta(osf::DataType::Binary,
+    auto meta = oneChannelMeta(osf::DataType::Binary,
                                  osf::ChannelType::Timestamped, 2);
     std::string s(reinterpret_cast<char const*>(out.data()), out.size());
     std::istringstream in(s);
     osf::BlockReader rdr(in, meta);
-    auto block_opt = rdr.next();
-    ASSERT_TRUE(block_opt.has_value());
-    ASSERT_TRUE(block_opt->has_value());
-    auto* ats = std::get_if<osf::AbsTimestampData>(&block_opt->value().kind);
+    auto blockOpt = rdr.next();
+    ASSERT_TRUE(blockOpt.has_value());
+    ASSERT_TRUE(blockOpt->has_value());
+    auto* ats = std::get_if<osf::AbsTimestampData>(&blockOpt->value().kind);
     ASSERT_NE(ats, nullptr);
     auto* bins = std::get_if<std::vector<std::pair<std::int64_t,
                               std::vector<std::uint8_t>>>>(&ats->samples);

@@ -330,15 +330,15 @@ TEST(ParseMetablockXml, buffer_and_string_view_overloads_agree) {
 <optimeas><channels><channel index="1" name="x" channeltype="scalar"
              datatype="int32" sizeoflengthvalue="2"/></channels></optimeas>)";
 
-    auto by_view = osf::parseMetablockXml(std::string_view{body});
-    auto by_buf  = osf::parseMetablockXml(
+    auto byView = osf::parseMetablockXml(std::string_view{body});
+    auto byBuf  = osf::parseMetablockXml(
         reinterpret_cast<std::uint8_t const*>(body.data()), body.size());
 
-    ASSERT_TRUE(by_view.has_value()) << by_view.error().message;
-    ASSERT_TRUE(by_buf.has_value())  << by_buf.error().message;
-    ASSERT_EQ(by_view->channels.size(), by_buf->channels.size());
-    EXPECT_EQ(by_view->channels[0].name, by_buf->channels[0].name);
-    EXPECT_EQ(by_view->channels[0].index, by_buf->channels[0].index);
+    ASSERT_TRUE(byView.has_value()) << byView.error().message;
+    ASSERT_TRUE(byBuf.has_value())  << byBuf.error().message;
+    ASSERT_EQ(byView->channels.size(), byBuf->channels.size());
+    EXPECT_EQ(byView->channels[0].name, byBuf->channels[0].name);
+    EXPECT_EQ(byView->channels[0].index, byBuf->channels[0].index);
 }
 
 TEST(ParseMetablockXml, null_pointer_with_nonzero_size_rejected_as_invalid_arg) {

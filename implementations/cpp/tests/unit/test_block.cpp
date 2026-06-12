@@ -18,14 +18,14 @@ namespace {
 // ---------------------------------------------------------------------
 
 TEST(BlockPayloads, numeric_payload_len_works_for_each_variant) {
-    osf::NumericPayload bool_run{std::vector<bool>{true, false}};
-    EXPECT_EQ(osf::numericPayloadLen(bool_run), 2u);
+    osf::NumericPayload boolRun{std::vector<bool>{true, false}};
+    EXPECT_EQ(osf::numericPayloadLen(boolRun), 2u);
 
     osf::NumericPayload doubles{std::vector<double>(7, 1.0)};
     EXPECT_EQ(osf::numericPayloadLen(doubles), 7u);
 
-    osf::NumericPayload empty_i32{std::vector<std::int32_t>{}};
-    EXPECT_TRUE(osf::numericPayloadEmpty(empty_i32));
+    osf::NumericPayload emptyI32{std::vector<std::int32_t>{}};
+    EXPECT_TRUE(osf::numericPayloadEmpty(emptyI32));
 }
 
 TEST(BlockPayloads, timestamped_payload_len_covers_string_binary_gps) {
@@ -37,8 +37,8 @@ TEST(BlockPayloads, timestamped_payload_len_covers_string_binary_gps) {
         4, {1, std::vector<std::uint8_t>{1, 2, 3}})};
     EXPECT_EQ(osf::timestampedPayloadLen(binaries), 4u);
 
-    P empty_double{std::vector<std::pair<std::int64_t, double>>{}};
-    EXPECT_TRUE(osf::timestampedPayloadEmpty(empty_double));
+    P emptyDouble{std::vector<std::pair<std::int64_t, double>>{}};
+    EXPECT_TRUE(osf::timestampedPayloadEmpty(emptyDouble));
 
     P gps{std::vector<std::pair<std::int64_t, osf::GpsLocation>>{
         {1, osf::GpsLocation{1, 2, 3}},
@@ -133,9 +133,9 @@ TEST(Block, skipped_default_payload_is_nullopt) {
     sk.bytesSkipped = 1;
     blk.kind = std::move(sk);
 
-    auto const& as_skipped = std::get<osf::Skipped>(blk.kind);
-    EXPECT_FALSE(as_skipped.payload.has_value());
-    EXPECT_EQ(as_skipped.reason.rawByte, 0);
+    auto const& asSkipped = std::get<osf::Skipped>(blk.kind);
+    EXPECT_FALSE(asSkipped.payload.has_value());
+    EXPECT_EQ(asSkipped.reason.rawByte, 0);
 }
 
 }  // namespace

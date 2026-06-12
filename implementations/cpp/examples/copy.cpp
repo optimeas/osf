@@ -24,52 +24,52 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    std::string const in_path  = argv[1];
-    std::string const out_path = argv[2];
+    std::string const inPath  = argv[1];
+    std::string const outPath = argv[2];
 
     // ── Load source ───────────────────────────────────────────────────────
-    auto load_res = osf::DataManager::loadFromFile(in_path);
-    if (!load_res) {
-        std::cerr << in_path << ": " << load_res.error().message << "\n";
+    auto loadRes = osf::DataManager::loadFromFile(inPath);
+    if (!loadRes) {
+        std::cerr << inPath << ": " << loadRes.error().message << "\n";
         return 1;
     }
-    osf::DataManager const& src = *load_res;
-    std::size_t const src_channels = src.channels().size();
+    osf::DataManager const& src = *loadRes;
+    std::size_t const srcChannels = src.channels().size();
 
     // ── Write destination ─────────────────────────────────────────────────
-    auto write_res = osf::writeToFile(src, out_path);
-    if (!write_res) {
-        std::cerr << out_path << ": " << write_res.error().message << "\n";
+    auto writeRes = osf::writeToFile(src, outPath);
+    if (!writeRes) {
+        std::cerr << outPath << ": " << writeRes.error().message << "\n";
         return 1;
     }
 
     // ── Reload and verify ─────────────────────────────────────────────────
-    auto reload_res = osf::DataManager::loadFromFile(out_path);
-    if (!reload_res) {
-        std::cerr << out_path << " (reload): " << reload_res.error().message << "\n";
+    auto reloadRes = osf::DataManager::loadFromFile(outPath);
+    if (!reloadRes) {
+        std::cerr << outPath << " (reload): " << reloadRes.error().message << "\n";
         return 1;
     }
-    osf::DataManager const& dst = *reload_res;
-    std::size_t const dst_channels = dst.channels().size();
+    osf::DataManager const& dst = *reloadRes;
+    std::size_t const dstChannels = dst.channels().size();
 
-    std::error_code ec_in;
-    std::error_code ec_out;
-    std::uintmax_t const in_sz  = std::filesystem::file_size(in_path,  ec_in);
-    std::uintmax_t const out_sz = std::filesystem::file_size(out_path, ec_out);
+    std::error_code ecIn;
+    std::error_code ecOut;
+    std::uintmax_t const inSz  = std::filesystem::file_size(inPath,  ecIn);
+    std::uintmax_t const outSz = std::filesystem::file_size(outPath, ecOut);
 
-    std::cout << "in:       " << in_path
-              << " (" << (ec_in ? std::uintmax_t{0} : in_sz) << " bytes, "
-              << src_channels << " channels)\n";
-    std::cout << "out:      " << out_path
-              << " (" << (ec_out ? std::uintmax_t{0} : out_sz) << " bytes, "
-              << dst_channels << " channels)\n";
+    std::cout << "in:       " << inPath
+              << " (" << (ecIn ? std::uintmax_t{0} : inSz) << " bytes, "
+              << srcChannels << " channels)\n";
+    std::cout << "out:      " << outPath
+              << " (" << (ecOut ? std::uintmax_t{0} : outSz) << " bytes, "
+              << dstChannels << " channels)\n";
 
-    if (src_channels != dst_channels) {
-        std::cerr << "MISMATCH: channel count in=" << src_channels
-                  << " out=" << dst_channels << "\n";
+    if (srcChannels != dstChannels) {
+        std::cerr << "MISMATCH: channel count in=" << srcChannels
+                  << " out=" << dstChannels << "\n";
         return 1;
     }
 
-    std::cout << "ok: channel count matches (" << src_channels << ")\n";
+    std::cout << "ok: channel count matches (" << srcChannels << ")\n";
     return 0;
 }

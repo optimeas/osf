@@ -16,7 +16,7 @@
 namespace {
 
 // Convenience: parse a string_view via the buffer overload.
-osf::Result<osf::MagicHeader> parse_bytes(std::string_view bytes) {
+osf::Result<osf::MagicHeader> parseBytes(std::string_view bytes) {
     return osf::parseMagicHeader(
         reinterpret_cast<std::uint8_t const*>(bytes.data()),
         bytes.size());
@@ -46,28 +46,28 @@ struct TempFile {
 // ----- 1..4: positive identifier parsing -----
 
 TEST(MagicHeader, parses_modern_osf4_identifier) {
-    auto result = parse_bytes("OSF4 928\n<rest>");
+    auto result = parseBytes("OSF4 928\n<rest>");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf4);
     EXPECT_EQ(result->metablockLen, 928u);
 }
 
 TEST(MagicHeader, parses_legacy_ocean_stream_format4_identifier) {
-    auto result = parse_bytes("OCEAN_STREAM_FORMAT4 26279\n");
+    auto result = parseBytes("OCEAN_STREAM_FORMAT4 26279\n");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf4);
     EXPECT_EQ(result->metablockLen, 26279u);
 }
 
 TEST(MagicHeader, parses_legacy_ocean_streaming_format4_identifier) {
-    auto result = parse_bytes("OCEAN_STREAMING_FORMAT4 12345\n");
+    auto result = parseBytes("OCEAN_STREAMING_FORMAT4 12345\n");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf4);
     EXPECT_EQ(result->metablockLen, 12345u);
 }
 
 TEST(MagicHeader, parses_osf5_identifier) {
-    auto result = parse_bytes("OSF5 895\n{\"osf\":...");
+    auto result = parseBytes("OSF5 895\n{\"osf\":...");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf5);
     EXPECT_EQ(result->metablockLen, 895u);
@@ -76,32 +76,32 @@ TEST(MagicHeader, parses_osf5_identifier) {
 // ----- 5..9: negative cases (parse failures) -----
 
 TEST(MagicHeader, rejects_unknown_identifier) {
-    auto result = parse_bytes("OSF99 100\n");
+    auto result = parseBytes("OSF99 100\n");
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error().code, osf::Error::Code::UnsupportedVersion);
 }
 
 TEST(MagicHeader, rejects_missing_length) {
-    auto result = parse_bytes("OSF5\n");
+    auto result = parseBytes("OSF5\n");
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error().code, osf::Error::Code::InvalidMagicHeader);
 }
 
 TEST(MagicHeader, rejects_non_numeric_length) {
-    auto result = parse_bytes("OSF5 abc\n");
+    auto result = parseBytes("OSF5 abc\n");
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error().code, osf::Error::Code::InvalidMagicHeader);
 }
 
 TEST(MagicHeader, rejects_runaway_input_without_newline) {
     std::string payload(osf::MAX_MAGIC_HEADER_LEN + 10, 'X');
-    auto result = parse_bytes(payload);
+    auto result = parseBytes(payload);
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error().code, osf::Error::Code::MagicHeaderTooLong);
 }
 
 TEST(MagicHeader, rejects_truncated_input) {
-    auto result = parse_bytes("OSF5 895");
+    auto result = parseBytes("OSF5 895");
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error().code, osf::Error::Code::InvalidMagicHeader);
 }
@@ -109,7 +109,7 @@ TEST(MagicHeader, rejects_truncated_input) {
 // ----- 10: CRLF tolerance -----
 
 TEST(MagicHeader, tolerates_crlf_terminator) {
-    auto result = parse_bytes("OSF5 42\r\n");
+    auto result = parseBytes("OSF5 42\r\n");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf5);
     EXPECT_EQ(result->metablockLen, 42u);
@@ -133,15 +133,15 @@ TEST(MagicHeader, stream_position_after_newline) {
 TEST(MagicHeader, buffer_overload_matches_istream_overload) {
     std::string input = "OSF5 100\n";
 
-    auto buffer_result = osf::parseMagicHeader(
+    auto bufferResult = osf::parseMagicHeader(
         reinterpret_cast<std::uint8_t const*>(input.data()), input.size());
 
     std::istringstream stream{input};
-    auto istream_result = osf::parseMagicHeader(static_cast<std::istream&>(stream));
+    auto istreamResult = osf::parseMagicHeader(static_cast<std::istream&>(stream));
 
-    ASSERT_TRUE(buffer_result.has_value()) << buffer_result.error().message;
-    ASSERT_TRUE(istream_result.has_value()) << istream_result.error().message;
-    EXPECT_EQ(*buffer_result, *istream_result);
+    ASSERT_TRUE(bufferResult.has_value()) << bufferResult.error().message;
+    ASSERT_TRUE(istreamResult.has_value()) << istreamResult.error().message;
+    EXPECT_EQ(*bufferResult, *istreamResult);
 }
 
 // ----- 13..14: path overload -----
@@ -179,7 +179,7 @@ TEST(MagicHeader, magic_header_equality) {
 // ----- 16: lone CR is not a terminator (future-proofing) -----
 
 TEST(MagicHeader, rejects_lone_cr_without_lf) {
-    auto result = parse_bytes("OSF5 42\r");
+    auto result = parseBytes("OSF5 42\r");
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error().code, osf::Error::Code::InvalidMagicHeader);
 }

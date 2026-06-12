@@ -26,12 +26,12 @@ protected:
             << "OSF_EXAMPLES_DIR does not exist: " << dir;
     }
 
-    static std::filesystem::path examples_dir() {
+    static std::filesystem::path examplesDir() {
         return std::filesystem::path{OSF_EXAMPLES_DIR};
     }
 };
 
-std::filesystem::path make_bw_temp_path() {
+std::filesystem::path makeBwTempPath() {
     static std::atomic<std::uint64_t> counter{0};
     auto const n = counter.fetch_add(1) + 1;
     return std::filesystem::temp_directory_path() /
@@ -54,7 +54,7 @@ struct TempFileGuard {
 /// → reload → compare channel count + per-channel name / dataType /
 /// sampleCount / first & last sample values.
 TEST_F(BlockWriterExamples, every_osf5_reference_file_roundtrips_via_block_writer) {
-    auto generated = examples_dir() / "generated";
+    auto generated = examplesDir() / "generated";
     ASSERT_TRUE(std::filesystem::exists(generated));
 
     int tested = 0;
@@ -84,7 +84,7 @@ TEST_F(BlockWriterExamples, every_osf5_reference_file_roundtrips_via_block_write
             << "reload failed for " << filename << ": " << reloaded.error().message;
 
         // Compare both managers.
-        EXPECT_TRUE(osf_test::roundtrip_managers_equal(*loaded, *reloaded))
+        EXPECT_TRUE(osf_test::roundtripManagersEqual(*loaded, *reloaded))
             << "file: " << entry.path();
 
         ++tested;
@@ -100,7 +100,7 @@ TEST_F(BlockWriterExamples, every_osf5_reference_file_roundtrips_via_block_write
 /// byte-identical.
 TEST_F(BlockWriterExamples, WriteToFileMatchesWriteToOstream) {
     // Use osf5_equidistant.osf as the fixed reference.
-    auto path = examples_dir() / "generated" / "osf5_equidistant.osf";
+    auto path = examplesDir() / "generated" / "osf5_equidistant.osf";
     ASSERT_TRUE(std::filesystem::exists(path))
         << "missing reference file: " << path;
 
@@ -108,7 +108,7 @@ TEST_F(BlockWriterExamples, WriteToFileMatchesWriteToOstream) {
     ASSERT_TRUE(loaded.has_value()) << loaded.error().message;
 
     // Write to a temp file.
-    TempFileGuard g{make_bw_temp_path()};
+    TempFileGuard g{makeBwTempPath()};
     {
         auto r = osf::writeToFile(*loaded, g.path);
         ASSERT_TRUE(r.has_value()) << r.error().message;
@@ -121,25 +121,25 @@ TEST_F(BlockWriterExamples, WriteToFileMatchesWriteToOstream) {
         auto r = osf::writeTo(*loaded, oss);
         ASSERT_TRUE(r.has_value()) << r.error().message;
     }
-    std::string const ostream_bytes = oss.str();
+    std::string const ostreamBytes = oss.str();
 
     // Read the temp file into memory.
     auto const fileSize = std::filesystem::file_size(g.path);
-    std::vector<char> file_bytes(fileSize);
+    std::vector<char> fileBytes(fileSize);
     {
         std::ifstream fin(g.path, std::ios::binary);
         ASSERT_TRUE(fin.is_open()) << "cannot open temp file: " << g.path;
-        fin.read(file_bytes.data(), static_cast<std::streamsize>(fileSize));
+        fin.read(fileBytes.data(), static_cast<std::streamsize>(fileSize));
         ASSERT_EQ(fin.gcount(), static_cast<std::streamsize>(fileSize));
     }
 
-    ASSERT_EQ(ostream_bytes.size(), fileSize)
-        << "byte length mismatch: ostream=" << ostream_bytes.size()
+    ASSERT_EQ(ostreamBytes.size(), fileSize)
+        << "byte length mismatch: ostream=" << ostreamBytes.size()
         << " file=" << fileSize;
 
     // Byte-identical comparison.
-    bool identical = (std::string(file_bytes.begin(), file_bytes.end()) ==
-                      ostream_bytes);
+    bool identical = (std::string(fileBytes.begin(), fileBytes.end()) ==
+                      ostreamBytes);
     EXPECT_TRUE(identical)
         << "writeToFile output differs from writeTo(ostream) output";
 }

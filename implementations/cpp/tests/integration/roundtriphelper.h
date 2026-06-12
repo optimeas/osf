@@ -31,7 +31,7 @@ namespace osf_test {
 namespace detail {
 
 /// Format a DataType as a short string for failure messages.
-inline std::string dt_str(osf::DataType dt) {
+inline std::string dtStr(osf::DataType dt) {
     switch (dt) {
         case osf::DataType::Bool:        return "Bool";
         case osf::DataType::Int8:        return "Int8";
@@ -81,7 +81,7 @@ inline std::string dt_str(osf::DataType dt) {
         return ::testing::AssertionSuccess();                                  \
     }
 
-inline ::testing::AssertionResult compare_equidistant(
+inline ::testing::AssertionResult compareEquidistant(
         std::string const& name,
         osf::EquidistantChannel const& a,
         osf::EquidistantChannel const& b) {
@@ -89,7 +89,7 @@ inline ::testing::AssertionResult compare_equidistant(
     OSF_CMP_EQ_FLAT(Floats)
     // Equidistant GPS is rare but theoretically valid.
     // asGpsFlat(EquidistantChannel) returns Result<vector<GpsLocation>>
-    // (no timestamp pairs — equidistant channels use segment start_ts).
+    // (no timestamp pairs — equidistant channels use segment startTs).
     if (auto va = osf::asGpsFlat(a); va.has_value()) {
         auto vb = osf::asGpsFlat(b);
         if (!vb.has_value()) {
@@ -121,7 +121,7 @@ inline ::testing::AssertionResult compare_equidistant(
     }
     return ::testing::AssertionFailure()
         << "channel '" << name << "': unrecognised equidistant data type: "
-        << dt_str(a.dataType);
+        << dtStr(a.dataType);
 }
 
 #undef OSF_CMP_EQ_FLAT
@@ -163,7 +163,7 @@ inline ::testing::AssertionResult compare_equidistant(
         return ::testing::AssertionSuccess();                                  \
     }
 
-inline ::testing::AssertionResult compare_timestamped(
+inline ::testing::AssertionResult compareTimestamped(
         std::string const& name,
         osf::TimestampedChannel const& a,
         osf::TimestampedChannel const& b) {
@@ -217,14 +217,14 @@ inline ::testing::AssertionResult compare_timestamped(
     }
     return ::testing::AssertionFailure()
         << "channel '" << name << "': unrecognised timestamped data type: "
-        << dt_str(a.dataType);
+        << dtStr(a.dataType);
 }
 
 #undef OSF_CMP_TS_FLAT
 
 // ── Variable first/last value comparison ─────────────────────────────
 
-inline ::testing::AssertionResult compare_variable(
+inline ::testing::AssertionResult compareVariable(
         std::string const& name,
         osf::VariableChannel const& a,
         osf::VariableChannel const& b) {
@@ -284,7 +284,7 @@ inline ::testing::AssertionResult compare_variable(
     }
     return ::testing::AssertionFailure()
         << "channel '" << name << "': unrecognised variable data type: "
-        << dt_str(a.dataType);
+        << dtStr(a.dataType);
 }
 
 }  // namespace detail
@@ -299,7 +299,7 @@ inline ::testing::AssertionResult compare_variable(
 ///
 /// Returns `AssertionSuccess()` when all checks pass; otherwise
 /// `AssertionFailure()` with a message identifying the first deviation.
-inline ::testing::AssertionResult roundtrip_managers_equal(
+inline ::testing::AssertionResult roundtripManagersEqual(
         osf::DataManager const& a, osf::DataManager const& b) {
     auto const& ach = a.channels();
     auto const& bch = b.channels();
@@ -315,33 +315,33 @@ inline ::testing::AssertionResult roundtrip_managers_equal(
         std::string const& nm = osf::channelName(ca);
 
         // Look up by name in B — matches the streaming-writer approach.
-        auto const* cb_ptr = b.channel(nm);
-        if (!cb_ptr) {
+        auto const* cbPtr = b.channel(nm);
+        if (!cbPtr) {
             return ::testing::AssertionFailure()
                 << "channel '" << nm << "' (index " << i
                 << ") missing in B";
         }
-        auto const& cb = *cb_ptr;
+        auto const& cb = *cbPtr;
 
         // Data type must match.
         if (osf::channelDataType(ca) != osf::channelDataType(cb)) {
             return ::testing::AssertionFailure()
                 << "channel '" << nm << "': dataType mismatch: "
-                << detail::dt_str(osf::channelDataType(ca)) << " vs "
-                << detail::dt_str(osf::channelDataType(cb));
+                << detail::dtStr(osf::channelDataType(ca)) << " vs "
+                << detail::dtStr(osf::channelDataType(cb));
         }
 
         // Sample count must match.
-        auto const cnt_a = osf::channelSampleCount(ca);
-        auto const cnt_b = osf::channelSampleCount(cb);
-        if (cnt_a != cnt_b) {
+        auto const cntA = osf::channelSampleCount(ca);
+        auto const cntB = osf::channelSampleCount(cb);
+        if (cntA != cntB) {
             return ::testing::AssertionFailure()
                 << "channel '" << nm << "': sample count mismatch: "
-                << cnt_a << " vs " << cnt_b;
+                << cntA << " vs " << cntB;
         }
 
         // Skip value comparison for genuinely empty channels.
-        if (cnt_a == 0) continue;
+        if (cntA == 0) continue;
 
         // Dispatch on the DataChannel variant.
         if (auto const* ea = std::get_if<osf::EquidistantChannel>(&ca)) {
@@ -350,7 +350,7 @@ inline ::testing::AssertionResult roundtrip_managers_equal(
                 return ::testing::AssertionFailure()
                     << "channel '" << nm
                     << "': variant mismatch (A is Equidistant, B is not)";
-            auto r = detail::compare_equidistant(nm, *ea, *eb);
+            auto r = detail::compareEquidistant(nm, *ea, *eb);
             if (!r) return r;
         } else if (auto const* ta = std::get_if<osf::TimestampedChannel>(&ca)) {
             auto const* tb = std::get_if<osf::TimestampedChannel>(&cb);
@@ -358,7 +358,7 @@ inline ::testing::AssertionResult roundtrip_managers_equal(
                 return ::testing::AssertionFailure()
                     << "channel '" << nm
                     << "': variant mismatch (A is Timestamped, B is not)";
-            auto r = detail::compare_timestamped(nm, *ta, *tb);
+            auto r = detail::compareTimestamped(nm, *ta, *tb);
             if (!r) return r;
         } else if (auto const* va = std::get_if<osf::VariableChannel>(&ca)) {
             auto const* vb = std::get_if<osf::VariableChannel>(&cb);
@@ -366,7 +366,7 @@ inline ::testing::AssertionResult roundtrip_managers_equal(
                 return ::testing::AssertionFailure()
                     << "channel '" << nm
                     << "': variant mismatch (A is Variable, B is not)";
-            auto r = detail::compare_variable(nm, *va, *vb);
+            auto r = detail::compareVariable(nm, *va, *vb);
             if (!r) return r;
         } else {
             return ::testing::AssertionFailure()

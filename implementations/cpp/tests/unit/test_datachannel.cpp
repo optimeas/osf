@@ -40,7 +40,7 @@ TEST(NumericValues, empty_for_returns_nullopt_for_variable_and_unsupported) {
 // EquidistantChannel::samplesVector
 // ---------------------------------------------------------------------
 
-osf::EquidistantChannel make_eq(osf::NumericValues samples,
+osf::EquidistantChannel makeEq(osf::NumericValues samples,
                                 std::vector<osf::Segment> segments) {
     osf::EquidistantChannel c;
     c.index = 0;
@@ -52,7 +52,7 @@ osf::EquidistantChannel make_eq(osf::NumericValues samples,
 }
 
 TEST(EquidistantChannel, samples_with_time_single_segment) {
-    auto c = make_eq(
+    auto c = makeEq(
         osf::NumericValues{std::vector<double>{10.0, 20.0, 30.0, 40.0}},
         {{1'000'000'000, 1.0, 0, 4}});
     auto samples = c.samplesVector();
@@ -66,7 +66,7 @@ TEST(EquidistantChannel, samples_with_time_single_segment) {
 }
 
 TEST(EquidistantChannel, samples_with_time_three_segments_no_interpolation) {
-    auto c = make_eq(
+    auto c = makeEq(
         osf::NumericValues{
             std::vector<std::int32_t>{1, 2, 3, 100, 101, 200, 201}},
         {
@@ -86,14 +86,14 @@ TEST(EquidistantChannel, samples_with_time_three_segments_no_interpolation) {
 }
 
 TEST(EquidistantChannel, empty_channel_iteration_yields_nothing) {
-    auto c = make_eq(osf::NumericValues{std::vector<double>{}}, {});
+    auto c = makeEq(osf::NumericValues{std::vector<double>{}}, {});
     auto samples = c.samplesVector();
     EXPECT_TRUE(samples.empty());
     EXPECT_TRUE(osf::numericValuesEmpty(c.samples));
 }
 
 TEST(EquidistantChannel, flat_access_mismatch_returns_typed_error) {
-    auto c = make_eq(osf::NumericValues{std::vector<std::int32_t>{1, 2, 3}},
+    auto c = makeEq(osf::NumericValues{std::vector<std::int32_t>{1, 2, 3}},
                      {{0, 1.0, 0, 3}});
     // Wrong type → mismatch.
     auto wrong = osf::asDoublesFlat(c);
@@ -185,7 +185,7 @@ TEST(VariableChannel, binary_iteration_collects_values) {
 // ---------------------------------------------------------------------
 
 TEST(DataChannel, common_accessors_work_for_each_variant) {
-    auto eq = make_eq(osf::NumericValues{std::vector<double>{1, 2, 3}},
+    auto eq = makeEq(osf::NumericValues{std::vector<double>{1, 2, 3}},
                       {{0, 1.0, 0, 3}});
     osf::DataChannel dc{std::move(eq)};
     EXPECT_EQ(osf::channelIndex(dc), 0);

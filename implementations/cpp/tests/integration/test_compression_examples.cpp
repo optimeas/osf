@@ -27,22 +27,22 @@ namespace {
 
 class CompressionExamplesTest : public ::testing::Test {
 protected:
-    static std::filesystem::path examples_dir() {
+    static std::filesystem::path examplesDir() {
         return std::filesystem::path{OSF_EXAMPLES_DIR};
     }
 
-    static std::string read_file(std::filesystem::path const& p) {
+    static std::string readFile(std::filesystem::path const& p) {
         std::ifstream in(p, std::ios::binary);
         return std::string(std::istreambuf_iterator<char>(in),
                            std::istreambuf_iterator<char>());
     }
 
     // Deflate with explicit windowBits: 15 → zlib, 15 + 16 → gzip.
-    static std::string deflate_with(std::string const& input,
-                                    int window_bits) {
+    static std::string deflateWith(std::string const& input,
+                                    int windowBits) {
         z_stream zs{};
         EXPECT_EQ(deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
-                               window_bits, 8, Z_DEFAULT_STRATEGY),
+                               windowBits, 8, Z_DEFAULT_STRATEGY),
                   Z_OK);
         std::vector<unsigned char> out(static_cast<std::size_t>(
             deflateBound(&zs, static_cast<uLong>(input.size()))));
@@ -66,19 +66,19 @@ protected:
 // ---------------------------------------------------------------------
 
 TEST_F(CompressionExamplesTest, steam_loco_gzip_and_zlib_match_plain) {
-    auto const plain_path = examples_dir() / "steam_loco.osf";
-    if (!std::filesystem::exists(plain_path)) {
+    auto const plainPath = examplesDir() / "steam_loco.osf";
+    if (!std::filesystem::exists(plainPath)) {
         GTEST_SKIP() << "steam_loco.osf missing";
     }
-    auto const plain = osf::DataManager::loadFromFile(plain_path);
+    auto const plain = osf::DataManager::loadFromFile(plainPath);
     ASSERT_TRUE(plain.has_value()) << plain.error().message;
     EXPECT_FALSE(plain->stats.compressed);
 
-    std::string const raw = read_file(plain_path);
+    std::string const raw = readFile(plainPath);
 
     struct Case {
         std::string label;
-        int window_bits;
+        int windowBits;
         osf::CompressionFormat format;
     };
     Case const cases[] = {
@@ -87,14 +87,14 @@ TEST_F(CompressionExamplesTest, steam_loco_gzip_and_zlib_match_plain) {
     };
 
     for (auto const& c : cases) {
-        std::istringstream src(deflate_with(raw, c.window_bits),
+        std::istringstream src(deflateWith(raw, c.windowBits),
                                std::ios::binary);
         auto const got = osf::DataManager::loadFromStream(src);
         ASSERT_TRUE(got.has_value())
             << c.label << ": " << got.error().message;
         EXPECT_TRUE(got->stats.compressed) << c.label;
         EXPECT_EQ(got->stats.compressionFormat, c.format) << c.label;
-        EXPECT_TRUE(osf_test::roundtrip_managers_equal(*plain, *got))
+        EXPECT_TRUE(osf_test::roundtripManagersEqual(*plain, *got))
             << c.label;
     }
 }
@@ -104,7 +104,7 @@ TEST_F(CompressionExamplesTest, steam_loco_gzip_and_zlib_match_plain) {
 // ---------------------------------------------------------------------
 
 TEST_F(CompressionExamplesTest, weather_station_osfz_loads_transparently) {
-    auto const path = examples_dir() / "weather_station.osfz";
+    auto const path = examplesDir() / "weather_station.osfz";
     if (!std::filesystem::exists(path)) {
         GTEST_SKIP() << "weather_station.osfz missing";
     }
@@ -114,12 +114,12 @@ TEST_F(CompressionExamplesTest, weather_station_osfz_loads_transparently) {
     EXPECT_EQ(mgr->stats.compressionFormat, osf::CompressionFormat::Gzip);
     ASSERT_FALSE(mgr->channels().empty());
 
-    bool any_non_empty = false;
+    bool anyNonEmpty = false;
     for (auto const& ch : mgr->channels()) {
         if (!osf::channelIsEmpty(ch)) {
-            any_non_empty = true;
+            anyNonEmpty = true;
             break;
         }
     }
-    EXPECT_TRUE(any_non_empty);
+    EXPECT_TRUE(anyNonEmpty);
 }

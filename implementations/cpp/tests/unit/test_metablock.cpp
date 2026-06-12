@@ -292,15 +292,15 @@ TEST(ParseMetablockJson, buffer_and_string_view_overloads_agree) {
             {"index":1,"name":"x","channeltype":"scalar",
              "datatype":"int32","sizeoflengthvalue":2}]}})";
 
-    auto by_view = osf::parseMetablockJson(std::string_view{body});
-    auto by_buf  = osf::parseMetablockJson(
+    auto byView = osf::parseMetablockJson(std::string_view{body});
+    auto byBuf  = osf::parseMetablockJson(
         reinterpret_cast<std::uint8_t const*>(body.data()), body.size());
 
-    ASSERT_TRUE(by_view.has_value()) << by_view.error().message;
-    ASSERT_TRUE(by_buf.has_value())  << by_buf.error().message;
-    ASSERT_EQ(by_view->channels.size(), by_buf->channels.size());
-    EXPECT_EQ(by_view->channels[0].name, by_buf->channels[0].name);
-    EXPECT_EQ(by_view->channels[0].index, by_buf->channels[0].index);
+    ASSERT_TRUE(byView.has_value()) << byView.error().message;
+    ASSERT_TRUE(byBuf.has_value())  << byBuf.error().message;
+    ASSERT_EQ(byView->channels.size(), byBuf->channels.size());
+    EXPECT_EQ(byView->channels[0].name, byBuf->channels[0].name);
+    EXPECT_EQ(byView->channels[0].index, byBuf->channels[0].index);
 }
 
 TEST(ParseMetablockJson, null_pointer_with_zero_size_returns_parse_error) {
@@ -332,8 +332,8 @@ TEST(SerializeMetablockJson, roundtrip_minimal_metablock) {
     ch.sizeOfLengthValue = 2;
     m.channels.push_back(ch);
 
-    auto const json_text = osf::serializeMetablockJson(m);
-    auto parsed = osf::parseMetablockJson(json_text);
+    auto const jsonText = osf::serializeMetablockJson(m);
+    auto parsed = osf::parseMetablockJson(jsonText);
     ASSERT_TRUE(parsed.has_value()) << "round-trip parse failed: "
                                     << parsed.error().message;
     EXPECT_EQ(parsed->channels.size(), 1u);
@@ -360,8 +360,8 @@ TEST(SerializeMetablockJson, roundtrip_full_channel_with_optional_fields) {
     ch.comment = "calibrated 2026-04-01";
     m.channels.push_back(ch);
 
-    auto const json_text = osf::serializeMetablockJson(m);
-    auto parsed = osf::parseMetablockJson(json_text);
+    auto const jsonText = osf::serializeMetablockJson(m);
+    auto parsed = osf::parseMetablockJson(jsonText);
     ASSERT_TRUE(parsed.has_value()) << parsed.error().message;
     ASSERT_EQ(parsed->channels.size(), 1u);
     auto const& pch = parsed->channels[0];
@@ -393,8 +393,8 @@ TEST(SerializeMetablockJson, roundtrip_geolocation_in_file_info) {
     ch.sizeOfLengthValue = 2;
     m.channels.push_back(ch);
 
-    auto const json_text = osf::serializeMetablockJson(m);
-    auto parsed = osf::parseMetablockJson(json_text);
+    auto const jsonText = osf::serializeMetablockJson(m);
+    auto parsed = osf::parseMetablockJson(jsonText);
     ASSERT_TRUE(parsed.has_value()) << parsed.error().message;
     EXPECT_EQ(parsed->fileInfo.creator, "test:1");
     ASSERT_TRUE(parsed->fileInfo.createdAtLatitude.has_value());
@@ -415,8 +415,8 @@ TEST(SerializeMetablockJson, roundtrip_gpslocation_channel) {
     ch.sizeOfLengthValue = 2;
     m.channels.push_back(ch);
 
-    auto const json_text = osf::serializeMetablockJson(m);
-    auto parsed = osf::parseMetablockJson(json_text);
+    auto const jsonText = osf::serializeMetablockJson(m);
+    auto parsed = osf::parseMetablockJson(jsonText);
     ASSERT_TRUE(parsed.has_value()) << parsed.error().message;
     ASSERT_EQ(parsed->channels.size(), 1u);
     EXPECT_EQ(parsed->channels[0].dataType, osf::DataType::GpsLocation);
@@ -439,8 +439,8 @@ TEST(SerializeMetablockJson, roundtrip_infos_present) {
     ch.sizeOfLengthValue = 2;
     m.channels.push_back(ch);
 
-    auto const json_text = osf::serializeMetablockJson(m);
-    auto parsed = osf::parseMetablockJson(json_text);
+    auto const jsonText = osf::serializeMetablockJson(m);
+    auto parsed = osf::parseMetablockJson(jsonText);
     ASSERT_TRUE(parsed.has_value()) << parsed.error().message;
     ASSERT_EQ(parsed->infos.size(), 2u);
     EXPECT_EQ(parsed->infos[0].name, "recording_session");

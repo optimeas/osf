@@ -30,12 +30,12 @@ protected:
             << "OSF_EXAMPLES_DIR does not exist: " << dir;
     }
 
-    static std::filesystem::path examples_dir() {
+    static std::filesystem::path examplesDir() {
         return std::filesystem::path{OSF_EXAMPLES_DIR};
     }
 };
 
-std::filesystem::path make_temp_path() {
+std::filesystem::path makeTempPath() {
     static std::atomic<std::uint64_t> counter{0};
     auto const n = counter.fetch_add(1) + 1;
     return std::filesystem::temp_directory_path() /
@@ -52,12 +52,12 @@ struct TempFileGuard {
 
 // ── Per-channel write dispatch (for the round-trip helper) ───────────
 
-osf::Result<void> write_equidistant(
+osf::Result<void> writeEquidistant(
         osf::StreamingWriter& w, std::uint16_t channel,
         osf::EquidistantChannel const& eq) {
     // Equidistant is float or double only per spec rev 2026-05-04.
     if (auto v = osf::asDoublesFlat(eq); v.has_value()) {
-        // Replay each segment using the segment's start_ts + rate +
+        // Replay each segment using the segment's startTs + rate +
         // the slice of the flat vector that segment covers.
         for (auto const& seg : eq.segments) {
             auto const* base = v->data() + seg.startIndex;
@@ -93,7 +93,7 @@ osf::Result<void> write_equidistant(
             channel, times.data(), vals.data(), vals.size());                 \
     }
 
-osf::Result<void> write_timestamped(
+osf::Result<void> writeTimestamped(
         osf::StreamingWriter& w, std::uint16_t channel,
         osf::TimestampedChannel const& ts) {
     // bool is special — std::vector<bool> is a bit-packed specialization
@@ -137,7 +137,7 @@ osf::Result<void> write_timestamped(
 
 #undef WRITE_TIMESTAMPED_DISPATCH
 
-osf::Result<void> write_variable(
+osf::Result<void> writeVariable(
         osf::StreamingWriter& w, std::uint16_t channel,
         osf::VariableChannel const& var) {
     if (auto strings = var.asStrings(); strings.has_value()) {
@@ -163,7 +163,7 @@ osf::Result<void> write_variable(
 }
 
 // Derive the writer-side channelType from the loaded variant.
-osf::ChannelType channel_type_from(osf::DataChannel const& ch) {
+osf::ChannelType channelTypeFrom(osf::DataChannel const& ch) {
     if (std::holds_alternative<osf::EquidistantChannel>(ch))
         return osf::ChannelType::Equidistant;
     if (std::holds_alternative<osf::TimestampedChannel>(ch))
@@ -173,43 +173,43 @@ osf::ChannelType channel_type_from(osf::DataChannel const& ch) {
 
 // Round-trip: load src → write all channels via StreamingWriter →
 // reload → assert channel count + per-channel name/datatype/sample-count
-// AND first/last sample values (via roundtrip_managers_equal).
-::testing::AssertionResult roundtrip_via_streaming_writer(
+// AND first/last sample values (via roundtripManagersEqual).
+::testing::AssertionResult roundtripViaStreamingWriter(
         std::filesystem::path const& src) {
-    auto src_mgr = osf::DataManager::loadFromFile(src);
-    if (!src_mgr) {
+    auto srcMgr = osf::DataManager::loadFromFile(src);
+    if (!srcMgr) {
         return ::testing::AssertionFailure()
-            << "load src failed: " << src_mgr.error().message;
+            << "load src failed: " << srcMgr.error().message;
     }
 
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     {
         osf::StreamingWriter w{g.path};
         // Copy file-info (only the user-controllable fields).
-        if (src_mgr->meta.fileInfo.creator)
-            w.setCreator(*src_mgr->meta.fileInfo.creator);
-        if (src_mgr->meta.fileInfo.tag)
-            w.setTag(*src_mgr->meta.fileInfo.tag);
-        if (src_mgr->meta.fileInfo.reason)
-            w.setReason(*src_mgr->meta.fileInfo.reason);
-        if (src_mgr->meta.fileInfo.namespaceSep)
-            w.setNamespaceSep(*src_mgr->meta.fileInfo.namespaceSep);
-        if (src_mgr->meta.fileInfo.comment)
-            w.setComment(*src_mgr->meta.fileInfo.comment);
-        if (src_mgr->meta.fileInfo.createdAtLatitude &&
-            src_mgr->meta.fileInfo.createdAtLongitude &&
-            src_mgr->meta.fileInfo.createdAtAltitude) {
-            w.setLocation(*src_mgr->meta.fileInfo.createdAtLatitude,
-                           *src_mgr->meta.fileInfo.createdAtLongitude,
-                           *src_mgr->meta.fileInfo.createdAtAltitude);
+        if (srcMgr->meta.fileInfo.creator)
+            w.setCreator(*srcMgr->meta.fileInfo.creator);
+        if (srcMgr->meta.fileInfo.tag)
+            w.setTag(*srcMgr->meta.fileInfo.tag);
+        if (srcMgr->meta.fileInfo.reason)
+            w.setReason(*srcMgr->meta.fileInfo.reason);
+        if (srcMgr->meta.fileInfo.namespaceSep)
+            w.setNamespaceSep(*srcMgr->meta.fileInfo.namespaceSep);
+        if (srcMgr->meta.fileInfo.comment)
+            w.setComment(*srcMgr->meta.fileInfo.comment);
+        if (srcMgr->meta.fileInfo.createdAtLatitude &&
+            srcMgr->meta.fileInfo.createdAtLongitude &&
+            srcMgr->meta.fileInfo.createdAtAltitude) {
+            w.setLocation(*srcMgr->meta.fileInfo.createdAtLatitude,
+                           *srcMgr->meta.fileInfo.createdAtLongitude,
+                           *srcMgr->meta.fileInfo.createdAtAltitude);
         }
 
         // Add channels — derive ChannelDef from the loaded DataChannels.
-        for (auto const& ch : src_mgr->channels()) {
+        for (auto const& ch : srcMgr->channels()) {
             osf::ChannelDef def;
             def.name = osf::channelName(ch);
             def.dataType = osf::channelDataType(ch);
-            def.channelType = channel_type_from(ch);
+            def.channelType = channelTypeFrom(ch);
             // Use sov=4 for variable channels (in case the source had
             // payloads near the sov=2 limit). For numeric channels,
             // sov=4 is also safe (fits everything).
@@ -230,17 +230,17 @@ osf::ChannelType channel_type_from(osf::DataChannel const& ch) {
 
         // Write samples per channel.
         for (std::uint16_t idx = 0;
-             idx < src_mgr->channels().size(); ++idx) {
-            auto const& ch = src_mgr->channels()[idx];
+             idx < srcMgr->channels().size(); ++idx) {
+            auto const& ch = srcMgr->channels()[idx];
             osf::Result<void> r;
             if (auto const* eq = std::get_if<osf::EquidistantChannel>(&ch)) {
-                r = write_equidistant(w, idx, *eq);
+                r = writeEquidistant(w, idx, *eq);
             } else if (auto const* ts =
                        std::get_if<osf::TimestampedChannel>(&ch)) {
-                r = write_timestamped(w, idx, *ts);
+                r = writeTimestamped(w, idx, *ts);
             } else if (auto const* var =
                        std::get_if<osf::VariableChannel>(&ch)) {
-                r = write_variable(w, idx, *var);
+                r = writeVariable(w, idx, *var);
             }
             if (!r) {
                 return ::testing::AssertionFailure()
@@ -255,12 +255,12 @@ osf::ChannelType channel_type_from(osf::DataChannel const& ch) {
         }
     }
 
-    auto out_mgr = osf::DataManager::loadFromFile(g.path);
-    if (!out_mgr) {
+    auto outMgr = osf::DataManager::loadFromFile(g.path);
+    if (!outMgr) {
         return ::testing::AssertionFailure()
-            << "load output failed: " << out_mgr.error().message;
+            << "load output failed: " << outMgr.error().message;
     }
-    return osf_test::roundtrip_managers_equal(*src_mgr, *out_mgr);
+    return osf_test::roundtripManagersEqual(*srcMgr, *outMgr);
 }
 
 }  // namespace
@@ -268,28 +268,28 @@ osf::ChannelType channel_type_from(osf::DataChannel const& ch) {
 // ── Category F — Cross-implementation roundtrip on three files ───────
 
 TEST_F(StreamingWriterExamples, roundtrip_osf5_equidistant) {
-    auto const path = examples_dir() / "generated" / "osf5_equidistant.osf";
+    auto const path = examplesDir() / "generated" / "osf5_equidistant.osf";
     ASSERT_TRUE(std::filesystem::exists(path)) << "missing: " << path;
-    EXPECT_TRUE(roundtrip_via_streaming_writer(path));
+    EXPECT_TRUE(roundtripViaStreamingWriter(path));
 }
 
 TEST_F(StreamingWriterExamples, roundtrip_osf5_scalar_numeric) {
-    auto const path = examples_dir() / "generated" / "osf5_scalar_numeric.osf";
+    auto const path = examplesDir() / "generated" / "osf5_scalar_numeric.osf";
     ASSERT_TRUE(std::filesystem::exists(path)) << "missing: " << path;
-    EXPECT_TRUE(roundtrip_via_streaming_writer(path));
+    EXPECT_TRUE(roundtripViaStreamingWriter(path));
 }
 
 TEST_F(StreamingWriterExamples, roundtrip_osf5_mixed_extended) {
-    auto const path = examples_dir() / "generated" / "osf5_mixed_extended.osf";
+    auto const path = examplesDir() / "generated" / "osf5_mixed_extended.osf";
     ASSERT_TRUE(std::filesystem::exists(path)) << "missing: " << path;
-    EXPECT_TRUE(roundtrip_via_streaming_writer(path));
+    EXPECT_TRUE(roundtripViaStreamingWriter(path));
 }
 
 // ── Category G — Reader-truncation regression ────────────────────────
 
 TEST_F(StreamingWriterExamples,
        partial_write_at_block_boundary_remains_readable) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     {
         osf::StreamingWriter w{g.path};
         osf::ChannelDef d;
@@ -313,17 +313,17 @@ TEST_F(StreamingWriterExamples,
     // (5 bytes) + only 6 of the 8 timestamp bytes.  The cut falls inside
     // the i64 timestamp field (the last 2 timestamp bytes and the entire
     // f64 sample are gone).
-    auto const original_size = std::filesystem::file_size(g.path);
-    ASSERT_GT(original_size, 10u);
-    std::filesystem::resize_file(g.path, original_size - 10);
+    auto const originalSize = std::filesystem::file_size(g.path);
+    ASSERT_GT(originalSize, 10u);
+    std::filesystem::resize_file(g.path, originalSize - 10);
 
     auto mgr = osf::DataManager::loadFromFile(g.path);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
-    auto const* ts_ch = std::get_if<osf::TimestampedChannel>(
+    auto const* tsCh = std::get_if<osf::TimestampedChannel>(
         mgr->channel("x"));
-    ASSERT_NE(ts_ch, nullptr);
-    EXPECT_EQ(ts_ch->timestampsNs.size(), 9u);
+    ASSERT_NE(tsCh, nullptr);
+    EXPECT_EQ(tsCh->timestampsNs.size(), 9u);
     EXPECT_EQ(mgr->stats.blocksTruncated, 1u);
-    EXPECT_EQ(ts_ch->timestampsNs[0], 0);
-    EXPECT_EQ(ts_ch->timestampsNs[8], 8);
+    EXPECT_EQ(tsCh->timestampsNs[0], 0);
+    EXPECT_EQ(tsCh->timestampsNs[8], 8);
 }

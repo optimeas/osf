@@ -18,7 +18,7 @@ using osf::detail::DurableFile;
 
 // Generate a unique temp path per test invocation so parallel test
 // runs do not collide.
-std::filesystem::path make_temp_path() {
+std::filesystem::path makeTempPath() {
     static std::atomic<std::uint64_t> counter{0};
     auto const n = counter.fetch_add(1) + 1;
     auto const filename = "osf_durable_file_test_" + std::to_string(n) + ".bin";
@@ -37,7 +37,7 @@ struct TempFileGuard {
 }  // namespace
 
 TEST(DurableFile, create_succeeds_on_writable_temp_dir) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     auto r = DurableFile::create(g.path);
     ASSERT_TRUE(r.has_value()) << "create failed: " << r.error().message;
     EXPECT_TRUE(r->is_open());
@@ -54,7 +54,7 @@ TEST(DurableFile, create_fails_on_nonexistent_parent_dir) {
 }
 
 TEST(DurableFile, write_appends_bytes_in_order) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     auto r = DurableFile::create(g.path);
     ASSERT_TRUE(r.has_value());
 
@@ -83,7 +83,7 @@ TEST(DurableFile, force_commits_buffered_writes) {
     // cannot disentangle force()'s contribution from close()'s, but the
     // existence of the bytes after force() (regardless of what close()
     // adds) is the necessary durability invariant.
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     auto r = DurableFile::create(g.path);
     ASSERT_TRUE(r.has_value());
     std::uint8_t const data[] = {0x42};
@@ -98,7 +98,7 @@ TEST(DurableFile, force_commits_buffered_writes) {
 }
 
 TEST(DurableFile, close_is_idempotent) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     auto r = DurableFile::create(g.path);
     ASSERT_TRUE(r.has_value());
     EXPECT_TRUE(r->close().has_value());
@@ -108,7 +108,7 @@ TEST(DurableFile, close_is_idempotent) {
 }
 
 TEST(DurableFile, write_after_close_returns_io_error) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     auto r = DurableFile::create(g.path);
     ASSERT_TRUE(r.has_value());
     ASSERT_TRUE(r->close().has_value());
@@ -120,7 +120,7 @@ TEST(DurableFile, write_after_close_returns_io_error) {
 }
 
 TEST(DurableFile, move_ctor_transfers_handle) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     auto r = DurableFile::create(g.path);
     ASSERT_TRUE(r.has_value());
     DurableFile moved{std::move(*r)};
@@ -133,7 +133,7 @@ TEST(DurableFile, move_ctor_transfers_handle) {
 }
 
 TEST(DurableFile, destructor_closes_open_file) {
-    auto const path = make_temp_path();
+    auto const path = makeTempPath();
     TempFileGuard g{path};
     {
         auto r = DurableFile::create(path);

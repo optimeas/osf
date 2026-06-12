@@ -17,7 +17,7 @@
 
 namespace {
 
-std::filesystem::path make_temp_path() {
+std::filesystem::path makeTempPath() {
     static std::atomic<std::uint64_t> counter{0};
     auto const n = counter.fetch_add(1) + 1;
     auto const filename =
@@ -33,7 +33,7 @@ struct TempFileGuard {
     }
 };
 
-osf::ChannelDef make_ts_channel(std::string name, osf::DataType type) {
+osf::ChannelDef makeTsChannel(std::string name, osf::DataType type) {
     osf::ChannelDef d;
     d.name = std::move(name);
     d.dataType = type;
@@ -51,11 +51,11 @@ constexpr std::int64_t kInterval =
 // ── 1. No repeat before the interval elapses ─────────────────────────
 
 TEST(StaleValueGuard, no_repeat_before_interval) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     {
         osf::StreamingWriter w{g.path};
         ASSERT_TRUE(w.addChannel(
-            make_ts_channel("a", osf::DataType::Double)).has_value());
+            makeTsChannel("a", osf::DataType::Double)).has_value());
         ASSERT_TRUE(w.start().has_value());
 
         osf::StaleValueGuard guard{w};
@@ -83,11 +83,11 @@ TEST(StaleValueGuard, no_repeat_before_interval) {
 // ── 2. One repeat once the interval has elapsed ──────────────────────
 
 TEST(StaleValueGuard, repeat_once_after_interval) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     {
         osf::StreamingWriter w{g.path};
         ASSERT_TRUE(w.addChannel(
-            make_ts_channel("a", osf::DataType::Double)).has_value());
+            makeTsChannel("a", osf::DataType::Double)).has_value());
         ASSERT_TRUE(w.start().has_value());
 
         osf::StaleValueGuard guard{w};
@@ -116,11 +116,11 @@ TEST(StaleValueGuard, repeat_once_after_interval) {
 // ── 3. A real write resets staleness ─────────────────────────────────
 
 TEST(StaleValueGuard, real_write_resets_staleness) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     {
         osf::StreamingWriter w{g.path};
         ASSERT_TRUE(w.addChannel(
-            make_ts_channel("a", osf::DataType::Double)).has_value());
+            makeTsChannel("a", osf::DataType::Double)).has_value());
         ASSERT_TRUE(w.start().has_value());
 
         osf::StaleValueGuard guard{w};
@@ -130,7 +130,7 @@ TEST(StaleValueGuard, real_write_resets_staleness) {
         ASSERT_TRUE(guard.writeTimestampedSample<double>(
             0, 1000 + kInterval - 1, 43.0).has_value());
 
-        // now - last_activity = 1 < interval → no repeat.
+        // now - lastActivity = 1 < interval → no repeat.
         auto polled = guard.poll(1000 + kInterval);
         ASSERT_TRUE(polled.has_value());
         EXPECT_EQ(*polled, 0u);
@@ -151,11 +151,11 @@ TEST(StaleValueGuard, real_write_resets_staleness) {
 // ── 4. At most one repeat per poll (no backfill) ─────────────────────
 
 TEST(StaleValueGuard, at_most_one_repeat_per_poll) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     {
         osf::StreamingWriter w{g.path};
         ASSERT_TRUE(w.addChannel(
-            make_ts_channel("a", osf::DataType::Double)).has_value());
+            makeTsChannel("a", osf::DataType::Double)).has_value());
         ASSERT_TRUE(w.start().has_value());
 
         osf::StaleValueGuard guard{w};
@@ -183,11 +183,11 @@ TEST(StaleValueGuard, at_most_one_repeat_per_poll) {
 // ── 5. Repeated polls keep re-emitting (interval from last activity) ─
 
 TEST(StaleValueGuard, repeated_poll_keeps_reemitting) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     {
         osf::StreamingWriter w{g.path};
         ASSERT_TRUE(w.addChannel(
-            make_ts_channel("a", osf::DataType::Double)).has_value());
+            makeTsChannel("a", osf::DataType::Double)).has_value());
         ASSERT_TRUE(w.start().has_value());
 
         osf::StaleValueGuard guard{w};
@@ -197,7 +197,7 @@ TEST(StaleValueGuard, repeated_poll_keeps_reemitting) {
         auto p1 = guard.poll(1000 + kInterval);
         ASSERT_TRUE(p1.has_value());
         EXPECT_EQ(*p1, 1u);
-        // last_activity is now 1000 + kInterval → next repeat one interval on.
+        // lastActivity is now 1000 + kInterval → next repeat one interval on.
         auto p2 = guard.poll(1000 + 2 * kInterval);
         ASSERT_TRUE(p2.has_value());
         EXPECT_EQ(*p2, 1u);
@@ -218,17 +218,17 @@ TEST(StaleValueGuard, repeated_poll_keeps_reemitting) {
 // ── 6. Multiple channels, mixed numeric types + GPS ──────────────────
 
 TEST(StaleValueGuard, multiple_channels_mixed_types) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     {
         osf::StreamingWriter w{g.path};
         ASSERT_TRUE(w.addChannel(
-            make_ts_channel("d", osf::DataType::Double)).has_value());
+            makeTsChannel("d", osf::DataType::Double)).has_value());
         ASSERT_TRUE(w.addChannel(
-            make_ts_channel("i", osf::DataType::Int32)).has_value());
+            makeTsChannel("i", osf::DataType::Int32)).has_value());
         ASSERT_TRUE(w.addChannel(
-            make_ts_channel("b", osf::DataType::Bool)).has_value());
+            makeTsChannel("b", osf::DataType::Bool)).has_value());
         ASSERT_TRUE(w.addChannel(
-            make_ts_channel("g", osf::DataType::GpsLocation)).has_value());
+            makeTsChannel("g", osf::DataType::GpsLocation)).has_value());
         ASSERT_TRUE(w.start().has_value());
 
         osf::StaleValueGuard guard{w};
@@ -279,11 +279,11 @@ TEST(StaleValueGuard, multiple_channels_mixed_types) {
 // ── 7. Batch write caches the last sample of the batch ───────────────
 
 TEST(StaleValueGuard, batch_write_caches_last_sample) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     {
         osf::StreamingWriter w{g.path};
         ASSERT_TRUE(w.addChannel(
-            make_ts_channel("a", osf::DataType::Double)).has_value());
+            makeTsChannel("a", osf::DataType::Double)).has_value());
         ASSERT_TRUE(w.start().has_value());
 
         osf::StaleValueGuard guard{w};
@@ -312,10 +312,10 @@ TEST(StaleValueGuard, batch_write_caches_last_sample) {
 // ── 8. Custom interval is honoured ───────────────────────────────────
 
 TEST(StaleValueGuard, custom_interval) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     osf::StreamingWriter w{g.path};
     ASSERT_TRUE(w.addChannel(
-        make_ts_channel("a", osf::DataType::Double)).has_value());
+        makeTsChannel("a", osf::DataType::Double)).has_value());
     ASSERT_TRUE(w.start().has_value());
 
     osf::StaleValueGuard guard{w, /*repeatIntervalNs=*/5000};
@@ -335,10 +335,10 @@ TEST(StaleValueGuard, custom_interval) {
 // ── 9. poll with un-advanced now re-emits nothing ────────────────────
 
 TEST(StaleValueGuard, poll_without_advancing_now) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     osf::StreamingWriter w{g.path};
     ASSERT_TRUE(w.addChannel(
-        make_ts_channel("a", osf::DataType::Double)).has_value());
+        makeTsChannel("a", osf::DataType::Double)).has_value());
     ASSERT_TRUE(w.start().has_value());
 
     osf::StaleValueGuard guard{w};
@@ -353,13 +353,13 @@ TEST(StaleValueGuard, poll_without_advancing_now) {
 // ── 10. A channel never written through the guard is not re-emitted ──
 
 TEST(StaleValueGuard, untracked_channel_ignored) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     {
         osf::StreamingWriter w{g.path};
         ASSERT_TRUE(w.addChannel(
-            make_ts_channel("a", osf::DataType::Double)).has_value());
+            makeTsChannel("a", osf::DataType::Double)).has_value());
         ASSERT_TRUE(w.addChannel(
-            make_ts_channel("b", osf::DataType::Double)).has_value());
+            makeTsChannel("b", osf::DataType::Double)).has_value());
         ASSERT_TRUE(w.start().has_value());
 
         osf::StaleValueGuard guard{w};
@@ -387,12 +387,12 @@ TEST(StaleValueGuard, untracked_channel_ignored) {
 // ── 11. isTracked / forget / clear ──────────────────────────────────
 
 TEST(StaleValueGuard, is_tracked_forget_clear) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     osf::StreamingWriter w{g.path};
     ASSERT_TRUE(w.addChannel(
-        make_ts_channel("a", osf::DataType::Double)).has_value());
+        makeTsChannel("a", osf::DataType::Double)).has_value());
     ASSERT_TRUE(w.addChannel(
-        make_ts_channel("b", osf::DataType::Double)).has_value());
+        makeTsChannel("b", osf::DataType::Double)).has_value());
     ASSERT_TRUE(w.start().has_value());
 
     osf::StaleValueGuard guard{w};
@@ -403,15 +403,15 @@ TEST(StaleValueGuard, is_tracked_forget_clear) {
 
     guard.forget(0);
     EXPECT_FALSE(guard.isTracked(0));
-    auto after_forget = guard.poll(1000 + kInterval);
-    ASSERT_TRUE(after_forget.has_value());
-    EXPECT_EQ(*after_forget, 1u);  // only channel 1 remains
+    auto afterForget = guard.poll(1000 + kInterval);
+    ASSERT_TRUE(afterForget.has_value());
+    EXPECT_EQ(*afterForget, 1u);  // only channel 1 remains
 
     guard.clear();
     EXPECT_FALSE(guard.isTracked(1));
-    auto after_clear = guard.poll(1000 + 2 * kInterval);
-    ASSERT_TRUE(after_clear.has_value());
-    EXPECT_EQ(*after_clear, 0u);
+    auto afterClear = guard.poll(1000 + 2 * kInterval);
+    ASSERT_TRUE(afterClear.has_value());
+    EXPECT_EQ(*afterClear, 0u);
 
     ASSERT_TRUE(w.close().has_value());
 }
@@ -419,10 +419,10 @@ TEST(StaleValueGuard, is_tracked_forget_clear) {
 // ── 12. A writer error during re-emit propagates out of poll ─────────
 
 TEST(StaleValueGuard, writer_error_propagates) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     osf::StreamingWriter w{g.path};
     ASSERT_TRUE(w.addChannel(
-        make_ts_channel("a", osf::DataType::Double)).has_value());
+        makeTsChannel("a", osf::DataType::Double)).has_value());
     ASSERT_TRUE(w.start().has_value());
 
     osf::StaleValueGuard guard{w};

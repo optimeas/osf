@@ -81,7 +81,7 @@ TEST(BlockWriter, EquidistantDoubleRoundtripsThroughOstream) {
     ASSERT_TRUE(idx.has_value());
 
     std::vector<double> samples{1.0, 2.0, 3.0, 4.0, 5.0};
-    ASSERT_TRUE(w.addEquidistantSegment(*idx, /*start_ns=*/1000,
+    ASSERT_TRUE(w.addEquidistantSegment(*idx, /*startNs=*/1000,
         /*rateHz=*/100.0, samples.data(), samples.size()).has_value());
 
     std::ostringstream out;
@@ -136,10 +136,10 @@ TEST(BlockWriter, TimestampedInt32Roundtrips) {
     ASSERT_TRUE(mgr.has_value());
     auto const* ch = mgr->channel("ts");
     ASSERT_NE(ch, nullptr);
-    auto const* ts_ch = std::get_if<osf::TimestampedChannel>(ch);
-    ASSERT_NE(ts_ch, nullptr);
+    auto const* tsCh = std::get_if<osf::TimestampedChannel>(ch);
+    ASSERT_NE(tsCh, nullptr);
     // asInt32Flat returns Result<vector<pair<int64_t, int32_t>>>
-    auto flat = osf::asInt32Flat(*ts_ch);
+    auto flat = osf::asInt32Flat(*tsCh);
     ASSERT_TRUE(flat.has_value());
     ASSERT_EQ(flat->size(), 3u);
     EXPECT_EQ((*flat)[0].second, -7);
@@ -165,9 +165,9 @@ TEST(BlockWriter, TimestampedDoubleRoundtrips) {
     ASSERT_TRUE(mgr.has_value());
     auto const* ch = mgr->channel("tsd");
     ASSERT_NE(ch, nullptr);
-    auto const* ts_ch = std::get_if<osf::TimestampedChannel>(ch);
-    ASSERT_NE(ts_ch, nullptr);
-    auto flat = osf::asDoublesFlat(*ts_ch);
+    auto const* tsCh = std::get_if<osf::TimestampedChannel>(ch);
+    ASSERT_NE(tsCh, nullptr);
+    auto flat = osf::asDoublesFlat(*tsCh);
     ASSERT_TRUE(flat.has_value());
     ASSERT_EQ(flat->size(), 3u);
     EXPECT_DOUBLE_EQ((*flat)[0].second, 1.5);
@@ -210,19 +210,19 @@ TEST(BlockWriter, TimestampedDatatypeMismatchRejected) {
 
 // Helper: parse the magic header to find block-stream offset and return the
 // block-stream bytes from an ostringstream output.
-static std::vector<std::uint8_t> extract_block_stream(std::string const& bytes) {
+static std::vector<std::uint8_t> extractBlockStream(std::string const& bytes) {
     // Magic line: "OSF5 <len>\n"
     std::size_t nl = bytes.find('\n');
-    std::string magic_line = bytes.substr(0, nl);
-    std::size_t space = magic_line.find(' ');
-    std::size_t metablockLen = std::stoull(magic_line.substr(space + 1));
-    std::size_t block_start = nl + 1 + metablockLen;
-    std::vector<std::uint8_t> block_stream;
-    block_stream.reserve(bytes.size() - block_start);
-    for (std::size_t i = block_start; i < bytes.size(); ++i) {
-        block_stream.push_back(static_cast<std::uint8_t>(bytes[i]));
+    std::string magicLine = bytes.substr(0, nl);
+    std::size_t space = magicLine.find(' ');
+    std::size_t metablockLen = std::stoull(magicLine.substr(space + 1));
+    std::size_t blockStart = nl + 1 + metablockLen;
+    std::vector<std::uint8_t> blockStream;
+    blockStream.reserve(bytes.size() - blockStart);
+    for (std::size_t i = blockStart; i < bytes.size(); ++i) {
+        blockStream.push_back(static_cast<std::uint8_t>(bytes[i]));
     }
-    return block_stream;
+    return blockStream;
 }
 
 TEST(BlockWriter, TimestampedBoolByteExact) {
@@ -241,7 +241,7 @@ TEST(BlockWriter, TimestampedBoolByteExact) {
         ASSERT_TRUE(w.addTimestampedSamples<bool>(*idx, ts, v, 2).has_value());
         std::ostringstream out;
         ASSERT_TRUE(w.writeTo(out).has_value());
-        auto bs = extract_block_stream(out.str());
+        auto bs = extractBlockStream(out.str());
         // Multi-sample: ctrl(1) + N(4) + [ts(8)+val(1)] * 2 = 1+4+18 = 23
         // Frame: sov(2) + channel(2) + payload = 2+2+23 = 27
         ASSERT_EQ(bs.size(), 27u);
@@ -267,7 +267,7 @@ TEST(BlockWriter, TimestampedBoolByteExact) {
         ASSERT_TRUE(w.addTimestampedSample<std::int8_t>(*idx, ts, v).has_value());
         std::ostringstream out;
         ASSERT_TRUE(w.writeTo(out).has_value());
-        auto bs = extract_block_stream(out.str());
+        auto bs = extractBlockStream(out.str());
         // Single-sample: ctrl(1)+ts(8)+val(1)=10; frame=14
         ASSERT_EQ(bs.size(), 14u);
         // Single-sample frame layout: [u16 len][u16 channel][u8 ctrl][i64 ts][value]
@@ -290,7 +290,7 @@ TEST(BlockWriter, TimestampedBoolByteExact) {
         ASSERT_TRUE(w.addTimestampedSample<std::uint8_t>(*idx, ts, v).has_value());
         std::ostringstream out;
         ASSERT_TRUE(w.writeTo(out).has_value());
-        auto bs = extract_block_stream(out.str());
+        auto bs = extractBlockStream(out.str());
         // Single-sample: ctrl(1)+ts(8)+val(1)=10; frame=14
         ASSERT_EQ(bs.size(), 14u);
         // Single-sample frame layout: [u16 len][u16 channel][u8 ctrl][i64 ts][value]
@@ -327,9 +327,9 @@ TEST(BlockWriter, GpsRoundtrips) {
     ASSERT_TRUE(mgr.has_value());
     auto const* ch = mgr->channel("gps");
     ASSERT_NE(ch, nullptr);
-    auto const* ts_ch = std::get_if<osf::TimestampedChannel>(ch);
-    ASSERT_NE(ts_ch, nullptr);
-    auto flat = osf::asGpsFlat(*ts_ch);
+    auto const* tsCh = std::get_if<osf::TimestampedChannel>(ch);
+    ASSERT_NE(tsCh, nullptr);
+    auto flat = osf::asGpsFlat(*tsCh);
     ASSERT_TRUE(flat.has_value());
     ASSERT_EQ(flat->size(), 2u);
     EXPECT_DOUBLE_EQ((*flat)[0].second.latitude,  47.1);
@@ -363,9 +363,9 @@ TEST(BlockWriter, StringRoundtrips) {
     ASSERT_TRUE(mgr.has_value());
     auto const* ch = mgr->channel("str");
     ASSERT_NE(ch, nullptr);
-    auto const* var_ch = std::get_if<osf::VariableChannel>(ch);
-    ASSERT_NE(var_ch, nullptr);
-    auto strs = var_ch->asStrings();
+    auto const* varCh = std::get_if<osf::VariableChannel>(ch);
+    ASSERT_NE(varCh, nullptr);
+    auto strs = varCh->asStrings();
     ASSERT_TRUE(strs.has_value());
     ASSERT_EQ((*strs)->size(), 2u);
     EXPECT_EQ((**strs)[0], "alpha");
@@ -401,13 +401,13 @@ TEST(BlockWriter, BinaryRoundtrips) {
     ASSERT_TRUE(mgr.has_value());
     auto const* ch = mgr->channel("bin");
     ASSERT_NE(ch, nullptr);
-    auto const* var_ch = std::get_if<osf::VariableChannel>(ch);
-    ASSERT_NE(var_ch, nullptr);
-    auto bins_out = var_ch->asBinaries();
-    ASSERT_TRUE(bins_out.has_value());
-    ASSERT_EQ((*bins_out)->size(), 2u);
-    EXPECT_EQ((**bins_out)[0], v0);
-    EXPECT_EQ((**bins_out)[1], v1);
+    auto const* varCh = std::get_if<osf::VariableChannel>(ch);
+    ASSERT_NE(varCh, nullptr);
+    auto binsOut = varCh->asBinaries();
+    ASSERT_TRUE(binsOut.has_value());
+    ASSERT_EQ((*binsOut)->size(), 2u);
+    EXPECT_EQ((**binsOut)[0], v0);
+    EXPECT_EQ((**binsOut)[1], v1);
 }
 
 // ── Task 6: Variable auto-bump sov 2->4 ──────────────────────────────
@@ -469,12 +469,12 @@ TEST(BlockWriter, BinaryBoundary65526SucceedsAtSov2) {
     ASSERT_NE(ch, nullptr);
     // sov must stay at 2 (no bump needed at exactly capacity)
     EXPECT_EQ(osf::channelMeta(*ch).sizeOfLengthValue, 2u);
-    auto const* var_ch = std::get_if<osf::VariableChannel>(ch);
-    ASSERT_NE(var_ch, nullptr);
-    auto bins_out = var_ch->asBinaries();
-    ASSERT_TRUE(bins_out.has_value());
-    ASSERT_EQ((*bins_out)->size(), 1u);
-    EXPECT_EQ((**bins_out)[0].size(), 65526u);
+    auto const* varCh = std::get_if<osf::VariableChannel>(ch);
+    ASSERT_NE(varCh, nullptr);
+    auto binsOut = varCh->asBinaries();
+    ASSERT_TRUE(binsOut.has_value());
+    ASSERT_EQ((*binsOut)->size(), 1u);
+    EXPECT_EQ((**binsOut)[0].size(), 65526u);
 }
 
 // ── Task 6: String datatype mismatch rejected ─────────────────────────
@@ -499,12 +499,12 @@ TEST(BlockWriter, StringDatatypeMismatchRejected) {
 /// Helper: build a BlockWriter source with one equidistant double channel,
 /// one timestamped int32 channel, and one string channel; emit it to a
 /// DataManager.
-static osf::DataManager make_mixed_manager() {
+static osf::DataManager makeMixedManager() {
     osf::BlockWriter src;
     src.setCreator("task7-test");
 
     // Equidistant double channel
-    auto eq_idx = src.addChannel([] {
+    auto eqIdx = src.addChannel([] {
         osf::ChannelDef d;
         d.name = "eq_dbl";
         d.dataType = osf::DataType::Double;
@@ -513,13 +513,13 @@ static osf::DataManager make_mixed_manager() {
         d.physicalUnit = "m/s";
         return d;
     }());
-    EXPECT_TRUE(eq_idx.has_value());
-    std::vector<double> eq_vals{1.0, 2.0, 3.0};
-    EXPECT_TRUE(src.addEquidistantSegment(*eq_idx, 1000, 100.0,
-        eq_vals.data(), eq_vals.size()).has_value());
+    EXPECT_TRUE(eqIdx.has_value());
+    std::vector<double> eqVals{1.0, 2.0, 3.0};
+    EXPECT_TRUE(src.addEquidistantSegment(*eqIdx, 1000, 100.0,
+        eqVals.data(), eqVals.size()).has_value());
 
     // Timestamped int32 channel
-    auto ts_idx = src.addChannel([] {
+    auto tsIdx = src.addChannel([] {
         osf::ChannelDef d;
         d.name = "ts_i32";
         d.dataType = osf::DataType::Int32;
@@ -527,13 +527,13 @@ static osf::DataManager make_mixed_manager() {
         d.sizeOfLengthValue = 2;
         return d;
     }());
-    EXPECT_TRUE(ts_idx.has_value());
+    EXPECT_TRUE(tsIdx.has_value());
     std::vector<std::int64_t> ts{10, 20, 30, 40};
     std::vector<std::int32_t> v{-1, 0, 42, 100};
-    EXPECT_TRUE(src.addTimestampedSamples<std::int32_t>(*ts_idx, ts.data(), v.data(), 4).has_value());
+    EXPECT_TRUE(src.addTimestampedSamples<std::int32_t>(*tsIdx, ts.data(), v.data(), 4).has_value());
 
     // String variable channel
-    auto str_idx = src.addChannel([] {
+    auto strIdx = src.addChannel([] {
         osf::ChannelDef d;
         d.name = "str_chan";
         d.dataType = osf::DataType::String;
@@ -541,10 +541,10 @@ static osf::DataManager make_mixed_manager() {
         d.sizeOfLengthValue = 2;
         return d;
     }());
-    EXPECT_TRUE(str_idx.has_value());
-    std::vector<std::int64_t> str_ts{100, 200};
+    EXPECT_TRUE(strIdx.has_value());
+    std::vector<std::int64_t> strTs{100, 200};
     std::vector<std::string_view> svs{"hello", "world"};
-    EXPECT_TRUE(src.addStringSamples(*str_idx, str_ts.data(), svs.data(), svs.size()).has_value());
+    EXPECT_TRUE(src.addStringSamples(*strIdx, strTs.data(), svs.data(), svs.size()).has_value());
 
     std::ostringstream oss;
     auto wr = src.writeTo(oss);
@@ -558,7 +558,7 @@ static osf::DataManager make_mixed_manager() {
 }
 
 TEST(BlockWriter, FromManagerRoundtripsMixedChannels) {
-    auto mgr = make_mixed_manager();
+    auto mgr = makeMixedManager();
 
     // Round-trip through fromManager
     auto bw = osf::BlockWriter::fromManager(mgr);
@@ -576,10 +576,10 @@ TEST(BlockWriter, FromManagerRoundtripsMixedChannels) {
     ASSERT_EQ(mgr2->channels().size(), 3u);
 
     // Equidistant double channel
-    auto const* eq_ch = mgr2->channel("eq_dbl");
-    ASSERT_NE(eq_ch, nullptr);
-    EXPECT_EQ(osf::channelDataType(*eq_ch), osf::DataType::Double);
-    auto const* eq = std::get_if<osf::EquidistantChannel>(eq_ch);
+    auto const* eqCh = mgr2->channel("eq_dbl");
+    ASSERT_NE(eqCh, nullptr);
+    EXPECT_EQ(osf::channelDataType(*eqCh), osf::DataType::Double);
+    auto const* eq = std::get_if<osf::EquidistantChannel>(eqCh);
     ASSERT_NE(eq, nullptr);
     ASSERT_EQ(eq->segments.size(), 1u);
     EXPECT_EQ(eq->segments[0].sampleCount, 3u);
@@ -590,10 +590,10 @@ TEST(BlockWriter, FromManagerRoundtripsMixedChannels) {
     EXPECT_DOUBLE_EQ((*flat)[2], 3.0);
 
     // Timestamped int32 channel
-    auto const* ts_ch = mgr2->channel("ts_i32");
-    ASSERT_NE(ts_ch, nullptr);
-    EXPECT_EQ(osf::channelDataType(*ts_ch), osf::DataType::Int32);
-    auto const* ts = std::get_if<osf::TimestampedChannel>(ts_ch);
+    auto const* tsCh = mgr2->channel("ts_i32");
+    ASSERT_NE(tsCh, nullptr);
+    EXPECT_EQ(osf::channelDataType(*tsCh), osf::DataType::Int32);
+    auto const* ts = std::get_if<osf::TimestampedChannel>(tsCh);
     ASSERT_NE(ts, nullptr);
     EXPECT_EQ(ts->timestampsNs.size(), 4u);
     auto flat32 = osf::asInt32Flat(*ts);
@@ -603,10 +603,10 @@ TEST(BlockWriter, FromManagerRoundtripsMixedChannels) {
     EXPECT_EQ((*flat32)[3].second, 100);
 
     // String variable channel
-    auto const* str_ch = mgr2->channel("str_chan");
-    ASSERT_NE(str_ch, nullptr);
-    EXPECT_EQ(osf::channelDataType(*str_ch), osf::DataType::String);
-    auto const* var = std::get_if<osf::VariableChannel>(str_ch);
+    auto const* strCh = mgr2->channel("str_chan");
+    ASSERT_NE(strCh, nullptr);
+    EXPECT_EQ(osf::channelDataType(*strCh), osf::DataType::String);
+    auto const* var = std::get_if<osf::VariableChannel>(strCh);
     ASSERT_NE(var, nullptr);
     auto strs = var->asStrings();
     ASSERT_TRUE(strs.has_value());
@@ -616,7 +616,7 @@ TEST(BlockWriter, FromManagerRoundtripsMixedChannels) {
 }
 
 TEST(BlockWriter, FreeWriteToRoundtrips) {
-    auto mgr = make_mixed_manager();
+    auto mgr = makeMixedManager();
 
     std::ostringstream oss;
     auto r = osf::writeTo(mgr, oss);
@@ -661,13 +661,13 @@ TEST(BlockWriter, FromManagerPreservesMultipleEquidistantSegments) {
     // Segment 1: start=0 ns, rate=100 Hz, 3 samples {1, 2, 3}
     std::vector<double> seg1{1.0, 2.0, 3.0};
     ASSERT_TRUE(w.addEquidistantSegment(
-        *idx, /*start_ns=*/0, /*rateHz=*/100.0,
+        *idx, /*startNs=*/0, /*rateHz=*/100.0,
         seg1.data(), seg1.size()).has_value());
 
     // Segment 2: start=1 000 000 000 ns (= 1 s), rate=100 Hz, 2 samples {10, 20}
     std::vector<double> seg2{10.0, 20.0};
     ASSERT_TRUE(w.addEquidistantSegment(
-        *idx, /*start_ns=*/1'000'000'000LL, /*rateHz=*/100.0,
+        *idx, /*startNs=*/1'000'000'000LL, /*rateHz=*/100.0,
         seg2.data(), seg2.size()).has_value());
 
     // Emit first time.

@@ -26,14 +26,14 @@ protected:
             << "OSF_EXAMPLES_DIR does not exist: " << dir;
     }
 
-    static std::filesystem::path examples_dir() {
+    static std::filesystem::path examplesDir() {
         return std::filesystem::path{OSF_EXAMPLES_DIR};
     }
 
     // Read magic header from `path`, then read exactly metablockLen
     // bytes that follow. Returns the metablock bytes; ASSERTs on
     // failure (caller wraps in a fixture method).
-    static std::vector<std::uint8_t> read_metablock(std::filesystem::path const& path) {
+    static std::vector<std::uint8_t> readMetablock(std::filesystem::path const& path) {
         auto header = osf::parseMagicHeader(path);
         EXPECT_TRUE(header.has_value())
             << "magic header parse failed for " << path << ": "
@@ -68,7 +68,7 @@ protected:
 // ---------------------------------------------------------------------
 
 TEST_F(MetablockExamplesTest, osf5_equidistant_snapshot) {
-    auto bytes = read_metablock(examples_dir() / "generated" / "osf5_equidistant.osf");
+    auto bytes = readMetablock(examplesDir() / "generated" / "osf5_equidistant.osf");
     ASSERT_FALSE(bytes.empty());
 
     auto mb = osf::parseMetablockJson(bytes.data(), bytes.size());
@@ -94,7 +94,7 @@ TEST_F(MetablockExamplesTest, osf5_equidistant_snapshot) {
 // ---------------------------------------------------------------------
 
 TEST_F(MetablockExamplesTest, all_osf5_generated_files_parse) {
-    auto generated = examples_dir() / "generated";
+    auto generated = examplesDir() / "generated";
     ASSERT_TRUE(std::filesystem::exists(generated))
         << "examples/generated/ missing";
 
@@ -106,7 +106,7 @@ TEST_F(MetablockExamplesTest, all_osf5_generated_files_parse) {
 
         SCOPED_TRACE("file: " + filename);
 
-        auto bytes = read_metablock(entry.path());
+        auto bytes = readMetablock(entry.path());
         ASSERT_FALSE(bytes.empty());
 
         auto mb = osf::parseMetablockJson(bytes.data(), bytes.size());
@@ -135,19 +135,19 @@ TEST_F(MetablockExamplesTest, all_osf5_generated_files_parse) {
 // ---------------------------------------------------------------------
 
 TEST_F(MetablockExamplesTest, osf5_gpslocation_file_declares_gpslocation_channel) {
-    auto bytes = read_metablock(examples_dir() / "generated" / "osf5_gpslocation.osf");
+    auto bytes = readMetablock(examplesDir() / "generated" / "osf5_gpslocation.osf");
     ASSERT_FALSE(bytes.empty());
 
     auto mb = osf::parseMetablockJson(bytes.data(), bytes.size());
     ASSERT_TRUE(mb.has_value()) << mb.error().message;
 
-    bool saw_gps = false;
+    bool sawGps = false;
     for (auto const& ch : mb->channels) {
         if (ch.dataType == osf::DataType::GpsLocation) {
-            saw_gps = true;
+            sawGps = true;
             EXPECT_EQ(ch.dataTypeRaw, "gpslocation");
         }
     }
-    EXPECT_TRUE(saw_gps)
+    EXPECT_TRUE(sawGps)
         << "osf5_gpslocation.osf produced no GpsLocation channel";
 }

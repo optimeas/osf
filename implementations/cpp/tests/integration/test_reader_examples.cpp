@@ -26,7 +26,7 @@ protected:
             << "OSF_EXAMPLES_DIR does not exist: " << dir;
     }
 
-    static std::filesystem::path examples_dir() {
+    static std::filesystem::path examplesDir() {
         return std::filesystem::path{OSF_EXAMPLES_DIR};
     }
 
@@ -38,7 +38,7 @@ protected:
         std::uintmax_t fileSize = 0;
     };
 
-    static OpenedFile open_osf(std::filesystem::path const& path) {
+    static OpenedFile openOsf(std::filesystem::path const& path) {
         OpenedFile out;
         out.fileSize = std::filesystem::file_size(path);
 
@@ -86,7 +86,7 @@ protected:
 // ---------------------------------------------------------------------
 
 TEST_F(ReaderExamplesTest, every_generated_reference_file_reads_clean) {
-    auto generated = examples_dir() / "generated";
+    auto generated = examplesDir() / "generated";
     ASSERT_TRUE(std::filesystem::exists(generated));
 
     int read = 0;
@@ -95,7 +95,7 @@ TEST_F(ReaderExamplesTest, every_generated_reference_file_reads_clean) {
         auto filename = entry.path().filename().string();
         SCOPED_TRACE("file: " + filename);
 
-        auto opened = open_osf(entry.path());
+        auto opened = openOsf(entry.path());
         ASSERT_TRUE(opened.stream.is_open());
 
         osf::BlockReader r(opened.stream, opened.meta);
@@ -103,11 +103,11 @@ TEST_F(ReaderExamplesTest, every_generated_reference_file_reads_clean) {
 
         std::uint64_t produced = 0;
         std::uint64_t errors = 0;
-        for (auto& blk_r : r) {
-            if (!blk_r.has_value()) {
+        for (auto& blkR : r) {
+            if (!blkR.has_value()) {
                 ++errors;
                 ADD_FAILURE() << "block read error in " << filename << ": "
-                              << blk_r.error().message;
+                              << blkR.error().message;
                 break;
             }
             ++produced;
@@ -127,15 +127,15 @@ TEST_F(ReaderExamplesTest, every_generated_reference_file_reads_clean) {
 // ---------------------------------------------------------------------
 
 TEST_F(ReaderExamplesTest, osf5_scalar_int64_first_block_decodes) {
-    auto opened = open_osf(examples_dir() / "generated" / "osf5_scalar_int64.osf");
+    auto opened = openOsf(examplesDir() / "generated" / "osf5_scalar_int64.osf");
     ASSERT_TRUE(opened.stream.is_open());
 
     osf::BlockReader r(opened.stream, opened.meta);
-    auto blk_r = r.next();
-    ASSERT_TRUE(blk_r && blk_r->has_value())
-        << (blk_r && !blk_r->has_value() ? blk_r->error().message
+    auto blkR = r.next();
+    ASSERT_TRUE(blkR && blkR->has_value())
+        << (blkR && !blkR->has_value() ? blkR->error().message
                                           : std::string{"no block"});
-    auto const& blk = **blk_r;
+    auto const& blk = **blkR;
     EXPECT_EQ(blk.channelIndex, 0);
 
     auto const* ad = std::get_if<osf::AbsTimestampData>(&blk.kind);
@@ -154,13 +154,13 @@ TEST_F(ReaderExamplesTest, osf5_scalar_int64_first_block_decodes) {
 // ---------------------------------------------------------------------
 
 TEST_F(ReaderExamplesTest, osf4_equidistant_first_block_is_StartData) {
-    auto opened = open_osf(examples_dir() / "generated" / "osf4_equidistant.osf");
+    auto opened = openOsf(examplesDir() / "generated" / "osf4_equidistant.osf");
     ASSERT_TRUE(opened.stream.is_open());
 
     osf::BlockReader r(opened.stream, opened.meta);
-    auto blk_r = r.next();
-    ASSERT_TRUE(blk_r && blk_r->has_value());
-    auto const& blk = **blk_r;
+    auto blkR = r.next();
+    ASSERT_TRUE(blkR && blkR->has_value());
+    auto const& blk = **blkR;
 
     auto const* sd = std::get_if<osf::StartData>(&blk.kind);
     ASSERT_NE(sd, nullptr) << "first block of osf4_equidistant is not StartData";
@@ -174,16 +174,16 @@ TEST_F(ReaderExamplesTest, osf4_equidistant_first_block_is_StartData) {
 // ---------------------------------------------------------------------
 
 TEST_F(ReaderExamplesTest, motorbike_osf_reads_clean) {
-    auto path = examples_dir() / "motorbike.osf";
+    auto path = examplesDir() / "motorbike.osf";
     if (!std::filesystem::exists(path)) GTEST_SKIP() << "motorbike.osf missing";
 
-    auto opened = open_osf(path);
+    auto opened = openOsf(path);
     ASSERT_TRUE(opened.stream.is_open());
 
     osf::BlockReader r(opened.stream, opened.meta);
     std::uint64_t blocks = 0;
-    for (auto& blk_r : r) {
-        ASSERT_TRUE(blk_r.has_value()) << blk_r.error().message;
+    for (auto& blkR : r) {
+        ASSERT_TRUE(blkR.has_value()) << blkR.error().message;
         ++blocks;
     }
     EXPECT_GT(blocks, 0u);
@@ -195,16 +195,16 @@ TEST_F(ReaderExamplesTest, motorbike_osf_reads_clean) {
 }
 
 TEST_F(ReaderExamplesTest, steam_loco_osf_reads_clean) {
-    auto path = examples_dir() / "steam_loco.osf";
+    auto path = examplesDir() / "steam_loco.osf";
     if (!std::filesystem::exists(path)) GTEST_SKIP() << "steam_loco.osf missing";
 
-    auto opened = open_osf(path);
+    auto opened = openOsf(path);
     ASSERT_TRUE(opened.stream.is_open());
 
     osf::BlockReader r(opened.stream, opened.meta);
     std::uint64_t blocks = 0;
-    for (auto& blk_r : r) {
-        ASSERT_TRUE(blk_r.has_value()) << blk_r.error().message;
+    for (auto& blkR : r) {
+        ASSERT_TRUE(blkR.has_value()) << blkR.error().message;
         ++blocks;
     }
     EXPECT_GT(blocks, 0u);
@@ -217,20 +217,20 @@ TEST_F(ReaderExamplesTest, steam_loco_osf_reads_clean) {
 // ---------------------------------------------------------------------
 
 TEST_F(ReaderExamplesTest, reader_stats_are_populated) {
-    auto opened = open_osf(examples_dir() / "generated" / "osf4_equidistant.osf");
+    auto opened = openOsf(examplesDir() / "generated" / "osf4_equidistant.osf");
     ASSERT_TRUE(opened.stream.is_open());
 
     osf::BlockReader r(opened.stream, opened.meta);
-    for (auto& blk_r : r) {
-        ASSERT_TRUE(blk_r.has_value());
+    for (auto& blkR : r) {
+        ASSERT_TRUE(blkR.has_value());
     }
     auto stats = r.stats();
     EXPECT_GT(stats.blocksRead, 0u);
     EXPECT_GT(stats.dataSectionSizeBytes, 0u);
     EXPECT_GT(stats.channelsWithData, 0u);
-    bool any_time_range = false;
+    bool anyTimeRange = false;
     for (auto const& [_, cs] : stats.perChannel) {
-        if (cs.timeRangeNs.has_value()) { any_time_range = true; break; }
+        if (cs.timeRangeNs.has_value()) { anyTimeRange = true; break; }
     }
-    EXPECT_TRUE(any_time_range);
+    EXPECT_TRUE(anyTimeRange);
 }

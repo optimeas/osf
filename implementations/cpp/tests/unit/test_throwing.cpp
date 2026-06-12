@@ -22,7 +22,7 @@
 
 namespace {
 
-std::filesystem::path make_temp_path() {
+std::filesystem::path makeTempPath() {
     static std::atomic<std::uint64_t> counter{0};
     auto const n = counter.fetch_add(1) + 1;
     return std::filesystem::temp_directory_path() /
@@ -38,7 +38,7 @@ struct TempFileGuard {
 };
 
 // Build a small OSF5 fixture (one timestamped double channel) in memory.
-osf::BlockWriter make_fixture_writer() {
+osf::BlockWriter makeFixtureWriter() {
     osf::BlockWriter w;
     osf::ChannelDef d;
     d.name = "Sensor/T";
@@ -53,9 +53,9 @@ osf::BlockWriter make_fixture_writer() {
 }
 
 // Serialize the fixture to a string (a valid plain OSF5 byte stream).
-std::string fixture_bytes() {
+std::string fixtureBytes() {
     std::ostringstream ss;
-    EXPECT_TRUE(make_fixture_writer().writeTo(ss).has_value());
+    EXPECT_TRUE(makeFixtureWriter().writeTo(ss).has_value());
     return ss.str();
 }
 
@@ -64,8 +64,8 @@ std::string fixture_bytes() {
 // ── load ──────────────────────────────────────────────────────────────
 
 TEST(Throwing, load_success_returns_manager) {
-    TempFileGuard g{make_temp_path()};
-    ASSERT_TRUE(make_fixture_writer().writeToFile(g.path).has_value());
+    TempFileGuard g{makeTempPath()};
+    ASSERT_TRUE(makeFixtureWriter().writeToFile(g.path).has_value());
 
     auto mgr = osf::throwing::load(g.path);   // by value, no Result
     ASSERT_NE(mgr.channel("Sensor/T"), nullptr);
@@ -87,7 +87,7 @@ TEST(Throwing, load_missing_file_throws) {
 }
 
 TEST(Throwing, load_from_istream_success) {
-    std::istringstream in(fixture_bytes(), std::ios::binary);
+    std::istringstream in(fixtureBytes(), std::ios::binary);
     auto mgr = osf::throwing::load(in);
     EXPECT_NE(mgr.channel("Sensor/T"), nullptr);
 }
@@ -100,19 +100,19 @@ TEST(Throwing, load_from_istream_garbage_throws) {
 // ── write ─────────────────────────────────────────────────────────────
 
 TEST(Throwing, write_to_file_round_trips) {
-    std::istringstream in(fixture_bytes(), std::ios::binary);
+    std::istringstream in(fixtureBytes(), std::ios::binary);
     auto const src = osf::throwing::load(in);
 
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     osf::throwing::writeToFile(src, g.path);   // void, throws on error
 
     auto const reloaded = osf::DataManager::loadFromFile(g.path);
     ASSERT_TRUE(reloaded.has_value()) << reloaded.error().message;
-    EXPECT_TRUE(osf_test::roundtrip_managers_equal(src, *reloaded));
+    EXPECT_TRUE(osf_test::roundtripManagersEqual(src, *reloaded));
 }
 
 TEST(Throwing, write_to_ostream_round_trips) {
-    std::istringstream in(fixture_bytes(), std::ios::binary);
+    std::istringstream in(fixtureBytes(), std::ios::binary);
     auto const src = osf::throwing::load(in);
 
     std::ostringstream out;
@@ -121,13 +121,13 @@ TEST(Throwing, write_to_ostream_round_trips) {
     std::istringstream back(out.str(), std::ios::binary);
     auto const reloaded = osf::DataManager::loadFromStream(back);
     ASSERT_TRUE(reloaded.has_value()) << reloaded.error().message;
-    EXPECT_TRUE(osf_test::roundtrip_managers_equal(src, *reloaded));
+    EXPECT_TRUE(osf_test::roundtripManagersEqual(src, *reloaded));
 }
 
 // ── unwrap ────────────────────────────────────────────────────────────
 
 TEST(Throwing, unwrap_void_success_does_not_throw) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     osf::StreamingWriter w{g.path};
     auto const idx = osf::throwing::unwrap(w.addChannel([] {
         osf::ChannelDef d;
@@ -142,7 +142,7 @@ TEST(Throwing, unwrap_void_success_does_not_throw) {
 }
 
 TEST(Throwing, unwrap_void_failure_throws) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     osf::StreamingWriter w{g.path};
     // start() with no channels → InvalidArgument.
     try {
