@@ -143,7 +143,7 @@ ctest --test-dir build                        # Windows: -C Debug
 - **Integrations-Tests** (`tests/integration/`) lesen die echten
   Beispieldateien unter `examples/` (Felddaten + die 17 generierten
   Referenzdateien) und beweisen u. a. bitgenaue Round-Trips.
-- **C-ABI-Test** (`tests/c_api/test_c_api.c`) ist ein eigenständiges
+- **C-ABI-Test** (`tests/capi/test_capi.c`) ist ein eigenständiges
   C99-Programm — er beweist C-Kompatibilität und DLL-Linkage.
 
 Erwartung: **alle Tests grün** (Stand 2026-06-12: 321 Tests mit

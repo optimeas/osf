@@ -256,7 +256,7 @@ implementations/cpp/
 ├── tests/
 │   ├── unit/                — GoogleTest-Units (synthetische Daten)
 │   ├── integration/         — Tests gegen examples/*.osf(z)
-│   └── c_api/               — reiner C99-Test für osf-c
+│   └── capi/                — reiner C99-Test für osf-c
 ├── examples/                — inspect, dump, write, copy
 └── third_party/             — tl::expected, nlohmann/json, pugixml (vendort)
 ```

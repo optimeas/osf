@@ -150,7 +150,7 @@ int main(int argc, char** argv) {
 
 Gebaut und auf allen drei CI-Plattformen (Linux/macOS/Windows)
 verifiziert wird genau dieses Nutzungsmuster durch den
-Standalone-C99-Test `tests/c_api/test_c_api.c`.
+Standalone-C99-Test `tests/capi/test_capi.c`.
 
 ## Anbindung aus C# (P/Invoke-Skizze)
 

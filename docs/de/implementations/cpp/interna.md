@@ -33,7 +33,7 @@ Wire-Format-Definitionen selbst stehen in der
 | Dekompressions-Streambuf | `compression.cpp` (Klasse `DecompressingIStream::Streambuf`) | Lesepfad |
 | Builder-Zustandsmaschine | `manager.cpp` (Struct `ChannelBuilder`) | `DataManager` |
 
-## Block-Encoder (`osf::detail::encode_*`)
+## Block-Encoder (`osf::detail::encode*`)
 
 Der Encoder schreibt komplette Block-Frames
 `[u16 Kanalindex][Längenfeld][Payload]` in einen Byte-Vektor
@@ -41,10 +41,10 @@ Der Encoder schreibt komplette Block-Frames
 
 | Funktion | Block | Payload-Layout |
 |---|---|---|
-| `encode_start_data<T>` | `bcStartData` (6) | `[u8 ctrl][i64 start_ts][f64 rate][u32 N][N × T]` |
-| `encode_continued_data<T>` | `bcContinuedData` (5) | `[u8 ctrl][u32 N][N × T]` |
-| `encode_abs_timestamp_data<T>` | `bcAbsTimeStampData` (8) | `[u8 ctrl][u32 N][N × (i64 ts + T)]` |
-| `encode_abs_timestamp_data_gps` | dito für GPS | Wert = 3 × f64 (lat, lon, alt) = 24 Bytes |
+| `encodeStartData<T>` | `bcStartData` (6) | `[u8 ctrl][i64 start_ts][f64 rate][u32 N][N × T]` |
+| `encodeContinuedData<T>` | `bcContinuedData` (5) | `[u8 ctrl][u32 N][N × T]` |
+| `encodeAbsTimestampData<T>` | `bcAbsTimeStampData` (8) | `[u8 ctrl][u32 N][N × (i64 ts + T)]` |
+| `encodeAbsTimestampDataGps` | dito für GPS | Wert = 3 × f64 (lat, lon, alt) = 24 Bytes |
 | String-/Binary-Überladungen | dito, Einzel-Sample | `[u8 ctrl][i64 ts][Bytes]` — Bit 7 = 0, **kein** `0x00`-Terminator (OSF5) |
 
 Konventionen: Bit 7 des Control-Bytes wird nur gesetzt, wenn die
@@ -143,8 +143,8 @@ Kanal des deklarierten Typs materialisiert.
 
 ## Reader-Details
 
-- Byte-Dekodierung über kleine `le_u16`/`le_u32`/`le_u64`-Helfer (plus
-  signed/float-Überladungen) statt `reinterpret_cast` — frei von
+- Byte-Dekodierung über kleine `readLeU16`/`readLeU32`/`readLeU64`-Helfer
+  (plus signed/float-Überladungen) statt `reinterpret_cast` — frei von
   Alignment- und Endianness-Annahmen.
 - `PayloadCursor` läuft über die im Speicher liegende Block-Payload
   und liefert `std::optional<T>`; ein Überlauf wird so zum sauberen
@@ -153,7 +153,7 @@ Kanal des deklarierten Typs materialisiert.
   Gleichlängen-Split zerlegt; bei nicht teilbarer Länge fällt der
   Reader auf Einzel-Sample zurück.
 - Der Null-Terminator wird versions-deterministisch behandelt
-  (Feld `osf_version_` im Reader): OSF4 strippt das letzte Byte jeder
+  (Feld `m_osfVersion` im Reader): OSF4 strippt das letzte Byte jeder
   String-/Binary-Payload, OSF5 nie (Spec-Rev 2026-05-24).
 - Der optionale OSF4-`0xFFFF`-Infoblock und der 40-Byte-Trailer
   (`OSF_STREAM_END …`) werden konsumiert und nie als `Block`
@@ -166,7 +166,7 @@ Kanal des deklarierten Typs materialisiert.
 | Unit | `tests/unit/test_*.cpp` | synthetische Bytes/Strukturen, eine Datei pro Modul |
 | Integration | `tests/integration/*_examples.cpp` | echte Dateien aus `examples/` (Felddaten + 17 generierte Referenzdateien) |
 | Round-Trip | `tests/integration/roundtriphelper.h` | Laden → Schreiben → Reload → **bitgenauer** Sample-Vergleich |
-| C-ABI | `tests/c_api/test_c_api.c` | eigenständiges C99-Programm, beweist C-Linkage |
+| C-ABI | `tests/capi/test_capi.c` | eigenständiges C99-Programm, beweist C-Linkage |
 
 Vor jedem Push gilt: kompletter ctest-Lauf lokal grün (aktuell 321
 Tests mit `OSF_BUILD_C_API=ON`), 0 Warnungen; CI verifiziert
