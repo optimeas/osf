@@ -32,10 +32,10 @@ CompressionFormat classify(std::uint8_t b0, std::uint8_t b1) noexcept {
 }  // namespace
 
 // =====================================================================
-// detect_compression — non-consuming peek
+// detectCompression — non-consuming peek
 // =====================================================================
 
-CompressionFormat detect_compression(std::istream& source) {
+CompressionFormat detectCompression(std::istream& source) {
     std::istream::pos_type const start = source.tellg();
     char head[2] = {0, 0};
     source.read(head, 2);
@@ -215,7 +215,7 @@ CompressionFormat DecompressingIStream::format() const noexcept {
     return buf_->format();
 }
 
-bool DecompressingIStream::is_compressed() const noexcept {
+bool DecompressingIStream::isCompressed() const noexcept {
     return buf_->format() != CompressionFormat::None;
 }
 

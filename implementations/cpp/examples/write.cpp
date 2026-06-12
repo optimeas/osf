@@ -36,19 +36,19 @@ int main(int argc, char** argv) {
 
     // ── Build the writer ──────────────────────────────────────────────────
     osf::BlockWriter writer;
-    writer.set_creator("osf-cpp example write");
+    writer.setCreator("osf-cpp example write");
 
     // Channel 1: equidistant float — "signals/sine"
     osf::ChannelDef sine_def;
     sine_def.name          = "signals/sine";
-    sine_def.data_type     = osf::DataType::Float;
-    sine_def.channel_type  = osf::ChannelType::Scalar;
-    sine_def.physical_unit = "V";
-    sine_def.display_name  = "Sine signal";
+    sine_def.dataType     = osf::DataType::Float;
+    sine_def.channelType  = osf::ChannelType::Scalar;
+    sine_def.physicalUnit = "V";
+    sine_def.displayName  = "Sine signal";
 
-    auto sine_idx_res = writer.add_channel(sine_def);
+    auto sine_idx_res = writer.addChannel(sine_def);
     if (!sine_idx_res) {
-        std::cerr << "add_channel (sine): " << sine_idx_res.error().message << "\n";
+        std::cerr << "addChannel (sine): " << sine_idx_res.error().message << "\n";
         return 1;
     }
     std::uint16_t const sine_idx = *sine_idx_res;
@@ -56,14 +56,14 @@ int main(int argc, char** argv) {
     // Channel 2: timestamped double — "events/counter"
     osf::ChannelDef ctr_def;
     ctr_def.name          = "events/counter";
-    ctr_def.data_type     = osf::DataType::Double;
-    ctr_def.channel_type  = osf::ChannelType::Scalar;
-    ctr_def.physical_unit = "count";
-    ctr_def.display_name  = "Event counter";
+    ctr_def.dataType     = osf::DataType::Double;
+    ctr_def.channelType  = osf::ChannelType::Scalar;
+    ctr_def.physicalUnit = "count";
+    ctr_def.displayName  = "Event counter";
 
-    auto ctr_idx_res = writer.add_channel(ctr_def);
+    auto ctr_idx_res = writer.addChannel(ctr_def);
     if (!ctr_idx_res) {
-        std::cerr << "add_channel (counter): " << ctr_idx_res.error().message << "\n";
+        std::cerr << "addChannel (counter): " << ctr_idx_res.error().message << "\n";
         return 1;
     }
     std::uint16_t const ctr_idx = *ctr_idx_res;
@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
 
     // Equidistant sine: 50 samples at 100 Hz starting at t = 0 ns.
     constexpr int    n_sine    = 50;
-    constexpr double rate_hz   = 100.0;
+    constexpr double rateHz   = 100.0;
     constexpr std::int64_t t0_ns = 0;
 
     std::vector<float> sine_samples(n_sine);
@@ -81,11 +81,11 @@ int main(int argc, char** argv) {
             static_cast<float>(std::sin(2.0 * k_pi * static_cast<double>(i) / n_sine));
     }
 
-    auto r1 = writer.add_equidistant_segment(
-        sine_idx, t0_ns, rate_hz,
+    auto r1 = writer.addEquidistantSegment(
+        sine_idx, t0_ns, rateHz,
         sine_samples.data(), sine_samples.size());
     if (!r1) {
-        std::cerr << "add_equidistant_segment: " << r1.error().message << "\n";
+        std::cerr << "addEquidistantSegment: " << r1.error().message << "\n";
         return 1;
     }
 
@@ -97,15 +97,15 @@ int main(int argc, char** argv) {
         std::int64_t const ts = static_cast<std::int64_t>(i) * ns_per_sec;
         double       const v  = static_cast<double>(i + 1) * 10.0;
 
-        auto r2 = writer.add_timestamped_sample<double>(ctr_idx, ts, v);
+        auto r2 = writer.addTimestampedSample<double>(ctr_idx, ts, v);
         if (!r2) {
-            std::cerr << "add_timestamped_sample: " << r2.error().message << "\n";
+            std::cerr << "addTimestampedSample: " << r2.error().message << "\n";
             return 1;
         }
     }
 
     // ── Emit ──────────────────────────────────────────────────────────────
-    auto r3 = writer.write_to_file(out_path);
+    auto r3 = writer.writeToFile(out_path);
     if (!r3) {
         std::cerr << out_path << ": " << r3.error().message << "\n";
         return 1;

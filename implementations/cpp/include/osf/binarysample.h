@@ -7,7 +7,7 @@
  *        std::span<std::uint8_t const>.
  *
  * Promoted from osf::detail to osf:: because the StreamingWriter public API
- * takes BinarySample as a parameter of write_timestamped_binary. The type
+ * takes BinarySample as a parameter of writeTimestampedBinary. The type
  * originated in src/blockencode_p.h where the encoder was the only
  * consumer; with a public-API call site it belongs in include/osf/.
  *
@@ -32,7 +32,7 @@ struct BinarySample {
         : data{d}, size{s} {}
 
     /// Ergonomic factory for the common case of an owning vector.
-    static BinarySample from_vector(std::vector<std::uint8_t> const& v) noexcept {
+    static BinarySample fromVector(std::vector<std::uint8_t> const& v) noexcept {
         return BinarySample{v.data(), v.size()};
     }
 };

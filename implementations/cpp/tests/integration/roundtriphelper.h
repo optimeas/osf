@@ -6,7 +6,7 @@
 ///
 /// Compares two `osf::DataManager` instances channel-by-channel:
 ///   - equal channel count
-///   - per-channel: name, data_type, sample_count
+///   - per-channel: name, dataType, sampleCount
 ///   - per-channel: first AND last materialised sample value (skipped for
 ///     empty channels)
 ///
@@ -54,12 +54,12 @@ inline std::string dt_str(osf::DataType dt) {
 // ── Equidistant first/last value comparison ───────────────────────────
 
 #define OSF_CMP_EQ_FLAT(SUFFIX)                                                \
-    if (auto va = osf::as_##SUFFIX##_flat(a); va.has_value()) {               \
-        auto vb = osf::as_##SUFFIX##_flat(b);                                  \
+    if (auto va = osf::as##SUFFIX##Flat(a); va.has_value()) {                 \
+        auto vb = osf::as##SUFFIX##Flat(b);                                    \
         if (!vb.has_value()) {                                                 \
             return ::testing::AssertionFailure()                               \
                 << "channel '" << name                                         \
-                << "': as_" #SUFFIX "_flat succeeded on A but failed on B: "  \
+                << "': as" #SUFFIX "Flat succeeded on A but failed on B: "    \
                 << vb.error().message;                                         \
         }                                                                      \
         auto const& fa = *va;                                                  \
@@ -85,17 +85,17 @@ inline ::testing::AssertionResult compare_equidistant(
         std::string const& name,
         osf::EquidistantChannel const& a,
         osf::EquidistantChannel const& b) {
-    OSF_CMP_EQ_FLAT(doubles)
-    OSF_CMP_EQ_FLAT(floats)
+    OSF_CMP_EQ_FLAT(Doubles)
+    OSF_CMP_EQ_FLAT(Floats)
     // Equidistant GPS is rare but theoretically valid.
-    // as_gps_flat(EquidistantChannel) returns Result<vector<GpsLocation>>
+    // asGpsFlat(EquidistantChannel) returns Result<vector<GpsLocation>>
     // (no timestamp pairs — equidistant channels use segment start_ts).
-    if (auto va = osf::as_gps_flat(a); va.has_value()) {
-        auto vb = osf::as_gps_flat(b);
+    if (auto va = osf::asGpsFlat(a); va.has_value()) {
+        auto vb = osf::asGpsFlat(b);
         if (!vb.has_value()) {
             return ::testing::AssertionFailure()
                 << "channel '" << name
-                << "': as_gps_flat succeeded on A but failed on B: "
+                << "': asGpsFlat succeeded on A but failed on B: "
                 << vb.error().message;
         }
         auto const& fa = *va;
@@ -121,7 +121,7 @@ inline ::testing::AssertionResult compare_equidistant(
     }
     return ::testing::AssertionFailure()
         << "channel '" << name << "': unrecognised equidistant data type: "
-        << dt_str(a.data_type);
+        << dt_str(a.dataType);
 }
 
 #undef OSF_CMP_EQ_FLAT
@@ -130,12 +130,12 @@ inline ::testing::AssertionResult compare_equidistant(
 
 /// Compare first/last of a `Result<vector<pair<int64_t, T>>>`.
 #define OSF_CMP_TS_FLAT(SUFFIX, TYPE)                                          \
-    if (auto va = osf::as_##SUFFIX##_flat(a); va.has_value()) {               \
-        auto vb = osf::as_##SUFFIX##_flat(b);                                  \
+    if (auto va = osf::as##SUFFIX##Flat(a); va.has_value()) {                 \
+        auto vb = osf::as##SUFFIX##Flat(b);                                    \
         if (!vb.has_value()) {                                                 \
             return ::testing::AssertionFailure()                               \
                 << "channel '" << name                                         \
-                << "': as_" #SUFFIX "_flat succeeded on A but failed on B: "  \
+                << "': as" #SUFFIX "Flat succeeded on A but failed on B: "    \
                 << vb.error().message;                                         \
         }                                                                      \
         auto const& fa = *va;                                                  \
@@ -167,24 +167,24 @@ inline ::testing::AssertionResult compare_timestamped(
         std::string const& name,
         osf::TimestampedChannel const& a,
         osf::TimestampedChannel const& b) {
-    OSF_CMP_TS_FLAT(bools,   bool)
-    OSF_CMP_TS_FLAT(int8,    std::int8_t)
-    OSF_CMP_TS_FLAT(int16,   std::int16_t)
-    OSF_CMP_TS_FLAT(int32,   std::int32_t)
-    OSF_CMP_TS_FLAT(int64,   std::int64_t)
-    OSF_CMP_TS_FLAT(uint8,   std::uint8_t)
-    OSF_CMP_TS_FLAT(uint16,  std::uint16_t)
-    OSF_CMP_TS_FLAT(uint32,  std::uint32_t)
-    OSF_CMP_TS_FLAT(uint64,  std::uint64_t)
-    OSF_CMP_TS_FLAT(floats,  float)
-    OSF_CMP_TS_FLAT(doubles, double)
+    OSF_CMP_TS_FLAT(Bools,   bool)
+    OSF_CMP_TS_FLAT(Int8,    std::int8_t)
+    OSF_CMP_TS_FLAT(Int16,   std::int16_t)
+    OSF_CMP_TS_FLAT(Int32,   std::int32_t)
+    OSF_CMP_TS_FLAT(Int64,   std::int64_t)
+    OSF_CMP_TS_FLAT(Uint8,   std::uint8_t)
+    OSF_CMP_TS_FLAT(Uint16,  std::uint16_t)
+    OSF_CMP_TS_FLAT(Uint32,  std::uint32_t)
+    OSF_CMP_TS_FLAT(Uint64,  std::uint64_t)
+    OSF_CMP_TS_FLAT(Floats,  float)
+    OSF_CMP_TS_FLAT(Doubles, double)
     // GPS timestamped
-    if (auto va = osf::as_gps_flat(a); va.has_value()) {
-        auto vb = osf::as_gps_flat(b);
+    if (auto va = osf::asGpsFlat(a); va.has_value()) {
+        auto vb = osf::asGpsFlat(b);
         if (!vb.has_value()) {
             return ::testing::AssertionFailure()
                 << "channel '" << name
-                << "': as_gps_flat succeeded on A but failed on B: "
+                << "': asGpsFlat succeeded on A but failed on B: "
                 << vb.error().message;
         }
         auto const& fa = *va;
@@ -217,7 +217,7 @@ inline ::testing::AssertionResult compare_timestamped(
     }
     return ::testing::AssertionFailure()
         << "channel '" << name << "': unrecognised timestamped data type: "
-        << dt_str(a.data_type);
+        << dt_str(a.dataType);
 }
 
 #undef OSF_CMP_TS_FLAT
@@ -228,17 +228,17 @@ inline ::testing::AssertionResult compare_variable(
         std::string const& name,
         osf::VariableChannel const& a,
         osf::VariableChannel const& b) {
-    if (a.data_type == osf::DataType::String) {
-        auto sa = a.as_strings();
-        auto sb = b.as_strings();
+    if (a.dataType == osf::DataType::String) {
+        auto sa = a.asStrings();
+        auto sb = b.asStrings();
         if (!sa.has_value())
             return ::testing::AssertionFailure()
                 << "channel '" << name
-                << "': as_strings() failed on A: " << sa.error().message;
+                << "': asStrings() failed on A: " << sa.error().message;
         if (!sb.has_value())
             return ::testing::AssertionFailure()
                 << "channel '" << name
-                << "': as_strings() failed on B: " << sb.error().message;
+                << "': asStrings() failed on B: " << sb.error().message;
         auto const& va = **sa;
         auto const& vb = **sb;
         if (va.size() != vb.size())
@@ -256,17 +256,17 @@ inline ::testing::AssertionResult compare_variable(
                 << va.back() << "' vs '" << vb.back() << "'";
         return ::testing::AssertionSuccess();
     }
-    if (a.data_type == osf::DataType::Binary) {
-        auto ba = a.as_binaries();
-        auto bb = b.as_binaries();
+    if (a.dataType == osf::DataType::Binary) {
+        auto ba = a.asBinaries();
+        auto bb = b.asBinaries();
         if (!ba.has_value())
             return ::testing::AssertionFailure()
                 << "channel '" << name
-                << "': as_binaries() failed on A: " << ba.error().message;
+                << "': asBinaries() failed on A: " << ba.error().message;
         if (!bb.has_value())
             return ::testing::AssertionFailure()
                 << "channel '" << name
-                << "': as_binaries() failed on B: " << bb.error().message;
+                << "': asBinaries() failed on B: " << bb.error().message;
         auto const& va = **ba;
         auto const& vb = **bb;
         if (va.size() != vb.size())
@@ -284,7 +284,7 @@ inline ::testing::AssertionResult compare_variable(
     }
     return ::testing::AssertionFailure()
         << "channel '" << name << "': unrecognised variable data type: "
-        << dt_str(a.data_type);
+        << dt_str(a.dataType);
 }
 
 }  // namespace detail
@@ -293,7 +293,7 @@ inline ::testing::AssertionResult compare_variable(
 
 /// Compare two `DataManager` instances for round-trip equality:
 ///   - equal channel count
-///   - per-channel: name + data_type + sample_count (identical)
+///   - per-channel: name + dataType + sampleCount (identical)
 ///   - per-channel: first AND last materialised sample value (for non-empty
 ///     channels), including timestamp comparison for timestamped channels
 ///
@@ -312,7 +312,7 @@ inline ::testing::AssertionResult roundtrip_managers_equal(
 
     for (std::size_t i = 0; i < ach.size(); ++i) {
         auto const& ca = ach[i];
-        std::string const& nm = osf::channel_name(ca);
+        std::string const& nm = osf::channelName(ca);
 
         // Look up by name in B — matches the streaming-writer approach.
         auto const* cb_ptr = b.channel(nm);
@@ -324,16 +324,16 @@ inline ::testing::AssertionResult roundtrip_managers_equal(
         auto const& cb = *cb_ptr;
 
         // Data type must match.
-        if (osf::channel_data_type(ca) != osf::channel_data_type(cb)) {
+        if (osf::channelDataType(ca) != osf::channelDataType(cb)) {
             return ::testing::AssertionFailure()
-                << "channel '" << nm << "': data_type mismatch: "
-                << detail::dt_str(osf::channel_data_type(ca)) << " vs "
-                << detail::dt_str(osf::channel_data_type(cb));
+                << "channel '" << nm << "': dataType mismatch: "
+                << detail::dt_str(osf::channelDataType(ca)) << " vs "
+                << detail::dt_str(osf::channelDataType(cb));
         }
 
         // Sample count must match.
-        auto const cnt_a = osf::channel_sample_count(ca);
-        auto const cnt_b = osf::channel_sample_count(cb);
+        auto const cnt_a = osf::channelSampleCount(ca);
+        auto const cnt_b = osf::channelSampleCount(cb);
         if (cnt_a != cnt_b) {
             return ::testing::AssertionFailure()
                 << "channel '" << nm << "': sample count mismatch: "

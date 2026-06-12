@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 //
-// Integration tests for parse_metablock_xml against the OSF4 reference
+// Integration tests for parseMetablockXml against the OSF4 reference
 // files under examples/generated/ plus the two field samples
 // motorbike.osf and steam_loco.osf. These exercise the parser on real
 // OSFGenerator output and on production-device output, not just on
@@ -32,7 +32,7 @@ protected:
     }
 
     static std::vector<std::uint8_t> read_metablock(std::filesystem::path const& path) {
-        auto header = osf::parse_magic_header(path);
+        auto header = osf::parseMagicHeader(path);
         EXPECT_TRUE(header.has_value())
             << "magic header parse failed for " << path << ": "
             << (header ? "" : header.error().message);
@@ -43,11 +43,11 @@ protected:
         if (!in.is_open()) return {};
 
         // Skip the magic-header line and then read exactly
-        // metablock_len bytes that follow.
+        // metablockLen bytes that follow.
         std::string line;
         std::getline(in, line);
 
-        std::vector<std::uint8_t> buf(static_cast<std::size_t>(header->metablock_len));
+        std::vector<std::uint8_t> buf(static_cast<std::size_t>(header->metablockLen));
         in.read(reinterpret_cast<char*>(buf.data()),
                 static_cast<std::streamsize>(buf.size()));
         EXPECT_EQ(static_cast<std::size_t>(in.gcount()), buf.size())
@@ -69,24 +69,24 @@ TEST_F(MetablockXmlExamplesTest, osf4_equidistant_snapshot) {
     auto bytes = read_metablock(examples_dir() / "generated" / "osf4_equidistant.osf");
     ASSERT_FALSE(bytes.empty());
 
-    auto mb = osf::parse_metablock_xml(bytes.data(), bytes.size());
+    auto mb = osf::parseMetablockXml(bytes.data(), bytes.size());
     ASSERT_TRUE(mb.has_value()) << mb.error().message;
 
-    EXPECT_EQ(mb->file_info.version, 4u);
-    ASSERT_TRUE(mb->file_info.creator.has_value());
-    EXPECT_EQ(*mb->file_info.creator, "OSFGenerator/1.0");
+    EXPECT_EQ(mb->fileInfo.version, 4u);
+    ASSERT_TRUE(mb->fileInfo.creator.has_value());
+    EXPECT_EQ(*mb->fileInfo.creator, "OSFGenerator/1.0");
     // OSFGenerator-style files use the short geolocation spelling.
-    EXPECT_TRUE(mb->file_info.created_at_latitude.has_value());
-    EXPECT_TRUE(mb->file_info.created_at_longitude.has_value());
-    EXPECT_TRUE(mb->file_info.created_at_altitude.has_value());
+    EXPECT_TRUE(mb->fileInfo.createdAtLatitude.has_value());
+    EXPECT_TRUE(mb->fileInfo.createdAtLongitude.has_value());
+    EXPECT_TRUE(mb->fileInfo.createdAtAltitude.has_value());
 
     ASSERT_FALSE(mb->channels.empty());
     auto const& first = mb->channels[0];
     EXPECT_EQ(first.index, 0);
-    EXPECT_EQ(first.channel_type, osf::ChannelType::Scalar);
-    EXPECT_EQ(first.data_type, osf::DataType::Double);
-    EXPECT_TRUE(first.time_increment_ns.has_value());
-    EXPECT_GT(*first.time_increment_ns, 0);
+    EXPECT_EQ(first.channelType, osf::ChannelType::Scalar);
+    EXPECT_EQ(first.dataType, osf::DataType::Double);
+    EXPECT_TRUE(first.timeIncrementNs.has_value());
+    EXPECT_GT(*first.timeIncrementNs, 0);
 }
 
 // ---------------------------------------------------------------------
@@ -110,17 +110,17 @@ TEST_F(MetablockXmlExamplesTest, all_osf4_generated_files_parse) {
         auto bytes = read_metablock(entry.path());
         ASSERT_FALSE(bytes.empty());
 
-        auto mb = osf::parse_metablock_xml(bytes.data(), bytes.size());
+        auto mb = osf::parseMetablockXml(bytes.data(), bytes.size());
         ASSERT_TRUE(mb.has_value()) << mb.error().message;
-        EXPECT_EQ(mb->file_info.version, 4u);
+        EXPECT_EQ(mb->fileInfo.version, 4u);
         EXPECT_GT(mb->channels.size(), 0u);
 
         for (auto const& ch : mb->channels) {
             EXPECT_FALSE(ch.name.empty());
-            EXPECT_TRUE(ch.size_of_length_value == 2 ||
-                        ch.size_of_length_value == 4)
+            EXPECT_TRUE(ch.sizeOfLengthValue == 2 ||
+                        ch.sizeOfLengthValue == 4)
                 << "channel " << ch.index << " (" << ch.name << ") has "
-                << "sizeoflengthvalue=" << int{ch.size_of_length_value};
+                << "sizeoflengthvalue=" << int{ch.sizeOfLengthValue};
         }
 
         ++parsed;
@@ -139,14 +139,14 @@ TEST_F(MetablockXmlExamplesTest, osf4_gpslocation_file_declares_gpslocation_chan
     auto bytes = read_metablock(examples_dir() / "generated" / "osf4_gpslocation.osf");
     ASSERT_FALSE(bytes.empty());
 
-    auto mb = osf::parse_metablock_xml(bytes.data(), bytes.size());
+    auto mb = osf::parseMetablockXml(bytes.data(), bytes.size());
     ASSERT_TRUE(mb.has_value()) << mb.error().message;
 
     bool saw_gps = false;
     for (auto const& ch : mb->channels) {
-        if (ch.data_type == osf::DataType::GpsLocation) {
+        if (ch.dataType == osf::DataType::GpsLocation) {
             saw_gps = true;
-            EXPECT_EQ(ch.data_type_raw, "gpslocation");
+            EXPECT_EQ(ch.dataTypeRaw, "gpslocation");
         }
     }
     EXPECT_TRUE(saw_gps)
@@ -168,9 +168,9 @@ TEST_F(MetablockXmlExamplesTest, motorbike_osf_metablock_parses) {
     }
     auto bytes = read_metablock(path);
     ASSERT_FALSE(bytes.empty());
-    auto mb = osf::parse_metablock_xml(bytes.data(), bytes.size());
+    auto mb = osf::parseMetablockXml(bytes.data(), bytes.size());
     ASSERT_TRUE(mb.has_value()) << mb.error().message;
-    EXPECT_EQ(mb->file_info.version, 4u);
+    EXPECT_EQ(mb->fileInfo.version, 4u);
     EXPECT_GT(mb->channels.size(), 0u);
 }
 
@@ -181,15 +181,15 @@ TEST_F(MetablockXmlExamplesTest, steam_loco_osf_metablock_parses) {
     }
     auto bytes = read_metablock(path);
     ASSERT_FALSE(bytes.empty());
-    auto mb = osf::parse_metablock_xml(bytes.data(), bytes.size());
+    auto mb = osf::parseMetablockXml(bytes.data(), bytes.size());
     ASSERT_TRUE(mb.has_value()) << mb.error().message;
-    EXPECT_EQ(mb->file_info.version, 4u);
+    EXPECT_EQ(mb->fileInfo.version, 4u);
     EXPECT_GT(mb->channels.size(), 0u);
 }
 
 // ---------------------------------------------------------------------
-// Symmetry probe: an OSF4 generated file (parsed by parse_metablock_xml)
-// and the equivalent OSF5 generated file (parsed by parse_metablock_json)
+// Symmetry probe: an OSF4 generated file (parsed by parseMetablockXml)
+// and the equivalent OSF5 generated file (parsed by parseMetablockJson)
 // produce the same channel list shape: symmetric population with the
 // JSON parser — pin one explicit case.
 // ---------------------------------------------------------------------
@@ -200,8 +200,8 @@ TEST_F(MetablockXmlExamplesTest, equidistant_osf4_and_osf5_have_matching_channel
     ASSERT_FALSE(bytes_4.empty());
     ASSERT_FALSE(bytes_5.empty());
 
-    auto mb_4 = osf::parse_metablock_xml(bytes_4.data(), bytes_4.size());
-    auto mb_5 = osf::parse_metablock_json(bytes_5.data(), bytes_5.size());
+    auto mb_4 = osf::parseMetablockXml(bytes_4.data(), bytes_4.size());
+    auto mb_5 = osf::parseMetablockJson(bytes_5.data(), bytes_5.size());
     ASSERT_TRUE(mb_4.has_value()) << mb_4.error().message;
     ASSERT_TRUE(mb_5.has_value()) << mb_5.error().message;
 
@@ -211,14 +211,14 @@ TEST_F(MetablockXmlExamplesTest, equidistant_osf4_and_osf5_have_matching_channel
         auto const& c5 = mb_5->channels[i];
         EXPECT_EQ(c4.index, c5.index) << "channel " << i << " index";
         EXPECT_EQ(c4.name, c5.name)   << "channel " << i << " name";
-        EXPECT_EQ(c4.channel_type, c5.channel_type)
-            << "channel " << i << " channel_type";
-        EXPECT_EQ(c4.data_type, c5.data_type)
-            << "channel " << i << " data_type";
-        EXPECT_EQ(c4.size_of_length_value, c5.size_of_length_value)
+        EXPECT_EQ(c4.channelType, c5.channelType)
+            << "channel " << i << " channelType";
+        EXPECT_EQ(c4.dataType, c5.dataType)
+            << "channel " << i << " dataType";
+        EXPECT_EQ(c4.sizeOfLengthValue, c5.sizeOfLengthValue)
             << "channel " << i << " sizeoflengthvalue";
-        EXPECT_EQ(c4.time_increment_ns.value_or(-1),
-                  c5.time_increment_ns.value_or(-1))
+        EXPECT_EQ(c4.timeIncrementNs.value_or(-1),
+                  c5.timeIncrementNs.value_or(-1))
             << "channel " << i << " timeincrement";
     }
 }

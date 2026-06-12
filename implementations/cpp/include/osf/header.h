@@ -9,7 +9,7 @@
 /// follows:
 ///
 /// ```text
-/// <IDENTIFIER> <metablock_length>\n
+/// <IDENTIFIER> <metablockLength>\n
 /// ```
 ///
 /// Accepted identifiers:
@@ -62,14 +62,14 @@ enum class OsfVersion {
 struct MagicHeader {
     /// Version detected from the identifier prefix. Default-constructed
     /// MagicHeader objects carry Osf4 as a placeholder; they are not
-    /// valid headers — populate via parse_magic_header().
+    /// valid headers — populate via parseMagicHeader().
     OsfVersion version = OsfVersion::Osf4;
     /// Byte length of the metablock that immediately follows the
     /// terminating newline. Zero on default-constructed instances.
-    std::uint64_t metablock_len = 0;
+    std::uint64_t metablockLen = 0;
 
     friend bool operator==(MagicHeader const& a, MagicHeader const& b) noexcept {
-        return a.version == b.version && a.metablock_len == b.metablock_len;
+        return a.version == b.version && a.metablockLen == b.metablockLen;
     }
     friend bool operator!=(MagicHeader const& a, MagicHeader const& b) noexcept {
         return !(a == b);
@@ -94,17 +94,17 @@ struct MagicHeader {
 ///   or length is not parseable as `std::uint64_t`.
 /// - `Error::Code::UnsupportedVersion` — line is parseable but
 ///   the identifier is none of the four accepted spellings.
-[[nodiscard]] Result<MagicHeader> parse_magic_header(std::istream& in);
+[[nodiscard]] Result<MagicHeader> parseMagicHeader(std::istream& in);
 
 /// Buffer convenience overload. Internally constructs a
 /// `std::stringstream` over `[data, data + size)` and delegates
 /// to the `std::istream` form.
-[[nodiscard]] Result<MagicHeader> parse_magic_header(std::uint8_t const* data,
+[[nodiscard]] Result<MagicHeader> parseMagicHeader(std::uint8_t const* data,
                                                     std::size_t size);
 
 /// Path convenience overload. Opens `path` in binary mode and
 /// delegates to the `std::istream` form. The stream is closed
 /// when the function returns.
-[[nodiscard]] Result<MagicHeader> parse_magic_header(std::filesystem::path const& path);
+[[nodiscard]] Result<MagicHeader> parseMagicHeader(std::filesystem::path const& path);
 
 }  // namespace osf

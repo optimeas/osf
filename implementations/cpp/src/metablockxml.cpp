@@ -87,10 +87,10 @@ Result<std::optional<std::int64_t>> parse_optional_i64(pugi::xml_node const& n,
 }
 
 Result<std::uint8_t> validate_size_of_length_value(std::int64_t raw,
-                                                  std::string const& channel_name) {
+                                                  std::string const& channelName) {
     if (raw == 2 || raw == 4) return static_cast<std::uint8_t>(raw);
     std::ostringstream oss;
-    oss << "OSF4 channel \"" << channel_name
+    oss << "OSF4 channel \"" << channelName
         << "\" sizeoflengthvalue must be 2 or 4, got " << raw;
     return tl::make_unexpected(invalid_metablock(oss.str()));
 }
@@ -110,43 +110,43 @@ Result<FileInfo> parse_optimeas_attrs(pugi::xml_node const& root) {
     FileInfo info;
     info.version = 4;
 
-    info.created_utc   = get_optional_string(root, "created_utc");
+    info.createdUtc   = get_optional_string(root, "created_utc");
     info.creator       = get_optional_string(root, "creator");
     info.tag           = get_optional_string(root, "tag");
     info.reason        = get_optional_string(root, "reason");
     info.comment       = get_optional_string(root, "comment");
-    info.namespace_sep = get_optional_string(root, "namespacesep");
+    info.namespaceSep = get_optional_string(root, "namespacesep");
 
     auto lat = parse_optional_double(root, "created_at_latitude");
     if (!lat) return tl::make_unexpected(std::move(lat).error());
-    info.created_at_latitude = *lat;
+    info.createdAtLatitude = *lat;
 
     auto lon = parse_optional_double(root, "created_at_longitude");
     if (!lon) return tl::make_unexpected(std::move(lon).error());
-    info.created_at_longitude = *lon;
+    info.createdAtLongitude = *lon;
 
     auto alt = parse_optional_double(root, "created_at_altitude");
     if (!alt) return tl::make_unexpected(std::move(alt).error());
-    info.created_at_altitude = *alt;
+    info.createdAtAltitude = *alt;
 
     // Short-form GPS spellings (`latitude=` without the `created_at_`
     // prefix) are emitted by OSFGenerator-era files and by some early
     // field devices. Accept them as an alternative on read; writers
     // always emit the spec form.
-    if (!info.created_at_latitude) {
+    if (!info.createdAtLatitude) {
         auto v = parse_optional_double(root, "latitude");
         if (!v) return tl::make_unexpected(std::move(v).error());
-        info.created_at_latitude = *v;
+        info.createdAtLatitude = *v;
     }
-    if (!info.created_at_longitude) {
+    if (!info.createdAtLongitude) {
         auto v = parse_optional_double(root, "longitude");
         if (!v) return tl::make_unexpected(std::move(v).error());
-        info.created_at_longitude = *v;
+        info.createdAtLongitude = *v;
     }
-    if (!info.created_at_altitude) {
+    if (!info.createdAtAltitude) {
         auto v = parse_optional_double(root, "altitude");
         if (!v) return tl::make_unexpected(std::move(v).error());
-        info.created_at_altitude = *v;
+        info.createdAtAltitude = *v;
     }
 
     return info;
@@ -184,17 +184,17 @@ Result<Channel> parse_channel(pugi::xml_node const& node, std::size_t position) 
 
     auto ct = get_required_string(node, "channeltype", ctx);
     if (!ct) return tl::make_unexpected(std::move(ct).error());
-    ch.channel_type_raw = *ct;
-    auto ct_r = parse_channel_type(ch.channel_type_raw);
+    ch.channelTypeRaw = *ct;
+    auto ct_r = parseChannelType(ch.channelTypeRaw);
     if (!ct_r) return tl::make_unexpected(std::move(ct_r).error());
-    ch.channel_type = *ct_r;
+    ch.channelType = *ct_r;
 
     auto dt = get_required_string(node, "datatype", ctx);
     if (!dt) return tl::make_unexpected(std::move(dt).error());
-    ch.data_type_raw = *dt;
-    auto dt_r = parse_data_type(ch.data_type_raw);
+    ch.dataTypeRaw = *dt;
+    auto dt_r = parseDataType(ch.dataTypeRaw);
     if (!dt_r) return tl::make_unexpected(std::move(dt_r).error());
-    ch.data_type = *dt_r;
+    ch.dataType = *dt_r;
 
     auto sol = get_required_string(node, "sizeoflengthvalue", ctx);
     if (!sol) return tl::make_unexpected(std::move(sol).error());
@@ -212,22 +212,22 @@ Result<Channel> parse_channel(pugi::xml_node const& node, std::size_t position) 
         auto sol_v8 = validate_size_of_length_value(
             static_cast<std::int64_t>(sol_v), ch.name);
         if (!sol_v8) return tl::make_unexpected(std::move(sol_v8).error());
-        ch.size_of_length_value = *sol_v8;
+        ch.sizeOfLengthValue = *sol_v8;
     }
 
     auto ti = parse_optional_i64(node, "timeincrement");
     if (!ti) return tl::make_unexpected(std::move(ti).error());
-    ch.time_increment_ns = *ti;
+    ch.timeIncrementNs = *ti;
 
-    ch.mime_type          = get_optional_string(node, "mimetype");
-    ch.physical_unit      = get_optional_string(node, "physicalunit");
-    ch.physical_dimension = get_optional_string(node, "physicaldimension");
-    ch.display_name       = get_optional_string(node, "displayname");
+    ch.mimeType          = get_optional_string(node, "mimetype");
+    ch.physicalUnit      = get_optional_string(node, "physicalunit");
+    ch.physicalDimension = get_optional_string(node, "physicaldimension");
+    ch.displayName       = get_optional_string(node, "displayname");
     ch.comment            = get_optional_string(node, "comment");
     ch.reference          = get_optional_string(node, "reference");
 
     if (has_attr(node, "spectrumtype")) {
-        ch.spectrum_type = parse_spectrum_type(
+        ch.spectrumType = parseSpectrumType(
             node.attribute("spectrumtype").as_string());
     }
 
@@ -270,15 +270,15 @@ Result<Info> parse_info(pugi::xml_node const& node) {
     if (has_attr(node, "datatype")) {
         dt_raw = node.attribute("datatype").as_string();
     }
-    auto dt_r = parse_data_type(dt_raw);
+    auto dt_r = parseDataType(dt_raw);
     if (!dt_r) return tl::make_unexpected(std::move(dt_r).error());
-    info.data_type = *dt_r;
+    info.dataType = *dt_r;
 
     if (has_attr(node, "value")) {
         info.value = node.attribute("value").as_string();
     }
 
-    info.physical_unit = get_optional_string(node, "physicalunit");
+    info.physicalUnit = get_optional_string(node, "physicalunit");
     return info;
 }
 
@@ -297,11 +297,11 @@ Result<std::vector<Info>> parse_infos(pugi::xml_node const& infos_root) {
 
 }  // anonymous namespace
 
-Result<MetaBlock> parse_metablock_xml(std::uint8_t const* data, std::size_t size) {
+Result<MetaBlock> parseMetablockXml(std::uint8_t const* data, std::size_t size) {
     if (data == nullptr && size != 0) {
         return tl::make_unexpected(Error{
             Error::Code::InvalidArgument,
-            "parse_metablock_xml: data is null but size > 0"});
+            "parseMetablockXml: data is null but size > 0"});
     }
 
     pugi::xml_document doc;
@@ -334,9 +334,9 @@ Result<MetaBlock> parse_metablock_xml(std::uint8_t const* data, std::size_t size
 
     MetaBlock mb;
 
-    auto file_info = parse_optimeas_attrs(root);
-    if (!file_info) return tl::make_unexpected(std::move(file_info).error());
-    mb.file_info = std::move(*file_info);
+    auto fileInfo = parse_optimeas_attrs(root);
+    if (!fileInfo) return tl::make_unexpected(std::move(fileInfo).error());
+    mb.fileInfo = std::move(*fileInfo);
 
     pugi::xml_node const channels_root = root.child("channels");
     if (channels_root) {
@@ -355,8 +355,8 @@ Result<MetaBlock> parse_metablock_xml(std::uint8_t const* data, std::size_t size
     return mb;
 }
 
-Result<MetaBlock> parse_metablock_xml(std::string_view text) {
-    return parse_metablock_xml(
+Result<MetaBlock> parseMetablockXml(std::string_view text) {
+    return parseMetablockXml(
         reinterpret_cast<std::uint8_t const*>(text.data()),
         text.size());
 }

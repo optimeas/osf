@@ -135,7 +135,7 @@ DataType rel_timestamped_payload_data_type(
 Result<std::size_t> extend_numeric(NumericValues& target,
                                    NumericPayload payload,
                                    std::uint16_t channel) {
-    DataType const target_dt  = numeric_values_data_type(target);
+    DataType const target_dt  = numericValuesDataType(target);
     DataType const payload_dt = numeric_payload_data_type(payload);
     if (payload_dt != target_dt) {
         return tl::make_unexpected(
@@ -155,14 +155,14 @@ Result<std::size_t> extend_numeric(NumericValues& target,
 }
 
 // Compute the last absolute timestamp produced by a segment with
-// `(start_timestamp_ns, sample_rate_hz, sample_count)`. Mirrors the
+// `(startTimestampNs, sampleRateHz, sampleCount)`. Mirrors the
 // Rust update_last_ts_from_segment helper.
 std::int64_t segment_last_timestamp(std::int64_t start_ts, double rate,
-                                    std::size_t sample_count) noexcept {
-    if (sample_count == 0) return start_ts;
+                                    std::size_t sampleCount) noexcept {
+    if (sampleCount == 0) return start_ts;
     if (rate > 0.0) {
         double const offset =
-            (static_cast<double>(sample_count - 1) / rate) * 1.0e9;
+            (static_cast<double>(sampleCount - 1) / rate) * 1.0e9;
         return start_ts + static_cast<std::int64_t>(offset);
     }
     return start_ts;
@@ -185,11 +185,11 @@ struct ChannelBuilder {
 
     std::uint16_t index = 0;
     std::string name;
-    DataType data_type = DataType::Unsupported;
-    std::optional<std::string> physical_unit;
-    std::optional<std::string> display_name;
-    std::optional<std::string> mime_type;
-    ChannelMeta channel_def;
+    DataType dataType = DataType::Unsupported;
+    std::optional<std::string> physicalUnit;
+    std::optional<std::string> displayName;
+    std::optional<std::string> mimeType;
+    ChannelMeta channelDef;
 
     // Anchor for bcContinuedRelStampData (carries deltas).
     std::optional<std::int64_t> last_timestamp_ns;
@@ -208,17 +208,17 @@ struct ChannelBuilder {
 };
 
 void seed_initial_state(ChannelBuilder& b) {
-    if (b.data_type == DataType::Unsupported ||
-        b.channel_def.channel_type == ChannelType::Unsupported) {
+    if (b.dataType == DataType::Unsupported ||
+        b.channelDef.channelType == ChannelType::Unsupported) {
         b.state = ChannelBuilder::State::Unsupported;
         return;
     }
-    if (b.data_type == DataType::String) {
+    if (b.dataType == DataType::String) {
         b.state = ChannelBuilder::State::Variable;
         b.var_strings.emplace();
         return;
     }
-    if (b.data_type == DataType::Binary || b.data_type == DataType::ByteArray) {
+    if (b.dataType == DataType::Binary || b.dataType == DataType::ByteArray) {
         b.state = ChannelBuilder::State::Variable;
         b.var_binaries.emplace();
         return;
@@ -228,14 +228,14 @@ void seed_initial_state(ChannelBuilder& b) {
 
 Result<void> apply_start(ChannelBuilder& b, StartData payload) {
     DataType const payload_dt = numeric_payload_data_type(payload.samples);
-    if (payload_dt != b.data_type) {
+    if (payload_dt != b.dataType) {
         return tl::make_unexpected(
-            data_type_mismatch(b.index, b.data_type, payload_dt));
+            data_type_mismatch(b.index, b.dataType, payload_dt));
     }
 
     switch (b.state) {
         case ChannelBuilder::State::Pending: {
-            auto empty = numeric_values_empty_for(b.data_type);
+            auto empty = numericValuesEmptyFor(b.dataType);
             if (!empty) {
                 return tl::make_unexpected(invalid_block(
                     "channel cannot hold equidistant samples"));
@@ -245,30 +245,30 @@ Result<void> apply_start(ChannelBuilder& b, StartData payload) {
                                            std::move(payload.samples), b.index);
             if (!appended) return tl::make_unexpected(std::move(appended).error());
             Segment seg;
-            seg.start_timestamp_ns = payload.start_timestamp_ns;
-            seg.sample_rate_hz     = payload.sample_rate_hz;
-            seg.start_index        = 0;
-            seg.sample_count       = *appended;
+            seg.startTimestampNs = payload.startTimestampNs;
+            seg.sampleRateHz     = payload.sampleRateHz;
+            seg.startIndex        = 0;
+            seg.sampleCount       = *appended;
             b.eq_segments.clear();
             b.eq_segments.push_back(seg);
             b.state = ChannelBuilder::State::Equidistant;
             b.last_timestamp_ns = segment_last_timestamp(
-                payload.start_timestamp_ns, payload.sample_rate_hz, *appended);
+                payload.startTimestampNs, payload.sampleRateHz, *appended);
             return {};
         }
         case ChannelBuilder::State::Equidistant: {
-            std::size_t const start_index = numeric_values_len(b.eq_samples);
+            std::size_t const startIndex = numericValuesLen(b.eq_samples);
             auto appended = extend_numeric(b.eq_samples,
                                            std::move(payload.samples), b.index);
             if (!appended) return tl::make_unexpected(std::move(appended).error());
             Segment seg;
-            seg.start_timestamp_ns = payload.start_timestamp_ns;
-            seg.sample_rate_hz     = payload.sample_rate_hz;
-            seg.start_index        = start_index;
-            seg.sample_count       = *appended;
+            seg.startTimestampNs = payload.startTimestampNs;
+            seg.sampleRateHz     = payload.sampleRateHz;
+            seg.startIndex        = startIndex;
+            seg.sampleCount       = *appended;
             b.eq_segments.push_back(seg);
             b.last_timestamp_ns = segment_last_timestamp(
-                payload.start_timestamp_ns, payload.sample_rate_hz, *appended);
+                payload.startTimestampNs, payload.sampleRateHz, *appended);
             return {};
         }
         case ChannelBuilder::State::Timestamped:
@@ -282,9 +282,9 @@ Result<void> apply_start(ChannelBuilder& b, StartData payload) {
 
 Result<void> apply_continued(ChannelBuilder& b, ContinuedData payload) {
     DataType const payload_dt = numeric_payload_data_type(payload.samples);
-    if (payload_dt != b.data_type) {
+    if (payload_dt != b.dataType) {
         return tl::make_unexpected(
-            data_type_mismatch(b.index, b.data_type, payload_dt));
+            data_type_mismatch(b.index, b.dataType, payload_dt));
     }
     switch (b.state) {
         case ChannelBuilder::State::Pending:
@@ -297,9 +297,9 @@ Result<void> apply_continued(ChannelBuilder& b, ContinuedData payload) {
                                            std::move(payload.samples), b.index);
             if (!appended) return tl::make_unexpected(std::move(appended).error());
             auto& last = b.eq_segments.back();
-            last.sample_count += *appended;
+            last.sampleCount += *appended;
             b.last_timestamp_ns = segment_last_timestamp(
-                last.start_timestamp_ns, last.sample_rate_hz, last.sample_count);
+                last.startTimestampNs, last.sampleRateHz, last.sampleCount);
             return {};
         }
         case ChannelBuilder::State::Timestamped:
@@ -316,9 +316,9 @@ Result<void> apply_continued(ChannelBuilder& b, ContinuedData payload) {
 Result<void> apply_abs_timestamped(ChannelBuilder& b,
                                    AbsTimestampData payload) {
     DataType const payload_dt = timestamped_payload_data_type(payload.samples);
-    if (payload_dt != b.data_type) {
+    if (payload_dt != b.dataType) {
         return tl::make_unexpected(
-            data_type_mismatch(b.index, b.data_type, payload_dt));
+            data_type_mismatch(b.index, b.dataType, payload_dt));
     }
 
     switch (b.state) {
@@ -327,7 +327,7 @@ Result<void> apply_abs_timestamped(ChannelBuilder& b,
             // would have been seeded into the Variable state by
             // seed_initial_state, so reaching Pending here implies
             // the payload is one of the numeric / GPS variants.
-            auto empty = numeric_values_empty_for(b.data_type);
+            auto empty = numericValuesEmptyFor(b.dataType);
             if (!empty) {
                 return tl::make_unexpected(invalid_block(
                     "unexpected variable-length payload in numeric "
@@ -340,7 +340,7 @@ Result<void> apply_abs_timestamped(ChannelBuilder& b,
             [[fallthrough]];
         }
         case ChannelBuilder::State::Timestamped: {
-            DataType const target_dt = numeric_values_data_type(b.ts_values);
+            DataType const target_dt = numericValuesDataType(b.ts_values);
             if (payload_dt != target_dt) {
                 return tl::make_unexpected(
                     data_type_mismatch(b.index, target_dt, payload_dt));
@@ -373,7 +373,7 @@ Result<void> apply_abs_timestamped(ChannelBuilder& b,
         }
         case ChannelBuilder::State::Variable: {
             // String XOR binary based on the channel's declared
-            // data_type — payload variant must match.
+            // dataType — payload variant must match.
             std::size_t appended = 0;
             bool mismatched = false;
             std::visit([&](auto&& src_vec) {
@@ -381,7 +381,7 @@ Result<void> apply_abs_timestamped(ChannelBuilder& b,
                 using Pair = typename V::value_type;
                 using T = typename Pair::second_type;
                 if constexpr (std::is_same_v<T, std::string>) {
-                    if (b.data_type != DataType::String || !b.var_strings) {
+                    if (b.dataType != DataType::String || !b.var_strings) {
                         mismatched = true;
                         return;
                     }
@@ -391,8 +391,8 @@ Result<void> apply_abs_timestamped(ChannelBuilder& b,
                         b.var_strings->push_back(std::move(value));
                     }
                 } else if constexpr (std::is_same_v<T, std::vector<std::uint8_t>>) {
-                    bool const ok = (b.data_type == DataType::Binary ||
-                                      b.data_type == DataType::ByteArray) &&
+                    bool const ok = (b.dataType == DataType::Binary ||
+                                      b.dataType == DataType::ByteArray) &&
                                      b.var_binaries;
                     if (!ok) {
                         mismatched = true;
@@ -410,7 +410,7 @@ Result<void> apply_abs_timestamped(ChannelBuilder& b,
             }, std::move(payload.samples));
             if (mismatched) {
                 return tl::make_unexpected(
-                    data_type_mismatch(b.index, b.data_type, payload_dt));
+                    data_type_mismatch(b.index, b.dataType, payload_dt));
             }
             if (appended > 0) {
                 b.last_timestamp_ns = b.ts_timestamps_ns.back();
@@ -428,9 +428,9 @@ Result<void> apply_abs_timestamped(ChannelBuilder& b,
 Result<void> apply_rel_timestamped(ChannelBuilder& b,
                                    ContinuedRelStampData payload) {
     DataType const payload_dt = rel_timestamped_payload_data_type(payload.samples);
-    if (payload_dt != b.data_type) {
+    if (payload_dt != b.dataType) {
         return tl::make_unexpected(
-            data_type_mismatch(b.index, b.data_type, payload_dt));
+            data_type_mismatch(b.index, b.dataType, payload_dt));
     }
     if (!b.last_timestamp_ns) {
         return tl::make_unexpected(rel_stamp_without_anchor(b.index));
@@ -441,7 +441,7 @@ Result<void> apply_rel_timestamped(ChannelBuilder& b,
         return tl::make_unexpected(channel_mixed(b.index));
     }
 
-    DataType const target_dt = numeric_values_data_type(b.ts_values);
+    DataType const target_dt = numericValuesDataType(b.ts_values);
     if (payload_dt != target_dt) {
         return tl::make_unexpected(
             data_type_mismatch(b.index, target_dt, payload_dt));
@@ -492,40 +492,40 @@ std::optional<DataChannel> finalize_builder(ChannelBuilder&& b) {
         case ChannelBuilder::State::Pending: {
             // Channel declared but no typed block arrived — emit an
             // empty channel matching the metablock's data-type group.
-            if (b.data_type == DataType::String) {
+            if (b.dataType == DataType::String) {
                 VariableChannel v;
                 v.index = b.index;
                 v.name = std::move(b.name);
-                v.data_type = b.data_type;
-                v.physical_unit = std::move(b.physical_unit);
-                v.display_name = std::move(b.display_name);
-                v.mime_type = std::move(b.mime_type);
-                v.channel_def = std::move(b.channel_def);
-                v.string_values.emplace();
+                v.dataType = b.dataType;
+                v.physicalUnit = std::move(b.physicalUnit);
+                v.displayName = std::move(b.displayName);
+                v.mimeType = std::move(b.mimeType);
+                v.channelDef = std::move(b.channelDef);
+                v.stringValues.emplace();
                 return DataChannel{std::move(v)};
             }
-            if (b.data_type == DataType::Binary ||
-                b.data_type == DataType::ByteArray) {
+            if (b.dataType == DataType::Binary ||
+                b.dataType == DataType::ByteArray) {
                 VariableChannel v;
                 v.index = b.index;
                 v.name = std::move(b.name);
-                v.data_type = b.data_type;
-                v.physical_unit = std::move(b.physical_unit);
-                v.display_name = std::move(b.display_name);
-                v.mime_type = std::move(b.mime_type);
-                v.channel_def = std::move(b.channel_def);
-                v.binary_values.emplace();
+                v.dataType = b.dataType;
+                v.physicalUnit = std::move(b.physicalUnit);
+                v.displayName = std::move(b.displayName);
+                v.mimeType = std::move(b.mimeType);
+                v.channelDef = std::move(b.channelDef);
+                v.binaryValues.emplace();
                 return DataChannel{std::move(v)};
             }
-            auto empty = numeric_values_empty_for(b.data_type);
+            auto empty = numericValuesEmptyFor(b.dataType);
             if (!empty) return std::nullopt;
             EquidistantChannel e;
             e.index = b.index;
             e.name = std::move(b.name);
-            e.data_type = b.data_type;
-            e.physical_unit = std::move(b.physical_unit);
-            e.display_name = std::move(b.display_name);
-            e.channel_def = std::move(b.channel_def);
+            e.dataType = b.dataType;
+            e.physicalUnit = std::move(b.physicalUnit);
+            e.displayName = std::move(b.displayName);
+            e.channelDef = std::move(b.channelDef);
             e.samples = std::move(*empty);
             return DataChannel{std::move(e)};
         }
@@ -533,10 +533,10 @@ std::optional<DataChannel> finalize_builder(ChannelBuilder&& b) {
             EquidistantChannel e;
             e.index = b.index;
             e.name = std::move(b.name);
-            e.data_type = b.data_type;
-            e.physical_unit = std::move(b.physical_unit);
-            e.display_name = std::move(b.display_name);
-            e.channel_def = std::move(b.channel_def);
+            e.dataType = b.dataType;
+            e.physicalUnit = std::move(b.physicalUnit);
+            e.displayName = std::move(b.displayName);
+            e.channelDef = std::move(b.channelDef);
             e.samples = std::move(b.eq_samples);
             e.segments = std::move(b.eq_segments);
             return DataChannel{std::move(e)};
@@ -545,11 +545,11 @@ std::optional<DataChannel> finalize_builder(ChannelBuilder&& b) {
             TimestampedChannel t;
             t.index = b.index;
             t.name = std::move(b.name);
-            t.data_type = b.data_type;
-            t.physical_unit = std::move(b.physical_unit);
-            t.display_name = std::move(b.display_name);
-            t.channel_def = std::move(b.channel_def);
-            t.timestamps_ns = std::move(b.ts_timestamps_ns);
+            t.dataType = b.dataType;
+            t.physicalUnit = std::move(b.physicalUnit);
+            t.displayName = std::move(b.displayName);
+            t.channelDef = std::move(b.channelDef);
+            t.timestampsNs = std::move(b.ts_timestamps_ns);
             t.values = std::move(b.ts_values);
             return DataChannel{std::move(t)};
         }
@@ -557,21 +557,21 @@ std::optional<DataChannel> finalize_builder(ChannelBuilder&& b) {
             VariableChannel v;
             v.index = b.index;
             v.name = std::move(b.name);
-            v.data_type = b.data_type;
-            v.physical_unit = std::move(b.physical_unit);
-            v.display_name = std::move(b.display_name);
-            v.mime_type = std::move(b.mime_type);
-            v.channel_def = std::move(b.channel_def);
-            v.timestamps_ns = std::move(b.ts_timestamps_ns);
-            v.string_values = std::move(b.var_strings);
-            v.binary_values = std::move(b.var_binaries);
+            v.dataType = b.dataType;
+            v.physicalUnit = std::move(b.physicalUnit);
+            v.displayName = std::move(b.displayName);
+            v.mimeType = std::move(b.mimeType);
+            v.channelDef = std::move(b.channelDef);
+            v.timestampsNs = std::move(b.ts_timestamps_ns);
+            v.stringValues = std::move(b.var_strings);
+            v.binaryValues = std::move(b.var_binaries);
             return DataChannel{std::move(v)};
         }
     }
     return std::nullopt;
 }
 
-// Read the magic header line, then exactly `metablock_len` bytes for
+// Read the magic header line, then exactly `metablockLen` bytes for
 // the metablock body. Returns the parsed metablock plus the
 // bytes-consumed totals (header line length, metablock body length).
 struct HeaderAndMetablock {
@@ -582,25 +582,25 @@ struct HeaderAndMetablock {
 
 Result<HeaderAndMetablock> parse_header_and_metablock(std::istream& in) {
     // OSFZ (gzip / zlib) decompression is applied transparently before
-    // this point (build_from_stream_impl wraps the source in a
+    // this point (buildFromStreamImpl wraps the source in a
     // DecompressingIStream), so `in` is always a plain OSF byte stream
     // here.
-    auto hdr = parse_magic_header(in);
+    auto hdr = parseMagicHeader(in);
     if (!hdr) return tl::make_unexpected(std::move(hdr).error());
 
-    // parse_magic_header (istream overload) leaves the cursor right
+    // parseMagicHeader (istream overload) leaves the cursor right
     // after the terminating newline. The header-line byte count is
     // identifier + " " + length + "\n"; recompute it from the parsed
     // version + length value so the stats are populated correctly.
     auto identifier_len = (hdr->version == OsfVersion::Osf4) ? 4 : 4;
     std::ostringstream oss;
-    oss << hdr->metablock_len;
+    oss << hdr->metablockLen;
     std::uint64_t const header_line_bytes =
         static_cast<std::uint64_t>(identifier_len) + 1 +
         oss.str().size() + 1;
 
-    std::vector<std::uint8_t> body(hdr->metablock_len);
-    if (hdr->metablock_len > 0) {
+    std::vector<std::uint8_t> body(hdr->metablockLen);
+    if (hdr->metablockLen > 0) {
         in.read(reinterpret_cast<char*>(body.data()),
                 static_cast<std::streamsize>(body.size()));
         if (static_cast<std::size_t>(in.gcount()) != body.size()) {
@@ -611,14 +611,14 @@ Result<HeaderAndMetablock> parse_header_and_metablock(std::istream& in) {
     }
 
     auto meta = (hdr->version == OsfVersion::Osf5)
-        ? parse_metablock_json(body.data(), body.size())
-        : parse_metablock_xml(body.data(), body.size());
+        ? parseMetablockJson(body.data(), body.size())
+        : parseMetablockXml(body.data(), body.size());
     if (!meta) return tl::make_unexpected(std::move(meta).error());
 
     HeaderAndMetablock out;
     out.meta = std::move(*meta);
     out.header_line_bytes = header_line_bytes;
-    out.metablock_bytes   = hdr->metablock_len;
+    out.metablock_bytes   = hdr->metablockLen;
     return out;
 }
 
@@ -628,9 +628,9 @@ Result<HeaderAndMetablock> parse_header_and_metablock(std::istream& in) {
 // DataManager builder
 // =====================================================================
 
-Result<DataManager> build_from_stream_impl(std::istream& stream,
-                                           std::uint64_t file_size,
-                                           bool have_file_size) {
+Result<DataManager> buildFromStreamImpl(std::istream& stream,
+                                           std::uint64_t fileSize,
+                                           bool haveFileSize) {
     // Transparent OSFZ (gzip / zlib) decompression: detection is by the
     // leading two bytes; a plain OSF stream passes through verbatim. The
     // rest of the read stack consumes the decompressed bytes unchanged.
@@ -640,10 +640,10 @@ Result<DataManager> build_from_stream_impl(std::istream& stream,
     if (!hm) return tl::make_unexpected(std::move(hm).error());
 
     BlockReader reader(input, hm->meta);
-    // file_size is telemetry only (BlockReader does not use it); the
+    // fileSize is telemetry only (BlockReader does not use it); the
     // value is the source file size, which for OSFZ is the compressed
     // size — still the meaningful "file size" to report.
-    if (have_file_size) reader.with_file_size(file_size);
+    if (haveFileSize) reader.withFileSize(fileSize);
 
     // Seed builders.
     std::vector<ChannelBuilder> builders;
@@ -653,17 +653,17 @@ Result<DataManager> build_from_stream_impl(std::istream& stream,
         ChannelBuilder b;
         b.index            = ch.index;
         b.name             = ch.name;
-        b.data_type        = ch.data_type;
-        b.physical_unit    = ch.physical_unit;
-        b.display_name     = ch.display_name;
-        b.mime_type        = ch.mime_type;
-        b.channel_def.channel_type         = ch.channel_type;
-        b.channel_def.size_of_length_value = ch.size_of_length_value;
-        b.channel_def.time_increment_ns    = ch.time_increment_ns;
-        b.channel_def.reference            = ch.reference;
-        b.channel_def.physical_dimension   = ch.physical_dimension;
-        b.channel_def.comment              = ch.comment;
-        b.channel_def.spectrum_type        = ch.spectrum_type;
+        b.dataType        = ch.dataType;
+        b.physicalUnit    = ch.physicalUnit;
+        b.displayName     = ch.displayName;
+        b.mimeType        = ch.mimeType;
+        b.channelDef.channelType         = ch.channelType;
+        b.channelDef.sizeOfLengthValue = ch.sizeOfLengthValue;
+        b.channelDef.timeIncrementNs    = ch.timeIncrementNs;
+        b.channelDef.reference            = ch.reference;
+        b.channelDef.physicalDimension   = ch.physicalDimension;
+        b.channelDef.comment              = ch.comment;
+        b.channelDef.spectrumType        = ch.spectrumType;
         seed_initial_state(b);
         builder_by_index[ch.index] = builders.size();
         builders.push_back(std::move(b));
@@ -675,10 +675,10 @@ Result<DataManager> build_from_stream_impl(std::istream& stream,
             return tl::make_unexpected(blk_r.error());
         }
         Block const& blk = *blk_r;
-        auto it = builder_by_index.find(blk.channel_index);
+        auto it = builder_by_index.find(blk.channelIndex);
         if (it == builder_by_index.end()) {
             std::ostringstream oss;
-            oss << "block references unknown channel index " << blk.channel_index;
+            oss << "block references unknown channel index " << blk.channelIndex;
             return tl::make_unexpected(Error{
                 Error::Code::UnknownChannelIndex, oss.str()});
         }
@@ -690,10 +690,10 @@ Result<DataManager> build_from_stream_impl(std::istream& stream,
     DataManager mgr;
     mgr.meta = std::move(hm->meta);
     mgr.stats = reader.stats();
-    mgr.stats.header_size_bytes    = hm->header_line_bytes;
-    mgr.stats.metablock_size_bytes = hm->metablock_bytes;
-    mgr.stats.compressed           = input.is_compressed();
-    mgr.stats.compression_format   = input.format();
+    mgr.stats.headerSizeBytes    = hm->header_line_bytes;
+    mgr.stats.metablockSizeBytes = hm->metablock_bytes;
+    mgr.stats.compressed           = input.isCompressed();
+    mgr.stats.compressionFormat   = input.format();
 
     mgr.channels_.reserve(builders.size());
     for (auto& b : builders) {
@@ -710,7 +710,7 @@ Result<DataManager> build_from_stream_impl(std::istream& stream,
     return mgr;
 }
 
-Result<DataManager> DataManager::load_from_file(
+Result<DataManager> DataManager::loadFromFile(
     std::filesystem::path const& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
@@ -718,16 +718,16 @@ Result<DataManager> DataManager::load_from_file(
         oss << "failed to open " << path;
         return tl::make_unexpected(Error{Error::Code::IoError, oss.str()});
     }
-    std::uint64_t file_size = 0;
+    std::uint64_t fileSize = 0;
     std::error_code ec;
     auto sz = std::filesystem::file_size(path, ec);
-    bool have_file_size = !ec;
-    if (have_file_size) file_size = sz;
-    return build_from_stream_impl(in, file_size, have_file_size);
+    bool haveFileSize = !ec;
+    if (haveFileSize) fileSize = sz;
+    return buildFromStreamImpl(in, fileSize, haveFileSize);
 }
 
-Result<DataManager> DataManager::load_from_stream(std::istream& stream) {
-    return build_from_stream_impl(stream, 0, false);
+Result<DataManager> DataManager::loadFromStream(std::istream& stream) {
+    return buildFromStreamImpl(stream, 0, false);
 }
 
 DataChannel const* DataManager::channel(std::string_view name) const {
@@ -736,7 +736,7 @@ DataChannel const* DataManager::channel(std::string_view name) const {
     return &channels_[it->second];
 }
 
-DataChannel const* DataManager::channel_by_index(std::uint16_t index) const {
+DataChannel const* DataManager::channelByIndex(std::uint16_t index) const {
     auto it = by_index_.find(index);
     if (it == by_index_.end()) return nullptr;
     return &channels_[it->second];

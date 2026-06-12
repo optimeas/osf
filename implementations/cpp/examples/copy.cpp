@@ -6,8 +6,8 @@
 // Usage:
 //   copy <in> <out>
 //
-// Loads <in> with DataManager::load_from_file (transparent OSFZ),
-// writes a fresh OSF5 file to <out> via osf::write_to_file,
+// Loads <in> with DataManager::loadFromFile (transparent OSFZ),
+// writes a fresh OSF5 file to <out> via osf::writeToFile,
 // reloads <out> and confirms that channel counts match.
 
 #include <osf/osf.h>
@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
     std::string const out_path = argv[2];
 
     // ── Load source ───────────────────────────────────────────────────────
-    auto load_res = osf::DataManager::load_from_file(in_path);
+    auto load_res = osf::DataManager::loadFromFile(in_path);
     if (!load_res) {
         std::cerr << in_path << ": " << load_res.error().message << "\n";
         return 1;
@@ -37,14 +37,14 @@ int main(int argc, char** argv) {
     std::size_t const src_channels = src.channels().size();
 
     // ── Write destination ─────────────────────────────────────────────────
-    auto write_res = osf::write_to_file(src, out_path);
+    auto write_res = osf::writeToFile(src, out_path);
     if (!write_res) {
         std::cerr << out_path << ": " << write_res.error().message << "\n";
         return 1;
     }
 
     // ── Reload and verify ─────────────────────────────────────────────────
-    auto reload_res = osf::DataManager::load_from_file(out_path);
+    auto reload_res = osf::DataManager::loadFromFile(out_path);
     if (!reload_res) {
         std::cerr << out_path << " (reload): " << reload_res.error().message << "\n";
         return 1;

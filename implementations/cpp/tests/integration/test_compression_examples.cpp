@@ -70,7 +70,7 @@ TEST_F(CompressionExamplesTest, steam_loco_gzip_and_zlib_match_plain) {
     if (!std::filesystem::exists(plain_path)) {
         GTEST_SKIP() << "steam_loco.osf missing";
     }
-    auto const plain = osf::DataManager::load_from_file(plain_path);
+    auto const plain = osf::DataManager::loadFromFile(plain_path);
     ASSERT_TRUE(plain.has_value()) << plain.error().message;
     EXPECT_FALSE(plain->stats.compressed);
 
@@ -89,11 +89,11 @@ TEST_F(CompressionExamplesTest, steam_loco_gzip_and_zlib_match_plain) {
     for (auto const& c : cases) {
         std::istringstream src(deflate_with(raw, c.window_bits),
                                std::ios::binary);
-        auto const got = osf::DataManager::load_from_stream(src);
+        auto const got = osf::DataManager::loadFromStream(src);
         ASSERT_TRUE(got.has_value())
             << c.label << ": " << got.error().message;
         EXPECT_TRUE(got->stats.compressed) << c.label;
-        EXPECT_EQ(got->stats.compression_format, c.format) << c.label;
+        EXPECT_EQ(got->stats.compressionFormat, c.format) << c.label;
         EXPECT_TRUE(osf_test::roundtrip_managers_equal(*plain, *got))
             << c.label;
     }
@@ -108,15 +108,15 @@ TEST_F(CompressionExamplesTest, weather_station_osfz_loads_transparently) {
     if (!std::filesystem::exists(path)) {
         GTEST_SKIP() << "weather_station.osfz missing";
     }
-    auto const mgr = osf::DataManager::load_from_file(path);
+    auto const mgr = osf::DataManager::loadFromFile(path);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     EXPECT_TRUE(mgr->stats.compressed);
-    EXPECT_EQ(mgr->stats.compression_format, osf::CompressionFormat::Gzip);
+    EXPECT_EQ(mgr->stats.compressionFormat, osf::CompressionFormat::Gzip);
     ASSERT_FALSE(mgr->channels().empty());
 
     bool any_non_empty = false;
     for (auto const& ch : mgr->channels()) {
-        if (!osf::channel_is_empty(ch)) {
+        if (!osf::channelIsEmpty(ch)) {
             any_non_empty = true;
             break;
         }

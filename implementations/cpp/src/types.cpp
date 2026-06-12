@@ -25,7 +25,7 @@ Error make_removed_in_spec(std::string_view field,
 
 }  // namespace
 
-Result<DataType> parse_data_type(std::string_view raw) {
+Result<DataType> parseDataType(std::string_view raw) {
     if (raw == "bool")        return DataType::Bool;
     if (raw == "int8")        return DataType::Int8;
     if (raw == "int16")       return DataType::Int16;
@@ -44,7 +44,7 @@ Result<DataType> parse_data_type(std::string_view raw) {
     // Read-side alias: normalise bytearray to Binary. Writers always
     // emit "binary"; this branch only covers files produced by other
     // toolchains. The owning Channel preserves the raw spelling on
-    // data_type_raw so callers can still see it was spelled differently.
+    // dataTypeRaw so callers can still see it was spelled differently.
     if (raw == "bytearray") return DataType::Binary;
 
     // Removed in spec revision 2026-05-04 (DECISIONS §16). Rejected
@@ -71,7 +71,7 @@ Result<DataType> parse_data_type(std::string_view raw) {
     return DataType::Unsupported;
 }
 
-Result<ChannelType> parse_channel_type(std::string_view raw) {
+Result<ChannelType> parseChannelType(std::string_view raw) {
     if (raw == "scalar")      return ChannelType::Scalar;
     if (raw == "equidistant") return ChannelType::Equidistant;
     if (raw == "timestamped") return ChannelType::Timestamped;
@@ -80,7 +80,7 @@ Result<ChannelType> parse_channel_type(std::string_view raw) {
     return ChannelType::Unsupported;
 }
 
-SpectrumType parse_spectrum_type(std::string_view raw) noexcept {
+SpectrumType parseSpectrumType(std::string_view raw) noexcept {
     if (raw == "amplitude")   return SpectrumType::Amplitude;
     if (raw == "realimag")    return SpectrumType::RealImag;
     if (raw == "ampphaserad") return SpectrumType::AmpPhaseRad;

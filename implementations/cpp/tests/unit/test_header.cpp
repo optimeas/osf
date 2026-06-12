@@ -17,7 +17,7 @@ namespace {
 
 // Convenience: parse a string_view via the buffer overload.
 osf::Result<osf::MagicHeader> parse_bytes(std::string_view bytes) {
-    return osf::parse_magic_header(
+    return osf::parseMagicHeader(
         reinterpret_cast<std::uint8_t const*>(bytes.data()),
         bytes.size());
 }
@@ -49,28 +49,28 @@ TEST(MagicHeader, parses_modern_osf4_identifier) {
     auto result = parse_bytes("OSF4 928\n<rest>");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf4);
-    EXPECT_EQ(result->metablock_len, 928u);
+    EXPECT_EQ(result->metablockLen, 928u);
 }
 
 TEST(MagicHeader, parses_legacy_ocean_stream_format4_identifier) {
     auto result = parse_bytes("OCEAN_STREAM_FORMAT4 26279\n");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf4);
-    EXPECT_EQ(result->metablock_len, 26279u);
+    EXPECT_EQ(result->metablockLen, 26279u);
 }
 
 TEST(MagicHeader, parses_legacy_ocean_streaming_format4_identifier) {
     auto result = parse_bytes("OCEAN_STREAMING_FORMAT4 12345\n");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf4);
-    EXPECT_EQ(result->metablock_len, 12345u);
+    EXPECT_EQ(result->metablockLen, 12345u);
 }
 
 TEST(MagicHeader, parses_osf5_identifier) {
     auto result = parse_bytes("OSF5 895\n{\"osf\":...");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf5);
-    EXPECT_EQ(result->metablock_len, 895u);
+    EXPECT_EQ(result->metablockLen, 895u);
 }
 
 // ----- 5..9: negative cases (parse failures) -----
@@ -112,7 +112,7 @@ TEST(MagicHeader, tolerates_crlf_terminator) {
     auto result = parse_bytes("OSF5 42\r\n");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf5);
-    EXPECT_EQ(result->metablock_len, 42u);
+    EXPECT_EQ(result->metablockLen, 42u);
 }
 
 // ----- 11: stream invariant -----
@@ -120,7 +120,7 @@ TEST(MagicHeader, tolerates_crlf_terminator) {
 TEST(MagicHeader, stream_position_after_newline) {
     std::string input = "OSF5 7\nMETABLOCK_BYTES_FOLLOW";
     std::istringstream stream{input};
-    auto result = osf::parse_magic_header(static_cast<std::istream&>(stream));
+    auto result = osf::parseMagicHeader(static_cast<std::istream&>(stream));
     ASSERT_TRUE(result.has_value()) << result.error().message;
 
     std::ostringstream remainder;
@@ -133,11 +133,11 @@ TEST(MagicHeader, stream_position_after_newline) {
 TEST(MagicHeader, buffer_overload_matches_istream_overload) {
     std::string input = "OSF5 100\n";
 
-    auto buffer_result = osf::parse_magic_header(
+    auto buffer_result = osf::parseMagicHeader(
         reinterpret_cast<std::uint8_t const*>(input.data()), input.size());
 
     std::istringstream stream{input};
-    auto istream_result = osf::parse_magic_header(static_cast<std::istream&>(stream));
+    auto istream_result = osf::parseMagicHeader(static_cast<std::istream&>(stream));
 
     ASSERT_TRUE(buffer_result.has_value()) << buffer_result.error().message;
     ASSERT_TRUE(istream_result.has_value()) << istream_result.error().message;
@@ -148,10 +148,10 @@ TEST(MagicHeader, buffer_overload_matches_istream_overload) {
 
 TEST(MagicHeader, path_overload_works) {
     TempFile tmp{"osf_test_path_overload.osf", "OSF5 1234\nrest_of_file"};
-    auto result = osf::parse_magic_header(tmp.path);
+    auto result = osf::parseMagicHeader(tmp.path);
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf5);
-    EXPECT_EQ(result->metablock_len, 1234u);
+    EXPECT_EQ(result->metablockLen, 1234u);
 }
 
 TEST(MagicHeader, path_overload_handles_missing_file) {
@@ -159,7 +159,7 @@ TEST(MagicHeader, path_overload_handles_missing_file) {
                  / "osf_test_definitely_missing_a3f9.osf";
     std::error_code ec;
     std::filesystem::remove(missing, ec);  // ensure not present
-    auto result = osf::parse_magic_header(missing);
+    auto result = osf::parseMagicHeader(missing);
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error().code, osf::Error::Code::IoError);
 }

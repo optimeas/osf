@@ -37,7 +37,7 @@ int main(void) {
     CHECK(m != NULL, "manager handle non-null");
 
     size_t count = osf_manager_channel_count(m);
-    CHECK(count > 0, "channel_count > 0");
+    CHECK(count > 0, "channelCount > 0");
 
     const osf_channel* ch = osf_manager_channel_at(m, 0);
     CHECK(ch != NULL, "channel_at(0) non-null");
@@ -55,7 +55,7 @@ int main(void) {
 
     osf_data_type dt = osf_channel_data_type(ch);
     size_t sc = osf_channel_sample_count(ch);
-    CHECK(sc > 0, "sample_count > 0");
+    CHECK(sc > 0, "sampleCount > 0");
 
     /* timestamps copy-out */
     int64_t ts[512];

@@ -5,7 +5,7 @@
 
 namespace osf {
 
-std::string_view error_category_name(Error::Code code) noexcept {
+std::string_view errorCategoryName(Error::Code code) noexcept {
     switch (code) {
         case Error::Code::Unknown:         return "Unknown";
         case Error::Code::InvalidArgument: return "InvalidArgument";

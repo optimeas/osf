@@ -26,27 +26,27 @@ namespace {
 // ---------------------------------------------------------------------
 
 osf::Channel make_channel(std::uint16_t index, osf::DataType dt,
-                          std::uint8_t size_of_length_value,
+                          std::uint8_t sizeOfLengthValue,
                           osf::ChannelType ct = osf::ChannelType::Scalar) {
     osf::Channel ch;
     ch.index = index;
     ch.name = "ch" + std::to_string(index);
-    ch.channel_type = ct;
-    ch.data_type = dt;
-    ch.size_of_length_value = size_of_length_value;
+    ch.channelType = ct;
+    ch.dataType = dt;
+    ch.sizeOfLengthValue = sizeOfLengthValue;
     return ch;
 }
 
 osf::MetaBlock make_meta(std::vector<osf::Channel> channels) {
     osf::MetaBlock mb;
-    mb.file_info.version = 5;
+    mb.fileInfo.version = 5;
     mb.channels = std::move(channels);
     return mb;
 }
 
 osf::MetaBlock make_meta_v4(std::vector<osf::Channel> channels) {
     osf::MetaBlock mb;
-    mb.file_info.version = 4;
+    mb.fileInfo.version = 4;
     mb.channels = std::move(channels);
     return mb;
 }
@@ -111,7 +111,7 @@ TEST(BlockReader, empty_stream_yields_nullopt_without_error) {
     ByteStream s({});
     osf::BlockReader r(s.get(), meta);
     EXPECT_FALSE(r.next().has_value());
-    EXPECT_EQ(r.blocks_truncated(), 0u);
+    EXPECT_EQ(r.blocksTruncated(), 0u);
 }
 
 TEST(BlockReader, truncation_in_channel_index_is_silent_eof) {
@@ -119,7 +119,7 @@ TEST(BlockReader, truncation_in_channel_index_is_silent_eof) {
     ByteStream s({0x00});  // single byte; can't form u16
     osf::BlockReader r(s.get(), meta);
     EXPECT_FALSE(r.next().has_value());
-    EXPECT_EQ(r.blocks_truncated(), 0u);
+    EXPECT_EQ(r.blocksTruncated(), 0u);
 }
 
 TEST(BlockReader, truncation_in_length_field_bumps_counter) {
@@ -128,7 +128,7 @@ TEST(BlockReader, truncation_in_length_field_bumps_counter) {
     ByteStream s({0x00, 0x00, 0x01, 0x00});
     osf::BlockReader r(s.get(), meta);
     EXPECT_FALSE(r.next().has_value());
-    EXPECT_EQ(r.blocks_truncated(), 1u);
+    EXPECT_EQ(r.blocksTruncated(), 1u);
 }
 
 TEST(BlockReader, truncation_mid_payload_bumps_counter) {
@@ -141,7 +141,7 @@ TEST(BlockReader, truncation_mid_payload_bumps_counter) {
     ByteStream s(std::move(bytes));
     osf::BlockReader r(s.get(), meta);
     EXPECT_FALSE(r.next().has_value());
-    EXPECT_EQ(r.blocks_truncated(), 1u);
+    EXPECT_EQ(r.blocksTruncated(), 1u);
 }
 
 // ---------------------------------------------------------------------
@@ -181,15 +181,15 @@ TEST(BlockReader, unsupported_data_type_yields_skipped_and_keeps_stream_aligned)
     auto first = r.next();
     ASSERT_TRUE(first && first->has_value());
     auto const& blk1 = **first;
-    EXPECT_EQ(blk1.channel_index, 0u);
+    EXPECT_EQ(blk1.channelIndex, 0u);
     auto const& sk1 = std::get<osf::Skipped>(blk1.kind);
     EXPECT_EQ(sk1.reason.kind, osf::SkipReason::Kind::UnsupportedDataType);
-    EXPECT_EQ(sk1.bytes_skipped, 5u);
+    EXPECT_EQ(sk1.bytesSkipped, 5u);
     EXPECT_FALSE(sk1.payload.has_value());  // default capture is off
 
     auto second = r.next();
     ASSERT_TRUE(second && second->has_value());
-    EXPECT_EQ((*second)->channel_index, 0u);  // stream still aligned
+    EXPECT_EQ((*second)->channelIndex, 0u);  // stream still aligned
 }
 
 TEST(BlockReader, capture_skipped_payload_keeps_body_bytes) {
@@ -199,14 +199,14 @@ TEST(BlockReader, capture_skipped_payload_keeps_body_bytes) {
     std::vector<std::uint8_t> bytes = {0, 0, 3, 0, 0x00, 0xAA, 0xBB};
     ByteStream s(std::move(bytes));
     osf::BlockReader r(s.get(), meta);
-    r.with_capture_skipped_payload(true);
+    r.withCaptureSkippedPayload(true);
 
     auto blk_r = r.next();
     ASSERT_TRUE(blk_r && blk_r->has_value());
     auto const& sk = std::get<osf::Skipped>((*blk_r)->kind);
     EXPECT_EQ(sk.reason.kind, osf::SkipReason::Kind::ReservedBlockType);
-    EXPECT_EQ(sk.reason.raw_byte, 0u);
-    EXPECT_EQ(sk.bytes_skipped, 3u);
+    EXPECT_EQ(sk.reason.rawByte, 0u);
+    EXPECT_EQ(sk.bytesSkipped, 3u);
     ASSERT_TRUE(sk.payload.has_value());
     EXPECT_EQ(*sk.payload, (std::vector<std::uint8_t>{0xAA, 0xBB}));
 }
@@ -226,7 +226,7 @@ TEST(BlockReader, deprecated_control_bytes_route_to_deprecated_skip_reason) {
         auto const& sk = std::get<osf::Skipped>((*blk_r)->kind);
         EXPECT_EQ(sk.reason.kind, osf::SkipReason::Kind::DeprecatedBlockType)
             << "raw byte " << int{raw};
-        EXPECT_EQ(sk.reason.raw_byte, raw) << "raw byte " << int{raw};
+        EXPECT_EQ(sk.reason.rawByte, raw) << "raw byte " << int{raw};
     }
 }
 
@@ -239,7 +239,7 @@ TEST(BlockReader, unknown_high_control_byte_routes_to_reserved_skip_reason) {
     ASSERT_TRUE(blk_r && blk_r->has_value());
     auto const& sk = std::get<osf::Skipped>((*blk_r)->kind);
     EXPECT_EQ(sk.reason.kind, osf::SkipReason::Kind::ReservedBlockType);
-    EXPECT_EQ(sk.reason.raw_byte, 0x55);
+    EXPECT_EQ(sk.reason.rawByte, 0x55);
 }
 
 // ---------------------------------------------------------------------
@@ -304,8 +304,8 @@ TEST(BlockReader, parses_start_data_single_sample_double) {
     auto blk_r = r.next();
     ASSERT_TRUE(blk_r && blk_r->has_value());
     auto const& sd = std::get<osf::StartData>((*blk_r)->kind);
-    EXPECT_EQ(sd.start_timestamp_ns, 1'000'000);
-    EXPECT_NEAR(sd.sample_rate_hz, 1000.0, 1e-9);
+    EXPECT_EQ(sd.startTimestampNs, 1'000'000);
+    EXPECT_NEAR(sd.sampleRateHz, 1000.0, 1e-9);
     auto const& v = std::get<std::vector<double>>(sd.samples);
     ASSERT_EQ(v.size(), 1u);
     EXPECT_DOUBLE_EQ(v[0], 2.5);
@@ -539,8 +539,8 @@ TEST(BlockReader, trailer_block_is_consumed_silently) {
     ByteStream s(std::move(bytes));
     osf::BlockReader r(s.get(), meta);
     EXPECT_FALSE(r.next().has_value());
-    EXPECT_TRUE(r.trailer_seen());
-    EXPECT_EQ(r.blocks_truncated(), 0u);
+    EXPECT_TRUE(r.trailerSeen());
+    EXPECT_EQ(r.blocksTruncated(), 0u);
 }
 
 // ---------------------------------------------------------------------
@@ -565,7 +565,7 @@ TEST(BlockReader, range_based_for_visits_all_blocks) {
         ++seen;
     }
     EXPECT_EQ(seen, 3);
-    EXPECT_EQ(r.stats().blocks_read, 3u);
+    EXPECT_EQ(r.stats().blocksRead, 3u);
 }
 
 }  // namespace

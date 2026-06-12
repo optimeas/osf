@@ -53,13 +53,13 @@ osf::MetaBlock one_channel_meta(osf::DataType dt,
                                 std::uint8_t sizeoflengthvalue,
                                 int osf_version = 5) {
     osf::MetaBlock m;
-    m.file_info.version = static_cast<std::uint32_t>(osf_version);
+    m.fileInfo.version = static_cast<std::uint32_t>(osf_version);
     osf::Channel ch;
     ch.index = 0;
     ch.name = "test_channel";
-    ch.data_type = dt;
-    ch.channel_type = ct;
-    ch.size_of_length_value = sizeoflengthvalue;
+    ch.dataType = dt;
+    ch.channelType = ct;
+    ch.sizeOfLengthValue = sizeoflengthvalue;
     m.channels.push_back(std::move(ch));
     return m;
 }
@@ -79,7 +79,7 @@ TEST(BlockEncodeSmoke, BinarySampleFromPointer) {
 
 TEST(BlockEncodeSmoke, BinarySampleFromVector) {
     std::vector<std::uint8_t> v = {0x01, 0x02, 0x03};
-    auto s = BinarySample::from_vector(v);
+    auto s = BinarySample::fromVector(v);
     EXPECT_EQ(s.data, v.data());
     EXPECT_EQ(s.size, std::size_t{3});
 }
@@ -92,8 +92,8 @@ TEST(BlockEncodeStartData, FloatSingleSample_Frame) {
     std::vector<std::uint8_t> out;
     float const samples[] = {1.5f};
     auto r = encode_start_data<float>(out, /*ch=*/7, /*sizeoflengthvalue=*/2,
-                                      /*start_ts_ns=*/1'000'000'000LL,
-                                      /*sample_rate_hz=*/100.0,
+                                      /*startTsNs=*/1'000'000'000LL,
+                                      /*sampleRateHz=*/100.0,
                                       samples, /*count=*/1);
     ASSERT_TRUE(r.has_value()) << "encoder returned error";
 
@@ -102,7 +102,7 @@ TEST(BlockEncodeStartData, FloatSingleSample_Frame) {
     // Total frame = 2 (ci) + 2 (len) + 21 (payload) = 25 bytes.
     ASSERT_EQ(out.size(), 25u);
 
-    EXPECT_TRUE(bytes_eq(out, 0, {0x07, 0x00}));         // channel_index=7
+    EXPECT_TRUE(bytes_eq(out, 0, {0x07, 0x00}));         // channelIndex=7
     EXPECT_TRUE(bytes_eq(out, 2, {0x15, 0x00}));         // payload_length u16
     EXPECT_EQ(out[4], 0x06);                              // bcStartData, bit-7=0
 }
@@ -152,7 +152,7 @@ TEST(BlockEncodeContinuedData, DoubleSingleSample_Frame) {
     // 1 (ctrl) + 8 (double) = 9 -> u16=0x0009. Frame = 2 + 2 + 9 = 13.
     ASSERT_EQ(out.size(), 13u);
 
-    EXPECT_TRUE(bytes_eq(out, 0, {0x03, 0x00}));         // channel_index=3
+    EXPECT_TRUE(bytes_eq(out, 0, {0x03, 0x00}));         // channelIndex=3
     EXPECT_TRUE(bytes_eq(out, 2, {0x09, 0x00}));         // payload_length u16
     EXPECT_EQ(out[4], 0x05);                              // bcContinuedData, bit-7=0
 }
@@ -240,12 +240,12 @@ TEST(BlockEncodeStartData, SizeofLengthValue4_U32LengthField) {
     // Frame: [ci u16=0][len u32=21][ctrl=0x06][ts 8B][rate 8B][float 4B]
     // = 2 + 4 + 1 + 8 + 8 + 4 = 27 bytes.
     ASSERT_EQ(out.size(), 27u);
-    EXPECT_TRUE(bytes_eq(out, 0, {0x00, 0x00}));                      // channel_index=0
+    EXPECT_TRUE(bytes_eq(out, 0, {0x00, 0x00}));                      // channelIndex=0
     EXPECT_TRUE(bytes_eq(out, 2, {0x15, 0x00, 0x00, 0x00}));          // payload_length u32=21
     EXPECT_EQ(out[6], 0x06);                                           // bcStartData, bit-7=0
 }
 
-// N3 — exercise the high byte of the u16 channel_index field. Prior tests
+// N3 — exercise the high byte of the u16 channelIndex field. Prior tests
 // only used channel indices <= 7, which leaves the second byte zero. A
 // non-zero high byte (here 0x01 for channel 0x0142) pins the LE layout.
 TEST(BlockEncodeStartData, ChannelIndexHighByte) {
@@ -255,7 +255,7 @@ TEST(BlockEncodeStartData, ChannelIndexHighByte) {
                                       /*ts=*/0LL, /*rate=*/100.0, samples, 1);
     ASSERT_TRUE(r.has_value());
 
-    // First two bytes are channel_index in little-endian: 0x0142 -> {0x42, 0x01}.
+    // First two bytes are channelIndex in little-endian: 0x0142 -> {0x42, 0x01}.
     EXPECT_TRUE(bytes_eq(out, 0, {0x42, 0x01}));
 }
 
@@ -280,8 +280,8 @@ TEST(BlockEncodeRoundtrip, StartDataFloat) {
     ASSERT_TRUE(block_opt->has_value());
     auto* sd = std::get_if<osf::StartData>(&block_opt->value().kind);
     ASSERT_NE(sd, nullptr);
-    EXPECT_EQ(sd->start_timestamp_ns, 1'000'000'000LL);
-    EXPECT_DOUBLE_EQ(sd->sample_rate_hz, 100.0);
+    EXPECT_EQ(sd->startTimestampNs, 1'000'000'000LL);
+    EXPECT_DOUBLE_EQ(sd->sampleRateHz, 100.0);
     auto* fv = std::get_if<std::vector<float>>(&sd->samples);
     ASSERT_NE(fv, nullptr);
     ASSERT_EQ(fv->size(), 3u);
@@ -610,7 +610,7 @@ TEST(BlockEncodeBinary, FromVectorFactory) {
     std::vector<std::uint8_t> out;
     std::vector<std::uint8_t> v = {0x01, 0x02};
     auto r = encode_abs_timestamp_data(out, 0, 2, 0LL,
-                                       BinarySample::from_vector(v));
+                                       BinarySample::fromVector(v));
     ASSERT_TRUE(r.has_value());
     ASSERT_EQ(out.size(), 15u);   // 2+2+11 = 15
     EXPECT_EQ(out[13], 0x01);
@@ -681,7 +681,7 @@ TEST(BlockEncodeRoundtripVariable, BinarySingleSample) {
     std::vector<std::uint8_t> out;
     std::vector<std::uint8_t> data = {0x00, 0x01, 0x00, 0xFF, 0x00};
     auto r = encode_abs_timestamp_data(out, 0, 2, 1LL,
-                                       BinarySample::from_vector(data));
+                                       BinarySample::fromVector(data));
     ASSERT_TRUE(r.has_value());
 
     auto meta = one_channel_meta(osf::DataType::Binary,

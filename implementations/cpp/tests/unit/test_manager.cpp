@@ -4,7 +4,7 @@
 // Unit tests for the DataManager builder state machine.
 //
 // Tests build a synthetic OSF5 stream (magic header + JSON metablock +
-// hand-crafted block bytes), feed it through DataManager::load_from_stream,
+// hand-crafted block bytes), feed it through DataManager::loadFromStream,
 // and assert on the assembled channel list. This exercises the full
 // builder state machine (Pending → Equidistant / Timestamped / Variable),
 // the data-type-mismatch checks, and the ChannelMixedBlockTypes /
@@ -291,15 +291,15 @@ TEST(DataManager, one_start_plus_one_continued_yields_one_segment) {
     append_continued_double(blocks, 0, rest);
 
     auto ss = make_osf5_stream(meta_one_double(), blocks);
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     ASSERT_EQ(mgr->channels().size(), 1u);
     auto const& dc = mgr->channels()[0];
     auto const* eq = std::get_if<osf::EquidistantChannel>(&dc);
     ASSERT_NE(eq, nullptr);
     EXPECT_EQ(eq->segments.size(), 1u);
-    EXPECT_EQ(eq->segments[0].sample_count, 300u);
-    EXPECT_EQ(osf::numeric_values_len(eq->samples), 300u);
+    EXPECT_EQ(eq->segments[0].sampleCount, 300u);
+    EXPECT_EQ(osf::numericValuesLen(eq->samples), 300u);
 }
 
 TEST(DataManager, two_start_blocks_open_two_segments) {
@@ -309,16 +309,16 @@ TEST(DataManager, two_start_blocks_open_two_segments) {
                         std::vector<double>(30, 2.0));
 
     auto ss = make_osf5_stream(meta_one_double(), blocks);
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     auto const* eq = std::get_if<osf::EquidistantChannel>(&mgr->channels()[0]);
     ASSERT_NE(eq, nullptr);
     ASSERT_EQ(eq->segments.size(), 2u);
-    EXPECT_EQ(eq->segments[0].sample_count, 50u);
-    EXPECT_EQ(eq->segments[0].start_index, 0u);
-    EXPECT_EQ(eq->segments[1].sample_count, 30u);
-    EXPECT_EQ(eq->segments[1].start_index, 50u);
-    EXPECT_EQ(osf::numeric_values_len(eq->samples), 80u);
+    EXPECT_EQ(eq->segments[0].sampleCount, 50u);
+    EXPECT_EQ(eq->segments[0].startIndex, 0u);
+    EXPECT_EQ(eq->segments[1].sampleCount, 30u);
+    EXPECT_EQ(eq->segments[1].startIndex, 50u);
+    EXPECT_EQ(osf::numericValuesLen(eq->samples), 80u);
 }
 
 // Coverage probe: the manager state machine and the reader's
@@ -339,18 +339,18 @@ TEST(DataManager, one_start_plus_one_continued_float) {
     append_continued_float(blocks, 0, rest);
 
     auto ss = make_osf5_stream(meta_one_float(), blocks);
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     ASSERT_EQ(mgr->channels().size(), 1u);
     auto const& dc = mgr->channels()[0];
     auto const* eq = std::get_if<osf::EquidistantChannel>(&dc);
     ASSERT_NE(eq, nullptr);
-    EXPECT_EQ(eq->data_type, osf::DataType::Float);
+    EXPECT_EQ(eq->dataType, osf::DataType::Float);
     ASSERT_EQ(eq->segments.size(), 1u);
-    EXPECT_EQ(eq->segments[0].sample_count, 8u);
-    EXPECT_EQ(osf::numeric_values_len(eq->samples), 8u);
+    EXPECT_EQ(eq->segments[0].sampleCount, 8u);
+    EXPECT_EQ(osf::numericValuesLen(eq->samples), 8u);
 
-    auto flat = osf::as_floats_flat(*eq);
+    auto flat = osf::asFloatsFlat(*eq);
     ASSERT_TRUE(flat.has_value()) << flat.error().message;
     std::vector<float> expected;
     expected.insert(expected.end(), first.begin(), first.end());
@@ -373,18 +373,18 @@ TEST(DataManager, one_start_plus_one_continued_int32) {
     append_continued_int32(blocks, 0, rest);
 
     auto ss = make_osf5_stream(meta_one_int32(), blocks);
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     ASSERT_EQ(mgr->channels().size(), 1u);
     auto const& dc = mgr->channels()[0];
     auto const* eq = std::get_if<osf::EquidistantChannel>(&dc);
     ASSERT_NE(eq, nullptr);
-    EXPECT_EQ(eq->data_type, osf::DataType::Int32);
+    EXPECT_EQ(eq->dataType, osf::DataType::Int32);
     ASSERT_EQ(eq->segments.size(), 1u);
-    EXPECT_EQ(eq->segments[0].sample_count, 8u);
-    EXPECT_EQ(osf::numeric_values_len(eq->samples), 8u);
+    EXPECT_EQ(eq->segments[0].sampleCount, 8u);
+    EXPECT_EQ(osf::numericValuesLen(eq->samples), 8u);
 
-    auto flat = osf::as_int32_flat(*eq);
+    auto flat = osf::asInt32Flat(*eq);
     ASSERT_TRUE(flat.has_value()) << flat.error().message;
     std::vector<std::int32_t> expected;
     expected.insert(expected.end(), first.begin(), first.end());
@@ -398,7 +398,7 @@ TEST(DataManager, start_then_abs_timestamp_is_mixed_block_types_error) {
     append_abs_double(blocks, 0, {{100, 1.0}});
 
     auto ss = make_osf5_stream(meta_one_double(), blocks);
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_FALSE(mgr.has_value());
     EXPECT_EQ(mgr.error().code, osf::Error::Code::ChannelMixedBlockTypes);
 }
@@ -408,7 +408,7 @@ TEST(DataManager, continued_without_start_is_error) {
     append_continued_double(blocks, 0, {1.0});
 
     auto ss = make_osf5_stream(meta_one_double(), blocks);
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_FALSE(mgr.has_value());
     EXPECT_EQ(mgr.error().code, osf::Error::Code::ContinuedDataWithoutStart);
 }
@@ -423,11 +423,11 @@ TEST(DataManager, abs_timestamped_int32_builds_timestamped_channel) {
     append_abs_int32(blocks, 0, {{400, 4}});
 
     auto ss = make_osf5_stream(meta_one_int32(), blocks);
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     auto const* ts = std::get_if<osf::TimestampedChannel>(&mgr->channels()[0]);
     ASSERT_NE(ts, nullptr);
-    EXPECT_EQ(ts->timestamps_ns,
+    EXPECT_EQ(ts->timestampsNs,
               (std::vector<std::int64_t>{100, 200, 300, 400}));
     auto const* v = std::get_if<std::vector<std::int32_t>>(&ts->values);
     ASSERT_NE(v, nullptr);
@@ -440,11 +440,11 @@ TEST(DataManager, rel_stamp_after_abs_extends_with_cumulative_timestamps) {
     append_rel_int32(blocks, 0, {{50, 11}, {50, 12}});
 
     auto ss = make_osf5_stream(meta_one_int32(), blocks);
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     auto const* ts = std::get_if<osf::TimestampedChannel>(&mgr->channels()[0]);
     ASSERT_NE(ts, nullptr);
-    EXPECT_EQ(ts->timestamps_ns,
+    EXPECT_EQ(ts->timestampsNs,
               (std::vector<std::int64_t>{1'000, 1'050, 1'100}));
 }
 
@@ -453,7 +453,7 @@ TEST(DataManager, rel_stamp_without_anchor_is_error) {
     append_rel_int32(blocks, 0, {{50, 1}});
 
     auto ss = make_osf5_stream(meta_one_int32(), blocks);
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_FALSE(mgr.has_value());
     EXPECT_EQ(mgr.error().code, osf::Error::Code::RelStampWithoutAnchor);
 }
@@ -463,7 +463,7 @@ TEST(DataManager, rel_stamp_without_anchor_is_error) {
 //
 // The `data_type_mismatch` check in the manager state machine is
 // defensive — it guards against custom block-iterator sources that
-// bypass the reader. Through `load_from_stream` it is unreachable
+// bypass the reader. Through `loadFromStream` it is unreachable
 // because the reader already typed-decodes the payload based on the
 // channel's declared data type before the manager ever sees a block.
 // The Rust reference exercises the check by injecting hand-built
@@ -483,15 +483,15 @@ TEST(DataManager, variable_string_channel_collects_strings) {
     append_abs_string(blocks, 0, 200, "bye");
 
     auto ss = make_osf5_stream(meta_one_string(), blocks);
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     auto const* var = std::get_if<osf::VariableChannel>(&mgr->channels()[0]);
     ASSERT_NE(var, nullptr);
-    EXPECT_EQ(var->timestamps_ns, (std::vector<std::int64_t>{100, 200}));
-    ASSERT_TRUE(var->string_values.has_value());
-    EXPECT_EQ(*var->string_values,
+    EXPECT_EQ(var->timestampsNs, (std::vector<std::int64_t>{100, 200}));
+    ASSERT_TRUE(var->stringValues.has_value());
+    EXPECT_EQ(*var->stringValues,
               (std::vector<std::string>{"hi", "bye"}));
-    EXPECT_FALSE(var->binary_values.has_value());
+    EXPECT_FALSE(var->binaryValues.has_value());
 }
 
 // ---------------------------------------------------------------------
@@ -510,16 +510,16 @@ TEST(DataManager, unsupported_channel_does_not_appear_in_output) {
     ]}})";
 
     auto ss = make_osf5_stream(metablock_json, {});
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     ASSERT_EQ(mgr->channels().size(), 1u);
-    EXPECT_EQ(osf::channel_index(mgr->channels()[0]), 1);
+    EXPECT_EQ(osf::channelIndex(mgr->channels()[0]), 1);
     EXPECT_NE(mgr->channel("ch1"), nullptr);
     EXPECT_EQ(mgr->channel("ch0"), nullptr);
 }
 
 // ---------------------------------------------------------------------
-// channel_by_name / channel_by_index lookup.
+// channel_by_name / channelByIndex lookup.
 // ---------------------------------------------------------------------
 
 TEST(DataManager, channel_lookup_by_name_and_index) {
@@ -527,18 +527,18 @@ TEST(DataManager, channel_lookup_by_name_and_index) {
     append_start_double(blocks, 0, 0, 1000.0, {1.0, 2.0});
 
     auto ss = make_osf5_stream(meta_one_double(), blocks);
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
 
     auto* by_name = mgr->channel("ch0");
     ASSERT_NE(by_name, nullptr);
-    EXPECT_EQ(osf::channel_index(*by_name), 0);
+    EXPECT_EQ(osf::channelIndex(*by_name), 0);
 
-    auto* by_index = mgr->channel_by_index(0);
+    auto* by_index = mgr->channelByIndex(0);
     EXPECT_EQ(by_index, by_name);
 
     EXPECT_EQ(mgr->channel("nope"), nullptr);
-    EXPECT_EQ(mgr->channel_by_index(42), nullptr);
+    EXPECT_EQ(mgr->channelByIndex(42), nullptr);
 }
 
 // ---------------------------------------------------------------------
@@ -551,7 +551,7 @@ TEST(DataManager, truncated_gzip_input_fails_gracefully) {
     std::stringstream ss(
         std::string{"\x1F\x8B\x08\x00\x00\x00\x00\x00", 8},
         std::ios::in | std::ios::binary);
-    auto mgr = osf::DataManager::load_from_stream(ss);
+    auto mgr = osf::DataManager::loadFromStream(ss);
     ASSERT_FALSE(mgr.has_value());
     // Confirm the error is a parse failure, not a hang or crash.
     EXPECT_FALSE(mgr.error().message.empty())

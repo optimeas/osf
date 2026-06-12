@@ -16,7 +16,7 @@
  *
  * Deployed optiMEAS devices emit gzip-wrapped OSF; older tooling used
  * raw zlib. DataManager wraps its input in a DecompressingIStream so
- * both forms load transparently. The low-level `parse_magic_header`
+ * both forms load transparently. The low-level `parseMagicHeader`
  * deliberately does NOT decompress — OSFZ transparency lives in this
  * read layer, implemented as a decompressing `std::istream` so the
  * existing `BlockReader(std::istream&, …)` reads through it unchanged.
@@ -41,7 +41,7 @@ namespace osf {
  * streams shorter than two bytes, and for plain OSF (which starts with
  * `OSF` = `0x4F`, colliding with neither magic).
  */
-[[nodiscard]] CompressionFormat detect_compression(std::istream& source);
+[[nodiscard]] CompressionFormat detectCompression(std::istream& source);
 
 /**
  * @brief A transparently-decompressing input stream over a source
@@ -72,7 +72,7 @@ public:
     [[nodiscard]] CompressionFormat format() const noexcept;
 
     /// True if the source was detected as zlib- or gzip-compressed.
-    [[nodiscard]] bool is_compressed() const noexcept;
+    [[nodiscard]] bool isCompressed() const noexcept;
 
 private:
     class Streambuf;                       // defined in src/compression.cpp

@@ -21,12 +21,12 @@
  * #include <osf/throwing.h>
  * try {
  *     auto manager = osf::throwing::load("data.osf");
- *     osf::throwing::write_to_file(manager, "out.osf");
+ *     osf::throwing::writeToFile(manager, "out.osf");
  *
  *     osf::StreamingWriter w{path};
  *     osf::throwing::unwrap(w.start());           // throws on error
  *     osf::throwing::unwrap(
- *         w.write_timestamped_sample<double>(ch, ts, value));
+ *         w.writeTimestampedSample<double>(ch, ts, value));
  * } catch (osf::Exception const& e) {
  *     log(e.code(), e.what());
  * }
@@ -35,9 +35,9 @@
 
 #pragma once
 
-#include "osf/blockwriter.h"   // ::osf::write_to_file / write_to(DataManager, …)
+#include "osf/blockwriter.h"   // ::osf::writeToFile / writeTo(DataManager, …)
 #include "osf/error.h"
-#include "osf/manager.h"        // DataManager::load_from_file / load_from_stream
+#include "osf/manager.h"        // DataManager::loadFromFile / loadFromStream
 
 #include <filesystem>
 #include <istream>
@@ -62,7 +62,7 @@ public:
     explicit Exception(Error err)
         : std::runtime_error(
               err.message.empty()
-                  ? std::string(error_category_name(err.code))
+                  ? std::string(errorCategoryName(err.code))
                   : err.message),
           error_(std::move(err)) {}
 
@@ -85,7 +85,7 @@ namespace throwing {
  * Works on any `Result<T>` from the core API — including the writer
  * methods, which keeps the throwing layer thin (no per-method wrappers):
  * @code
- * auto idx = osf::throwing::unwrap(writer.add_channel(def));  // -> uint16_t
+ * auto idx = osf::throwing::unwrap(writer.addChannel(def));  // -> uint16_t
  * osf::throwing::unwrap(writer.start());                      // -> void
  * @endcode
  *
@@ -111,27 +111,27 @@ inline void unwrap(Result<void> r) {
 
 /// Load an OSF / OSFZ file, or throw `osf::Exception`.
 inline DataManager load(std::filesystem::path const& path) {
-    return unwrap(DataManager::load_from_file(path));
+    return unwrap(DataManager::loadFromFile(path));
 }
 
 /// Load from a seekable input stream, or throw `osf::Exception`.
 inline DataManager load(std::istream& in) {
-    return unwrap(DataManager::load_from_stream(in));
+    return unwrap(DataManager::loadFromStream(in));
 }
 
 // ── Write (always OSF5) ───────────────────────────────────────────────
 
 /// Write \p mgr to \p path as OSF5, or throw `osf::Exception`.
-inline void write_to_file(DataManager const& mgr,
+inline void writeToFile(DataManager const& mgr,
                           std::filesystem::path path) {
     // Fully qualified to call the core (non-throwing) convenience
     // function, not recurse into this overload.
-    unwrap(::osf::write_to_file(mgr, std::move(path)));
+    unwrap(::osf::writeToFile(mgr, std::move(path)));
 }
 
 /// Write \p mgr to \p out as OSF5, or throw `osf::Exception`.
-inline void write_to(DataManager const& mgr, std::ostream& out) {
-    unwrap(::osf::write_to(mgr, out));
+inline void writeTo(DataManager const& mgr, std::ostream& out) {
+    unwrap(::osf::writeTo(mgr, out));
 }
 
 }  // namespace throwing

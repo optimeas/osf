@@ -60,19 +60,19 @@ std::size_t max_samples_per_timestamped_block(std::size_t value_size,
 // Effective max sample size for a single-sample variable block.
 std::size_t variable_sample_capacity(std::uint8_t sov) noexcept;
 
-// Writer-controllable file-info fields. `created_utc` and `version`
+// Writer-controllable file-info fields. `createdUtc` and `version`
 // are not carried here — build_metablock stamps them at assembly time
-// (version = 5; created_utc = current UTC, DECISIONS §13). Unset
+// (version = 5; createdUtc = current UTC, DECISIONS §13). Unset
 // `creator` / `tag` receive their §13 defaults at assembly time, too.
 // Must stay field-compatible with BlockWriter::FileInfoFields (blockwriter.h).
 struct FileInfoDraft {
     std::optional<std::string> creator;
     std::optional<std::string> tag;
     std::optional<std::string> reason;
-    std::optional<double>      created_at_latitude;
-    std::optional<double>      created_at_longitude;
-    std::optional<double>      created_at_altitude;
-    std::optional<std::string> namespace_sep;
+    std::optional<double>      createdAtLatitude;
+    std::optional<double>      createdAtLongitude;
+    std::optional<double>      createdAtAltitude;
+    std::optional<std::string> namespaceSep;
     std::optional<std::string> comment;
 };
 
@@ -81,9 +81,9 @@ struct FileInfoDraft {
 // the Delphi reference convention: `equidistant` for equidistant
 // channels, `scalar` for every other kind (timestamped numeric, GPS,
 // string, binary). DECISIONS §13 metadata defaults are applied here:
-// created_utc is stamped with the current UTC time, unset creator
+// createdUtc is stamped with the current UTC time, unset creator
 // falls back to "osf-cpp/<version>", unset tag to "default".
-// Caller serialises via serialize_metablock_json.
+// Caller serialises via serializeMetablockJson.
 MetaBlock build_metablock(FileInfoDraft const& fi,
                           std::vector<ChannelDef> const& channels);
 

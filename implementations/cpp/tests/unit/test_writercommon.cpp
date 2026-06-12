@@ -14,9 +14,9 @@ namespace {
 osf::ChannelDef ch(std::string name, osf::DataType dt, osf::ChannelType ct) {
     osf::ChannelDef d;
     d.name = std::move(name);
-    d.data_type = dt;
-    d.channel_type = ct;
-    d.size_of_length_value = 2;
+    d.dataType = dt;
+    d.channelType = ct;
+    d.sizeOfLengthValue = 2;
     return d;
 }
 
@@ -32,16 +32,16 @@ TEST(WriterCommon, BuildMetablockNormalisesNonEquidistantToScalar) {
     osf::MetaBlock meta = osf::detail::build_metablock(fi, channels);
 
     ASSERT_EQ(meta.channels.size(), 3u);
-    EXPECT_EQ(meta.channels[0].channel_type, osf::ChannelType::Equidistant);
-    EXPECT_EQ(meta.channels[1].channel_type, osf::ChannelType::Scalar);  // was Timestamped
-    EXPECT_EQ(meta.channels[2].channel_type, osf::ChannelType::Scalar);
-    EXPECT_EQ(meta.file_info.version, 5u);
-    EXPECT_EQ(meta.file_info.creator, "test:1");
+    EXPECT_EQ(meta.channels[0].channelType, osf::ChannelType::Equidistant);
+    EXPECT_EQ(meta.channels[1].channelType, osf::ChannelType::Scalar);  // was Timestamped
+    EXPECT_EQ(meta.channels[2].channelType, osf::ChannelType::Scalar);
+    EXPECT_EQ(meta.fileInfo.version, 5u);
+    EXPECT_EQ(meta.fileInfo.creator, "test:1");
     EXPECT_EQ(meta.channels[0].index, 0u);
     EXPECT_EQ(meta.channels[1].index, 1u);
 }
 
-// DECISIONS §13: created_utc is stamped automatically; unset creator /
+// DECISIONS §13: createdUtc is stamped automatically; unset creator /
 // tag fall back to their defaults; explicit values win.
 TEST(WriterCommon, BuildMetablockAppliesDecisions13Defaults) {
     osf::detail::FileInfoDraft fi;   // everything unset
@@ -51,9 +51,9 @@ TEST(WriterCommon, BuildMetablockAppliesDecisions13Defaults) {
 
     osf::MetaBlock meta = osf::detail::build_metablock(fi, channels);
 
-    // created_utc: always present, ISO-8601 "YYYY-MM-DDTHH:MM:SSZ".
-    ASSERT_TRUE(meta.file_info.created_utc.has_value());
-    std::string const& ts = *meta.file_info.created_utc;
+    // createdUtc: always present, ISO-8601 "YYYY-MM-DDTHH:MM:SSZ".
+    ASSERT_TRUE(meta.fileInfo.createdUtc.has_value());
+    std::string const& ts = *meta.fileInfo.createdUtc;
     ASSERT_EQ(ts.size(), 20u);
     EXPECT_EQ(ts[4], '-');
     EXPECT_EQ(ts[7], '-');
@@ -63,16 +63,16 @@ TEST(WriterCommon, BuildMetablockAppliesDecisions13Defaults) {
     EXPECT_EQ(ts[19], 'Z');
 
     // creator default: "osf-cpp/<library version>".
-    ASSERT_TRUE(meta.file_info.creator.has_value());
-    EXPECT_EQ(*meta.file_info.creator,
+    ASSERT_TRUE(meta.fileInfo.creator.has_value());
+    EXPECT_EQ(*meta.fileInfo.creator,
               "osf-cpp/" + std::string{osf::version()});
 
     // tag default: "default".
-    ASSERT_TRUE(meta.file_info.tag.has_value());
-    EXPECT_EQ(*meta.file_info.tag, "default");
+    ASSERT_TRUE(meta.fileInfo.tag.has_value());
+    EXPECT_EQ(*meta.fileInfo.tag, "default");
 
     // reason stays omitted when unset (not defaulted, not null).
-    EXPECT_FALSE(meta.file_info.reason.has_value());
+    EXPECT_FALSE(meta.fileInfo.reason.has_value());
 }
 
 TEST(WriterCommon, BuildMetablockExplicitCreatorTagWin) {
@@ -85,8 +85,8 @@ TEST(WriterCommon, BuildMetablockExplicitCreatorTagWin) {
 
     osf::MetaBlock meta = osf::detail::build_metablock(fi, channels);
 
-    EXPECT_EQ(*meta.file_info.creator, "my-app/2.0");
-    EXPECT_EQ(*meta.file_info.tag, "calibration");
+    EXPECT_EQ(*meta.fileInfo.creator, "my-app/2.0");
+    EXPECT_EQ(*meta.fileInfo.tag, "calibration");
 }
 
 }  // namespace

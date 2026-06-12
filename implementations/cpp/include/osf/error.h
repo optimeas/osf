@@ -105,7 +105,7 @@ struct Error {
         /// lifted to absolute time. Surfaced by the future `DataManager`.
         RelStampWithoutAnchor,
         /// A block payload's typed variant did not match the channel's
-        /// declared `data_type`. The reader normally enforces this at
+        /// declared `dataType`. The reader normally enforces this at
         /// the stream level; surfaced here so the future `DataManager`
         /// has a typed code for the equivalent check.
         DataTypeMismatch,
@@ -125,7 +125,7 @@ struct Error {
 ///
 /// Usage idiom:
 /// ```cpp
-/// auto r = osf::DataManager::load_from_file(path);
+/// auto r = osf::DataManager::loadFromFile(path);
 /// if (!r) { /* r.error().code / r.error().message */ }
 /// osf::DataManager const& mgr = *r;   // or r.value()
 /// ```
@@ -134,6 +134,6 @@ using Result = tl::expected<T, Error>;
 
 // Returns a stable string identifier for the given Code, suitable
 // for logging. The returned view points into static storage.
-[[nodiscard]] std::string_view error_category_name(Error::Code code) noexcept;
+[[nodiscard]] std::string_view errorCategoryName(Error::Code code) noexcept;
 
 }  // namespace osf

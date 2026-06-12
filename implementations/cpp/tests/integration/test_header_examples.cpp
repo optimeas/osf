@@ -30,19 +30,19 @@ protected:
 // ----- 1: motorbike.osf — production OSF4 file -----
 
 TEST_F(HeaderExamplesTest, motorbike_osf_has_valid_header) {
-    auto result = osf::parse_magic_header(examples_dir() / "motorbike.osf");
+    auto result = osf::parseMagicHeader(examples_dir() / "motorbike.osf");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf4);
-    EXPECT_GT(result->metablock_len, 0u);
+    EXPECT_GT(result->metablockLen, 0u);
 }
 
 // ----- 2: steam_loco.osf — production OSF4 file -----
 
 TEST_F(HeaderExamplesTest, steam_loco_osf_has_valid_header) {
-    auto result = osf::parse_magic_header(examples_dir() / "steam_loco.osf");
+    auto result = osf::parseMagicHeader(examples_dir() / "steam_loco.osf");
     ASSERT_TRUE(result.has_value()) << result.error().message;
     EXPECT_EQ(result->version, osf::OsfVersion::Osf4);
-    EXPECT_GT(result->metablock_len, 0u);
+    EXPECT_GT(result->metablockLen, 0u);
 }
 
 // ----- 3: weather_station.osfz — gzip bytes are not a plain header -----
@@ -53,7 +53,7 @@ TEST_F(HeaderExamplesTest, steam_loco_osf_has_valid_header) {
 // as a plain OSF magic header; this is by design.
 
 TEST_F(HeaderExamplesTest, weather_station_osfz_not_parseable_as_plain_header) {
-    auto result = osf::parse_magic_header(examples_dir() / "weather_station.osfz");
+    auto result = osf::parseMagicHeader(examples_dir() / "weather_station.osfz");
     ASSERT_FALSE(result.has_value())
         << "raw OSFZ bytes are not a valid plain OSF magic header";
     // The gzip magic 0x1F 0x8B and the high-entropy bytes that follow
@@ -63,7 +63,7 @@ TEST_F(HeaderExamplesTest, weather_station_osfz_not_parseable_as_plain_header) {
     EXPECT_TRUE(code == osf::Error::Code::UnsupportedVersion ||
                 code == osf::Error::Code::InvalidMagicHeader ||
                 code == osf::Error::Code::MagicHeaderTooLong)
-        << "unexpected error code: " << osf::error_category_name(code);
+        << "unexpected error code: " << osf::errorCategoryName(code);
 }
 
 // ----- 4: generated reference files — all parse, version per filename -----
@@ -81,9 +81,9 @@ TEST_F(HeaderExamplesTest, generated_files_all_parse) {
         auto filename = entry.path().filename().string();
         SCOPED_TRACE("file: " + filename);
 
-        auto result = osf::parse_magic_header(entry.path());
+        auto result = osf::parseMagicHeader(entry.path());
         ASSERT_TRUE(result.has_value()) << result.error().message;
-        EXPECT_GT(result->metablock_len, 0u);
+        EXPECT_GT(result->metablockLen, 0u);
 
         // Filename prefix tells us the expected version.
         if (filename.rfind("osf4_", 0) == 0) {

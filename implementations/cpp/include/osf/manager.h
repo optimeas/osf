@@ -37,7 +37,7 @@ namespace osf {
 class DataManager {
 public:
     /// Parsed metablock; kept so applications can read file-level
-    /// metadata (creator, created_utc, infos, …) without re-opening
+    /// metadata (creator, createdUtc, infos, …) without re-opening
     /// the file.
     MetaBlock meta;
     /// Telemetry from the underlying `BlockReader` — file/section
@@ -51,13 +51,13 @@ public:
     /// OSFZ-compressed input (gzip `0x1F 0x8B` or zlib `0x78 …`) is
     /// detected and decompressed transparently before the magic-header
     /// parse.
-    [[nodiscard]] static Result<DataManager> load_from_file(
+    [[nodiscard]] static Result<DataManager> loadFromFile(
         std::filesystem::path const& path);
 
     /// Construct from any `std::istream` positioned at the start of
     /// the OSF file. The stream must outlive the parse — the
     /// constructor reads it to EOF.
-    [[nodiscard]] static Result<DataManager> load_from_stream(
+    [[nodiscard]] static Result<DataManager> loadFromStream(
         std::istream& stream);
 
     /// Read-only view of all channels in metablock order.
@@ -74,7 +74,7 @@ public:
     /// Look up a channel by its on-disk index (the integer `index`
     /// attribute from the metablock). Returns `nullptr` when no
     /// channel has that index — the optional access form.
-    [[nodiscard]] DataChannel const* channel_by_index(std::uint16_t index) const;
+    [[nodiscard]] DataChannel const* channelByIndex(std::uint16_t index) const;
 
 private:
     std::vector<DataChannel> channels_;
@@ -83,9 +83,9 @@ private:
 
     DataManager() = default;
 
-    friend Result<DataManager> build_from_stream_impl(std::istream& stream,
-                                                     std::uint64_t file_size,
-                                                     bool have_file_size);
+    friend Result<DataManager> buildFromStreamImpl(std::istream& stream,
+                                                     std::uint64_t fileSize,
+                                                     bool haveFileSize);
 };
 
 }  // namespace osf

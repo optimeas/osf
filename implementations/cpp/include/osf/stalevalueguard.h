@@ -18,14 +18,14 @@
  * StreamingWriter (the guard is constructed after the writer's start()).
  * The caller routes timestamped writes through the guard, which forwards
  * each write to the writer and, on success, caches the channel's last
- * (timestamp, value). poll(now_ns) then re-emits the cached value of any
+ * (timestamp, value). poll(nowNs) then re-emits the cached value of any
  * channel that has been idle for at least the repeat interval, stamped at
- * now_ns. The guard is decoupled from the writer — it owns no file handle
+ * nowNs. The guard is decoupled from the writer — it owns no file handle
  * and never touches writer internals.
  *
  * Design notes:
  *   - Pull-based: no internal clock and no background thread. The caller
- *     supplies now_ns to poll() (mirroring StreamingWriter, where the
+ *     supplies nowNs to poll() (mirroring StreamingWriter, where the
  *     caller supplies all timestamps). This keeps the guard deterministic,
  *     embedded-friendly, and trivially testable.
  *   - At most one re-emit per channel per poll() — the guard keeps a trace
@@ -68,20 +68,20 @@ public:
      *                          outlive the guard. Typically already
      *                          started; writes are validated by the
      *                          writer regardless.
-     * @param repeat_interval_ns Idle threshold after which poll() re-emits
+     * @param repeatIntervalNs Idle threshold after which poll() re-emits
      *                          the last value. Expected to be positive; a
      *                          non-positive value makes every poll() that
      *                          advances now re-emit.
      */
     explicit StaleValueGuard(
         StreamingWriter& writer,
-        std::int64_t repeat_interval_ns = DEFAULT_REPEAT_INTERVAL_NS);
+        std::int64_t repeatIntervalNs = DEFAULT_REPEAT_INTERVAL_NS);
 
     StaleValueGuard(StaleValueGuard const&) = delete;
     StaleValueGuard& operator=(StaleValueGuard const&) = delete;
 
     /// The configured re-emit interval in nanoseconds.
-    [[nodiscard]] std::int64_t repeat_interval_ns() const noexcept;
+    [[nodiscard]] std::int64_t repeatIntervalNs() const noexcept;
 
     // ── Write-through (numeric) — caches last value+ts on success ──────
 
@@ -90,8 +90,8 @@ public:
      *        and, on success, cache it as the channel's last value.
      */
     template <typename T>
-    [[nodiscard]] Result<void> write_timestamped_sample(
-        std::uint16_t channel, std::int64_t timestamp_ns, T value);
+    [[nodiscard]] Result<void> writeTimestampedSample(
+        std::uint16_t channel, std::int64_t timestampNs, T value);
 
     /**
      * @brief Forward a batch of timestamped numeric samples to the writer
@@ -100,39 +100,39 @@ public:
      *        does not change the cache.
      */
     template <typename T>
-    [[nodiscard]] Result<void> write_timestamped_samples(
-        std::uint16_t channel, std::int64_t const* timestamps_ns,
+    [[nodiscard]] Result<void> writeTimestampedSamples(
+        std::uint16_t channel, std::int64_t const* timestampsNs,
         T const* values, std::size_t count);
 
     // ── Write-through (GPS) ────────────────────────────────────────────
 
-    [[nodiscard]] Result<void> write_timestamped_gps_sample(
-        std::uint16_t channel, std::int64_t timestamp_ns, GpsLocation value);
+    [[nodiscard]] Result<void> writeTimestampedGpsSample(
+        std::uint16_t channel, std::int64_t timestampNs, GpsLocation value);
 
-    [[nodiscard]] Result<void> write_timestamped_gps_samples(
-        std::uint16_t channel, std::int64_t const* timestamps_ns,
+    [[nodiscard]] Result<void> writeTimestampedGpsSamples(
+        std::uint16_t channel, std::int64_t const* timestampsNs,
         GpsLocation const* values, std::size_t count);
 
     // ── Freshness sweep ────────────────────────────────────────────────
 
     /**
      * @brief Re-emit the cached value of every tracked channel idle for at
-     *        least the repeat interval, stamped at now_ns.
+     *        least the repeat interval, stamped at nowNs.
      * @return The number of channels re-emitted, or the first writer error
      *         encountered (remaining channels for that sweep are skipped).
      *
-     * A channel is re-emitted when `now_ns - last_activity_ns >= interval`.
+     * A channel is re-emitted when `nowNs - lastActivityNs >= interval`.
      * On a successful re-emit the channel's last-activity timestamp is set
-     * to now_ns, so the next re-emit is one interval later. Real writes
+     * to nowNs, so the next re-emit is one interval later. Real writes
      * also advance last-activity, so an actively updated channel never
      * receives a synthetic repeat.
      */
-    [[nodiscard]] Result<std::size_t> poll(std::int64_t now_ns);
+    [[nodiscard]] Result<std::size_t> poll(std::int64_t nowNs);
 
     // ── Introspection / control ────────────────────────────────────────
 
     /// Whether the channel has been written through the guard at least once.
-    [[nodiscard]] bool is_tracked(std::uint16_t channel) const noexcept;
+    [[nodiscard]] bool isTracked(std::uint16_t channel) const noexcept;
 
     /// Stop guarding one channel (drops its cached value). No-op if untracked.
     void forget(std::uint16_t channel);
@@ -147,7 +147,7 @@ private:
         float, double, GpsLocation>;
 
     struct ChannelEntry {
-        std::int64_t last_activity_ns;
+        std::int64_t lastActivityNs;
         CachedValue value;
     };
 
@@ -155,34 +155,34 @@ private:
     std::int64_t interval_ns_;
     std::map<std::uint16_t, ChannelEntry> tracked_;
 
-    // Re-emit a cached value at now_ns by dispatching over the variant to
+    // Re-emit a cached value at nowNs by dispatching over the variant to
     // the matching writer method. Defined in the .cpp.
     [[nodiscard]] Result<void> reemit(std::uint16_t channel,
-                                      std::int64_t now_ns,
+                                      std::int64_t nowNs,
                                       CachedValue const& v);
 };
 
 // ── Numeric template bodies — thin forward + cache ────────────────────
 
 template <typename T>
-Result<void> StaleValueGuard::write_timestamped_sample(
-        std::uint16_t channel, std::int64_t timestamp_ns, T value) {
-    auto r = writer_.write_timestamped_sample<T>(channel, timestamp_ns,
+Result<void> StaleValueGuard::writeTimestampedSample(
+        std::uint16_t channel, std::int64_t timestampNs, T value) {
+    auto r = writer_.writeTimestampedSample<T>(channel, timestampNs,
                                                  value);
     if (r) {
-        tracked_[channel] = ChannelEntry{timestamp_ns, CachedValue{value}};
+        tracked_[channel] = ChannelEntry{timestampNs, CachedValue{value}};
     }
     return r;
 }
 
 template <typename T>
-Result<void> StaleValueGuard::write_timestamped_samples(
-        std::uint16_t channel, std::int64_t const* timestamps_ns,
+Result<void> StaleValueGuard::writeTimestampedSamples(
+        std::uint16_t channel, std::int64_t const* timestampsNs,
         T const* values, std::size_t count) {
-    auto r = writer_.write_timestamped_samples<T>(channel, timestamps_ns,
+    auto r = writer_.writeTimestampedSamples<T>(channel, timestampsNs,
                                                   values, count);
     if (r && count > 0) {
-        tracked_[channel] = ChannelEntry{timestamps_ns[count - 1],
+        tracked_[channel] = ChannelEntry{timestampsNs[count - 1],
                                          CachedValue{values[count - 1]}};
     }
     return r;

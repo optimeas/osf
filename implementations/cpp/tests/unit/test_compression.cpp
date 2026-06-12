@@ -49,22 +49,22 @@ const std::string kPlain = "OSF5 42\n{\"osf\":...rest of file...}";
 
 }  // namespace
 
-// ── detect_compression (non-consuming) ───────────────────────────────
+// ── detectCompression (non-consuming) ───────────────────────────────
 
 TEST(DetectCompression, plain_is_none_and_position_preserved) {
     std::istringstream src(kPlain, std::ios::binary);
-    EXPECT_EQ(osf::detect_compression(src), osf::CompressionFormat::None);
+    EXPECT_EQ(osf::detectCompression(src), osf::CompressionFormat::None);
     // Position preserved: a subsequent read still sees the first byte.
     EXPECT_EQ(static_cast<char>(src.get()), 'O');
 }
 
 TEST(DetectCompression, zlib_and_gzip_are_classified_without_consuming) {
     std::istringstream zsrc(zlib_encode(kPlain), std::ios::binary);
-    EXPECT_EQ(osf::detect_compression(zsrc), osf::CompressionFormat::Zlib);
+    EXPECT_EQ(osf::detectCompression(zsrc), osf::CompressionFormat::Zlib);
     EXPECT_EQ(static_cast<std::uint8_t>(zsrc.get()), 0x78);
 
     std::istringstream gsrc(gzip_encode(kPlain), std::ios::binary);
-    EXPECT_EQ(osf::detect_compression(gsrc), osf::CompressionFormat::Gzip);
+    EXPECT_EQ(osf::detectCompression(gsrc), osf::CompressionFormat::Gzip);
     EXPECT_EQ(static_cast<std::uint8_t>(gsrc.get()), 0x1F);
 }
 
@@ -73,7 +73,7 @@ TEST(DetectCompression, zlib_and_gzip_are_classified_without_consuming) {
 TEST(DecompressingIStream, plain_passes_through) {
     std::istringstream src(kPlain, std::ios::binary);
     osf::DecompressingIStream dz(src);
-    EXPECT_FALSE(dz.is_compressed());
+    EXPECT_FALSE(dz.isCompressed());
     EXPECT_EQ(dz.format(), osf::CompressionFormat::None);
     EXPECT_EQ(read_all(dz), kPlain);
 }
@@ -83,7 +83,7 @@ TEST(DecompressingIStream, zlib_is_decompressed) {
     ASSERT_EQ(static_cast<std::uint8_t>(compressed[0]), 0x78);
     std::istringstream src(compressed, std::ios::binary);
     osf::DecompressingIStream dz(src);
-    EXPECT_TRUE(dz.is_compressed());
+    EXPECT_TRUE(dz.isCompressed());
     EXPECT_EQ(dz.format(), osf::CompressionFormat::Zlib);
     EXPECT_EQ(read_all(dz), kPlain);
 }
@@ -94,7 +94,7 @@ TEST(DecompressingIStream, gzip_is_decompressed) {
     ASSERT_EQ(static_cast<std::uint8_t>(compressed[1]), 0x8B);
     std::istringstream src(compressed, std::ios::binary);
     osf::DecompressingIStream dz(src);
-    EXPECT_TRUE(dz.is_compressed());
+    EXPECT_TRUE(dz.isCompressed());
     EXPECT_EQ(dz.format(), osf::CompressionFormat::Gzip);
     EXPECT_EQ(read_all(dz), kPlain);
 }
@@ -143,7 +143,7 @@ TEST(DecompressingIStream, large_payload_round_trips_across_chunks) {
     for (auto const& enc : {gzip_encode(big), zlib_encode(big)}) {
         std::istringstream src(enc, std::ios::binary);
         osf::DecompressingIStream dz(src);
-        EXPECT_TRUE(dz.is_compressed());
+        EXPECT_TRUE(dz.isCompressed());
         EXPECT_EQ(read_all(dz), big);
     }
 }

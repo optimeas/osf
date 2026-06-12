@@ -12,16 +12,16 @@ namespace osf {
 // NumericValues helpers
 // =====================================================================
 
-std::size_t numeric_values_len(NumericValues const& v) noexcept {
+std::size_t numericValuesLen(NumericValues const& v) noexcept {
     return std::visit(
         [](auto const& vec) noexcept { return vec.size(); }, v);
 }
 
-bool numeric_values_empty(NumericValues const& v) noexcept {
-    return numeric_values_len(v) == 0;
+bool numericValuesEmpty(NumericValues const& v) noexcept {
+    return numericValuesLen(v) == 0;
 }
 
-DataType numeric_values_data_type(NumericValues const& v) noexcept {
+DataType numericValuesDataType(NumericValues const& v) noexcept {
     return std::visit([](auto const& vec) noexcept -> DataType {
         using Vec = std::decay_t<decltype(vec)>;
         if constexpr (std::is_same_v<Vec, std::vector<bool>>)
@@ -51,7 +51,7 @@ DataType numeric_values_data_type(NumericValues const& v) noexcept {
     }, v);
 }
 
-std::optional<NumericValues> numeric_values_empty_for(DataType dt) noexcept {
+std::optional<NumericValues> numericValuesEmptyFor(DataType dt) noexcept {
     switch (dt) {
         case DataType::Bool:        return NumericValues{std::vector<bool>{}};
         case DataType::Int8:        return NumericValues{std::vector<std::int8_t>{}};
@@ -91,13 +91,13 @@ NumericValueRef numeric_value_ref_at(NumericValues const& v, std::size_t idx) {
 // rate is non-positive (defensive — would only happen on a
 // malformed file).
 std::int64_t segment_timestamp(Segment const& seg, std::size_t i) noexcept {
-    if (seg.sample_rate_hz > 0.0 && i > 0) {
+    if (seg.sampleRateHz > 0.0 && i > 0) {
         double const offset = static_cast<double>(i) * 1.0e9 /
-                              seg.sample_rate_hz;
-        return seg.start_timestamp_ns +
+                              seg.sampleRateHz;
+        return seg.startTimestampNs +
                static_cast<std::int64_t>(offset);
     }
-    return seg.start_timestamp_ns;
+    return seg.startTimestampNs;
 }
 
 Error access_mismatch(std::uint16_t channel, DataType requested,
@@ -112,18 +112,18 @@ Error access_mismatch(std::uint16_t channel, DataType requested,
 }  // anonymous namespace
 
 // =====================================================================
-// EquidistantChannel::samples_vector
+// EquidistantChannel::samplesVector
 // =====================================================================
 
 std::vector<Sample<NumericValueRef>>
-EquidistantChannel::samples_vector() const {
+EquidistantChannel::samplesVector() const {
     std::vector<Sample<NumericValueRef>> out;
-    out.reserve(numeric_values_len(samples));
+    out.reserve(numericValuesLen(samples));
     for (auto const& seg : segments) {
-        for (std::size_t i = 0; i < seg.sample_count; ++i) {
+        for (std::size_t i = 0; i < seg.sampleCount; ++i) {
             Sample<NumericValueRef> s;
-            s.timestamp_ns = segment_timestamp(seg, i);
-            s.value = numeric_value_ref_at(samples, seg.start_index + i);
+            s.timestampNs = segment_timestamp(seg, i);
+            s.value = numeric_value_ref_at(samples, seg.startIndex + i);
             out.push_back(std::move(s));
         }
     }
@@ -131,16 +131,16 @@ EquidistantChannel::samples_vector() const {
 }
 
 // =====================================================================
-// TimestampedChannel::samples_vector
+// TimestampedChannel::samplesVector
 // =====================================================================
 
 std::vector<Sample<NumericValueRef>>
-TimestampedChannel::samples_vector() const {
+TimestampedChannel::samplesVector() const {
     std::vector<Sample<NumericValueRef>> out;
-    out.reserve(timestamps_ns.size());
-    for (std::size_t i = 0; i < timestamps_ns.size(); ++i) {
+    out.reserve(timestampsNs.size());
+    for (std::size_t i = 0; i < timestampsNs.size(); ++i) {
         Sample<NumericValueRef> s;
-        s.timestamp_ns = timestamps_ns[i];
+        s.timestampNs = timestampsNs[i];
         s.value = numeric_value_ref_at(values, i);
         out.push_back(std::move(s));
     }
@@ -148,40 +148,40 @@ TimestampedChannel::samples_vector() const {
 }
 
 // =====================================================================
-// VariableChannel — accessors + samples_vector
+// VariableChannel — accessors + samplesVector
 // =====================================================================
 
 Result<std::vector<std::string> const*>
-VariableChannel::as_strings() const {
-    if (string_values) {
-        return &*string_values;
+VariableChannel::asStrings() const {
+    if (stringValues) {
+        return &*stringValues;
     }
     return tl::make_unexpected(access_mismatch(index, DataType::String,
-                                              data_type));
+                                              dataType));
 }
 
 Result<std::vector<std::vector<std::uint8_t>> const*>
-VariableChannel::as_binaries() const {
-    if (binary_values) {
-        return &*binary_values;
+VariableChannel::asBinaries() const {
+    if (binaryValues) {
+        return &*binaryValues;
     }
     return tl::make_unexpected(access_mismatch(index, DataType::Binary,
-                                              data_type));
+                                              dataType));
 }
 
 std::vector<Sample<VariableValueRef>>
-VariableChannel::samples_vector() const {
+VariableChannel::samplesVector() const {
     std::vector<Sample<VariableValueRef>> out;
-    out.reserve(timestamps_ns.size());
-    for (std::size_t i = 0; i < timestamps_ns.size(); ++i) {
+    out.reserve(timestampsNs.size());
+    for (std::size_t i = 0; i < timestampsNs.size(); ++i) {
         Sample<VariableValueRef> s;
-        s.timestamp_ns = timestamps_ns[i];
-        if (string_values) {
+        s.timestampNs = timestampsNs[i];
+        if (stringValues) {
             s.value.kind = VariableValueRef::Kind::String;
-            s.value.string_value = (*string_values)[i];
-        } else if (binary_values) {
+            s.value.stringValue = (*stringValues)[i];
+        } else if (binaryValues) {
             s.value.kind = VariableValueRef::Kind::Binary;
-            s.value.binary_value = (*binary_values)[i];
+            s.value.binaryValue = (*binaryValues)[i];
         }
         out.push_back(std::move(s));
     }
@@ -192,54 +192,54 @@ VariableChannel::samples_vector() const {
 // Channel common accessors
 // =====================================================================
 
-std::uint16_t channel_index(DataChannel const& c) noexcept {
+std::uint16_t channelIndex(DataChannel const& c) noexcept {
     return std::visit([](auto const& ch) noexcept { return ch.index; }, c);
 }
 
-std::string const& channel_name(DataChannel const& c) noexcept {
+std::string const& channelName(DataChannel const& c) noexcept {
     return std::visit([](auto const& ch) noexcept -> std::string const& {
         return ch.name;
     }, c);
 }
 
-DataType channel_data_type(DataChannel const& c) noexcept {
-    return std::visit([](auto const& ch) noexcept { return ch.data_type; }, c);
+DataType channelDataType(DataChannel const& c) noexcept {
+    return std::visit([](auto const& ch) noexcept { return ch.dataType; }, c);
 }
 
-std::optional<std::string> channel_physical_unit(DataChannel const& c) {
+std::optional<std::string> channelPhysicalUnit(DataChannel const& c) {
     return std::visit([](auto const& ch) -> std::optional<std::string> {
-        return ch.physical_unit;
+        return ch.physicalUnit;
     }, c);
 }
 
-std::optional<std::string> channel_display_name(DataChannel const& c) {
+std::optional<std::string> channelDisplayName(DataChannel const& c) {
     return std::visit([](auto const& ch) -> std::optional<std::string> {
-        return ch.display_name;
+        return ch.displayName;
     }, c);
 }
 
-std::size_t channel_sample_count(DataChannel const& c) noexcept {
+std::size_t channelSampleCount(DataChannel const& c) noexcept {
     return std::visit([](auto const& ch) noexcept -> std::size_t {
         using T = std::decay_t<decltype(ch)>;
         if constexpr (std::is_same_v<T, EquidistantChannel>) {
-            return numeric_values_len(ch.samples);
+            return numericValuesLen(ch.samples);
         } else if constexpr (std::is_same_v<T, TimestampedChannel>) {
-            return numeric_values_len(ch.values);
+            return numericValuesLen(ch.values);
         } else {
-            if (ch.string_values) return ch.string_values->size();
-            if (ch.binary_values) return ch.binary_values->size();
+            if (ch.stringValues) return ch.stringValues->size();
+            if (ch.binaryValues) return ch.binaryValues->size();
             return 0;
         }
     }, c);
 }
 
-bool channel_is_empty(DataChannel const& c) noexcept {
-    return channel_sample_count(c) == 0;
+bool channelIsEmpty(DataChannel const& c) noexcept {
+    return channelSampleCount(c) == 0;
 }
 
-ChannelMeta const& channel_meta(DataChannel const& c) noexcept {
+ChannelMeta const& channelMeta(DataChannel const& c) noexcept {
     return std::visit([](auto const& ch) noexcept -> ChannelMeta const& {
-        return ch.channel_def;
+        return ch.channelDef;
     }, c);
 }
 
@@ -249,39 +249,39 @@ ChannelMeta const& channel_meta(DataChannel const& c) noexcept {
 
 #define OSF_DEFINE_FLAT_ACCESSORS(SUFFIX, TYPE, DT)                          \
     Result<std::vector<TYPE>>                                                \
-        as_##SUFFIX##_flat(EquidistantChannel const& c) {                    \
+        as##SUFFIX##Flat(EquidistantChannel const& c) {                      \
         if (auto const* v = std::get_if<std::vector<TYPE>>(&c.samples)) {    \
             return *v;                                                       \
         }                                                                    \
         return tl::make_unexpected(access_mismatch(                          \
-            c.index, DT, numeric_values_data_type(c.samples)));              \
+            c.index, DT, numericValuesDataType(c.samples)));              \
     }                                                                        \
     Result<std::vector<std::pair<std::int64_t, TYPE>>>                       \
-        as_##SUFFIX##_flat(TimestampedChannel const& c) {                    \
+        as##SUFFIX##Flat(TimestampedChannel const& c) {                      \
         if (auto const* v = std::get_if<std::vector<TYPE>>(&c.values)) {     \
             std::vector<std::pair<std::int64_t, TYPE>> out;                  \
             out.reserve(v->size());                                          \
             for (std::size_t i = 0; i < v->size(); ++i) {                    \
-                out.emplace_back(c.timestamps_ns[i], (*v)[i]);               \
+                out.emplace_back(c.timestampsNs[i], (*v)[i]);               \
             }                                                                \
             return out;                                                      \
         }                                                                    \
         return tl::make_unexpected(access_mismatch(                          \
-            c.index, DT, numeric_values_data_type(c.values)));               \
+            c.index, DT, numericValuesDataType(c.values)));               \
     }
 
-OSF_DEFINE_FLAT_ACCESSORS(bools,   bool,             DataType::Bool)
-OSF_DEFINE_FLAT_ACCESSORS(int8,    std::int8_t,      DataType::Int8)
-OSF_DEFINE_FLAT_ACCESSORS(int16,   std::int16_t,     DataType::Int16)
-OSF_DEFINE_FLAT_ACCESSORS(int32,   std::int32_t,     DataType::Int32)
-OSF_DEFINE_FLAT_ACCESSORS(int64,   std::int64_t,     DataType::Int64)
-OSF_DEFINE_FLAT_ACCESSORS(uint8,   std::uint8_t,     DataType::UInt8)
-OSF_DEFINE_FLAT_ACCESSORS(uint16,  std::uint16_t,    DataType::UInt16)
-OSF_DEFINE_FLAT_ACCESSORS(uint32,  std::uint32_t,    DataType::UInt32)
-OSF_DEFINE_FLAT_ACCESSORS(uint64,  std::uint64_t,    DataType::UInt64)
-OSF_DEFINE_FLAT_ACCESSORS(floats,  float,            DataType::Float)
-OSF_DEFINE_FLAT_ACCESSORS(doubles, double,           DataType::Double)
-OSF_DEFINE_FLAT_ACCESSORS(gps,     GpsLocation,      DataType::GpsLocation)
+OSF_DEFINE_FLAT_ACCESSORS(Bools,   bool,             DataType::Bool)
+OSF_DEFINE_FLAT_ACCESSORS(Int8,    std::int8_t,      DataType::Int8)
+OSF_DEFINE_FLAT_ACCESSORS(Int16,   std::int16_t,     DataType::Int16)
+OSF_DEFINE_FLAT_ACCESSORS(Int32,   std::int32_t,     DataType::Int32)
+OSF_DEFINE_FLAT_ACCESSORS(Int64,   std::int64_t,     DataType::Int64)
+OSF_DEFINE_FLAT_ACCESSORS(Uint8,   std::uint8_t,     DataType::UInt8)
+OSF_DEFINE_FLAT_ACCESSORS(Uint16,  std::uint16_t,    DataType::UInt16)
+OSF_DEFINE_FLAT_ACCESSORS(Uint32,  std::uint32_t,    DataType::UInt32)
+OSF_DEFINE_FLAT_ACCESSORS(Uint64,  std::uint64_t,    DataType::UInt64)
+OSF_DEFINE_FLAT_ACCESSORS(Floats,  float,            DataType::Float)
+OSF_DEFINE_FLAT_ACCESSORS(Doubles, double,           DataType::Double)
+OSF_DEFINE_FLAT_ACCESSORS(Gps,     GpsLocation,      DataType::GpsLocation)
 
 #undef OSF_DEFINE_FLAT_ACCESSORS
 

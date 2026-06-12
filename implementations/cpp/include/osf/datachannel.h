@@ -20,8 +20,8 @@
 /// | `Variable`      | timestamps + string XOR binary vectors        |
 ///
 /// Equidistant channels reconstruct sample timestamps lazily when
-/// `samples_vector()` is called, using the per-segment
-/// `(start_timestamp_ns, sample_rate_hz)`. Spec rev 2026-05-04 makes
+/// `samplesVector()` is called, using the per-segment
+/// `(startTimestampNs, sampleRateHz)`. Spec rev 2026-05-04 makes
 /// multiple segments per channel explicit; every `bcStartData` opens
 /// a new one.
 
@@ -67,18 +67,18 @@ using NumericValues = std::variant<
 >;
 
 /// Number of samples held by a `NumericValues`. O(1).
-[[nodiscard]] std::size_t numeric_values_len(NumericValues const& v) noexcept;
+[[nodiscard]] std::size_t numericValuesLen(NumericValues const& v) noexcept;
 
-/// Equivalent to `numeric_values_len(v) == 0`.
-[[nodiscard]] bool numeric_values_empty(NumericValues const& v) noexcept;
+/// Equivalent to `numericValuesLen(v) == 0`.
+[[nodiscard]] bool numericValuesEmpty(NumericValues const& v) noexcept;
 
 /// `DataType` enum matching the active alternative.
-[[nodiscard]] DataType numeric_values_data_type(NumericValues const& v) noexcept;
+[[nodiscard]] DataType numericValuesDataType(NumericValues const& v) noexcept;
 
 /// Build an empty `NumericValues` whose active alternative matches
 /// `dt`. Returns `std::nullopt` for variable-length types (`String`,
 /// `Binary`, `ByteArray`) and for `Unsupported`.
-[[nodiscard]] std::optional<NumericValues> numeric_values_empty_for(
+[[nodiscard]] std::optional<NumericValues> numericValuesEmptyFor(
     DataType dt) noexcept;
 
 // =====================================================================
@@ -90,15 +90,15 @@ using NumericValues = std::variant<
 /// time and sample rate.
 struct Segment {
     /// Absolute start timestamp of this segment in nanoseconds.
-    std::int64_t start_timestamp_ns = 0;
+    std::int64_t startTimestampNs = 0;
     /// Sample rate in Hz, valid until the next segment of this
     /// channel.
-    double sample_rate_hz = 0.0;
+    double sampleRateHz = 0.0;
     /// First sample of this segment in the channel's flat
     /// `NumericValues` vector.
-    std::size_t start_index = 0;
+    std::size_t startIndex = 0;
     /// Number of samples belonging to this segment.
-    std::size_t sample_count = 0;
+    std::size_t sampleCount = 0;
 };
 
 /// Secondary channel-definition fields preserved from the metablock
@@ -107,23 +107,23 @@ struct Segment {
 struct ChannelMeta {
     /// Original on-disk channel-type spelling (`scalar`,
     /// `equidistant`, `timestamped`).
-    ChannelType channel_type = ChannelType::Scalar;
+    ChannelType channelType = ChannelType::Scalar;
     /// Length-prefix width on disk (2 or 4 bytes per spec).
-    std::uint8_t size_of_length_value = 0;
+    std::uint8_t sizeOfLengthValue = 0;
     /// Sample period in nanoseconds, if the metablock declared one.
-    std::optional<std::int64_t> time_increment_ns;
+    std::optional<std::int64_t> timeIncrementNs;
     /// Free-form reference identifier.
     std::optional<std::string> reference;
     /// Physical dimension (e.g. `temperature`).
-    std::optional<std::string> physical_dimension;
+    std::optional<std::string> physicalDimension;
     /// Free-form comment.
     std::optional<std::string> comment;
     /// Spectrum subtype, if the channel carries spectral data.
-    std::optional<SpectrumType> spectrum_type;
+    std::optional<SpectrumType> spectrumType;
 };
 
 // =====================================================================
-// Sample iteration types — value classes returned by samples_vector.
+// Sample iteration types — value classes returned by samplesVector.
 // =====================================================================
 
 /// Single numeric (or GPS) sample value, discriminated by data type.
@@ -149,14 +149,14 @@ using NumericValueRef = std::variant<
 struct VariableValueRef {
     enum class Kind { String, Binary };
     Kind kind = Kind::String;
-    std::string string_value;
-    std::vector<std::uint8_t> binary_value;
+    std::string stringValue;
+    std::vector<std::uint8_t> binaryValue;
 };
 
-/// Generic `(timestamp_ns, value)` pair.
+/// Generic `(timestampNs, value)` pair.
 template <typename T>
 struct Sample {
-    std::int64_t timestamp_ns = 0;
+    std::int64_t timestampNs = 0;
     T value;
 };
 
@@ -174,27 +174,27 @@ struct EquidistantChannel {
     std::string name;
     /// Datatype of the samples — every numeric type plus
     /// `GpsLocation` is possible (though equidistant GPS is rare).
-    DataType data_type = DataType::Unsupported;
+    DataType dataType = DataType::Unsupported;
     /// Optional physical unit string (e.g. `°C`).
-    std::optional<std::string> physical_unit;
+    std::optional<std::string> physicalUnit;
     /// Optional display name.
-    std::optional<std::string> display_name;
+    std::optional<std::string> displayName;
     /// Secondary channel-definition fields preserved from the
     /// metablock.
-    ChannelMeta channel_def;
+    ChannelMeta channelDef;
 
     /// Flat sample storage: every segment's samples appended
     /// head-to-tail.
     NumericValues samples{std::vector<double>{}};
-    /// One entry per `bcStartData`; `start_index..start_index +
-    /// sample_count` indexes into `samples`.
+    /// One entry per `bcStartData`; `startIndex..startIndex +
+    /// sampleCount` indexes into `samples`.
     std::vector<Segment> segments;
 
     /// Reconstruct `(timestamp, value)` pairs for every sample. Per
     /// the spec, sample `i` within a segment lands at
-    /// `segment.start + i * (1e9 / sample_rate_hz)`. Time gaps
+    /// `segment.start + i * (1e9 / sampleRateHz)`. Time gaps
     /// between consecutive segments are NOT interpolated.
-    [[nodiscard]] std::vector<Sample<NumericValueRef>> samples_vector() const;
+    [[nodiscard]] std::vector<Sample<NumericValueRef>> samplesVector() const;
 };
 
 // =====================================================================
@@ -211,23 +211,23 @@ struct TimestampedChannel {
     /// Fully qualified channel name.
     std::string name;
     /// Datatype of the samples.
-    DataType data_type = DataType::Unsupported;
+    DataType dataType = DataType::Unsupported;
     /// Optional physical unit string.
-    std::optional<std::string> physical_unit;
+    std::optional<std::string> physicalUnit;
     /// Optional display name.
-    std::optional<std::string> display_name;
+    std::optional<std::string> displayName;
     /// Secondary channel-definition fields preserved from the
     /// metablock.
-    ChannelMeta channel_def;
+    ChannelMeta channelDef;
 
     /// Absolute timestamps in nanoseconds since the Unix epoch (UTC),
     /// in stream order — same length as `values`.
-    std::vector<std::int64_t> timestamps_ns;
-    /// Sample values, parallel to `timestamps_ns`.
+    std::vector<std::int64_t> timestampsNs;
+    /// Sample values, parallel to `timestampsNs`.
     NumericValues values{std::vector<double>{}};
 
     /// Pair every timestamp with its sample value.
-    [[nodiscard]] std::vector<Sample<NumericValueRef>> samples_vector() const;
+    [[nodiscard]] std::vector<Sample<NumericValueRef>> samplesVector() const;
 };
 
 // =====================================================================
@@ -235,8 +235,8 @@ struct TimestampedChannel {
 // =====================================================================
 
 /// Timestamped channel for string and binary data. Variable-length
-/// payloads land in either `string_values` (when `data_type` is
-/// `String`) or `binary_values` (when `data_type` is `Binary`); the
+/// payloads land in either `stringValues` (when `dataType` is
+/// `String`) or `binaryValues` (when `dataType` is `Binary`); the
 /// other field stays `std::nullopt`.
 struct VariableChannel {
     /// Channel index from the metablock.
@@ -245,39 +245,39 @@ struct VariableChannel {
     std::string name;
     /// Datatype — exactly one of `DataType::String` or
     /// `DataType::Binary`.
-    DataType data_type = DataType::String;
+    DataType dataType = DataType::String;
     /// Optional physical unit string (rare for string / binary).
-    std::optional<std::string> physical_unit;
+    std::optional<std::string> physicalUnit;
     /// Optional display name.
-    std::optional<std::string> display_name;
+    std::optional<std::string> displayName;
     /// MIME type for binary channels (e.g. `image/jpeg`).
-    std::optional<std::string> mime_type;
+    std::optional<std::string> mimeType;
     /// Secondary channel-definition fields preserved from the
     /// metablock.
-    ChannelMeta channel_def;
+    ChannelMeta channelDef;
 
     /// Absolute timestamps in nanoseconds since the Unix epoch (UTC).
-    std::vector<std::int64_t> timestamps_ns;
-    /// String samples; set for `data_type == String`.
-    std::optional<std::vector<std::string>> string_values;
-    /// Binary samples; set for `data_type == Binary`.
-    std::optional<std::vector<std::vector<std::uint8_t>>> binary_values;
+    std::vector<std::int64_t> timestampsNs;
+    /// String samples; set for `dataType == String`.
+    std::optional<std::vector<std::string>> stringValues;
+    /// Binary samples; set for `dataType == Binary`.
+    std::optional<std::vector<std::vector<std::uint8_t>>> binaryValues;
 
     /// Read the channel's string samples.
     ///
     /// \returns `DataTypeAccessMismatch` when the channel holds
     /// binary data instead.
-    [[nodiscard]] Result<std::vector<std::string> const*> as_strings() const;
+    [[nodiscard]] Result<std::vector<std::string> const*> asStrings() const;
 
     /// Read the channel's binary samples.
     ///
     /// \returns `DataTypeAccessMismatch` when the channel holds
     /// string data instead.
     [[nodiscard]] Result<std::vector<std::vector<std::uint8_t>> const*>
-        as_binaries() const;
+        asBinaries() const;
 
     /// Pair every timestamp with its value (string or binary).
-    [[nodiscard]] std::vector<Sample<VariableValueRef>> samples_vector() const;
+    [[nodiscard]] std::vector<Sample<VariableValueRef>> samplesVector() const;
 };
 
 // =====================================================================
@@ -291,31 +291,31 @@ using DataChannel = std::variant<EquidistantChannel, TimestampedChannel,
                                  VariableChannel>;
 
 /// Common accessor: channel index from the metablock.
-[[nodiscard]] std::uint16_t channel_index(DataChannel const& c) noexcept;
+[[nodiscard]] std::uint16_t channelIndex(DataChannel const& c) noexcept;
 
 /// Common accessor: channel name.
-[[nodiscard]] std::string const& channel_name(DataChannel const& c) noexcept;
+[[nodiscard]] std::string const& channelName(DataChannel const& c) noexcept;
 
 /// Common accessor: data type of the samples.
-[[nodiscard]] DataType channel_data_type(DataChannel const& c) noexcept;
+[[nodiscard]] DataType channelDataType(DataChannel const& c) noexcept;
 
 /// Common accessor: physical-unit string (if set in the metablock).
-[[nodiscard]] std::optional<std::string> channel_physical_unit(
+[[nodiscard]] std::optional<std::string> channelPhysicalUnit(
     DataChannel const& c);
 
 /// Common accessor: display name (if set in the metablock).
-[[nodiscard]] std::optional<std::string> channel_display_name(
+[[nodiscard]] std::optional<std::string> channelDisplayName(
     DataChannel const& c);
 
 /// Total sample count (sum across all segments for equidistant
 /// channels).
-[[nodiscard]] std::size_t channel_sample_count(DataChannel const& c) noexcept;
+[[nodiscard]] std::size_t channelSampleCount(DataChannel const& c) noexcept;
 
-/// Convenience predicate for `channel_sample_count == 0`.
-[[nodiscard]] bool channel_is_empty(DataChannel const& c) noexcept;
+/// Convenience predicate for `channelSampleCount == 0`.
+[[nodiscard]] bool channelIsEmpty(DataChannel const& c) noexcept;
 
 /// Read-only view of the secondary channel-definition fields.
-[[nodiscard]] ChannelMeta const& channel_meta(DataChannel const& c) noexcept;
+[[nodiscard]] ChannelMeta const& channelMeta(DataChannel const& c) noexcept;
 
 // =====================================================================
 // Flat-access helpers — clone the typed vector when the active
@@ -328,22 +328,22 @@ using DataChannel = std::variant<EquidistantChannel, TimestampedChannel,
 
 #define OSF_DECL_FLAT_ACCESSORS(SUFFIX, TYPE)                              \
     [[nodiscard]] Result<std::vector<TYPE>>                                \
-        as_##SUFFIX##_flat(EquidistantChannel const& c);                   \
+        as##SUFFIX##Flat(EquidistantChannel const& c);                     \
     [[nodiscard]] Result<std::vector<std::pair<std::int64_t, TYPE>>>       \
-        as_##SUFFIX##_flat(TimestampedChannel const& c);
+        as##SUFFIX##Flat(TimestampedChannel const& c);
 
-OSF_DECL_FLAT_ACCESSORS(bools,   bool)
-OSF_DECL_FLAT_ACCESSORS(int8,    std::int8_t)
-OSF_DECL_FLAT_ACCESSORS(int16,   std::int16_t)
-OSF_DECL_FLAT_ACCESSORS(int32,   std::int32_t)
-OSF_DECL_FLAT_ACCESSORS(int64,   std::int64_t)
-OSF_DECL_FLAT_ACCESSORS(uint8,   std::uint8_t)
-OSF_DECL_FLAT_ACCESSORS(uint16,  std::uint16_t)
-OSF_DECL_FLAT_ACCESSORS(uint32,  std::uint32_t)
-OSF_DECL_FLAT_ACCESSORS(uint64,  std::uint64_t)
-OSF_DECL_FLAT_ACCESSORS(floats,  float)
-OSF_DECL_FLAT_ACCESSORS(doubles, double)
-OSF_DECL_FLAT_ACCESSORS(gps,     GpsLocation)
+OSF_DECL_FLAT_ACCESSORS(Bools,   bool)
+OSF_DECL_FLAT_ACCESSORS(Int8,    std::int8_t)
+OSF_DECL_FLAT_ACCESSORS(Int16,   std::int16_t)
+OSF_DECL_FLAT_ACCESSORS(Int32,   std::int32_t)
+OSF_DECL_FLAT_ACCESSORS(Int64,   std::int64_t)
+OSF_DECL_FLAT_ACCESSORS(Uint8,   std::uint8_t)
+OSF_DECL_FLAT_ACCESSORS(Uint16,  std::uint16_t)
+OSF_DECL_FLAT_ACCESSORS(Uint32,  std::uint32_t)
+OSF_DECL_FLAT_ACCESSORS(Uint64,  std::uint64_t)
+OSF_DECL_FLAT_ACCESSORS(Floats,  float)
+OSF_DECL_FLAT_ACCESSORS(Doubles, double)
+OSF_DECL_FLAT_ACCESSORS(Gps,     GpsLocation)
 
 #undef OSF_DECL_FLAT_ACCESSORS
 

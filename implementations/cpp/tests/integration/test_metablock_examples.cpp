@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 //
-// Integration tests for parse_metablock_json against the OSF5 reference
+// Integration tests for parseMetablockJson against the OSF5 reference
 // files under examples/generated/. These exercise the parser on real
 // fixtures produced by OSFGenerator rather than hand-built JSON; that
 // is the cross-validation step against the spec.
@@ -30,11 +30,11 @@ protected:
         return std::filesystem::path{OSF_EXAMPLES_DIR};
     }
 
-    // Read magic header from `path`, then read exactly metablock_len
+    // Read magic header from `path`, then read exactly metablockLen
     // bytes that follow. Returns the metablock bytes; ASSERTs on
     // failure (caller wraps in a fixture method).
     static std::vector<std::uint8_t> read_metablock(std::filesystem::path const& path) {
-        auto header = osf::parse_magic_header(path);
+        auto header = osf::parseMagicHeader(path);
         EXPECT_TRUE(header.has_value())
             << "magic header parse failed for " << path << ": "
             << (header ? "" : header.error().message);
@@ -50,7 +50,7 @@ protected:
         std::string line;
         std::getline(in, line);
 
-        std::vector<std::uint8_t> buf(static_cast<std::size_t>(header->metablock_len));
+        std::vector<std::uint8_t> buf(static_cast<std::size_t>(header->metablockLen));
         in.read(reinterpret_cast<char*>(buf.data()),
                 static_cast<std::streamsize>(buf.size()));
         EXPECT_EQ(static_cast<std::size_t>(in.gcount()), buf.size())
@@ -71,21 +71,21 @@ TEST_F(MetablockExamplesTest, osf5_equidistant_snapshot) {
     auto bytes = read_metablock(examples_dir() / "generated" / "osf5_equidistant.osf");
     ASSERT_FALSE(bytes.empty());
 
-    auto mb = osf::parse_metablock_json(bytes.data(), bytes.size());
+    auto mb = osf::parseMetablockJson(bytes.data(), bytes.size());
     ASSERT_TRUE(mb.has_value()) << mb.error().message;
 
-    EXPECT_EQ(mb->file_info.version, 5u);
-    ASSERT_TRUE(mb->file_info.creator.has_value());
-    EXPECT_EQ(*mb->file_info.creator, "OSFGenerator/1.0");
-    EXPECT_TRUE(mb->file_info.created_at_latitude.has_value());
+    EXPECT_EQ(mb->fileInfo.version, 5u);
+    ASSERT_TRUE(mb->fileInfo.creator.has_value());
+    EXPECT_EQ(*mb->fileInfo.creator, "OSFGenerator/1.0");
+    EXPECT_TRUE(mb->fileInfo.createdAtLatitude.has_value());
 
     ASSERT_FALSE(mb->channels.empty());
     auto const& first = mb->channels[0];
     EXPECT_EQ(first.index, 0);
-    EXPECT_EQ(first.channel_type, osf::ChannelType::Scalar);
-    EXPECT_EQ(first.data_type, osf::DataType::Double);
-    EXPECT_TRUE(first.time_increment_ns.has_value());
-    EXPECT_GT(*first.time_increment_ns, 0);
+    EXPECT_EQ(first.channelType, osf::ChannelType::Scalar);
+    EXPECT_EQ(first.dataType, osf::DataType::Double);
+    EXPECT_TRUE(first.timeIncrementNs.has_value());
+    EXPECT_GT(*first.timeIncrementNs, 0);
 }
 
 // ---------------------------------------------------------------------
@@ -109,17 +109,17 @@ TEST_F(MetablockExamplesTest, all_osf5_generated_files_parse) {
         auto bytes = read_metablock(entry.path());
         ASSERT_FALSE(bytes.empty());
 
-        auto mb = osf::parse_metablock_json(bytes.data(), bytes.size());
+        auto mb = osf::parseMetablockJson(bytes.data(), bytes.size());
         ASSERT_TRUE(mb.has_value()) << mb.error().message;
-        EXPECT_EQ(mb->file_info.version, 5u);
+        EXPECT_EQ(mb->fileInfo.version, 5u);
         EXPECT_GT(mb->channels.size(), 0u);
 
         for (auto const& ch : mb->channels) {
             EXPECT_FALSE(ch.name.empty());
-            EXPECT_TRUE(ch.size_of_length_value == 2 ||
-                        ch.size_of_length_value == 4)
+            EXPECT_TRUE(ch.sizeOfLengthValue == 2 ||
+                        ch.sizeOfLengthValue == 4)
                 << "channel " << ch.index << " (" << ch.name << ") has "
-                << "sizeoflengthvalue=" << int{ch.size_of_length_value};
+                << "sizeoflengthvalue=" << int{ch.sizeOfLengthValue};
         }
 
         ++parsed;
@@ -138,14 +138,14 @@ TEST_F(MetablockExamplesTest, osf5_gpslocation_file_declares_gpslocation_channel
     auto bytes = read_metablock(examples_dir() / "generated" / "osf5_gpslocation.osf");
     ASSERT_FALSE(bytes.empty());
 
-    auto mb = osf::parse_metablock_json(bytes.data(), bytes.size());
+    auto mb = osf::parseMetablockJson(bytes.data(), bytes.size());
     ASSERT_TRUE(mb.has_value()) << mb.error().message;
 
     bool saw_gps = false;
     for (auto const& ch : mb->channels) {
-        if (ch.data_type == osf::DataType::GpsLocation) {
+        if (ch.dataType == osf::DataType::GpsLocation) {
             saw_gps = true;
-            EXPECT_EQ(ch.data_type_raw, "gpslocation");
+            EXPECT_EQ(ch.dataTypeRaw, "gpslocation");
         }
     }
     EXPECT_TRUE(saw_gps)

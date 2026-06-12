@@ -56,23 +56,23 @@ osf::Result<void> write_equidistant(
         osf::StreamingWriter& w, std::uint16_t channel,
         osf::EquidistantChannel const& eq) {
     // Equidistant is float or double only per spec rev 2026-05-04.
-    if (auto v = osf::as_doubles_flat(eq); v.has_value()) {
+    if (auto v = osf::asDoublesFlat(eq); v.has_value()) {
         // Replay each segment using the segment's start_ts + rate +
         // the slice of the flat vector that segment covers.
         for (auto const& seg : eq.segments) {
-            auto const* base = v->data() + seg.start_index;
-            if (auto r = w.start_equidistant_segment(
-                    channel, seg.start_timestamp_ns, seg.sample_rate_hz,
-                    base, seg.sample_count); !r) return r;
+            auto const* base = v->data() + seg.startIndex;
+            if (auto r = w.startEquidistantSegment(
+                    channel, seg.startTimestampNs, seg.sampleRateHz,
+                    base, seg.sampleCount); !r) return r;
         }
         return {};
     }
-    if (auto v = osf::as_floats_flat(eq); v.has_value()) {
+    if (auto v = osf::asFloatsFlat(eq); v.has_value()) {
         for (auto const& seg : eq.segments) {
-            auto const* base = v->data() + seg.start_index;
-            if (auto r = w.start_equidistant_segment(
-                    channel, seg.start_timestamp_ns, seg.sample_rate_hz,
-                    base, seg.sample_count); !r) return r;
+            auto const* base = v->data() + seg.startIndex;
+            if (auto r = w.startEquidistantSegment(
+                    channel, seg.startTimestampNs, seg.sampleRateHz,
+                    base, seg.sampleCount); !r) return r;
         }
         return {};
     }
@@ -82,14 +82,14 @@ osf::Result<void> write_equidistant(
 }
 
 #define WRITE_TIMESTAMPED_DISPATCH(SUFFIX, TYPE)                              \
-    if (auto v = osf::as_##SUFFIX##_flat(ts); v.has_value()) {                \
+    if (auto v = osf::as##SUFFIX##Flat(ts); v.has_value()) {                  \
         std::vector<std::int64_t> times; times.reserve(v->size());            \
         std::vector<TYPE>         vals;  vals.reserve(v->size());             \
         for (auto const& pair : *v) {                                         \
             times.push_back(pair.first);                                      \
             vals.push_back(pair.second);                                      \
         }                                                                     \
-        return w.write_timestamped_samples<TYPE>(                             \
+        return w.writeTimestampedSamples<TYPE>(                             \
             channel, times.data(), vals.data(), vals.size());                 \
     }
 
@@ -98,36 +98,36 @@ osf::Result<void> write_timestamped(
         osf::TimestampedChannel const& ts) {
     // bool is special — std::vector<bool> is a bit-packed specialization
     // with no contiguous storage, so we cannot pass &vals[0] / .data()
-    // to write_timestamped_samples<bool>(bool const*, ...). Use a
+    // to writeTimestampedSamples<bool>(bool const*, ...). Use a
     // heap-allocated bool array to preserve the bool const* interface.
-    if (auto v = osf::as_bools_flat(ts); v.has_value()) {
+    if (auto v = osf::asBoolsFlat(ts); v.has_value()) {
         std::vector<std::int64_t> times; times.reserve(v->size());
         auto vals = std::make_unique<bool[]>(v->size());
         for (std::size_t i = 0; i < v->size(); ++i) {
             times.push_back((*v)[i].first);
             vals[i] = (*v)[i].second;
         }
-        return w.write_timestamped_samples<bool>(
+        return w.writeTimestampedSamples<bool>(
             channel, times.data(), vals.get(), v->size());
     }
-    WRITE_TIMESTAMPED_DISPATCH(int8,    std::int8_t)
-    WRITE_TIMESTAMPED_DISPATCH(int16,   std::int16_t)
-    WRITE_TIMESTAMPED_DISPATCH(int32,   std::int32_t)
-    WRITE_TIMESTAMPED_DISPATCH(int64,   std::int64_t)
-    WRITE_TIMESTAMPED_DISPATCH(uint8,   std::uint8_t)
-    WRITE_TIMESTAMPED_DISPATCH(uint16,  std::uint16_t)
-    WRITE_TIMESTAMPED_DISPATCH(uint32,  std::uint32_t)
-    WRITE_TIMESTAMPED_DISPATCH(uint64,  std::uint64_t)
-    WRITE_TIMESTAMPED_DISPATCH(floats,  float)
-    WRITE_TIMESTAMPED_DISPATCH(doubles, double)
-    if (auto v = osf::as_gps_flat(ts); v.has_value()) {
+    WRITE_TIMESTAMPED_DISPATCH(Int8,    std::int8_t)
+    WRITE_TIMESTAMPED_DISPATCH(Int16,   std::int16_t)
+    WRITE_TIMESTAMPED_DISPATCH(Int32,   std::int32_t)
+    WRITE_TIMESTAMPED_DISPATCH(Int64,   std::int64_t)
+    WRITE_TIMESTAMPED_DISPATCH(Uint8,   std::uint8_t)
+    WRITE_TIMESTAMPED_DISPATCH(Uint16,  std::uint16_t)
+    WRITE_TIMESTAMPED_DISPATCH(Uint32,  std::uint32_t)
+    WRITE_TIMESTAMPED_DISPATCH(Uint64,  std::uint64_t)
+    WRITE_TIMESTAMPED_DISPATCH(Floats,  float)
+    WRITE_TIMESTAMPED_DISPATCH(Doubles, double)
+    if (auto v = osf::asGpsFlat(ts); v.has_value()) {
         std::vector<std::int64_t>     times; times.reserve(v->size());
         std::vector<osf::GpsLocation> vals;  vals.reserve(v->size());
         for (auto const& pair : *v) {
             times.push_back(pair.first);
             vals.push_back(pair.second);
         }
-        return w.write_timestamped_gps_samples(
+        return w.writeTimestampedGpsSamples(
             channel, times.data(), vals.data(), vals.size());
     }
     return tl::make_unexpected(osf::Error{
@@ -140,20 +140,20 @@ osf::Result<void> write_timestamped(
 osf::Result<void> write_variable(
         osf::StreamingWriter& w, std::uint16_t channel,
         osf::VariableChannel const& var) {
-    if (auto strings = var.as_strings(); strings.has_value()) {
+    if (auto strings = var.asStrings(); strings.has_value()) {
         for (std::size_t i = 0; i < (*strings)->size(); ++i) {
-            if (auto r = w.write_timestamped_string(
-                    channel, var.timestamps_ns[i],
+            if (auto r = w.writeTimestampedString(
+                    channel, var.timestampsNs[i],
                     std::string_view{(**strings)[i]}); !r) return r;
         }
         return {};
     }
-    if (auto bins = var.as_binaries(); bins.has_value()) {
+    if (auto bins = var.asBinaries(); bins.has_value()) {
         for (std::size_t i = 0; i < (*bins)->size(); ++i) {
             auto const& blob = (**bins)[i];
-            if (auto r = w.write_timestamped_binary(
-                    channel, var.timestamps_ns[i],
-                    osf::BinarySample::from_vector(blob)); !r) return r;
+            if (auto r = w.writeTimestampedBinary(
+                    channel, var.timestampsNs[i],
+                    osf::BinarySample::fromVector(blob)); !r) return r;
         }
         return {};
     }
@@ -162,7 +162,7 @@ osf::Result<void> write_variable(
         "variable channel is neither string nor binary"});
 }
 
-// Derive the writer-side channel_type from the loaded variant.
+// Derive the writer-side channelType from the loaded variant.
 osf::ChannelType channel_type_from(osf::DataChannel const& ch) {
     if (std::holds_alternative<osf::EquidistantChannel>(ch))
         return osf::ChannelType::Equidistant;
@@ -176,7 +176,7 @@ osf::ChannelType channel_type_from(osf::DataChannel const& ch) {
 // AND first/last sample values (via roundtrip_managers_equal).
 ::testing::AssertionResult roundtrip_via_streaming_writer(
         std::filesystem::path const& src) {
-    auto src_mgr = osf::DataManager::load_from_file(src);
+    auto src_mgr = osf::DataManager::loadFromFile(src);
     if (!src_mgr) {
         return ::testing::AssertionFailure()
             << "load src failed: " << src_mgr.error().message;
@@ -186,40 +186,40 @@ osf::ChannelType channel_type_from(osf::DataChannel const& ch) {
     {
         osf::StreamingWriter w{g.path};
         // Copy file-info (only the user-controllable fields).
-        if (src_mgr->meta.file_info.creator)
-            w.set_creator(*src_mgr->meta.file_info.creator);
-        if (src_mgr->meta.file_info.tag)
-            w.set_tag(*src_mgr->meta.file_info.tag);
-        if (src_mgr->meta.file_info.reason)
-            w.set_reason(*src_mgr->meta.file_info.reason);
-        if (src_mgr->meta.file_info.namespace_sep)
-            w.set_namespace_sep(*src_mgr->meta.file_info.namespace_sep);
-        if (src_mgr->meta.file_info.comment)
-            w.set_comment(*src_mgr->meta.file_info.comment);
-        if (src_mgr->meta.file_info.created_at_latitude &&
-            src_mgr->meta.file_info.created_at_longitude &&
-            src_mgr->meta.file_info.created_at_altitude) {
-            w.set_location(*src_mgr->meta.file_info.created_at_latitude,
-                           *src_mgr->meta.file_info.created_at_longitude,
-                           *src_mgr->meta.file_info.created_at_altitude);
+        if (src_mgr->meta.fileInfo.creator)
+            w.setCreator(*src_mgr->meta.fileInfo.creator);
+        if (src_mgr->meta.fileInfo.tag)
+            w.setTag(*src_mgr->meta.fileInfo.tag);
+        if (src_mgr->meta.fileInfo.reason)
+            w.setReason(*src_mgr->meta.fileInfo.reason);
+        if (src_mgr->meta.fileInfo.namespaceSep)
+            w.setNamespaceSep(*src_mgr->meta.fileInfo.namespaceSep);
+        if (src_mgr->meta.fileInfo.comment)
+            w.setComment(*src_mgr->meta.fileInfo.comment);
+        if (src_mgr->meta.fileInfo.createdAtLatitude &&
+            src_mgr->meta.fileInfo.createdAtLongitude &&
+            src_mgr->meta.fileInfo.createdAtAltitude) {
+            w.setLocation(*src_mgr->meta.fileInfo.createdAtLatitude,
+                           *src_mgr->meta.fileInfo.createdAtLongitude,
+                           *src_mgr->meta.fileInfo.createdAtAltitude);
         }
 
         // Add channels — derive ChannelDef from the loaded DataChannels.
         for (auto const& ch : src_mgr->channels()) {
             osf::ChannelDef def;
-            def.name = osf::channel_name(ch);
-            def.data_type = osf::channel_data_type(ch);
-            def.channel_type = channel_type_from(ch);
+            def.name = osf::channelName(ch);
+            def.dataType = osf::channelDataType(ch);
+            def.channelType = channel_type_from(ch);
             // Use sov=4 for variable channels (in case the source had
             // payloads near the sov=2 limit). For numeric channels,
             // sov=4 is also safe (fits everything).
-            def.size_of_length_value = 4;
-            def.physical_unit  = osf::channel_physical_unit(ch);
-            def.display_name   = osf::channel_display_name(ch);
-            if (auto r = w.add_channel(def); !r) {
+            def.sizeOfLengthValue = 4;
+            def.physicalUnit  = osf::channelPhysicalUnit(ch);
+            def.displayName   = osf::channelDisplayName(ch);
+            if (auto r = w.addChannel(def); !r) {
                 return ::testing::AssertionFailure()
-                    << "add_channel failed for "
-                    << osf::channel_name(ch) << ": "
+                    << "addChannel failed for "
+                    << osf::channelName(ch) << ": "
                     << r.error().message;
             }
         }
@@ -244,7 +244,7 @@ osf::ChannelType channel_type_from(osf::DataChannel const& ch) {
             }
             if (!r) {
                 return ::testing::AssertionFailure()
-                    << "write channel " << osf::channel_name(ch) << " failed: "
+                    << "write channel " << osf::channelName(ch) << " failed: "
                     << r.error().message;
             }
         }
@@ -255,7 +255,7 @@ osf::ChannelType channel_type_from(osf::DataChannel const& ch) {
         }
     }
 
-    auto out_mgr = osf::DataManager::load_from_file(g.path);
+    auto out_mgr = osf::DataManager::loadFromFile(g.path);
     if (!out_mgr) {
         return ::testing::AssertionFailure()
             << "load output failed: " << out_mgr.error().message;
@@ -294,13 +294,13 @@ TEST_F(StreamingWriterExamples,
         osf::StreamingWriter w{g.path};
         osf::ChannelDef d;
         d.name = "x";
-        d.data_type = osf::DataType::Double;
-        d.channel_type = osf::ChannelType::Timestamped;
-        d.size_of_length_value = 2;
-        ASSERT_TRUE(w.add_channel(d).has_value());
+        d.dataType = osf::DataType::Double;
+        d.channelType = osf::ChannelType::Timestamped;
+        d.sizeOfLengthValue = 2;
+        ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
         for (std::int64_t i = 0; i < 10; ++i) {
-            ASSERT_TRUE(w.write_timestamped_sample<double>(
+            ASSERT_TRUE(w.writeTimestampedSample<double>(
                 0, /*ts=*/i, /*v=*/static_cast<double>(i)).has_value());
         }
         ASSERT_TRUE(w.close().has_value());
@@ -317,13 +317,13 @@ TEST_F(StreamingWriterExamples,
     ASSERT_GT(original_size, 10u);
     std::filesystem::resize_file(g.path, original_size - 10);
 
-    auto mgr = osf::DataManager::load_from_file(g.path);
+    auto mgr = osf::DataManager::loadFromFile(g.path);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     auto const* ts_ch = std::get_if<osf::TimestampedChannel>(
         mgr->channel("x"));
     ASSERT_NE(ts_ch, nullptr);
-    EXPECT_EQ(ts_ch->timestamps_ns.size(), 9u);
-    EXPECT_EQ(mgr->stats.blocks_truncated, 1u);
-    EXPECT_EQ(ts_ch->timestamps_ns[0], 0);
-    EXPECT_EQ(ts_ch->timestamps_ns[8], 8);
+    EXPECT_EQ(ts_ch->timestampsNs.size(), 9u);
+    EXPECT_EQ(mgr->stats.blocksTruncated, 1u);
+    EXPECT_EQ(ts_ch->timestampsNs[0], 0);
+    EXPECT_EQ(ts_ch->timestampsNs[8], 8);
 }

@@ -6,7 +6,7 @@
 #include "blockencode_p.h"           // osf::detail::encode_*
 #include "durablefile_p.h"           // osf::detail::DurableFile
 #include "writercommon_p.h"          // osf::detail chunking helpers + constants
-#include "osf/metablock.h"          // FileInfo, Channel, MetaBlock, serialize_metablock_json
+#include "osf/metablock.h"          // FileInfo, Channel, MetaBlock, serializeMetablockJson
 
 #include <algorithm>
 #include <cassert>
@@ -34,7 +34,7 @@ struct ChannelState {
         Unset, Equidistant, Timestamped, Variable
     };
     BlockKindLock kind_lock = BlockKindLock::Unset;
-    DataType      datatype_lock = DataType::Unsupported;   // copied from ChannelDef.data_type
+    DataType      datatype_lock = DataType::Unsupported;   // copied from ChannelDef.dataType
     bool          segment_open = false;                     // equidistant only
 };
 
@@ -47,7 +47,7 @@ Error make_error(Error::Code code, std::string msg) {
 }
 
 // Map a supported template T to its DataType enum. Compile-time
-// dispatch; used by require_timestamped_channel in Tasks 4–6.
+// dispatch; used by requireTimestampedChannel in Tasks 4–6.
 template <typename T>
 constexpr DataType data_type_for() noexcept {
     if constexpr (std::is_same_v<T, bool>)               return DataType::Bool;
@@ -122,51 +122,51 @@ StreamingWriter& StreamingWriter::operator=(StreamingWriter&& other) noexcept {
 
 // ── File-info setters ────────────────────────────────────────────────
 
-void StreamingWriter::set_creator(std::string value)       { creator_   = std::move(value); }
-void StreamingWriter::set_tag(std::string value)           { tag_       = std::move(value); }
-void StreamingWriter::set_reason(std::string value)        { reason_    = std::move(value); }
-void StreamingWriter::set_namespace_sep(std::string value) { namespace_sep_ = std::move(value); }
-void StreamingWriter::set_comment(std::string value)       { comment_   = std::move(value); }
+void StreamingWriter::setCreator(std::string value)       { creator_   = std::move(value); }
+void StreamingWriter::setTag(std::string value)           { tag_       = std::move(value); }
+void StreamingWriter::setReason(std::string value)        { reason_    = std::move(value); }
+void StreamingWriter::setNamespaceSep(std::string value) { namespace_sep_ = std::move(value); }
+void StreamingWriter::setComment(std::string value)       { comment_   = std::move(value); }
 
-void StreamingWriter::set_location(double latitude, double longitude,
+void StreamingWriter::setLocation(double latitude, double longitude,
                                    double altitude) {
     created_at_latitude_  = latitude;
     created_at_longitude_ = longitude;
     created_at_altitude_  = altitude;
 }
 
-// ── add_channel ──────────────────────────────────────────────────────
+// ── addChannel ──────────────────────────────────────────────────────
 
-Result<std::uint16_t> StreamingWriter::add_channel(ChannelDef def) {
+Result<std::uint16_t> StreamingWriter::addChannel(ChannelDef def) {
     if (state_ != State::Configure) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
-            "add_channel: writer is past the Configure phase"));
+            "addChannel: writer is past the Configure phase"));
     }
-    if (def.size_of_length_value != 2 && def.size_of_length_value != 4) {
+    if (def.sizeOfLengthValue != 2 && def.sizeOfLengthValue != 4) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
-            "add_channel: size_of_length_value must be 2 or 4"));
+            "addChannel: sizeOfLengthValue must be 2 or 4"));
     }
-    if (def.data_type == DataType::Unsupported) {
+    if (def.dataType == DataType::Unsupported) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
-            "add_channel: data_type Unsupported is not writeable"));
+            "addChannel: dataType Unsupported is not writeable"));
     }
-    if (def.channel_type == ChannelType::Unsupported) {
+    if (def.channelType == ChannelType::Unsupported) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
-            "add_channel: channel_type Unsupported is not writeable"));
+            "addChannel: channelType Unsupported is not writeable"));
     }
     if (channels_.size() >= 0xFFFF) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
-            "add_channel: too many channels (max 65535)"));
+            "addChannel: too many channels (max 65535)"));
     }
 
     auto const idx = static_cast<std::uint16_t>(channels_.size());
     detail::ChannelState st;
-    st.datatype_lock = def.data_type;
+    st.datatype_lock = def.dataType;
     channels_.push_back(std::move(def));
     channel_states_.push_back(st);
     return idx;
@@ -201,15 +201,15 @@ Result<void> StreamingWriter::start() {
     fi.creator = creator_;
     fi.tag = tag_;
     fi.reason = reason_;
-    fi.created_at_latitude = created_at_latitude_;
-    fi.created_at_longitude = created_at_longitude_;
-    fi.created_at_altitude = created_at_altitude_;
-    fi.namespace_sep = namespace_sep_;
+    fi.createdAtLatitude = created_at_latitude_;
+    fi.createdAtLongitude = created_at_longitude_;
+    fi.createdAtAltitude = created_at_altitude_;
+    fi.namespaceSep = namespace_sep_;
     fi.comment = comment_;
     MetaBlock meta = detail::build_metablock(fi, channels_);
 
     // Serialize the metablock and build the magic-header line.
-    std::string const json_body = serialize_metablock_json(meta);
+    std::string const json_body = serializeMetablockJson(meta);
     std::string const magic_line =
         "OSF5 " + std::to_string(json_body.size()) + "\n";
 
@@ -267,9 +267,9 @@ Result<void> StreamingWriter::close() {
     return result;
 }
 
-// ── do_write_block — the I/O gate ────────────────────────────────────
+// ── doWriteBlock — the I/O gate ────────────────────────────────────
 
-Result<void> StreamingWriter::do_write_block(std::uint8_t const* data,
+Result<void> StreamingWriter::doWriteBlock(std::uint8_t const* data,
                                              std::size_t size) {
     if (state_ == State::Broken) {
         return tl::make_unexpected(*sticky_error_);
@@ -277,7 +277,7 @@ Result<void> StreamingWriter::do_write_block(std::uint8_t const* data,
     if (state_ != State::Streaming) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
-            "do_write_block: writer not in Streaming state"));
+            "doWriteBlock: writer not in Streaming state"));
     }
     if (auto wr = durable_file_->write(data, size); !wr) {
         state_ = State::Broken;
@@ -294,26 +294,26 @@ Result<void> StreamingWriter::do_write_block(std::uint8_t const* data,
 
 // ── require_* helpers ────────────────────────────────────────────────
 
-std::uint8_t StreamingWriter::sov_for(std::uint16_t channel) const noexcept {
+std::uint8_t StreamingWriter::sovFor(std::uint16_t channel) const noexcept {
     assert(channel < channels_.size());
-    return channels_[channel].size_of_length_value;
+    return channels_[channel].sizeOfLengthValue;
 }
 
-std::optional<Error> StreamingWriter::require_streaming_state() const {
+std::optional<Error> StreamingWriter::requireStreamingState() const {
     if (state_ == State::Broken) return *sticky_error_;
     if (state_ == State::Closed) {
         return make_error(Error::Code::InvalidArgument, "writer is closed");
     }
     if (state_ == State::Configure) {
         return make_error(Error::Code::InvalidArgument,
-                          "call start() before write_*");
+                          "call start() before write*");
     }
     return std::nullopt;
 }
 
-std::optional<Error> StreamingWriter::require_equidistant_channel(
+std::optional<Error> StreamingWriter::requireEquidistantChannel(
         std::uint16_t channel, DataType expected) {
-    if (auto err = require_streaming_state()) return err;
+    if (auto err = requireStreamingState()) return err;
     if (channel >= channels_.size()) {
         return make_error(Error::Code::InvalidArgument,
                           "channel index out of range");
@@ -334,9 +334,9 @@ std::optional<Error> StreamingWriter::require_equidistant_channel(
     return std::nullopt;
 }
 
-std::optional<Error> StreamingWriter::require_timestamped_channel(
+std::optional<Error> StreamingWriter::requireTimestampedChannel(
         std::uint16_t channel, DataType expected) {
-    if (auto err = require_streaming_state()) return err;
+    if (auto err = requireStreamingState()) return err;
     if (channel >= channels_.size()) {
         return make_error(Error::Code::InvalidArgument,
                           "channel index out of range");
@@ -357,9 +357,9 @@ std::optional<Error> StreamingWriter::require_timestamped_channel(
     return std::nullopt;
 }
 
-std::optional<Error> StreamingWriter::require_variable_channel(
+std::optional<Error> StreamingWriter::requireVariableChannel(
         std::uint16_t channel, DataType expected) {
-    if (auto err = require_streaming_state()) return err;
+    if (auto err = requireStreamingState()) return err;
     if (channel >= channels_.size()) {
         return make_error(Error::Code::InvalidArgument,
                           "channel index out of range");
@@ -386,43 +386,43 @@ std::optional<Error> StreamingWriter::require_variable_channel(
 // bodies that live further down. The GPS + Variable methods are
 // non-template entry points with their own bodies.
 
-Result<void> StreamingWriter::start_equidistant_segment(
+Result<void> StreamingWriter::startEquidistantSegment(
         std::uint16_t channel, std::int64_t start_ts, double rate,
         float const* samples, std::size_t count) {
-    return start_equidistant_segment_impl<float>(channel, start_ts, rate,
+    return startEquidistantSegmentImpl<float>(channel, start_ts, rate,
                                                   samples, count);
 }
-Result<void> StreamingWriter::start_equidistant_segment(
+Result<void> StreamingWriter::startEquidistantSegment(
         std::uint16_t channel, std::int64_t start_ts, double rate,
         double const* samples, std::size_t count) {
-    return start_equidistant_segment_impl<double>(channel, start_ts, rate,
+    return startEquidistantSegmentImpl<double>(channel, start_ts, rate,
                                                    samples, count);
 }
-Result<void> StreamingWriter::append_equidistant_samples(
+Result<void> StreamingWriter::appendEquidistantSamples(
         std::uint16_t channel, float const* samples, std::size_t count) {
-    return append_equidistant_samples_impl<float>(channel, samples, count);
+    return appendEquidistantSamplesImpl<float>(channel, samples, count);
 }
-Result<void> StreamingWriter::append_equidistant_samples(
+Result<void> StreamingWriter::appendEquidistantSamples(
         std::uint16_t channel, double const* samples, std::size_t count) {
-    return append_equidistant_samples_impl<double>(channel, samples, count);
+    return appendEquidistantSamplesImpl<double>(channel, samples, count);
 }
 
 // ── GPS array ─────────────────────────────────────────────────────
 
-Result<void> StreamingWriter::write_timestamped_gps_samples(
-        std::uint16_t channel, std::int64_t const* timestamps_ns,
+Result<void> StreamingWriter::writeTimestampedGpsSamples(
+        std::uint16_t channel, std::int64_t const* timestampsNs,
         GpsLocation const* values, std::size_t count) {
     if (count == 0) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
-            "write_timestamped_gps_samples: count must be > 0"));
+            "writeTimestampedGpsSamples: count must be > 0"));
     }
-    if (auto err = require_timestamped_channel(
+    if (auto err = requireTimestampedChannel(
             channel, DataType::GpsLocation)) {
         return tl::make_unexpected(*err);
     }
 
-    auto const sov = sov_for(channel);
+    auto const sov = sovFor(channel);
     // GPS wire-format per sample: GPS_WIRE_SIZE bytes (3 little-endian
     // doubles for latitude, longitude, altitude per block.h:57-72).
     std::size_t const max_per_block =
@@ -436,10 +436,10 @@ Result<void> StreamingWriter::write_timestamped_gps_samples(
         scratch_buffer_.clear();
         if (auto enc = osf::detail::encode_abs_timestamp_data_gps(
                 scratch_buffer_, channel, sov,
-                timestamps_ns + written, values + written, chunk); !enc) {
+                timestampsNs + written, values + written, chunk); !enc) {
             return enc;
         }
-        if (auto wr = do_write_block(scratch_buffer_.data(),
+        if (auto wr = doWriteBlock(scratch_buffer_.data(),
                                       scratch_buffer_.size()); !wr) {
             return wr;
         }
@@ -450,22 +450,22 @@ Result<void> StreamingWriter::write_timestamped_gps_samples(
 
 // ── GPS scalar — forwards to array ────────────────────────────────
 
-Result<void> StreamingWriter::write_timestamped_gps_sample(
-        std::uint16_t channel, std::int64_t timestamp_ns,
+Result<void> StreamingWriter::writeTimestampedGpsSample(
+        std::uint16_t channel, std::int64_t timestampNs,
         GpsLocation value) {
-    return write_timestamped_gps_samples(channel, &timestamp_ns,
+    return writeTimestampedGpsSamples(channel, &timestampNs,
                                          &value, 1);
 }
 
 // ── Variable (string + binary) — single-sample per spec ──────────
 
-Result<void> StreamingWriter::write_timestamped_string(
-        std::uint16_t channel, std::int64_t timestamp_ns,
+Result<void> StreamingWriter::writeTimestampedString(
+        std::uint16_t channel, std::int64_t timestampNs,
         std::string_view value) {
-    if (auto err = require_variable_channel(channel, DataType::String)) {
+    if (auto err = requireVariableChannel(channel, DataType::String)) {
         return tl::make_unexpected(*err);
     }
-    auto const sov = sov_for(channel);
+    auto const sov = sovFor(channel);
     std::size_t const capacity = osf::detail::variable_sample_capacity(sov);
     if (value.size() > capacity) {
         return tl::make_unexpected(make_error(
@@ -475,24 +475,24 @@ Result<void> StreamingWriter::write_timestamped_string(
                 " bytes exceeds the maximum single-block payload (" +
                 std::to_string(capacity) + " bytes for sizeoflengthvalue=" +
                 std::to_string(sov) + "). Declare sizeoflengthvalue=4 at "
-                "add_channel() time for channels that may carry larger "
+                "addChannel() time for channels that may carry larger "
                 "payloads."));
     }
     scratch_buffer_.clear();
     if (auto enc = osf::detail::encode_abs_timestamp_data(
-            scratch_buffer_, channel, sov, timestamp_ns, value); !enc) {
+            scratch_buffer_, channel, sov, timestampNs, value); !enc) {
         return enc;
     }
-    return do_write_block(scratch_buffer_.data(), scratch_buffer_.size());
+    return doWriteBlock(scratch_buffer_.data(), scratch_buffer_.size());
 }
 
-Result<void> StreamingWriter::write_timestamped_binary(
-        std::uint16_t channel, std::int64_t timestamp_ns,
+Result<void> StreamingWriter::writeTimestampedBinary(
+        std::uint16_t channel, std::int64_t timestampNs,
         BinarySample value) {
-    if (auto err = require_variable_channel(channel, DataType::Binary)) {
+    if (auto err = requireVariableChannel(channel, DataType::Binary)) {
         return tl::make_unexpected(*err);
     }
-    auto const sov = sov_for(channel);
+    auto const sov = sovFor(channel);
     std::size_t const capacity = osf::detail::variable_sample_capacity(sov);
     if (value.size > capacity) {
         return tl::make_unexpected(make_error(
@@ -502,34 +502,34 @@ Result<void> StreamingWriter::write_timestamped_binary(
                 " bytes exceeds the maximum single-block payload (" +
                 std::to_string(capacity) + " bytes for sizeoflengthvalue=" +
                 std::to_string(sov) + "). Declare sizeoflengthvalue=4 at "
-                "add_channel() time for channels that may carry larger "
+                "addChannel() time for channels that may carry larger "
                 "payloads."));
     }
     scratch_buffer_.clear();
     if (auto enc = osf::detail::encode_abs_timestamp_data(
-            scratch_buffer_, channel, sov, timestamp_ns, value); !enc) {
+            scratch_buffer_, channel, sov, timestampNs, value); !enc) {
         return enc;
     }
-    return do_write_block(scratch_buffer_.data(), scratch_buffer_.size());
+    return doWriteBlock(scratch_buffer_.data(), scratch_buffer_.size());
 }
 
-// ── write_timestamped_samples_impl<T> ────────────────────────────────
+// ── writeTimestampedSamplesImpl<T> ────────────────────────────────
 
 template <typename T>
-Result<void> StreamingWriter::write_timestamped_samples_impl(
-        std::uint16_t channel, std::int64_t const* timestamps_ns,
+Result<void> StreamingWriter::writeTimestampedSamplesImpl(
+        std::uint16_t channel, std::int64_t const* timestampsNs,
         T const* values, std::size_t count) {
     if (count == 0) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
-            "write_timestamped_samples: count must be > 0"));
+            "writeTimestampedSamples: count must be > 0"));
     }
-    if (auto err = require_timestamped_channel(
+    if (auto err = requireTimestampedChannel(
             channel, data_type_for<T>())) {
         return tl::make_unexpected(*err);
     }
 
-    auto const sov = sov_for(channel);
+    auto const sov = sovFor(channel);
     std::size_t const max_per_block =
         osf::detail::max_samples_per_timestamped_block(sizeof(T), sov);
 
@@ -540,10 +540,10 @@ Result<void> StreamingWriter::write_timestamped_samples_impl(
         scratch_buffer_.clear();
         if (auto enc = osf::detail::encode_abs_timestamp_data<T>(
                 scratch_buffer_, channel, sov,
-                timestamps_ns + written, values + written, chunk); !enc) {
+                timestampsNs + written, values + written, chunk); !enc) {
             return enc;
         }
-        if (auto wr = do_write_block(scratch_buffer_.data(),
+        if (auto wr = doWriteBlock(scratch_buffer_.data(),
                                       scratch_buffer_.size()); !wr) {
             return wr;
         }
@@ -552,29 +552,29 @@ Result<void> StreamingWriter::write_timestamped_samples_impl(
     return {};
 }
 
-// ── start_equidistant_segment_impl<T> / append_equidistant_samples_impl<T> ───
+// ── startEquidistantSegmentImpl<T> / appendEquidistantSamplesImpl<T> ───
 
 template <typename T>
-Result<void> StreamingWriter::start_equidistant_segment_impl(
+Result<void> StreamingWriter::startEquidistantSegmentImpl(
         std::uint16_t channel, std::int64_t start_ts, double rate,
         T const* samples, std::size_t count) {
     if (count == 0) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
-            "start_equidistant_segment: count must be > 0"));
+            "startEquidistantSegment: count must be > 0"));
     }
     if (!(rate > 0.0) || !std::isfinite(rate)) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
-            "start_equidistant_segment: sample_rate_hz must be a "
+            "startEquidistantSegment: sampleRateHz must be a "
             "positive finite double"));
     }
-    if (auto err = require_equidistant_channel(
+    if (auto err = requireEquidistantChannel(
             channel, data_type_for<T>())) {
         return tl::make_unexpected(*err);
     }
 
-    auto const sov = sov_for(channel);
+    auto const sov = sovFor(channel);
     std::size_t const max_first =
         osf::detail::max_samples_per_start_block(sizeof(T), sov);
     std::size_t const max_cont =
@@ -588,7 +588,7 @@ Result<void> StreamingWriter::start_equidistant_segment_impl(
             samples, first); !enc) {
         return enc;
     }
-    if (auto wr = do_write_block(scratch_buffer_.data(),
+    if (auto wr = doWriteBlock(scratch_buffer_.data(),
                                   scratch_buffer_.size()); !wr) {
         return wr;
     }
@@ -605,7 +605,7 @@ Result<void> StreamingWriter::start_equidistant_segment_impl(
                 samples + written, chunk); !enc) {
             return enc;
         }
-        if (auto wr = do_write_block(scratch_buffer_.data(),
+        if (auto wr = doWriteBlock(scratch_buffer_.data(),
                                       scratch_buffer_.size()); !wr) {
             return wr;
         }
@@ -615,14 +615,14 @@ Result<void> StreamingWriter::start_equidistant_segment_impl(
 }
 
 template <typename T>
-Result<void> StreamingWriter::append_equidistant_samples_impl(
+Result<void> StreamingWriter::appendEquidistantSamplesImpl(
         std::uint16_t channel, T const* samples, std::size_t count) {
     if (count == 0) {
         return tl::make_unexpected(make_error(
             Error::Code::InvalidArgument,
-            "append_equidistant_samples: count must be > 0"));
+            "appendEquidistantSamples: count must be > 0"));
     }
-    if (auto err = require_equidistant_channel(
+    if (auto err = requireEquidistantChannel(
             channel, data_type_for<T>())) {
         return tl::make_unexpected(*err);
     }
@@ -633,7 +633,7 @@ Result<void> StreamingWriter::append_equidistant_samples_impl(
                 ": append without start"));
     }
 
-    auto const sov = sov_for(channel);
+    auto const sov = sovFor(channel);
     std::size_t const max_cont =
         osf::detail::max_samples_per_continued_block(sizeof(T), sov);
 
@@ -647,7 +647,7 @@ Result<void> StreamingWriter::append_equidistant_samples_impl(
                 samples + written, chunk); !enc) {
             return enc;
         }
-        if (auto wr = do_write_block(scratch_buffer_.data(),
+        if (auto wr = doWriteBlock(scratch_buffer_.data(),
                                       scratch_buffer_.size()); !wr) {
             return wr;
         }
@@ -659,25 +659,25 @@ Result<void> StreamingWriter::append_equidistant_samples_impl(
 // Explicit instantiations — float + double only per spec rev
 // 2026-05-04 equidistant restriction.
 template Result<void>
-StreamingWriter::start_equidistant_segment_impl<float>(
+StreamingWriter::startEquidistantSegmentImpl<float>(
     std::uint16_t, std::int64_t, double, float const*, std::size_t);
 template Result<void>
-StreamingWriter::start_equidistant_segment_impl<double>(
+StreamingWriter::startEquidistantSegmentImpl<double>(
     std::uint16_t, std::int64_t, double, double const*, std::size_t);
 template Result<void>
-StreamingWriter::append_equidistant_samples_impl<float>(
+StreamingWriter::appendEquidistantSamplesImpl<float>(
     std::uint16_t, float const*, std::size_t);
 template Result<void>
-StreamingWriter::append_equidistant_samples_impl<double>(
+StreamingWriter::appendEquidistantSamplesImpl<double>(
     std::uint16_t, double const*, std::size_t);
 
-// ── Explicit instantiations of write_timestamped_samples_impl<T> ─────
+// ── Explicit instantiations of writeTimestampedSamplesImpl<T> ─────
 // Explicit instantiations for the 11 numeric types supported by the
-// write_timestamped_sample / write_timestamped_samples public API.
+// writeTimestampedSample / writeTimestampedSamples public API.
 
 #define OSF_INSTANTIATE_TIMESTAMPED_IMPL(T)                                  \
     template Result<void>                                                    \
-    StreamingWriter::write_timestamped_samples_impl<T>(                      \
+    StreamingWriter::writeTimestampedSamplesImpl<T>(                      \
         std::uint16_t, std::int64_t const*, T const*, std::size_t)
 
 OSF_INSTANTIATE_TIMESTAMPED_IMPL(bool);

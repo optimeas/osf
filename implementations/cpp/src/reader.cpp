@@ -425,8 +425,8 @@ Result<RelTimestampedPayload> parse_continued_rel_stamp_data(
 // ---------------------------------------------------------------------
 
 struct StartDataParsed {
-    std::int64_t start_timestamp_ns;
-    double sample_rate_hz;
+    std::int64_t startTimestampNs;
+    double sampleRateHz;
     NumericPayload samples;
 };
 
@@ -502,25 +502,25 @@ BlockReader::BlockReader(std::istream& stream, MetaBlock const& meta)
     // value (5, 0, unknown) defaults to OSF5 (no strip). A
     // default-constructed MetaBlock yields version == 0 which the
     // test helpers rely on for OSF5 behaviour.
-    osf_version_ = (meta.file_info.version == 4)
+    osf_version_ = (meta.fileInfo.version == 4)
                        ? OsfVersion::Osf4
                        : OsfVersion::Osf5;
     channels_.reserve(meta.channels.size());
-    stats_.channels_total = meta.channels.size();
+    stats_.channelsTotal = meta.channels.size();
     for (auto const& ch : meta.channels) {
-        bool const unsupported = ch.data_type == DataType::Unsupported ||
-                                 ch.channel_type == ChannelType::Unsupported;
-        if (unsupported) ++stats_.channels_unsupported;
-        channels_.emplace(ch.index, ChannelInfo{ch.channel_type, ch.data_type,
-                                                ch.size_of_length_value});
+        bool const unsupported = ch.dataType == DataType::Unsupported ||
+                                 ch.channelType == ChannelType::Unsupported;
+        if (unsupported) ++stats_.channelsUnsupported;
+        channels_.emplace(ch.index, ChannelInfo{ch.channelType, ch.dataType,
+                                                ch.sizeOfLengthValue});
         ChannelStats cs;
         cs.name = ch.name;
-        stats_.per_channel.emplace(ch.index, std::move(cs));
+        stats_.perChannel.emplace(ch.index, std::move(cs));
     }
 }
 
 BlockReader::IoResult<std::uint32_t>
-BlockReader::read_length_field(std::uint8_t sizeof_field) {
+BlockReader::readLengthField(std::uint8_t sizeof_field) {
     if (sizeof_field == 2) {
         std::uint8_t buf[2];
         auto r = stream_read_n(*stream_, buf, 2);
@@ -543,7 +543,7 @@ BlockReader::read_length_field(std::uint8_t sizeof_field) {
 }
 
 BlockReader::IoResult<std::vector<std::uint8_t>>
-BlockReader::read_payload(std::size_t len) {
+BlockReader::readPayload(std::size_t len) {
     std::vector<std::uint8_t> buf(len);
     if (len == 0) return std::optional<std::vector<std::uint8_t>>{std::move(buf)};
     auto r = stream_read_n(*stream_, buf.data(), static_cast<std::streamsize>(len));
@@ -568,20 +568,20 @@ Result<bool> BlockReader::drain(std::uint64_t len) {
     return true;
 }
 
-Result<void> BlockReader::consume_trailer() {
+Result<void> BlockReader::consumeTrailer() {
     // Per spec: [u32 length][u8 control = bcReserved][N bytes payload].
     // The length is always u32 here, NOT the per-channel
     // sizeoflengthvalue. The 2-byte channel index that introduced the
     // trailer was already counted by the caller.
-    stats_.data_section_size_bytes += 4;
+    stats_.dataSectionSizeBytes += 4;
 
     std::uint8_t buf[4];
     auto rr = stream_read_n(*stream_, buf, 4);
     if (!rr)  return tl::make_unexpected(std::move(rr).error());
     if (!*rr) {
-        if (stats_.blocks_truncated < 1) stats_.blocks_truncated = 1;
+        if (stats_.blocksTruncated < 1) stats_.blocksTruncated = 1;
         finished_ = true;
-        stats_.trailer_seen = true;
+        stats_.trailerSeen = true;
         return {};
     }
     std::uint32_t const length = osf::detail::read_le_u32(buf);
@@ -589,9 +589,9 @@ Result<void> BlockReader::consume_trailer() {
     auto drained = drain(length);
     if (!drained) return tl::make_unexpected(std::move(drained).error());
     if (*drained) {
-        stats_.data_section_size_bytes += length;
+        stats_.dataSectionSizeBytes += length;
     } else {
-        if (stats_.blocks_truncated < 1) stats_.blocks_truncated = 1;
+        if (stats_.blocksTruncated < 1) stats_.blocksTruncated = 1;
     }
 
     // Best-effort: try to consume the magic trailer if present. If the
@@ -600,51 +600,51 @@ Result<void> BlockReader::consume_trailer() {
     auto tr = stream_read_n(*stream_, tail, MAGIC_TRAILER_LEN);
     if (!tr) return tl::make_unexpected(std::move(tr).error());
     if (*tr) {
-        stats_.data_section_size_bytes += MAGIC_TRAILER_LEN;
+        stats_.dataSectionSizeBytes += MAGIC_TRAILER_LEN;
         // We do not enforce the "OSF_STREAM_END" prefix; if the bytes
         // disagree the file is still well-formed up to this point.
     }
 
-    stats_.trailer_seen = true;
+    stats_.trailerSeen = true;
     finished_ = true;
     return {};
 }
 
-void BlockReader::record_skip(std::uint16_t channel_index, std::uint32_t length,
+void BlockReader::recordSkip(std::uint16_t channelIndex, std::uint32_t length,
                               SkipReason const& reason) {
     switch (reason.kind) {
         case SkipReason::Kind::UnsupportedDataType:
         case SkipReason::Kind::UnsupportedChannelType:
-            ++stats_.blocks_skipped_unsupported; break;
+            ++stats_.blocksSkippedUnsupported; break;
         case SkipReason::Kind::DeprecatedBlockType:
-            ++stats_.blocks_skipped_deprecated_type; break;
+            ++stats_.blocksSkippedDeprecatedType; break;
         case SkipReason::Kind::ReservedBlockType:
-            ++stats_.blocks_skipped_reserved_type; break;
+            ++stats_.blocksSkippedReservedType; break;
     }
-    auto& cs = stats_.per_channel[channel_index];
-    ++cs.blocks_skipped;
-    cs.bytes_payload += length;
+    auto& cs = stats_.perChannel[channelIndex];
+    ++cs.blocksSkipped;
+    cs.bytesPayload += length;
 }
 
-Result<Block> BlockReader::skip_block(std::uint16_t channel_index,
+Result<Block> BlockReader::skipBlock(std::uint16_t channelIndex,
                                       std::size_t length,
                                       SkipReason reason) {
     if (capture_skipped_) {
-        auto buf_r = read_payload(length);
+        auto buf_r = readPayload(length);
         if (!buf_r) return tl::make_unexpected(std::move(buf_r).error());
         if (!*buf_r) {
-            if (stats_.blocks_truncated < 1) stats_.blocks_truncated = 1;
+            if (stats_.blocksTruncated < 1) stats_.blocksTruncated = 1;
             finished_ = true;
             return tl::make_unexpected(io_error(
                 "stream truncated mid-skip-payload"));
         }
-        stats_.data_section_size_bytes += length;
-        record_skip(channel_index, static_cast<std::uint32_t>(length), reason);
+        stats_.dataSectionSizeBytes += length;
+        recordSkip(channelIndex, static_cast<std::uint32_t>(length), reason);
         Block blk;
-        blk.channel_index = channel_index;
+        blk.channelIndex = channelIndex;
         Skipped sk;
         sk.reason = reason;
-        sk.bytes_skipped = length;
+        sk.bytesSkipped = length;
         sk.payload = std::move(**buf_r);
         blk.kind = std::move(sk);
         return blk;
@@ -652,18 +652,18 @@ Result<Block> BlockReader::skip_block(std::uint16_t channel_index,
     auto drained = drain(length);
     if (!drained) return tl::make_unexpected(std::move(drained).error());
     if (!*drained) {
-        if (stats_.blocks_truncated < 1) stats_.blocks_truncated = 1;
+        if (stats_.blocksTruncated < 1) stats_.blocksTruncated = 1;
         finished_ = true;
         return tl::make_unexpected(io_error(
             "stream truncated mid-skip-payload"));
     }
-    stats_.data_section_size_bytes += length;
-    record_skip(channel_index, static_cast<std::uint32_t>(length), reason);
+    stats_.dataSectionSizeBytes += length;
+    recordSkip(channelIndex, static_cast<std::uint32_t>(length), reason);
     Block blk;
-    blk.channel_index = channel_index;
+    blk.channelIndex = channelIndex;
     Skipped sk;
     sk.reason = reason;
-    sk.bytes_skipped = length;
+    sk.bytesSkipped = length;
     blk.kind = std::move(sk);
     return blk;
 }
@@ -679,47 +679,47 @@ std::optional<Result<Block>> BlockReader::next() {
         if (!r) { finished_ = true; return Result<Block>{tl::make_unexpected(r.error())}; }
         if (!*r) { finished_ = true; return std::nullopt; }
     }
-    std::uint16_t const channel_index = osf::detail::read_le_u16(ci_buf);
-    stats_.data_section_size_bytes += 2;
+    std::uint16_t const channelIndex = osf::detail::read_le_u16(ci_buf);
+    stats_.dataSectionSizeBytes += 2;
 
     // Step 2: optional 0xFFFF trailer block.
-    if (channel_index == TRAILER_CHANNEL_INDEX) {
-        auto r = consume_trailer();
+    if (channelIndex == TRAILER_CHANNEL_INDEX) {
+        auto r = consumeTrailer();
         if (!r) { finished_ = true; return Result<Block>{tl::make_unexpected(r.error())}; }
         return std::nullopt;
     }
 
     // Step 3: channel lookup. An unknown index is a corruption signal
     // (we cannot even know how wide the length prefix should be).
-    auto it = channels_.find(channel_index);
+    auto it = channels_.find(channelIndex);
     if (it == channels_.end()) {
         finished_ = true;
         std::ostringstream oss;
-        oss << "block references unknown channel index " << channel_index;
+        oss << "block references unknown channel index " << channelIndex;
         return Result<Block>{tl::make_unexpected(
             Error{Error::Code::UnknownChannelIndex, oss.str()})};
     }
     ChannelInfo const& info = it->second;
 
     // Step 4: per-channel length prefix.
-    auto len_r = read_length_field(info.size_of_length_value);
+    auto len_r = readLengthField(info.sizeOfLengthValue);
     if (!len_r) { finished_ = true; return Result<Block>{tl::make_unexpected(len_r.error())}; }
     if (!*len_r) {
-        if (stats_.blocks_truncated < 1) stats_.blocks_truncated = 1;
+        if (stats_.blocksTruncated < 1) stats_.blocksTruncated = 1;
         finished_ = true;
         return std::nullopt;
     }
     std::uint32_t const length = **len_r;
-    stats_.data_section_size_bytes += info.size_of_length_value;
+    stats_.dataSectionSizeBytes += info.sizeOfLengthValue;
 
     if (length == 0) {
         SkipReason const reason{SkipReason::Kind::ReservedBlockType, 0};
-        record_skip(channel_index, 0, reason);
+        recordSkip(channelIndex, 0, reason);
         Block blk;
-        blk.channel_index = channel_index;
+        blk.channelIndex = channelIndex;
         Skipped sk;
         sk.reason = reason;
-        sk.bytes_skipped = 0;
+        sk.bytesSkipped = 0;
         blk.kind = std::move(sk);
         return Result<Block>{std::move(blk)};
     }
@@ -727,37 +727,37 @@ std::optional<Result<Block>> BlockReader::next() {
     std::size_t const length_usize = length;
 
     // Step 5: forward-compat skip — Unsupported channel.
-    if (auto reason = channel_unsupported_reason(info.channel_type, info.data_type)) {
-        auto r = skip_block(channel_index, length_usize, *reason);
+    if (auto reason = channel_unsupported_reason(info.channelType, info.dataType)) {
+        auto r = skipBlock(channelIndex, length_usize, *reason);
         if (!r) { finished_ = true; return Result<Block>{tl::make_unexpected(r.error())}; }
         return Result<Block>{std::move(*r)};
     }
 
     // Step 6: pull the full payload.
-    auto payload_r = read_payload(length_usize);
+    auto payload_r = readPayload(length_usize);
     if (!payload_r) { finished_ = true; return Result<Block>{tl::make_unexpected(payload_r.error())}; }
     if (!*payload_r) {
-        if (stats_.blocks_truncated < 1) stats_.blocks_truncated = 1;
+        if (stats_.blocksTruncated < 1) stats_.blocksTruncated = 1;
         finished_ = true;
         return std::nullopt;
     }
     std::vector<std::uint8_t> payload = std::move(**payload_r);
-    stats_.data_section_size_bytes += length;
+    stats_.dataSectionSizeBytes += length;
 
     // Step 7: decode control byte and route.
     std::uint8_t const control_raw = payload[0];
-    ControlByte const cb = decode_control_byte(control_raw);
+    ControlByte const cb = decodeControlByte(control_raw);
     std::uint8_t const* body = payload.data() + 1;
     std::size_t const body_len = payload.size() - 1;
 
     auto make_skipped = [&](SkipReason::Kind kind, std::uint8_t raw) {
         SkipReason const reason{kind, raw};
-        record_skip(channel_index, length, reason);
+        recordSkip(channelIndex, length, reason);
         Block blk;
-        blk.channel_index = channel_index;
+        blk.channelIndex = channelIndex;
         Skipped sk;
         sk.reason = reason;
-        sk.bytes_skipped = length;
+        sk.bytesSkipped = length;
         if (capture_skipped_) {
             sk.payload = std::vector<std::uint8_t>(body, body + body_len);
         }
@@ -780,66 +780,66 @@ std::optional<Result<Block>> BlockReader::next() {
                 SkipReason::Kind::ReservedBlockType, cb.raw)};
 
         case ControlKind::StartData: {
-            auto r = parse_start_data(body, body_len, info.data_type,
-                                      cb.multi_sample);
+            auto r = parse_start_data(body, body_len, info.dataType,
+                                      cb.multiSample);
             if (!r) return Result<Block>{tl::make_unexpected(r.error())};
-            std::size_t const n = numeric_payload_len(r->samples);
-            auto& cs = stats_.per_channel[channel_index];
-            ++cs.blocks_read;
-            cs.bytes_payload += length;
-            cs.samples_total += n;
+            std::size_t const n = numericPayloadLen(r->samples);
+            auto& cs = stats_.perChannel[channelIndex];
+            ++cs.blocksRead;
+            cs.bytesPayload += length;
+            cs.samplesTotal += n;
             ++cs.segments;
-            cs.observe_timestamp(r->start_timestamp_ns);
-            if (n > 0 && r->sample_rate_hz > 0.0) {
+            cs.observeTimestamp(r->startTimestampNs);
+            if (n > 0 && r->sampleRateHz > 0.0) {
                 double const span_ns =
-                    (static_cast<double>(n - 1) / r->sample_rate_hz) * 1.0e9;
-                std::int64_t const last = r->start_timestamp_ns +
+                    (static_cast<double>(n - 1) / r->sampleRateHz) * 1.0e9;
+                std::int64_t const last = r->startTimestampNs +
                     static_cast<std::int64_t>(span_ns);
-                cs.observe_timestamp(last);
+                cs.observeTimestamp(last);
             }
-            ++stats_.blocks_read;
+            ++stats_.blocksRead;
             Block blk;
-            blk.channel_index = channel_index;
+            blk.channelIndex = channelIndex;
             StartData sd;
-            sd.start_timestamp_ns = r->start_timestamp_ns;
-            sd.sample_rate_hz = r->sample_rate_hz;
+            sd.startTimestampNs = r->startTimestampNs;
+            sd.sampleRateHz = r->sampleRateHz;
             sd.samples = std::move(r->samples);
             blk.kind = std::move(sd);
             return Result<Block>{std::move(blk)};
         }
         case ControlKind::ContinuedData: {
-            auto r = parse_continued_data(body, body_len, info.data_type,
-                                          cb.multi_sample);
+            auto r = parse_continued_data(body, body_len, info.dataType,
+                                          cb.multiSample);
             if (!r) return Result<Block>{tl::make_unexpected(r.error())};
-            std::size_t const n = numeric_payload_len(*r);
-            auto& cs = stats_.per_channel[channel_index];
-            ++cs.blocks_read;
-            cs.bytes_payload += length;
-            cs.samples_total += n;
-            ++stats_.blocks_read;
+            std::size_t const n = numericPayloadLen(*r);
+            auto& cs = stats_.perChannel[channelIndex];
+            ++cs.blocksRead;
+            cs.bytesPayload += length;
+            cs.samplesTotal += n;
+            ++stats_.blocksRead;
             Block blk;
-            blk.channel_index = channel_index;
+            blk.channelIndex = channelIndex;
             ContinuedData cd;
             cd.samples = std::move(*r);
             blk.kind = std::move(cd);
             return Result<Block>{std::move(blk)};
         }
         case ControlKind::AbsTimeStampData: {
-            auto r = parse_abs_timestamp_data(body, body_len, info.data_type,
-                                              cb.multi_sample, osf_version_);
+            auto r = parse_abs_timestamp_data(body, body_len, info.dataType,
+                                              cb.multiSample, osf_version_);
             if (!r) return Result<Block>{tl::make_unexpected(r.error())};
-            std::size_t const n = timestamped_payload_len(*r);
-            auto& cs = stats_.per_channel[channel_index];
-            ++cs.blocks_read;
-            cs.bytes_payload += length;
-            cs.samples_total += n;
+            std::size_t const n = timestampedPayloadLen(*r);
+            auto& cs = stats_.perChannel[channelIndex];
+            ++cs.blocksRead;
+            cs.bytesPayload += length;
+            cs.samplesTotal += n;
             if (auto range = abs_timestamp_range(*r)) {
-                cs.observe_timestamp(range->first);
-                cs.observe_timestamp(range->second);
+                cs.observeTimestamp(range->first);
+                cs.observeTimestamp(range->second);
             }
-            ++stats_.blocks_read;
+            ++stats_.blocksRead;
             Block blk;
-            blk.channel_index = channel_index;
+            blk.channelIndex = channelIndex;
             AbsTimestampData ad;
             ad.samples = std::move(*r);
             blk.kind = std::move(ad);
@@ -847,17 +847,17 @@ std::optional<Result<Block>> BlockReader::next() {
         }
         case ControlKind::ContinuedRelStampData: {
             auto r = parse_continued_rel_stamp_data(body, body_len,
-                                                    info.data_type,
-                                                    cb.multi_sample);
+                                                    info.dataType,
+                                                    cb.multiSample);
             if (!r) return Result<Block>{tl::make_unexpected(r.error())};
-            std::size_t const n = rel_timestamped_payload_len(*r);
-            auto& cs = stats_.per_channel[channel_index];
-            ++cs.blocks_read;
-            cs.bytes_payload += length;
-            cs.samples_total += n;
-            ++stats_.blocks_read;
+            std::size_t const n = relTimestampedPayloadLen(*r);
+            auto& cs = stats_.perChannel[channelIndex];
+            ++cs.blocksRead;
+            cs.bytesPayload += length;
+            cs.samplesTotal += n;
+            ++stats_.blocksRead;
             Block blk;
-            blk.channel_index = channel_index;
+            blk.channelIndex = channelIndex;
             ContinuedRelStampData rd;
             rd.samples = std::move(*r);
             blk.kind = std::move(rd);
@@ -871,12 +871,12 @@ std::optional<Result<Block>> BlockReader::next() {
 ReaderStats BlockReader::stats() const {
     ReaderStats s = stats_;
     s.elapsed = std::chrono::steady_clock::now() - started_;
-    s.blocks_total = s.blocks_read + s.blocks_skipped_unsupported +
-                     s.blocks_skipped_deprecated_type +
-                     s.blocks_skipped_reserved_type;
-    s.channels_with_data = 0;
-    for (auto const& [_, cs] : s.per_channel) {
-        if (cs.blocks_read + cs.blocks_skipped > 0) ++s.channels_with_data;
+    s.blocksTotal = s.blocksRead + s.blocksSkippedUnsupported +
+                     s.blocksSkippedDeprecatedType +
+                     s.blocksSkippedReservedType;
+    s.channelsWithData = 0;
+    for (auto const& [_, cs] : s.perChannel) {
+        if (cs.blocksRead + cs.blocksSkipped > 0) ++s.channelsWithData;
     }
     return s;
 }

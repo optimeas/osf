@@ -19,7 +19,7 @@
 /// - **Best-effort on truncation.** A file that ends mid-block —
 ///   typical for embedded writers losing power — yields all blocks up
 ///   to the last complete one and then `nullopt`. The reader bumps
-///   `stats().blocks_truncated` from 0 to 1 (capped because no useful
+///   `stats().blocksTruncated` from 0 to 1 (capped because no useful
 ///   block can follow a partial one) and stops.
 /// - **Skip on unsupported.** Channels marked `DataType::Unsupported`
 ///   or `ChannelType::Unsupported` do not abort the iteration; the
@@ -28,7 +28,7 @@
 /// - **Skipped payload capture is opt-in.** Default behaviour drops
 ///   the bytes without allocation; specialists who need to look at
 ///   deprecated `bcMessageEvent` blocks or unknown future types call
-///   `with_capture_skipped_payload(true)` to keep them.
+///   `withCaptureSkippedPayload(true)` to keep them.
 
 #pragma once
 
@@ -52,14 +52,14 @@ namespace osf {
 ///
 /// The reader borrows an `std::istream&` whose cursor is right after
 /// the metablock, plus the parsed `MetaBlock` (so it can resolve
-/// channel indices to their per-channel `data_type`, `channel_type`,
-/// and `size_of_length_value`). The stream must outlive the reader.
+/// channel indices to their per-channel `dataType`, `channelType`,
+/// and `sizeOfLengthValue`). The stream must outlive the reader.
 ///
 /// Construct directly with the two-argument constructor. Optional
 /// fluent setters:
-/// - `with_capture_skipped_payload(bool)` — keep raw bytes of skipped
+/// - `withCaptureSkippedPayload(bool)` — keep raw bytes of skipped
 ///   blocks instead of dropping them.
-/// - `with_file_size(u64)` — record the originating file size so the
+/// - `withFileSize(u64)` — record the originating file size so the
 ///   `stats()` output can show it (not used by the reader itself).
 class BlockReader {
 public:
@@ -80,7 +80,7 @@ public:
 
     /// Opt in to capturing the raw payload bytes of skipped blocks.
     /// Default is `false` (zero allocation per skipped block).
-    BlockReader& with_capture_skipped_payload(bool enabled) noexcept {
+    BlockReader& withCaptureSkippedPayload(bool enabled) noexcept {
         capture_skipped_ = enabled;
         return *this;
     }
@@ -88,8 +88,8 @@ public:
     /// Record the file size that produced this stream so consumers
     /// (e.g. the `stats` example) can show it. The reader does not
     /// use the value internally.
-    BlockReader& with_file_size(std::uint64_t file_size_bytes) noexcept {
-        stats_.file_size_bytes = file_size_bytes;
+    BlockReader& withFileSize(std::uint64_t fileSizeBytes) noexcept {
+        stats_.fileSizeBytes = fileSizeBytes;
         return *this;
     }
 
@@ -105,25 +105,25 @@ public:
     [[nodiscard]] std::optional<Result<Block>> next();
 
     /// Read-only snapshot of the running stats. `elapsed` is updated
-    /// to the current wall-clock delta and `blocks_total` /
-    /// `channels_with_data` are recomputed from per-channel detail.
+    /// to the current wall-clock delta and `blocksTotal` /
+    /// `channelsWithData` are recomputed from per-channel detail.
     [[nodiscard]] ReaderStats stats() const;
 
     /// Number of blocks the reader could not finish before the stream
     /// ended. Capped at 1 by construction.
-    [[nodiscard]] std::uint64_t blocks_truncated() const noexcept {
-        return stats_.blocks_truncated;
+    [[nodiscard]] std::uint64_t blocksTruncated() const noexcept {
+        return stats_.blocksTruncated;
     }
 
     /// `true` if the reader consumed the optional `0xFFFF`
     /// info-data block.
-    [[nodiscard]] bool trailer_seen() const noexcept {
-        return stats_.trailer_seen;
+    [[nodiscard]] bool trailerSeen() const noexcept {
+        return stats_.trailerSeen;
     }
 
-    /// File size that was supplied via `with_file_size`, if any.
-    [[nodiscard]] std::optional<std::uint64_t> file_size_bytes() const noexcept {
-        return stats_.file_size_bytes;
+    /// File size that was supplied via `withFileSize`, if any.
+    [[nodiscard]] std::optional<std::uint64_t> fileSizeBytes() const noexcept {
+        return stats_.fileSizeBytes;
     }
 
     // -----------------------------------------------------------------
@@ -181,12 +181,12 @@ public:
 private:
     // Per-channel metadata the reader needs to decode a block: the
     // channel and data types so we know how to route the payload, plus
-    // size_of_length_value so we know how wide the length prefix is on
+    // sizeOfLengthValue so we know how wide the length prefix is on
     // the wire.
     struct ChannelInfo {
-        ChannelType channel_type = ChannelType::Scalar;
-        DataType    data_type    = DataType::Unsupported;
-        std::uint8_t size_of_length_value = 0;
+        ChannelType channelType = ChannelType::Scalar;
+        DataType    dataType    = DataType::Unsupported;
+        std::uint8_t sizeOfLengthValue = 0;
     };
 
     // Tag-only result returned by the I/O helpers — distinguishes a
@@ -194,18 +194,18 @@ private:
     template <typename T>
     using IoResult = Result<std::optional<T>>;
 
-    IoResult<std::uint32_t> read_length_field(std::uint8_t sizeof_field);
-    IoResult<std::vector<std::uint8_t>> read_payload(std::size_t len);
+    IoResult<std::uint32_t> readLengthField(std::uint8_t sizeof_field);
+    IoResult<std::vector<std::uint8_t>> readPayload(std::size_t len);
     Result<bool> drain(std::uint64_t len);
-    Result<void> consume_trailer();
+    Result<void> consumeTrailer();
 
-    Result<Block> skip_block(std::uint16_t channel_index, std::size_t length,
+    Result<Block> skipBlock(std::uint16_t channelIndex, std::size_t length,
                              SkipReason reason);
-    void record_skip(std::uint16_t channel_index, std::uint32_t length,
+    void recordSkip(std::uint16_t channelIndex, std::uint32_t length,
                      SkipReason const& reason);
 
     std::istream* stream_;
-    /// OSF file version derived from `meta.file_info.version`. Drives
+    /// OSF file version derived from `meta.fileInfo.version`. Drives
     /// the version-deterministic null-terminator rule (spec rev
     /// 2026-05-24): OSF4 strips the last byte of every string/binary
     /// AbsTs payload, OSF5 leaves it alone.

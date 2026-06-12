@@ -117,10 +117,10 @@ bool is_numeric_scalar(osf::DataType dt) noexcept {
 std::vector<osf::Sample<osf::NumericValueRef>>
 numeric_samples(osf::DataChannel const& dc) {
     if (auto const* e = std::get_if<osf::EquidistantChannel>(&dc)) {
-        return e->samples_vector();
+        return e->samplesVector();
     }
     if (auto const* t = std::get_if<osf::TimestampedChannel>(&dc)) {
-        return t->samples_vector();
+        return t->samplesVector();
     }
     return {};
 }
@@ -147,7 +147,7 @@ osf_status osf_load_file(const char* path, osf_manager** out) {
             return OSF_ERR_INVALID_ARGUMENT;
         }
         *out = nullptr;
-        auto r = osf::DataManager::load_from_file(path);
+        auto r = osf::DataManager::loadFromFile(path);
         if (!r) {
             set_error(r.error().message);
             return status_from_code(r.error().code);
@@ -192,39 +192,39 @@ osf_compression_format osf_manager_compression_format(const osf_manager* m) {
     if (m == nullptr) {
         return OSF_COMPRESSION_NONE;
     }
-    return compression_to_c(m->mgr.stats.compression_format);
+    return compression_to_c(m->mgr.stats.compressionFormat);
 }
 
 const char* osf_manager_creator(const osf_manager* m) {
-    if (m == nullptr || !m->mgr.meta.file_info.creator) {
+    if (m == nullptr || !m->mgr.meta.fileInfo.creator) {
         return "";
     }
-    return m->mgr.meta.file_info.creator->c_str();
+    return m->mgr.meta.fileInfo.creator->c_str();
 }
 
 const char* osf_manager_created_utc(const osf_manager* m) {
-    if (m == nullptr || !m->mgr.meta.file_info.created_utc) {
+    if (m == nullptr || !m->mgr.meta.fileInfo.createdUtc) {
         return "";
     }
-    return m->mgr.meta.file_info.created_utc->c_str();
+    return m->mgr.meta.fileInfo.createdUtc->c_str();
 }
 
 // ── channel ──────────────────────────────────────────────────────────
 
 const char* osf_channel_name(const osf_channel* c) {
     auto const* dc = as_dc(c);
-    return (dc == nullptr) ? "" : osf::channel_name(*dc).c_str();
+    return (dc == nullptr) ? "" : osf::channelName(*dc).c_str();
 }
 
 uint16_t osf_channel_index(const osf_channel* c) {
     auto const* dc = as_dc(c);
-    return (dc == nullptr) ? 0u : osf::channel_index(*dc);
+    return (dc == nullptr) ? 0u : osf::channelIndex(*dc);
 }
 
 osf_data_type osf_channel_data_type(const osf_channel* c) {
     auto const* dc = as_dc(c);
     return (dc == nullptr) ? OSF_DT_UNSUPPORTED
-                           : data_type_to_c(osf::channel_data_type(*dc));
+                           : data_type_to_c(osf::channelDataType(*dc));
 }
 
 const char* osf_channel_physical_unit(const osf_channel* c) {
@@ -232,20 +232,20 @@ const char* osf_channel_physical_unit(const osf_channel* c) {
     if (dc == nullptr) {
         return "";
     }
-    // Read the unit straight from the channel's own `physical_unit` member
+    // Read the unit straight from the channel's own `physicalUnit` member
     // (stable for the manager's lifetime) rather than the common accessor,
     // which returns a temporary optional<string> by value — the borrowed
     // pointer must stay valid until osf_manager_free.
     return std::visit(
         [](auto const& ch) -> const char* {
-            return ch.physical_unit ? ch.physical_unit->c_str() : "";
+            return ch.physicalUnit ? ch.physicalUnit->c_str() : "";
         },
         *dc);
 }
 
 size_t osf_channel_sample_count(const osf_channel* c) {
     auto const* dc = as_dc(c);
-    return (dc == nullptr) ? 0u : osf::channel_sample_count(*dc);
+    return (dc == nullptr) ? 0u : osf::channelSampleCount(*dc);
 }
 
 size_t osf_channel_read_timestamps(const osf_channel* c, int64_t* out,
@@ -255,17 +255,17 @@ size_t osf_channel_read_timestamps(const osf_channel* c, int64_t* out,
         return 0u;
     }
     if (auto const* var = std::get_if<osf::VariableChannel>(dc)) {
-        auto const samples = var->samples_vector();
+        auto const samples = var->samplesVector();
         size_t const n = std::min(samples.size(), cap);
         for (size_t i = 0; i < n; ++i) {
-            out[i] = samples[i].timestamp_ns;
+            out[i] = samples[i].timestampNs;
         }
         return n;
     }
     auto const samples = numeric_samples(*dc);
     size_t const n = std::min(samples.size(), cap);
     for (size_t i = 0; i < n; ++i) {
-        out[i] = samples[i].timestamp_ns;
+        out[i] = samples[i].timestampNs;
     }
     return n;
 }
@@ -273,7 +273,7 @@ size_t osf_channel_read_timestamps(const osf_channel* c, int64_t* out,
 size_t osf_channel_read_f64(const osf_channel* c, double* out, size_t cap) {
     auto const* dc = as_dc(c);
     if (dc == nullptr || out == nullptr ||
-        !is_numeric_scalar(osf::channel_data_type(*dc))) {
+        !is_numeric_scalar(osf::channelDataType(*dc))) {
         return 0u;
     }
     auto const samples = numeric_samples(*dc);
@@ -296,7 +296,7 @@ size_t osf_channel_read_f64(const osf_channel* c, double* out, size_t cap) {
 size_t osf_channel_read_i64(const osf_channel* c, int64_t* out, size_t cap) {
     auto const* dc = as_dc(c);
     if (dc == nullptr || out == nullptr ||
-        !is_numeric_scalar(osf::channel_data_type(*dc))) {
+        !is_numeric_scalar(osf::channelDataType(*dc))) {
         return 0u;
     }
     auto const samples = numeric_samples(*dc);
@@ -320,7 +320,7 @@ size_t osf_channel_read_gps(const osf_channel* c, double* out_lla,
                             size_t cap_samples) {
     auto const* dc = as_dc(c);
     if (dc == nullptr || out_lla == nullptr ||
-        osf::channel_data_type(*dc) != osf::DataType::GpsLocation) {
+        osf::channelDataType(*dc) != osf::DataType::GpsLocation) {
         return 0u;
     }
     auto const samples = numeric_samples(*dc);
@@ -350,7 +350,7 @@ const char* osf_channel_string_at(const osf_channel* c, size_t i) {
         set_error("osf_channel_string_at: channel is not a string channel");
         return nullptr;
     }
-    auto r = var->as_strings();
+    auto r = var->asStrings();
     if (!r) {
         set_error(r.error().message);
         return nullptr;
@@ -374,7 +374,7 @@ const uint8_t* osf_channel_binary_at(const osf_channel* c, size_t i,
         set_error("osf_channel_binary_at: channel is not a binary channel");
         return nullptr;
     }
-    auto r = var->as_binaries();
+    auto r = var->asBinaries();
     if (!r) {
         set_error(r.error().message);
         return nullptr;
@@ -396,7 +396,7 @@ osf_status osf_write_to_file(const osf_manager* m, const char* path) {
             set_error("osf_write_to_file: null argument");
             return OSF_ERR_INVALID_ARGUMENT;
         }
-        auto r = osf::write_to_file(m->mgr, path);
+        auto r = osf::writeToFile(m->mgr, path);
         if (!r) {
             set_error(r.error().message);
             return status_from_code(r.error().code);

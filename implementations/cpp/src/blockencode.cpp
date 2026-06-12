@@ -9,14 +9,14 @@
 namespace osf::detail {
 namespace {
 
-// Reserve and append the [channel_index][payload_length] frame
+// Reserve and append the [channelIndex][payload_length] frame
 // prefix. Returns the offset at which the caller should start
 // writing the control byte. Validates sizeoflengthvalue and that
 // payload_length fits.
 //
 // payload_length must already include the control byte.
 Result<std::size_t> begin_frame(std::vector<std::uint8_t>& out,
-                                std::uint16_t channel_index,
+                                std::uint16_t channelIndex,
                                 std::uint8_t sizeoflengthvalue,
                                 std::uint64_t payload_length) {
     if (sizeoflengthvalue != 2 && sizeoflengthvalue != 4) {
@@ -37,9 +37,9 @@ Result<std::size_t> begin_frame(std::vector<std::uint8_t>& out,
         out.size() + 2u + sizeoflengthvalue;
     out.resize(out.size() + 2u + sizeoflengthvalue);
 
-    // channel_index
+    // channelIndex
     write_le_u16(out.data() + ctrl_offset - 2u - sizeoflengthvalue,
-                 channel_index);
+                 channelIndex);
     // payload_length
     if (sizeoflengthvalue == 2) {
         write_le_u16(out.data() + ctrl_offset - 2u,
@@ -87,10 +87,10 @@ void append_sample(std::vector<std::uint8_t>& out, T v) {
 
 template <typename T>
 Result<void> encode_start_data(std::vector<std::uint8_t>& out,
-                               std::uint16_t channel_index,
+                               std::uint16_t channelIndex,
                                std::uint8_t sizeoflengthvalue,
-                               std::int64_t start_timestamp_ns,
-                               double sample_rate_hz,
+                               std::int64_t startTimestampNs,
+                               double sampleRateHz,
                                T const* samples,
                                std::size_t count) {
     if (count == 0) {
@@ -103,7 +103,7 @@ Result<void> encode_start_data(std::vector<std::uint8_t>& out,
     std::uint64_t const payload_len =
         1u + 8u + 8u + (multi ? 4u : 0u) + count * sizeof(T);
 
-    auto begin = begin_frame(out, channel_index, sizeoflengthvalue, payload_len);
+    auto begin = begin_frame(out, channelIndex, sizeoflengthvalue, payload_len);
     if (!begin) return tl::make_unexpected(begin.error());
 
     std::uint8_t const ctrl = static_cast<std::uint8_t>(
@@ -114,9 +114,9 @@ Result<void> encode_start_data(std::vector<std::uint8_t>& out,
     out.push_back(ctrl);
 
     std::uint8_t buf8[8];
-    write_le_i64(buf8, start_timestamp_ns);
+    write_le_i64(buf8, startTimestampNs);
     out.insert(out.end(), std::begin(buf8), std::end(buf8));
-    write_le_f64(buf8, sample_rate_hz);
+    write_le_f64(buf8, sampleRateHz);
     out.insert(out.end(), std::begin(buf8), std::end(buf8));
 
     if (multi) {
@@ -132,7 +132,7 @@ Result<void> encode_start_data(std::vector<std::uint8_t>& out,
 
 template <typename T>
 Result<void> encode_continued_data(std::vector<std::uint8_t>& out,
-                                   std::uint16_t channel_index,
+                                   std::uint16_t channelIndex,
                                    std::uint8_t sizeoflengthvalue,
                                    T const* samples,
                                    std::size_t count) {
@@ -145,7 +145,7 @@ Result<void> encode_continued_data(std::vector<std::uint8_t>& out,
     std::uint64_t const payload_len =
         1u + (multi ? 4u : 0u) + count * sizeof(T);
 
-    auto begin = begin_frame(out, channel_index, sizeoflengthvalue, payload_len);
+    auto begin = begin_frame(out, channelIndex, sizeoflengthvalue, payload_len);
     if (!begin) return tl::make_unexpected(begin.error());
 
     std::uint8_t const ctrl = static_cast<std::uint8_t>(
@@ -179,9 +179,9 @@ OSF_INSTANTIATE_EQUIDISTANT(double);
 
 template <typename T>
 Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
-                                       std::uint16_t channel_index,
+                                       std::uint16_t channelIndex,
                                        std::uint8_t sizeoflengthvalue,
-                                       std::int64_t const* timestamps_ns,
+                                       std::int64_t const* timestampsNs,
                                        T const* samples,
                                        std::size_t count) {
     if (count == 0) {
@@ -195,7 +195,7 @@ Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
     std::uint64_t const payload_len =
         1u + (multi ? 4u : 0u) + count * pair_bytes;
 
-    auto begin = begin_frame(out, channel_index, sizeoflengthvalue, payload_len);
+    auto begin = begin_frame(out, channelIndex, sizeoflengthvalue, payload_len);
     if (!begin) return tl::make_unexpected(begin.error());
 
     std::uint8_t const ctrl = static_cast<std::uint8_t>(
@@ -211,7 +211,7 @@ Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
 
     std::uint8_t tsbuf[8];
     for (std::size_t i = 0; i < count; ++i) {
-        write_le_i64(tsbuf, timestamps_ns[i]);
+        write_le_i64(tsbuf, timestampsNs[i]);
         out.insert(out.end(), std::begin(tsbuf), std::end(tsbuf));
         append_sample<T>(out, samples[i]);
     }
@@ -238,21 +238,21 @@ OSF_INSTANTIATE_TIMESTAMPED(double);
 #undef OSF_INSTANTIATE_TIMESTAMPED
 
 Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
-                                       std::uint16_t channel_index,
+                                       std::uint16_t channelIndex,
                                        std::uint8_t sizeoflengthvalue,
-                                       std::int64_t timestamp_ns,
+                                       std::int64_t timestampNs,
                                        std::string_view sample) {
     // Single-sample only; bit-7 = 0, no N-prefix, no trailing 0x00.
     std::uint64_t const payload_len = 1u + 8u + sample.size();
 
-    auto begin = begin_frame(out, channel_index, sizeoflengthvalue, payload_len);
+    auto begin = begin_frame(out, channelIndex, sizeoflengthvalue, payload_len);
     if (!begin) return tl::make_unexpected(begin.error());
 
     out.reserve(out.size() + payload_len);
     out.push_back(0x08);                     // bcAbsTimeStampData, bit-7 clear
 
     std::uint8_t tsbuf[8];
-    write_le_i64(tsbuf, timestamp_ns);
+    write_le_i64(tsbuf, timestampNs);
     out.insert(out.end(), std::begin(tsbuf), std::end(tsbuf));
 
     // Payload bytes verbatim — OSF5 writer per spec rev 2026-05-24.
@@ -262,20 +262,20 @@ Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
 }
 
 Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
-                                       std::uint16_t channel_index,
+                                       std::uint16_t channelIndex,
                                        std::uint8_t sizeoflengthvalue,
-                                       std::int64_t timestamp_ns,
+                                       std::int64_t timestampNs,
                                        BinarySample sample) {
     std::uint64_t const payload_len = 1u + 8u + sample.size;
 
-    auto begin = begin_frame(out, channel_index, sizeoflengthvalue, payload_len);
+    auto begin = begin_frame(out, channelIndex, sizeoflengthvalue, payload_len);
     if (!begin) return tl::make_unexpected(begin.error());
 
     out.reserve(out.size() + payload_len);
     out.push_back(0x08);                     // bcAbsTimeStampData, bit-7 clear
 
     std::uint8_t tsbuf[8];
-    write_le_i64(tsbuf, timestamp_ns);
+    write_le_i64(tsbuf, timestampNs);
     out.insert(out.end(), std::begin(tsbuf), std::end(tsbuf));
 
     out.insert(out.end(), sample.data, sample.data + sample.size);
@@ -283,9 +283,9 @@ Result<void> encode_abs_timestamp_data(std::vector<std::uint8_t>& out,
 }
 
 Result<void> encode_abs_timestamp_data_gps(std::vector<std::uint8_t>& out,
-                                          std::uint16_t channel_index,
+                                          std::uint16_t channelIndex,
                                           std::uint8_t sizeoflengthvalue,
-                                          std::int64_t const* timestamps_ns,
+                                          std::int64_t const* timestampsNs,
                                           GpsLocation const* samples,
                                           std::size_t count) {
     if (count == 0) {
@@ -298,7 +298,7 @@ Result<void> encode_abs_timestamp_data_gps(std::vector<std::uint8_t>& out,
     std::uint64_t const payload_len =
         1u + (multi ? 4u : 0u) + count * 32u;
 
-    auto begin = begin_frame(out, channel_index, sizeoflengthvalue, payload_len);
+    auto begin = begin_frame(out, channelIndex, sizeoflengthvalue, payload_len);
     if (!begin) return tl::make_unexpected(begin.error());
 
     std::uint8_t const ctrl = static_cast<std::uint8_t>(
@@ -314,7 +314,7 @@ Result<void> encode_abs_timestamp_data_gps(std::vector<std::uint8_t>& out,
 
     std::uint8_t buf8[8];
     for (std::size_t i = 0; i < count; ++i) {
-        write_le_i64(buf8, timestamps_ns[i]);
+        write_le_i64(buf8, timestampsNs[i]);
         out.insert(out.end(), std::begin(buf8), std::end(buf8));
         write_le_f64(buf8, samples[i].latitude);
         out.insert(out.end(), std::begin(buf8), std::end(buf8));

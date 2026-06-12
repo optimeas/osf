@@ -50,9 +50,9 @@ struct TempFileGuard {
 
 // ── Category A — Round-trip every osf5_*.osf reference file ──────────
 
-/// For each generated osf5_* file: load → write_to(ostream) via BlockWriter
-/// → reload → compare channel count + per-channel name / data_type /
-/// sample_count / first & last sample values.
+/// For each generated osf5_* file: load → writeTo(ostream) via BlockWriter
+/// → reload → compare channel count + per-channel name / dataType /
+/// sampleCount / first & last sample values.
 TEST_F(BlockWriterExamples, every_osf5_reference_file_roundtrips_via_block_writer) {
     auto generated = examples_dir() / "generated";
     ASSERT_TRUE(std::filesystem::exists(generated));
@@ -66,20 +66,20 @@ TEST_F(BlockWriterExamples, every_osf5_reference_file_roundtrips_via_block_write
         SCOPED_TRACE("file: " + filename);
 
         // Load.
-        auto loaded = osf::DataManager::load_from_file(entry.path());
+        auto loaded = osf::DataManager::loadFromFile(entry.path());
         ASSERT_TRUE(loaded.has_value())
             << "load failed for " << filename << ": " << loaded.error().message;
 
         // Write via BlockWriter (free function).
         std::ostringstream oss;
         oss.exceptions(std::ios::failbit | std::ios::badbit);
-        auto wr = osf::write_to(*loaded, oss);
+        auto wr = osf::writeTo(*loaded, oss);
         ASSERT_TRUE(wr.has_value())
-            << "write_to failed for " << filename << ": " << wr.error().message;
+            << "writeTo failed for " << filename << ": " << wr.error().message;
 
         // Reload from the in-memory bytes.
         std::istringstream iss(oss.str(), std::ios::binary);
-        auto reloaded = osf::DataManager::load_from_stream(iss);
+        auto reloaded = osf::DataManager::loadFromStream(iss);
         ASSERT_TRUE(reloaded.has_value())
             << "reload failed for " << filename << ": " << reloaded.error().message;
 
@@ -93,10 +93,10 @@ TEST_F(BlockWriterExamples, every_osf5_reference_file_roundtrips_via_block_write
     EXPECT_GT(tested, 0) << "no osf5_*.osf files found under " << generated;
 }
 
-// ── Category B — write_to_file byte-identical to write_to(ostream) ───
+// ── Category B — writeToFile byte-identical to writeTo(ostream) ───
 
-/// Pick any osf5_*.osf file, round-trip it via write_to_file() and
-/// write_to(ostream) independently, then assert the two outputs are
+/// Pick any osf5_*.osf file, round-trip it via writeToFile() and
+/// writeTo(ostream) independently, then assert the two outputs are
 /// byte-identical.
 TEST_F(BlockWriterExamples, WriteToFileMatchesWriteToOstream) {
     // Use osf5_equidistant.osf as the fixed reference.
@@ -104,13 +104,13 @@ TEST_F(BlockWriterExamples, WriteToFileMatchesWriteToOstream) {
     ASSERT_TRUE(std::filesystem::exists(path))
         << "missing reference file: " << path;
 
-    auto loaded = osf::DataManager::load_from_file(path);
+    auto loaded = osf::DataManager::loadFromFile(path);
     ASSERT_TRUE(loaded.has_value()) << loaded.error().message;
 
     // Write to a temp file.
     TempFileGuard g{make_bw_temp_path()};
     {
-        auto r = osf::write_to_file(*loaded, g.path);
+        auto r = osf::writeToFile(*loaded, g.path);
         ASSERT_TRUE(r.has_value()) << r.error().message;
     }
 
@@ -118,28 +118,28 @@ TEST_F(BlockWriterExamples, WriteToFileMatchesWriteToOstream) {
     std::ostringstream oss;
     oss.exceptions(std::ios::failbit | std::ios::badbit);
     {
-        auto r = osf::write_to(*loaded, oss);
+        auto r = osf::writeTo(*loaded, oss);
         ASSERT_TRUE(r.has_value()) << r.error().message;
     }
     std::string const ostream_bytes = oss.str();
 
     // Read the temp file into memory.
-    auto const file_size = std::filesystem::file_size(g.path);
-    std::vector<char> file_bytes(file_size);
+    auto const fileSize = std::filesystem::file_size(g.path);
+    std::vector<char> file_bytes(fileSize);
     {
         std::ifstream fin(g.path, std::ios::binary);
         ASSERT_TRUE(fin.is_open()) << "cannot open temp file: " << g.path;
-        fin.read(file_bytes.data(), static_cast<std::streamsize>(file_size));
-        ASSERT_EQ(fin.gcount(), static_cast<std::streamsize>(file_size));
+        fin.read(file_bytes.data(), static_cast<std::streamsize>(fileSize));
+        ASSERT_EQ(fin.gcount(), static_cast<std::streamsize>(fileSize));
     }
 
-    ASSERT_EQ(ostream_bytes.size(), file_size)
+    ASSERT_EQ(ostream_bytes.size(), fileSize)
         << "byte length mismatch: ostream=" << ostream_bytes.size()
-        << " file=" << file_size;
+        << " file=" << fileSize;
 
     // Byte-identical comparison.
     bool identical = (std::string(file_bytes.begin(), file_bytes.end()) ==
                       ostream_bytes);
     EXPECT_TRUE(identical)
-        << "write_to_file output differs from write_to(ostream) output";
+        << "writeToFile output differs from writeTo(ostream) output";
 }

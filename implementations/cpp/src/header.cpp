@@ -94,22 +94,22 @@ Result<MagicHeader> parse_magic_header_line(std::string_view line) {
     }
     auto len_str = rest.substr(0, end + 1);
 
-    std::uint64_t metablock_len = 0;
+    std::uint64_t metablockLen = 0;
     auto [ptr, ec] = std::from_chars(len_str.data(),
                                      len_str.data() + len_str.size(),
-                                     metablock_len);
+                                     metablockLen);
     if (ec != std::errc{} || ptr != len_str.data() + len_str.size()) {
         return tl::make_unexpected(Error{
             Error::Code::InvalidMagicHeader,
             "metablock length is not a valid uint64: \"" + std::string{len_str} + "\""});
     }
 
-    return MagicHeader{*version_result, metablock_len};
+    return MagicHeader{*version_result, metablockLen};
 }
 
 }  // anonymous namespace
 
-Result<MagicHeader> parse_magic_header(std::istream& in) {
+Result<MagicHeader> parseMagicHeader(std::istream& in) {
     auto line_result = read_first_line(in);
     if (!line_result) {
         return tl::make_unexpected(std::move(line_result).error());
@@ -117,20 +117,20 @@ Result<MagicHeader> parse_magic_header(std::istream& in) {
     return parse_magic_header_line(*line_result);
 }
 
-Result<MagicHeader> parse_magic_header(std::uint8_t const* data, std::size_t size) {
+Result<MagicHeader> parseMagicHeader(std::uint8_t const* data, std::size_t size) {
     std::string buf{reinterpret_cast<char const*>(data), size};
     std::istringstream stream{std::move(buf)};
-    return parse_magic_header(static_cast<std::istream&>(stream));
+    return parseMagicHeader(static_cast<std::istream&>(stream));
 }
 
-Result<MagicHeader> parse_magic_header(std::filesystem::path const& path) {
+Result<MagicHeader> parseMagicHeader(std::filesystem::path const& path) {
     std::ifstream stream{path, std::ios::binary};
     if (!stream.is_open()) {
         return tl::make_unexpected(Error{
             Error::Code::IoError,
             "failed to open file: " + path.string()});
     }
-    return parse_magic_header(static_cast<std::istream&>(stream));
+    return parseMagicHeader(static_cast<std::istream&>(stream));
 }
 
 }  // namespace osf

@@ -27,7 +27,7 @@
 ///    unknown control values) come through as `BlockKind::Skipped`
 ///    rather than being silently swallowed. Stream position is
 ///    preserved either way; the caller can opt to inspect skipped
-///    payloads via `BlockReader::with_capture_skipped_payload`.
+///    payloads via `BlockReader::withCaptureSkippedPayload`.
 
 #pragma once
 
@@ -93,12 +93,12 @@ using NumericPayload = std::variant<
 >;
 
 /// Number of samples held by a `NumericPayload`. O(1).
-[[nodiscard]] std::size_t numeric_payload_len(NumericPayload const& p) noexcept;
+[[nodiscard]] std::size_t numericPayloadLen(NumericPayload const& p) noexcept;
 
-/// Equivalent to `numeric_payload_len(p) == 0`.
-[[nodiscard]] bool numeric_payload_empty(NumericPayload const& p) noexcept;
+/// Equivalent to `numericPayloadLen(p) == 0`.
+[[nodiscard]] bool numericPayloadEmpty(NumericPayload const& p) noexcept;
 
-/// Timestamped payload: `(timestamp_ns, value)` pairs per supported
+/// Timestamped payload: `(timestampNs, value)` pairs per supported
 /// data type. `string`, `binary`, and `gpslocation` only occur here
 /// (equidistant blocks are numeric-only per spec).
 ///
@@ -125,13 +125,13 @@ using TimestampedPayload = std::variant<
 >;
 
 /// Number of samples held by a `TimestampedPayload`.
-[[nodiscard]] std::size_t timestamped_payload_len(TimestampedPayload const& p) noexcept;
+[[nodiscard]] std::size_t timestampedPayloadLen(TimestampedPayload const& p) noexcept;
 
-/// Equivalent to `timestamped_payload_len(p) == 0`.
-[[nodiscard]] bool timestamped_payload_empty(TimestampedPayload const& p) noexcept;
+/// Equivalent to `timestampedPayloadLen(p) == 0`.
+[[nodiscard]] bool timestampedPayloadEmpty(TimestampedPayload const& p) noexcept;
 
 /// Relative-timestamped payload (OSF4-only `bcContinuedRelStampData`):
-/// `(delta_ns, value)` pairs where `delta_ns` is the unsigned 32-bit
+/// `(deltaNs, value)` pairs where `deltaNs` is the unsigned 32-bit
 /// offset from the previous sample of the same channel. Numeric data
 /// types only per spec.
 using RelTimestampedPayload = std::variant<
@@ -149,11 +149,11 @@ using RelTimestampedPayload = std::variant<
 >;
 
 /// Number of samples held by a `RelTimestampedPayload`.
-[[nodiscard]] std::size_t rel_timestamped_payload_len(
+[[nodiscard]] std::size_t relTimestampedPayloadLen(
     RelTimestampedPayload const& p) noexcept;
 
-/// Equivalent to `rel_timestamped_payload_len(p) == 0`.
-[[nodiscard]] bool rel_timestamped_payload_empty(
+/// Equivalent to `relTimestampedPayloadLen(p) == 0`.
+[[nodiscard]] bool relTimestampedPayloadEmpty(
     RelTimestampedPayload const& p) noexcept;
 
 // ---------------------------------------------------------------------
@@ -163,30 +163,30 @@ using RelTimestampedPayload = std::variant<
 /// Why a block ended up as `BlockKind::Skipped`.
 struct SkipReason {
     enum class Kind {
-        /// The channel's `data_type` is `DataType::Unsupported` —
+        /// The channel's `dataType` is `DataType::Unsupported` —
         /// either a future-spec spelling or one this build does not
         /// implement.
         UnsupportedDataType,
-        /// The channel's `channel_type` is `ChannelType::Unsupported`.
+        /// The channel's `channelType` is `ChannelType::Unsupported`.
         UnsupportedChannelType,
         /// Deprecated control byte that newer writers no longer emit
         /// but readers must tolerate (1 = `bcTrustedTimestamp`,
-        /// 3 = `bcStatusEvent`, 4 = `bcMessageEvent`). `raw_byte`
+        /// 3 = `bcStatusEvent`, 4 = `bcMessageEvent`). `rawByte`
         /// carries the value.
         DeprecatedBlockType,
         /// Reserved control byte (0 = `bcReserved`,
         /// 2 = `bcTimebaseRealign`) or any value the spec does not
-        /// currently define. `raw_byte` carries the value.
+        /// currently define. `rawByte` carries the value.
         ReservedBlockType,
     };
 
     Kind kind = Kind::ReservedBlockType;
     /// Raw control-byte value (low 7 bits). Only meaningful for
     /// `DeprecatedBlockType` / `ReservedBlockType`; zero otherwise.
-    std::uint8_t raw_byte = 0;
+    std::uint8_t rawByte = 0;
 
     friend bool operator==(SkipReason const& a, SkipReason const& b) noexcept {
-        return a.kind == b.kind && a.raw_byte == b.raw_byte;
+        return a.kind == b.kind && a.rawByte == b.rawByte;
     }
     friend bool operator!=(SkipReason const& a, SkipReason const& b) noexcept {
         return !(a == b);
@@ -203,16 +203,16 @@ struct SkipReason {
 struct StartData {
     /// Absolute start timestamp in nanoseconds since the Unix epoch
     /// (UTC).
-    std::int64_t start_timestamp_ns = 0;
+    std::int64_t startTimestampNs = 0;
     /// Sample rate in Hz, valid until the next `bcStartData` of the
     /// same channel.
-    double sample_rate_hz = 0.0;
+    double sampleRateHz = 0.0;
     /// Sample values.
     NumericPayload samples;
 };
 
 /// `bcContinuedData`: continuation of the current equidistant segment
-/// of the same channel. Time per sample is `1 / sample_rate_hz` from
+/// of the same channel. Time per sample is `1 / sampleRateHz` from
 /// the most recent `StartData`. Numeric only.
 struct ContinuedData {
     /// Sample values, picking up where the previous block ended.
@@ -222,7 +222,7 @@ struct ContinuedData {
 /// `bcAbsTimeStampData`: each sample carries its own absolute
 /// timestamp. Supports all data types including `string` and `binary`.
 struct AbsTimestampData {
-    /// `(timestamp_ns, value)` pairs in stream order.
+    /// `(timestampNs, value)` pairs in stream order.
     TimestampedPayload samples;
 };
 
@@ -230,7 +230,7 @@ struct AbsTimestampData {
 /// relative time delta in nanoseconds (`uint32`) plus a value. Reader
 /// supports it; writers never produce it.
 struct ContinuedRelStampData {
-    /// `(delta_ns, value)` pairs in stream order.
+    /// `(deltaNs, value)` pairs in stream order.
     RelTimestampedPayload samples;
 };
 
@@ -242,10 +242,10 @@ struct Skipped {
     SkipReason reason;
     /// Number of payload bytes the reader had to consume from the
     /// stream (control byte + payload). Always ≥ 0.
-    std::uint64_t bytes_skipped = 0;
+    std::uint64_t bytesSkipped = 0;
     /// Captured payload bytes after the control byte. Default is
     /// `std::nullopt` (bytes are dropped without allocation). Opt in
-    /// with `BlockReader::with_capture_skipped_payload(true)`.
+    /// with `BlockReader::withCaptureSkippedPayload(true)`.
     std::optional<std::vector<std::uint8_t>> payload;
 };
 
@@ -264,7 +264,7 @@ struct Block {
     /// Channel this block belongs to. `0xFFFF` (TRAILER_CHANNEL_INDEX)
     /// is reserved for the optional OSF4 info-data block and is not
     /// produced as a regular `Block` by the reader.
-    std::uint16_t channel_index = 0;
+    std::uint16_t channelIndex = 0;
     /// Decoded payload.
     BlockKind kind;
 };
@@ -310,10 +310,10 @@ struct ControlByte {
     /// a `uint32` sample count `N`; when clear, exactly one sample
     /// follows. One exception: `bcAbsTimeStampData` for `string` and
     /// `binary` always sets bit 7 per spec.
-    bool multi_sample = false;
+    bool multiSample = false;
 };
 
 /// Decode the 1-byte control byte that follows the length field.
-[[nodiscard]] ControlByte decode_control_byte(std::uint8_t byte) noexcept;
+[[nodiscard]] ControlByte decodeControlByte(std::uint8_t byte) noexcept;
 
 }  // namespace osf

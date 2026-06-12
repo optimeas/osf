@@ -61,37 +61,37 @@ Result<FileInfo> parse_file_info(json const& osf_obj) {
     }
     json const& fobj = *file_it;
 
-    info.created_utc          = get_optional_string(fobj, "created_utc");
+    info.createdUtc          = get_optional_string(fobj, "created_utc");
     info.creator              = get_optional_string(fobj, "creator");
     info.reason               = get_optional_string(fobj, "reason");
     info.tag                  = get_optional_string(fobj, "tag");
     info.comment              = get_optional_string(fobj, "comment");
-    info.namespace_sep        = get_optional_string(fobj, "namespacesep");
-    info.created_at_latitude  = get_optional_double(fobj, "created_at_latitude");
-    info.created_at_longitude = get_optional_double(fobj, "created_at_longitude");
-    info.created_at_altitude  = get_optional_double(fobj, "created_at_altitude");
+    info.namespaceSep        = get_optional_string(fobj, "namespacesep");
+    info.createdAtLatitude  = get_optional_double(fobj, "created_at_latitude");
+    info.createdAtLongitude = get_optional_double(fobj, "created_at_longitude");
+    info.createdAtAltitude  = get_optional_double(fobj, "created_at_altitude");
 
     // Some early OSF5 emitters used the short spelling (`latitude=`
     // without the `created_at_` prefix). Accept and normalise on read;
     // writers always emit the spec form.
-    if (!info.created_at_latitude) {
-        info.created_at_latitude = get_optional_double(fobj, "latitude");
+    if (!info.createdAtLatitude) {
+        info.createdAtLatitude = get_optional_double(fobj, "latitude");
     }
-    if (!info.created_at_longitude) {
-        info.created_at_longitude = get_optional_double(fobj, "longitude");
+    if (!info.createdAtLongitude) {
+        info.createdAtLongitude = get_optional_double(fobj, "longitude");
     }
-    if (!info.created_at_altitude) {
-        info.created_at_altitude = get_optional_double(fobj, "altitude");
+    if (!info.createdAtAltitude) {
+        info.createdAtAltitude = get_optional_double(fobj, "altitude");
     }
 
     return info;
 }
 
 Result<std::uint8_t> validate_size_of_length_value(std::uint64_t raw,
-                                                  std::string const& channel_name) {
+                                                  std::string const& channelName) {
     if (raw == 2 || raw == 4) return static_cast<std::uint8_t>(raw);
     std::ostringstream oss;
-    oss << "channel \"" << channel_name
+    oss << "channel \"" << channelName
         << "\" sizeoflengthvalue must be 2 or 4, got " << raw;
     return tl::make_unexpected(invalid_metablock(oss.str()));
 }
@@ -132,10 +132,10 @@ Result<Channel> parse_channel(json const& obj, std::size_t position) {
         return tl::make_unexpected(invalid_metablock(
             "channel \"" + ch.name + "\" is missing required field \"channeltype\""));
     }
-    ch.channel_type_raw = ct_it->template get<std::string>();
-    auto ct_r = parse_channel_type(ch.channel_type_raw);
+    ch.channelTypeRaw = ct_it->template get<std::string>();
+    auto ct_r = parseChannelType(ch.channelTypeRaw);
     if (!ct_r) return tl::make_unexpected(std::move(ct_r).error());
-    ch.channel_type = *ct_r;
+    ch.channelType = *ct_r;
 
     // datatype — required; RemovedInSpec propagates as-is
     auto dt_it = obj.find("datatype");
@@ -143,10 +143,10 @@ Result<Channel> parse_channel(json const& obj, std::size_t position) {
         return tl::make_unexpected(invalid_metablock(
             "channel \"" + ch.name + "\" is missing required field \"datatype\""));
     }
-    ch.data_type_raw = dt_it->template get<std::string>();
-    auto dt_r = parse_data_type(ch.data_type_raw);
+    ch.dataTypeRaw = dt_it->template get<std::string>();
+    auto dt_r = parseDataType(ch.dataTypeRaw);
     if (!dt_r) return tl::make_unexpected(std::move(dt_r).error());
-    ch.data_type = *dt_r;
+    ch.dataType = *dt_r;
 
     // sizeoflengthvalue — required, must be 2 or 4
     auto sol_it = obj.find("sizeoflengthvalue");
@@ -164,24 +164,24 @@ Result<Channel> parse_channel(json const& obj, std::size_t position) {
     auto sol_r = validate_size_of_length_value(
         static_cast<std::uint64_t>(raw_sol), ch.name);
     if (!sol_r) return tl::make_unexpected(std::move(sol_r).error());
-    ch.size_of_length_value = *sol_r;
+    ch.sizeOfLengthValue = *sol_r;
 
     // Optional fields
     auto ti_it = obj.find("timeincrement");
     if (ti_it != obj.end() && ti_it->is_number_integer()) {
-        ch.time_increment_ns = ti_it->template get<std::int64_t>();
+        ch.timeIncrementNs = ti_it->template get<std::int64_t>();
     }
 
-    ch.mime_type          = get_optional_string(obj, "mimetype");
-    ch.physical_unit      = get_optional_string(obj, "physicalunit");
-    ch.physical_dimension = get_optional_string(obj, "physicaldimension");
-    ch.display_name       = get_optional_string(obj, "displayname");
+    ch.mimeType          = get_optional_string(obj, "mimetype");
+    ch.physicalUnit      = get_optional_string(obj, "physicalunit");
+    ch.physicalDimension = get_optional_string(obj, "physicaldimension");
+    ch.displayName       = get_optional_string(obj, "displayname");
     ch.comment            = get_optional_string(obj, "comment");
     ch.reference          = get_optional_string(obj, "reference");
 
     auto st_it = obj.find("spectrumtype");
     if (st_it != obj.end() && st_it->is_string()) {
-        ch.spectrum_type = parse_spectrum_type(
+        ch.spectrumType = parseSpectrumType(
             st_it->template get<std::string>());
     }
 
@@ -249,9 +249,9 @@ Result<std::vector<Info>> parse_infos(json const& osf_obj) {
         if (dt_it != entry.end() && dt_it->is_string()) {
             dt_raw = dt_it->template get<std::string>();
         }
-        auto dt_r = parse_data_type(dt_raw);
+        auto dt_r = parseDataType(dt_raw);
         if (!dt_r) return tl::make_unexpected(std::move(dt_r).error());
-        info.data_type = *dt_r;
+        info.dataType = *dt_r;
 
         auto v_it = entry.find("value");
         if (v_it != entry.end()) {
@@ -262,7 +262,7 @@ Result<std::vector<Info>> parse_infos(json const& osf_obj) {
             }
         }
 
-        info.physical_unit = get_optional_string(entry, "physicalunit");
+        info.physicalUnit = get_optional_string(entry, "physicalunit");
         out.push_back(std::move(info));
     }
     return out;
@@ -270,11 +270,11 @@ Result<std::vector<Info>> parse_infos(json const& osf_obj) {
 
 }  // anonymous namespace
 
-Result<MetaBlock> parse_metablock_json(std::uint8_t const* data, std::size_t size) {
+Result<MetaBlock> parseMetablockJson(std::uint8_t const* data, std::size_t size) {
     if (data == nullptr && size != 0) {
         return tl::make_unexpected(Error{
             Error::Code::InvalidArgument,
-            "parse_metablock_json: data is null but size > 0"});
+            "parseMetablockJson: data is null but size > 0"});
     }
 
     // allow_exceptions=false: parse returns a discarded value on error
@@ -309,8 +309,8 @@ Result<MetaBlock> parse_metablock_json(std::uint8_t const* data, std::size_t siz
     MetaBlock mb;
     auto fi = parse_file_info(*osf_it);
     if (!fi) return tl::make_unexpected(std::move(fi).error());
-    mb.file_info = std::move(*fi);
-    mb.file_info.version = 5;
+    mb.fileInfo = std::move(*fi);
+    mb.fileInfo.version = 5;
 
     auto ch = parse_channels(*osf_it);
     if (!ch) return tl::make_unexpected(std::move(ch).error());
@@ -323,8 +323,8 @@ Result<MetaBlock> parse_metablock_json(std::uint8_t const* data, std::size_t siz
     return mb;
 }
 
-Result<MetaBlock> parse_metablock_json(std::string_view text) {
-    return parse_metablock_json(
+Result<MetaBlock> parseMetablockJson(std::string_view text) {
+    return parseMetablockJson(
         reinterpret_cast<std::uint8_t const*>(text.data()),
         text.size());
 }
@@ -384,15 +384,15 @@ std::string spectrum_type_to_wire(SpectrumType st) {
 
 json file_info_to_json(FileInfo const& fi) {
     json obj = json::object();
-    if (fi.created_utc)            obj["created_utc"]          = *fi.created_utc;
+    if (fi.createdUtc)            obj["created_utc"]          = *fi.createdUtc;
     if (fi.creator)                obj["creator"]              = *fi.creator;
     if (fi.tag)                    obj["tag"]                  = *fi.tag;
     if (fi.reason)                 obj["reason"]               = *fi.reason;
-    if (fi.namespace_sep)          obj["namespacesep"]         = *fi.namespace_sep;
+    if (fi.namespaceSep)          obj["namespacesep"]         = *fi.namespaceSep;
     if (fi.comment)                obj["comment"]              = *fi.comment;
-    if (fi.created_at_latitude)    obj["created_at_latitude"]  = *fi.created_at_latitude;
-    if (fi.created_at_longitude)   obj["created_at_longitude"] = *fi.created_at_longitude;
-    if (fi.created_at_altitude)    obj["created_at_altitude"]  = *fi.created_at_altitude;
+    if (fi.createdAtLatitude)    obj["created_at_latitude"]  = *fi.createdAtLatitude;
+    if (fi.createdAtLongitude)   obj["created_at_longitude"] = *fi.createdAtLongitude;
+    if (fi.createdAtAltitude)    obj["created_at_altitude"]  = *fi.createdAtAltitude;
     return obj;
 }
 
@@ -400,21 +400,21 @@ json channel_to_json(Channel const& ch) {
     json obj = json::object();
     obj["index"]             = ch.index;
     obj["name"]              = ch.name;
-    obj["channeltype"]       = channel_type_to_wire(ch.channel_type,
-                                                    ch.channel_type_raw);
-    obj["datatype"]          = data_type_to_wire(ch.data_type,
-                                                 ch.data_type_raw);
-    obj["sizeoflengthvalue"] = ch.size_of_length_value;
+    obj["channeltype"]       = channel_type_to_wire(ch.channelType,
+                                                    ch.channelTypeRaw);
+    obj["datatype"]          = data_type_to_wire(ch.dataType,
+                                                 ch.dataTypeRaw);
+    obj["sizeoflengthvalue"] = ch.sizeOfLengthValue;
 
-    if (ch.time_increment_ns)   obj["timeincrement"]      = *ch.time_increment_ns;
-    if (ch.physical_unit)       obj["physicalunit"]       = *ch.physical_unit;
-    if (ch.physical_dimension)  obj["physicaldimension"]  = *ch.physical_dimension;
-    if (ch.display_name)        obj["displayname"]        = *ch.display_name;
-    if (ch.mime_type)           obj["mimetype"]           = *ch.mime_type;
+    if (ch.timeIncrementNs)   obj["timeincrement"]      = *ch.timeIncrementNs;
+    if (ch.physicalUnit)       obj["physicalunit"]       = *ch.physicalUnit;
+    if (ch.physicalDimension)  obj["physicaldimension"]  = *ch.physicalDimension;
+    if (ch.displayName)        obj["displayname"]        = *ch.displayName;
+    if (ch.mimeType)           obj["mimetype"]           = *ch.mimeType;
     if (ch.reference)           obj["reference"]          = *ch.reference;
     if (ch.comment)             obj["comment"]            = *ch.comment;
-    if (ch.spectrum_type)       obj["spectrumtype"]       =
-        spectrum_type_to_wire(*ch.spectrum_type);
+    if (ch.spectrumType)       obj["spectrumtype"]       =
+        spectrum_type_to_wire(*ch.spectrumType);
     return obj;
 }
 
@@ -422,14 +422,14 @@ json info_to_json(Info const& info) {
     json obj = json::object();
     obj["name"]     = info.name;
     obj["value"]    = info.value;
-    obj["datatype"] = data_type_to_wire(info.data_type, /*raw_fallback=*/"");
-    if (info.physical_unit) obj["physicalunit"] = *info.physical_unit;
+    obj["datatype"] = data_type_to_wire(info.dataType, /*raw_fallback=*/"");
+    if (info.physicalUnit) obj["physicalunit"] = *info.physicalUnit;
     return obj;
 }
 
 }  // namespace
 
-std::string serialize_metablock_json(MetaBlock const& meta) {
+std::string serializeMetablockJson(MetaBlock const& meta) {
     json channels_arr = json::array();
     for (auto const& ch : meta.channels) {
         channels_arr.push_back(channel_to_json(ch));
@@ -444,7 +444,7 @@ std::string serialize_metablock_json(MetaBlock const& meta) {
     json inner    = json::object();
     inner["format"]   = "osf5";
     inner["version"]  = 5;
-    inner["file"]     = file_info_to_json(meta.file_info);
+    inner["file"]     = file_info_to_json(meta.fileInfo);
     inner["channels"] = std::move(channels_arr);
     if (!meta.infos.empty()) {
         inner["infos"] = std::move(infos_arr);

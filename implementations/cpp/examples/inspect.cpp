@@ -6,7 +6,7 @@
 // Usage:
 //   inspect <file>
 //
-// Prints file-level metadata (version, creator, created_utc, compression)
+// Prints file-level metadata (version, creator, createdUtc, compression)
 // and a one-line summary per channel.
 
 #include <osf/osf.h>
@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
 
     std::string const path = argv[1];
 
-    auto result = osf::DataManager::load_from_file(path);
+    auto result = osf::DataManager::loadFromFile(path);
     if (!result) {
         std::cerr << path << ": " << result.error().message << "\n";
         return 1;
@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
 
     osf::DataManager const& mgr = *result;
     osf::ReaderStats  const& st  = mgr.stats;
-    osf::FileInfo     const& fi  = mgr.meta.file_info;
+    osf::FileInfo     const& fi  = mgr.meta.fileInfo;
 
     // ── File-level summary ──────────────────────────────────────────────
     std::cout << "path:           " << path << "\n";
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
     if (!st.compressed) {
         compressed_label = "no";
     } else {
-        switch (st.compression_format) {
+        switch (st.compressionFormat) {
             case osf::CompressionFormat::Gzip: compressed_label = "yes (gzip)"; break;
             case osf::CompressionFormat::Zlib: compressed_label = "yes (zlib)"; break;
             default:                           compressed_label = "yes";         break;
@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
     std::cout << "compressed:     " << compressed_label << "\n";
     std::cout << "version:        " << fi.version << "\n";
     std::cout << "creator:        " << fi.creator.value_or("-") << "\n";
-    std::cout << "created_utc:    " << fi.created_utc.value_or("-") << "\n";
+    std::cout << "created_utc:    " << fi.createdUtc.value_or("-") << "\n";
 
     std::size_t const nchan = mgr.channels().size();
     std::cout << "channels:       " << nchan << "\n";
@@ -105,16 +105,16 @@ int main(int argc, char** argv) {
         // Determine column width for the name field (capped at 48).
         std::size_t max_name = 0;
         for (osf::DataChannel const& dc : mgr.channels()) {
-            max_name = std::max(max_name, osf::channel_name(dc).size());
+            max_name = std::max(max_name, osf::channelName(dc).size());
         }
         max_name = std::min(max_name, std::size_t{48});
 
         for (osf::DataChannel const& dc : mgr.channels()) {
-            std::uint16_t const idx   = osf::channel_index(dc);
-            std::string   const name  = truncate(osf::channel_name(dc), max_name);
-            std::string   const ct    = channel_type_name(osf::channel_meta(dc).channel_type);
-            std::string   const dt    = data_type_name(osf::channel_data_type(dc));
-            std::string   const unit  = osf::channel_physical_unit(dc).value_or("-");
+            std::uint16_t const idx   = osf::channelIndex(dc);
+            std::string   const name  = truncate(osf::channelName(dc), max_name);
+            std::string   const ct    = channel_type_name(osf::channelMeta(dc).channelType);
+            std::string   const dt    = data_type_name(osf::channelDataType(dc));
+            std::string   const unit  = osf::channelPhysicalUnit(dc).value_or("-");
 
             std::cout << "   ["
                       << std::setw(3) << std::right << idx

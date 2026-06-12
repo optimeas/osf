@@ -13,8 +13,8 @@
 /// `ChannelType::Unsupported` exist so a file using a future-spec
 /// spelling still parses channel-by-channel without aborting the whole
 /// metablock. The on-disk spelling is preserved alongside on the
-/// owning `Channel` (`Channel::data_type_raw`,
-/// `Channel::channel_type_raw`) so callers can still produce useful
+/// owning `Channel` (`Channel::dataTypeRaw`,
+/// `Channel::channelTypeRaw`) so callers can still produce useful
 /// diagnostics. Block reads against a channel whose type is
 /// `Unsupported` will fail explicitly when later attempted.
 
@@ -71,7 +71,7 @@ enum class DataType {
     /// revision 2026-05-04.
     GpsLocation,
     /// Forward-compatibility sentinel. Carries no data on its own;
-    /// the on-disk spelling lives on the owning `Channel::data_type_raw`.
+    /// the on-disk spelling lives on the owning `Channel::dataTypeRaw`.
     Unsupported,
 };
 
@@ -83,11 +83,11 @@ enum class DataType {
 /// The on-disk strings `scalar`, `timestamped`, and `equidistant` all
 /// occur in the wild; the parser treats `scalar` as the canonical
 /// spelling for both equidistant and timestamped channels and uses
-/// `time_increment_ns` on the channel to disambiguate.
+/// `timeIncrementNs` on the channel to disambiguate.
 enum class ChannelType {
     /// Default channel type used by the OSFGenerator and most field
     /// devices. The actual layout (equidistant vs. timestamped) is
-    /// derived from `Channel::time_increment_ns`.
+    /// derived from `Channel::timeIncrementNs`.
     Scalar,
     /// Channel with a fixed sample rate; timestamps are reconstructed
     /// from `bcStartData` segments and the sample index.
@@ -95,7 +95,7 @@ enum class ChannelType {
     /// Channel with an absolute timestamp per sample.
     Timestamped,
     /// Forward-compatibility sentinel. The on-disk spelling lives on
-    /// `Channel::channel_type_raw`.
+    /// `Channel::channelTypeRaw`.
     Unsupported,
 };
 
@@ -124,17 +124,17 @@ enum class SpectrumType {
 /// - Anything else → `DataType::Unsupported`. The metablock as a whole
 ///   still parses; block reads against this channel will fail
 ///   explicitly when later attempted.
-[[nodiscard]] Result<DataType> parse_data_type(std::string_view raw);
+[[nodiscard]] Result<DataType> parseDataType(std::string_view raw);
 
 /// Resolve a wire-format channel-type string to a `ChannelType`
 /// variant. Unknown spellings produce `ChannelType::Unsupported`.
 /// Currently never returns an error — the `Result` return type is
 /// reserved for future spec revisions that retire a value.
-[[nodiscard]] Result<ChannelType> parse_channel_type(std::string_view raw);
+[[nodiscard]] Result<ChannelType> parseChannelType(std::string_view raw);
 
 /// Resolve a wire-format spectrum-type string to a `SpectrumType`
 /// variant. Unknown spellings resolve to `Amplitude` (the spec
 /// default for missing or unrecognised spectrum-type metadata).
-[[nodiscard]] SpectrumType parse_spectrum_type(std::string_view raw) noexcept;
+[[nodiscard]] SpectrumType parseSpectrumType(std::string_view raw) noexcept;
 
 }  // namespace osf
