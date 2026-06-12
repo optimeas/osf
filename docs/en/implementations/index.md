@@ -12,7 +12,7 @@ keywords:
   - C++
   - Java
 last_update:
-  date: 2026-06-04
+  date: 2026-06-12
   author: Optimeas GmbH
 ---
 
@@ -38,7 +38,7 @@ Legend: ✅ available · 🚧 in active development · 📋 planned
 | **[Delphi](delphi.md)** | ✅ | Reference implementation — full library, demos and the `osftool` CLI (Windows / RAD Studio) |
 | **[Rust](rust.md)** (`osf-core`) | ✅ | Read, write and transparent OSFZ; also the foundation of the Python binding |
 | **[Python](python.md)** (`osfdata`) | ✅ | PyO3 bindings over the Rust core, NumPy integration; see [Python integration](../integrations/python.md) |
-| **[C++](cpp.md)** | ✅ | Standalone C++17 implementation — reader, both writers, C ABI; CI on Linux/macOS/Windows |
+| **[C++](cpp.md)** | ✅ | Standalone C++17 implementation — reader, both writers, C ABI; CI on Linux/macOS/Windows. Detailed developer handbook under [C++ in detail](cpp/architecture.md) |
 | **[Java](java.md)** | 📋 | Architecture decided (Java 25, Maven, JPMS); no code yet |
 | **[Other languages](planned.md)** | 📋 | C, C#, MATLAB, JavaScript/TypeScript, Swift — planned |
 
