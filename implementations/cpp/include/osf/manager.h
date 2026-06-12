@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
+
+/// \file manager.h
+/// High-level OSF reader: assembles typed in-memory channels from the
+/// block stream.
+///
+/// `DataManager` is the second API tier on top of `BlockReader`. Where
+/// the reader yields per-block raw views, the manager groups blocks by
+/// channel and produces `osf::Channel` values that hide the on-disk
+/// block boundaries: equidistant samples flat with their segments,
+/// timestamped samples with parallel timestamp / value vectors,
+/// string / binary samples as `(timestamp, value)` pairs.
+///
+/// Channel-by-name lookup is the primary documented entry point;
+/// lookup by index is provided as an optional convenience.
+
+#pragma once
+
+#include <cstdint>
+#include <filesystem>
+#include <iosfwd>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
+
+#include <osf/datachannel.h>
+#include <osf/error.h>
+#include <osf/metablock.h>
+#include <osf/stats.h>
+
+namespace osf {
+
+/// High-level read-only view of an OSF file: parsed metablock,
+/// `ReaderStats`, and the typed channel list.
+class DataManager {
+public:
+    /// Parsed metablock; kept so applications can read file-level
+    /// metadata (creator, createdUtc, infos, …) without re-opening
+    /// the file.
+    MetaBlock meta;
+    /// Telemetry from the underlying `BlockReader` — file/section
+    /// sizes, elapsed time, per-channel sample counts and timing.
+    ReaderStats stats;
+
+    /// Open `path`, parse the magic header and metablock, drive a
+    /// `BlockReader` to completion, and assemble the typed channel
+    /// list.
+    ///
+    /// OSFZ-compressed input (gzip `0x1F 0x8B` or zlib `0x78 …`) is
+    /// detected and decompressed transparently before the magic-header
+    /// parse.
+    [[nodiscard]] static Result<DataManager> loadFromFile(
+        std::filesystem::path const& path);
+
+    /// Construct from any `std::istream` positioned at the start of
+    /// the OSF file. The stream must outlive the parse — the
+    /// constructor reads it to EOF.
+    [[nodiscard]] static Result<DataManager> loadFromStream(
+        std::istream& stream);
+
+    /// Read-only view of all channels in metablock order.
+    [[nodiscard]] std::vector<DataChannel> const& channels() const noexcept {
+        return m_channels;
+    }
+
+    /// Look up a channel by its fully qualified name.
+    ///
+    /// **Primary access form.** Returns `nullptr` when no channel with
+    /// that name exists.
+    [[nodiscard]] DataChannel const* channel(std::string_view name) const;
+
+    /// Look up a channel by its on-disk index (the integer `index`
+    /// attribute from the metablock). Returns `nullptr` when no
+    /// channel has that index — the optional access form.
+    [[nodiscard]] DataChannel const* channelByIndex(std::uint16_t index) const;
+
+private:
+    std::vector<DataChannel> m_channels;
+    std::unordered_map<std::string, std::size_t> m_byName;
+    std::unordered_map<std::uint16_t, std::size_t> m_byIndex;
+
+    DataManager() = default;
+
+    friend Result<DataManager> buildFromStreamImpl(std::istream& stream,
+                                                     std::uint64_t fileSize,
+                                                     bool haveFileSize);
+};
+
+}  // namespace osf

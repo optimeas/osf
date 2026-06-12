@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
-#include <osf/metablock.hpp>
+#include <osf/metablock.h>
 
 #include <climits>
 #include <sstream>
@@ -16,14 +16,14 @@ namespace {
 
 using nlohmann::json;
 
-Error invalid_metablock(std::string msg) {
+Error invalidMetablock(std::string msg) {
     return Error{Error::Code::InvalidMetablock, std::move(msg)};
 }
 
 // nlohmann::json carries an explicit value_t::discarded sentinel that
 // the non-throwing parse() returns on failure. Wrapping it once keeps
 // the call sites focused on field-level concerns.
-bool is_discarded(json const& v) noexcept {
+bool isDiscarded(json const& v) noexcept {
     return v.type() == json::value_t::discarded;
 }
 
@@ -34,7 +34,7 @@ bool is_discarded(json const& v) noexcept {
 //   - other   → JSON-dump representation (numbers as decimal text, bools
 //               as "true" / "false"). Matches the Rust impl, which uses
 //               value.to_string() for non-string fallthroughs.
-std::optional<std::string> get_optional_string(json const& obj, char const* key) {
+std::optional<std::string> getOptionalString(json const& obj, char const* key) {
     auto it = obj.find(key);
     if (it == obj.end()) return std::nullopt;
     if (it->is_null()) return std::nullopt;
@@ -42,147 +42,147 @@ std::optional<std::string> get_optional_string(json const& obj, char const* key)
     return it->dump();
 }
 
-std::optional<double> get_optional_double(json const& obj, char const* key) {
+std::optional<double> getOptionalDouble(json const& obj, char const* key) {
     auto it = obj.find(key);
     if (it == obj.end() || !it->is_number()) return std::nullopt;
     return it->template get<double>();
 }
 
-Result<FileInfo> parse_file_info(json const& osf_obj) {
+Result<FileInfo> parseFileInfo(json const& osfObj) {
     FileInfo info;
 
-    auto file_it = osf_obj.find("file");
-    if (file_it == osf_obj.end()) {
+    auto fileIt = osfObj.find("file");
+    if (fileIt == osfObj.end()) {
         return info;  // file block is optional
     }
-    if (!file_it->is_object()) {
-        return tl::make_unexpected(invalid_metablock(
+    if (!fileIt->is_object()) {
+        return tl::make_unexpected(invalidMetablock(
             "OSF5 \"file\" must be an object"));
     }
-    json const& fobj = *file_it;
+    json const& fobj = *fileIt;
 
-    info.created_utc          = get_optional_string(fobj, "created_utc");
-    info.creator              = get_optional_string(fobj, "creator");
-    info.reason               = get_optional_string(fobj, "reason");
-    info.tag                  = get_optional_string(fobj, "tag");
-    info.comment              = get_optional_string(fobj, "comment");
-    info.namespace_sep        = get_optional_string(fobj, "namespacesep");
-    info.created_at_latitude  = get_optional_double(fobj, "created_at_latitude");
-    info.created_at_longitude = get_optional_double(fobj, "created_at_longitude");
-    info.created_at_altitude  = get_optional_double(fobj, "created_at_altitude");
+    info.createdUtc          = getOptionalString(fobj, "created_utc");
+    info.creator              = getOptionalString(fobj, "creator");
+    info.reason               = getOptionalString(fobj, "reason");
+    info.tag                  = getOptionalString(fobj, "tag");
+    info.comment              = getOptionalString(fobj, "comment");
+    info.namespaceSep        = getOptionalString(fobj, "namespacesep");
+    info.createdAtLatitude  = getOptionalDouble(fobj, "created_at_latitude");
+    info.createdAtLongitude = getOptionalDouble(fobj, "created_at_longitude");
+    info.createdAtAltitude  = getOptionalDouble(fobj, "created_at_altitude");
 
     // Some early OSF5 emitters used the short spelling (`latitude=`
     // without the `created_at_` prefix). Accept and normalise on read;
     // writers always emit the spec form.
-    if (!info.created_at_latitude) {
-        info.created_at_latitude = get_optional_double(fobj, "latitude");
+    if (!info.createdAtLatitude) {
+        info.createdAtLatitude = getOptionalDouble(fobj, "latitude");
     }
-    if (!info.created_at_longitude) {
-        info.created_at_longitude = get_optional_double(fobj, "longitude");
+    if (!info.createdAtLongitude) {
+        info.createdAtLongitude = getOptionalDouble(fobj, "longitude");
     }
-    if (!info.created_at_altitude) {
-        info.created_at_altitude = get_optional_double(fobj, "altitude");
+    if (!info.createdAtAltitude) {
+        info.createdAtAltitude = getOptionalDouble(fobj, "altitude");
     }
 
     return info;
 }
 
-Result<std::uint8_t> validate_size_of_length_value(std::uint64_t raw,
-                                                  std::string const& channel_name) {
+Result<std::uint8_t> validateSizeOfLengthValue(std::uint64_t raw,
+                                                  std::string const& channelName) {
     if (raw == 2 || raw == 4) return static_cast<std::uint8_t>(raw);
     std::ostringstream oss;
-    oss << "channel \"" << channel_name
+    oss << "channel \"" << channelName
         << "\" sizeoflengthvalue must be 2 or 4, got " << raw;
-    return tl::make_unexpected(invalid_metablock(oss.str()));
+    return tl::make_unexpected(invalidMetablock(oss.str()));
 }
 
-Result<Channel> parse_channel(json const& obj, std::size_t position) {
+Result<Channel> parseChannel(json const& obj, std::size_t position) {
     Channel ch;
 
     // index — required, must fit u16
-    auto idx_it = obj.find("index");
-    if (idx_it == obj.end() || !idx_it->is_number_integer()) {
+    auto idxIt = obj.find("index");
+    if (idxIt == obj.end() || !idxIt->is_number_integer()) {
         std::ostringstream oss;
         oss << "channel at position " << position
             << " is missing required field \"index\"";
-        return tl::make_unexpected(invalid_metablock(oss.str()));
+        return tl::make_unexpected(invalidMetablock(oss.str()));
     }
-    auto raw_idx = idx_it->template get<std::int64_t>();
-    if (raw_idx < 0 || raw_idx > static_cast<std::int64_t>(UINT16_MAX)) {
+    auto rawIdx = idxIt->template get<std::int64_t>();
+    if (rawIdx < 0 || rawIdx > static_cast<std::int64_t>(UINT16_MAX)) {
         std::ostringstream oss;
-        oss << "channel at position " << position << " has index=" << raw_idx
+        oss << "channel at position " << position << " has index=" << rawIdx
             << " out of range 0.." << UINT16_MAX;
-        return tl::make_unexpected(invalid_metablock(oss.str()));
+        return tl::make_unexpected(invalidMetablock(oss.str()));
     }
-    ch.index = static_cast<std::uint16_t>(raw_idx);
+    ch.index = static_cast<std::uint16_t>(rawIdx);
 
     // name — required
-    auto name_it = obj.find("name");
-    if (name_it == obj.end() || !name_it->is_string()) {
+    auto nameIt = obj.find("name");
+    if (nameIt == obj.end() || !nameIt->is_string()) {
         std::ostringstream oss;
         oss << "channel at index " << ch.index
             << " is missing required field \"name\"";
-        return tl::make_unexpected(invalid_metablock(oss.str()));
+        return tl::make_unexpected(invalidMetablock(oss.str()));
     }
-    ch.name = name_it->template get<std::string>();
+    ch.name = nameIt->template get<std::string>();
 
     // channeltype — required
-    auto ct_it = obj.find("channeltype");
-    if (ct_it == obj.end() || !ct_it->is_string()) {
-        return tl::make_unexpected(invalid_metablock(
+    auto ctIt = obj.find("channeltype");
+    if (ctIt == obj.end() || !ctIt->is_string()) {
+        return tl::make_unexpected(invalidMetablock(
             "channel \"" + ch.name + "\" is missing required field \"channeltype\""));
     }
-    ch.channel_type_raw = ct_it->template get<std::string>();
-    auto ct_r = parse_channel_type(ch.channel_type_raw);
-    if (!ct_r) return tl::make_unexpected(std::move(ct_r).error());
-    ch.channel_type = *ct_r;
+    ch.channelTypeRaw = ctIt->template get<std::string>();
+    auto ctR = parseChannelType(ch.channelTypeRaw);
+    if (!ctR) return tl::make_unexpected(std::move(ctR).error());
+    ch.channelType = *ctR;
 
     // datatype — required; RemovedInSpec propagates as-is
-    auto dt_it = obj.find("datatype");
-    if (dt_it == obj.end() || !dt_it->is_string()) {
-        return tl::make_unexpected(invalid_metablock(
+    auto dtIt = obj.find("datatype");
+    if (dtIt == obj.end() || !dtIt->is_string()) {
+        return tl::make_unexpected(invalidMetablock(
             "channel \"" + ch.name + "\" is missing required field \"datatype\""));
     }
-    ch.data_type_raw = dt_it->template get<std::string>();
-    auto dt_r = parse_data_type(ch.data_type_raw);
-    if (!dt_r) return tl::make_unexpected(std::move(dt_r).error());
-    ch.data_type = *dt_r;
+    ch.dataTypeRaw = dtIt->template get<std::string>();
+    auto dtR = parseDataType(ch.dataTypeRaw);
+    if (!dtR) return tl::make_unexpected(std::move(dtR).error());
+    ch.dataType = *dtR;
 
     // sizeoflengthvalue — required, must be 2 or 4
-    auto sol_it = obj.find("sizeoflengthvalue");
-    if (sol_it == obj.end() || !sol_it->is_number_integer()) {
-        return tl::make_unexpected(invalid_metablock(
+    auto solIt = obj.find("sizeoflengthvalue");
+    if (solIt == obj.end() || !solIt->is_number_integer()) {
+        return tl::make_unexpected(invalidMetablock(
             "channel \"" + ch.name + "\" is missing required field \"sizeoflengthvalue\""));
     }
-    auto raw_sol = sol_it->template get<std::int64_t>();
-    if (raw_sol < 0) {
+    auto rawSol = solIt->template get<std::int64_t>();
+    if (rawSol < 0) {
         std::ostringstream oss;
         oss << "channel \"" << ch.name
-            << "\" sizeoflengthvalue must be 2 or 4, got " << raw_sol;
-        return tl::make_unexpected(invalid_metablock(oss.str()));
+            << "\" sizeoflengthvalue must be 2 or 4, got " << rawSol;
+        return tl::make_unexpected(invalidMetablock(oss.str()));
     }
-    auto sol_r = validate_size_of_length_value(
-        static_cast<std::uint64_t>(raw_sol), ch.name);
-    if (!sol_r) return tl::make_unexpected(std::move(sol_r).error());
-    ch.size_of_length_value = *sol_r;
+    auto solR = validateSizeOfLengthValue(
+        static_cast<std::uint64_t>(rawSol), ch.name);
+    if (!solR) return tl::make_unexpected(std::move(solR).error());
+    ch.sizeOfLengthValue = *solR;
 
     // Optional fields
-    auto ti_it = obj.find("timeincrement");
-    if (ti_it != obj.end() && ti_it->is_number_integer()) {
-        ch.time_increment_ns = ti_it->template get<std::int64_t>();
+    auto tiIt = obj.find("timeincrement");
+    if (tiIt != obj.end() && tiIt->is_number_integer()) {
+        ch.timeIncrementNs = tiIt->template get<std::int64_t>();
     }
 
-    ch.mime_type          = get_optional_string(obj, "mimetype");
-    ch.physical_unit      = get_optional_string(obj, "physicalunit");
-    ch.physical_dimension = get_optional_string(obj, "physicaldimension");
-    ch.display_name       = get_optional_string(obj, "displayname");
-    ch.comment            = get_optional_string(obj, "comment");
-    ch.reference          = get_optional_string(obj, "reference");
+    ch.mimeType          = getOptionalString(obj, "mimetype");
+    ch.physicalUnit      = getOptionalString(obj, "physicalunit");
+    ch.physicalDimension = getOptionalString(obj, "physicaldimension");
+    ch.displayName       = getOptionalString(obj, "displayname");
+    ch.comment            = getOptionalString(obj, "comment");
+    ch.reference          = getOptionalString(obj, "reference");
 
-    auto st_it = obj.find("spectrumtype");
-    if (st_it != obj.end() && st_it->is_string()) {
-        ch.spectrum_type = parse_spectrum_type(
-            st_it->template get<std::string>());
+    auto stIt = obj.find("spectrumtype");
+    if (stIt != obj.end() && stIt->is_string()) {
+        ch.spectrumType = parseSpectrumType(
+            stIt->template get<std::string>());
     }
 
     // Channel-level fields removed in spec revision 2026-05-04
@@ -195,11 +195,11 @@ Result<Channel> parse_channel(json const& obj, std::size_t position) {
     return ch;
 }
 
-Result<std::vector<Channel>> parse_channels(json const& osf_obj) {
-    auto it = osf_obj.find("channels");
-    if (it == osf_obj.end()) return std::vector<Channel>{};
+Result<std::vector<Channel>> parseChannels(json const& osfObj) {
+    auto it = osfObj.find("channels");
+    if (it == osfObj.end()) return std::vector<Channel>{};
     if (!it->is_array()) {
-        return tl::make_unexpected(invalid_metablock(
+        return tl::make_unexpected(invalidMetablock(
             "OSF5 \"channels\" must be an array"));
     }
     std::vector<Channel> out;
@@ -209,20 +209,20 @@ Result<std::vector<Channel>> parse_channels(json const& osf_obj) {
         if (!entry.is_object()) {
             std::ostringstream oss;
             oss << "OSF5 channels[" << i << "] must be an object";
-            return tl::make_unexpected(invalid_metablock(oss.str()));
+            return tl::make_unexpected(invalidMetablock(oss.str()));
         }
-        auto ch = parse_channel(entry, i);
+        auto ch = parseChannel(entry, i);
         if (!ch) return tl::make_unexpected(std::move(ch).error());
         out.push_back(std::move(*ch));
     }
     return out;
 }
 
-Result<std::vector<Info>> parse_infos(json const& osf_obj) {
-    auto it = osf_obj.find("infos");
-    if (it == osf_obj.end()) return std::vector<Info>{};
+Result<std::vector<Info>> parseInfos(json const& osfObj) {
+    auto it = osfObj.find("infos");
+    if (it == osfObj.end()) return std::vector<Info>{};
     if (!it->is_array()) {
-        return tl::make_unexpected(invalid_metablock(
+        return tl::make_unexpected(invalidMetablock(
             "OSF5 \"infos\" must be an array"));
     }
     std::vector<Info> out;
@@ -232,37 +232,37 @@ Result<std::vector<Info>> parse_infos(json const& osf_obj) {
         if (!entry.is_object()) {
             std::ostringstream oss;
             oss << "OSF5 infos[" << i << "] must be an object";
-            return tl::make_unexpected(invalid_metablock(oss.str()));
+            return tl::make_unexpected(invalidMetablock(oss.str()));
         }
         Info info;
 
-        auto name_it = entry.find("name");
-        if (name_it == entry.end() || !name_it->is_string()) {
+        auto nameIt = entry.find("name");
+        if (nameIt == entry.end() || !nameIt->is_string()) {
             std::ostringstream oss;
             oss << "OSF5 infos[" << i << "] is missing \"name\"";
-            return tl::make_unexpected(invalid_metablock(oss.str()));
+            return tl::make_unexpected(invalidMetablock(oss.str()));
         }
-        info.name = name_it->template get<std::string>();
+        info.name = nameIt->template get<std::string>();
 
-        std::string dt_raw = "string";
-        auto dt_it = entry.find("datatype");
-        if (dt_it != entry.end() && dt_it->is_string()) {
-            dt_raw = dt_it->template get<std::string>();
+        std::string dtRaw = "string";
+        auto dtIt = entry.find("datatype");
+        if (dtIt != entry.end() && dtIt->is_string()) {
+            dtRaw = dtIt->template get<std::string>();
         }
-        auto dt_r = parse_data_type(dt_raw);
-        if (!dt_r) return tl::make_unexpected(std::move(dt_r).error());
-        info.data_type = *dt_r;
+        auto dtR = parseDataType(dtRaw);
+        if (!dtR) return tl::make_unexpected(std::move(dtR).error());
+        info.dataType = *dtR;
 
-        auto v_it = entry.find("value");
-        if (v_it != entry.end()) {
-            if (v_it->is_string()) {
-                info.value = v_it->template get<std::string>();
-            } else if (!v_it->is_null()) {
-                info.value = v_it->dump();
+        auto vIt = entry.find("value");
+        if (vIt != entry.end()) {
+            if (vIt->is_string()) {
+                info.value = vIt->template get<std::string>();
+            } else if (!vIt->is_null()) {
+                info.value = vIt->dump();
             }
         }
 
-        info.physical_unit = get_optional_string(entry, "physicalunit");
+        info.physicalUnit = getOptionalString(entry, "physicalunit");
         out.push_back(std::move(info));
     }
     return out;
@@ -270,11 +270,11 @@ Result<std::vector<Info>> parse_infos(json const& osf_obj) {
 
 }  // anonymous namespace
 
-Result<MetaBlock> parse_metablock_json(std::uint8_t const* data, std::size_t size) {
+Result<MetaBlock> parseMetablockJson(std::uint8_t const* data, std::size_t size) {
     if (data == nullptr && size != 0) {
         return tl::make_unexpected(Error{
             Error::Code::InvalidArgument,
-            "parse_metablock_json: data is null but size > 0"});
+            "parseMetablockJson: data is null but size > 0"});
     }
 
     // allow_exceptions=false: parse returns a discarded value on error
@@ -283,20 +283,20 @@ Result<MetaBlock> parse_metablock_json(std::uint8_t const* data, std::size_t siz
     auto root = json::parse(data, data + size,
                             /*cb=*/nullptr,
                             /*allow_exceptions=*/false);
-    if (is_discarded(root)) {
+    if (isDiscarded(root)) {
         return tl::make_unexpected(Error{
             Error::Code::JsonParseError,
             "OSF5 metablock JSON parse error (malformed JSON)"});
     }
 
     if (!root.is_object()) {
-        return tl::make_unexpected(invalid_metablock(
+        return tl::make_unexpected(invalidMetablock(
             "OSF5 root must be a JSON object"));
     }
 
-    auto osf_it = root.find("osf");
-    if (osf_it == root.end() || !osf_it->is_object()) {
-        return tl::make_unexpected(invalid_metablock(
+    auto osfIt = root.find("osf");
+    if (osfIt == root.end() || !osfIt->is_object()) {
+        return tl::make_unexpected(invalidMetablock(
             "OSF5 root is missing the \"osf\" envelope"));
     }
 
@@ -307,24 +307,24 @@ Result<MetaBlock> parse_metablock_json(std::uint8_t const* data, std::size_t siz
     // silently until a logging facade lands.
 
     MetaBlock mb;
-    auto fi = parse_file_info(*osf_it);
+    auto fi = parseFileInfo(*osfIt);
     if (!fi) return tl::make_unexpected(std::move(fi).error());
-    mb.file_info = std::move(*fi);
-    mb.file_info.version = 5;
+    mb.fileInfo = std::move(*fi);
+    mb.fileInfo.version = 5;
 
-    auto ch = parse_channels(*osf_it);
+    auto ch = parseChannels(*osfIt);
     if (!ch) return tl::make_unexpected(std::move(ch).error());
     mb.channels = std::move(*ch);
 
-    auto in = parse_infos(*osf_it);
+    auto in = parseInfos(*osfIt);
     if (!in) return tl::make_unexpected(std::move(in).error());
     mb.infos = std::move(*in);
 
     return mb;
 }
 
-Result<MetaBlock> parse_metablock_json(std::string_view text) {
-    return parse_metablock_json(
+Result<MetaBlock> parseMetablockJson(std::string_view text) {
+    return parseMetablockJson(
         reinterpret_cast<std::uint8_t const*>(text.data()),
         text.size());
 }
@@ -336,7 +336,7 @@ using nlohmann::json;
 // Map a known DataType enum to its canonical wire spelling. For
 // Unsupported we fall back to the channel's raw spelling (preserved
 // from parse time for round-trip).
-std::string data_type_to_wire(DataType dt, std::string_view raw_fallback) {
+std::string dataTypeToWire(DataType dt, std::string_view rawFallback) {
     switch (dt) {
         case DataType::Bool:        return "bool";
         case DataType::Int8:        return "int8";
@@ -354,25 +354,25 @@ std::string data_type_to_wire(DataType dt, std::string_view raw_fallback) {
         case DataType::ByteArray:   return "binary";   // canonical write form
         case DataType::GpsLocation: return "gpslocation";
         case DataType::Unsupported:
-            return std::string{raw_fallback.empty() ? "double" : raw_fallback};
+            return std::string{rawFallback.empty() ? "double" : rawFallback};
     }
-    return std::string{raw_fallback.empty() ? "double" : raw_fallback};
+    return std::string{rawFallback.empty() ? "double" : rawFallback};
 }
 
-std::string channel_type_to_wire(ChannelType ct,
-                                 std::string_view raw_fallback) {
+std::string channelTypeToWire(ChannelType ct,
+                                 std::string_view rawFallback) {
     switch (ct) {
         case ChannelType::Scalar:      return "scalar";
         case ChannelType::Equidistant: return "equidistant";
         case ChannelType::Timestamped: return "timestamped";
         case ChannelType::Unsupported:
-            return std::string{raw_fallback.empty() ? "scalar"
-                                                    : raw_fallback};
+            return std::string{rawFallback.empty() ? "scalar"
+                                                    : rawFallback};
     }
-    return std::string{raw_fallback.empty() ? "scalar" : raw_fallback};
+    return std::string{rawFallback.empty() ? "scalar" : rawFallback};
 }
 
-std::string spectrum_type_to_wire(SpectrumType st) {
+std::string spectrumTypeToWire(SpectrumType st) {
     switch (st) {
         case SpectrumType::Amplitude:   return "amplitude";
         case SpectrumType::RealImag:    return "realimag";
@@ -382,72 +382,72 @@ std::string spectrum_type_to_wire(SpectrumType st) {
     return "amplitude";
 }
 
-json file_info_to_json(FileInfo const& fi) {
+json fileInfoToJson(FileInfo const& fi) {
     json obj = json::object();
-    if (fi.created_utc)            obj["created_utc"]          = *fi.created_utc;
+    if (fi.createdUtc)            obj["created_utc"]          = *fi.createdUtc;
     if (fi.creator)                obj["creator"]              = *fi.creator;
     if (fi.tag)                    obj["tag"]                  = *fi.tag;
     if (fi.reason)                 obj["reason"]               = *fi.reason;
-    if (fi.namespace_sep)          obj["namespacesep"]         = *fi.namespace_sep;
+    if (fi.namespaceSep)          obj["namespacesep"]         = *fi.namespaceSep;
     if (fi.comment)                obj["comment"]              = *fi.comment;
-    if (fi.created_at_latitude)    obj["created_at_latitude"]  = *fi.created_at_latitude;
-    if (fi.created_at_longitude)   obj["created_at_longitude"] = *fi.created_at_longitude;
-    if (fi.created_at_altitude)    obj["created_at_altitude"]  = *fi.created_at_altitude;
+    if (fi.createdAtLatitude)    obj["created_at_latitude"]  = *fi.createdAtLatitude;
+    if (fi.createdAtLongitude)   obj["created_at_longitude"] = *fi.createdAtLongitude;
+    if (fi.createdAtAltitude)    obj["created_at_altitude"]  = *fi.createdAtAltitude;
     return obj;
 }
 
-json channel_to_json(Channel const& ch) {
+json channelToJson(Channel const& ch) {
     json obj = json::object();
     obj["index"]             = ch.index;
     obj["name"]              = ch.name;
-    obj["channeltype"]       = channel_type_to_wire(ch.channel_type,
-                                                    ch.channel_type_raw);
-    obj["datatype"]          = data_type_to_wire(ch.data_type,
-                                                 ch.data_type_raw);
-    obj["sizeoflengthvalue"] = ch.size_of_length_value;
+    obj["channeltype"]       = channelTypeToWire(ch.channelType,
+                                                    ch.channelTypeRaw);
+    obj["datatype"]          = dataTypeToWire(ch.dataType,
+                                                 ch.dataTypeRaw);
+    obj["sizeoflengthvalue"] = ch.sizeOfLengthValue;
 
-    if (ch.time_increment_ns)   obj["timeincrement"]      = *ch.time_increment_ns;
-    if (ch.physical_unit)       obj["physicalunit"]       = *ch.physical_unit;
-    if (ch.physical_dimension)  obj["physicaldimension"]  = *ch.physical_dimension;
-    if (ch.display_name)        obj["displayname"]        = *ch.display_name;
-    if (ch.mime_type)           obj["mimetype"]           = *ch.mime_type;
+    if (ch.timeIncrementNs)   obj["timeincrement"]      = *ch.timeIncrementNs;
+    if (ch.physicalUnit)       obj["physicalunit"]       = *ch.physicalUnit;
+    if (ch.physicalDimension)  obj["physicaldimension"]  = *ch.physicalDimension;
+    if (ch.displayName)        obj["displayname"]        = *ch.displayName;
+    if (ch.mimeType)           obj["mimetype"]           = *ch.mimeType;
     if (ch.reference)           obj["reference"]          = *ch.reference;
     if (ch.comment)             obj["comment"]            = *ch.comment;
-    if (ch.spectrum_type)       obj["spectrumtype"]       =
-        spectrum_type_to_wire(*ch.spectrum_type);
+    if (ch.spectrumType)       obj["spectrumtype"]       =
+        spectrumTypeToWire(*ch.spectrumType);
     return obj;
 }
 
-json info_to_json(Info const& info) {
+json infoToJson(Info const& info) {
     json obj = json::object();
     obj["name"]     = info.name;
     obj["value"]    = info.value;
-    obj["datatype"] = data_type_to_wire(info.data_type, /*raw_fallback=*/"");
-    if (info.physical_unit) obj["physicalunit"] = *info.physical_unit;
+    obj["datatype"] = dataTypeToWire(info.dataType, /*rawFallback=*/"");
+    if (info.physicalUnit) obj["physicalunit"] = *info.physicalUnit;
     return obj;
 }
 
 }  // namespace
 
-std::string serialize_metablock_json(MetaBlock const& meta) {
-    json channels_arr = json::array();
+std::string serializeMetablockJson(MetaBlock const& meta) {
+    json channelsArr = json::array();
     for (auto const& ch : meta.channels) {
-        channels_arr.push_back(channel_to_json(ch));
+        channelsArr.push_back(channelToJson(ch));
     }
 
-    json infos_arr = json::array();
+    json infosArr = json::array();
     for (auto const& info : meta.infos) {
-        infos_arr.push_back(info_to_json(info));
+        infosArr.push_back(infoToJson(info));
     }
 
     json envelope = json::object();
     json inner    = json::object();
     inner["format"]   = "osf5";
     inner["version"]  = 5;
-    inner["file"]     = file_info_to_json(meta.file_info);
-    inner["channels"] = std::move(channels_arr);
+    inner["file"]     = fileInfoToJson(meta.fileInfo);
+    inner["channels"] = std::move(channelsArr);
     if (!meta.infos.empty()) {
-        inner["infos"] = std::move(infos_arr);
+        inner["infos"] = std::move(infosArr);
     }
     envelope["osf"] = std::move(inner);
 

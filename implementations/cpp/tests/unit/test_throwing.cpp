@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
-#include "osf/throwing.hpp"
+#include "osf/throwing.h"
 
-#include "osf/block_writer.hpp"
-#include "osf/data_channel.hpp"
-#include "osf/error.hpp"
-#include "osf/manager.hpp"
-#include "osf/streaming_writer.hpp"
-#include "osf/types.hpp"
+#include "osf/blockwriter.h"
+#include "osf/datachannel.h"
+#include "osf/error.h"
+#include "osf/manager.h"
+#include "osf/streamingwriter.h"
+#include "osf/types.h"
 
-#include "roundtrip_helper.hpp"
+#include "roundtriphelper.h"
 
 #include <gtest/gtest.h>
 
@@ -22,7 +22,7 @@
 
 namespace {
 
-std::filesystem::path make_temp_path() {
+std::filesystem::path makeTempPath() {
     static std::atomic<std::uint64_t> counter{0};
     auto const n = counter.fetch_add(1) + 1;
     return std::filesystem::temp_directory_path() /
@@ -38,24 +38,24 @@ struct TempFileGuard {
 };
 
 // Build a small OSF5 fixture (one timestamped double channel) in memory.
-osf::BlockWriter make_fixture_writer() {
+osf::BlockWriter makeFixtureWriter() {
     osf::BlockWriter w;
     osf::ChannelDef d;
     d.name = "Sensor/T";
-    d.data_type = osf::DataType::Double;
-    d.channel_type = osf::ChannelType::Timestamped;
-    auto const ci = w.add_channel(d);
+    d.dataType = osf::DataType::Double;
+    d.channelType = osf::ChannelType::Timestamped;
+    auto const ci = w.addChannel(d);
     EXPECT_TRUE(ci.has_value());
     std::int64_t const ts[] = {10, 20, 30};
     double const vs[] = {1.5, 2.5, 3.5};
-    EXPECT_TRUE(w.add_timestamped_samples<double>(*ci, ts, vs, 3).has_value());
+    EXPECT_TRUE(w.addTimestampedSamples<double>(*ci, ts, vs, 3).has_value());
     return w;
 }
 
 // Serialize the fixture to a string (a valid plain OSF5 byte stream).
-std::string fixture_bytes() {
+std::string fixtureBytes() {
     std::ostringstream ss;
-    EXPECT_TRUE(make_fixture_writer().write_to(ss).has_value());
+    EXPECT_TRUE(makeFixtureWriter().writeTo(ss).has_value());
     return ss.str();
 }
 
@@ -64,12 +64,12 @@ std::string fixture_bytes() {
 // ── load ──────────────────────────────────────────────────────────────
 
 TEST(Throwing, load_success_returns_manager) {
-    TempFileGuard g{make_temp_path()};
-    ASSERT_TRUE(make_fixture_writer().write_to_file(g.path).has_value());
+    TempFileGuard g{makeTempPath()};
+    ASSERT_TRUE(makeFixtureWriter().writeToFile(g.path).has_value());
 
     auto mgr = osf::throwing::load(g.path);   // by value, no Result
     ASSERT_NE(mgr.channel("Sensor/T"), nullptr);
-    EXPECT_FALSE(osf::channel_is_empty(*mgr.channel("Sensor/T")));
+    EXPECT_FALSE(osf::channelIsEmpty(*mgr.channel("Sensor/T")));
 }
 
 TEST(Throwing, load_missing_file_throws) {
@@ -87,7 +87,7 @@ TEST(Throwing, load_missing_file_throws) {
 }
 
 TEST(Throwing, load_from_istream_success) {
-    std::istringstream in(fixture_bytes(), std::ios::binary);
+    std::istringstream in(fixtureBytes(), std::ios::binary);
     auto mgr = osf::throwing::load(in);
     EXPECT_NE(mgr.channel("Sensor/T"), nullptr);
 }
@@ -100,40 +100,40 @@ TEST(Throwing, load_from_istream_garbage_throws) {
 // ── write ─────────────────────────────────────────────────────────────
 
 TEST(Throwing, write_to_file_round_trips) {
-    std::istringstream in(fixture_bytes(), std::ios::binary);
+    std::istringstream in(fixtureBytes(), std::ios::binary);
     auto const src = osf::throwing::load(in);
 
-    TempFileGuard g{make_temp_path()};
-    osf::throwing::write_to_file(src, g.path);   // void, throws on error
+    TempFileGuard g{makeTempPath()};
+    osf::throwing::writeToFile(src, g.path);   // void, throws on error
 
-    auto const reloaded = osf::DataManager::load_from_file(g.path);
+    auto const reloaded = osf::DataManager::loadFromFile(g.path);
     ASSERT_TRUE(reloaded.has_value()) << reloaded.error().message;
-    EXPECT_TRUE(osf_test::roundtrip_managers_equal(src, *reloaded));
+    EXPECT_TRUE(osftest::roundtripManagersEqual(src, *reloaded));
 }
 
 TEST(Throwing, write_to_ostream_round_trips) {
-    std::istringstream in(fixture_bytes(), std::ios::binary);
+    std::istringstream in(fixtureBytes(), std::ios::binary);
     auto const src = osf::throwing::load(in);
 
     std::ostringstream out;
-    osf::throwing::write_to(src, out);
+    osf::throwing::writeTo(src, out);
 
     std::istringstream back(out.str(), std::ios::binary);
-    auto const reloaded = osf::DataManager::load_from_stream(back);
+    auto const reloaded = osf::DataManager::loadFromStream(back);
     ASSERT_TRUE(reloaded.has_value()) << reloaded.error().message;
-    EXPECT_TRUE(osf_test::roundtrip_managers_equal(src, *reloaded));
+    EXPECT_TRUE(osftest::roundtripManagersEqual(src, *reloaded));
 }
 
 // ── unwrap ────────────────────────────────────────────────────────────
 
 TEST(Throwing, unwrap_void_success_does_not_throw) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     osf::StreamingWriter w{g.path};
-    auto const idx = osf::throwing::unwrap(w.add_channel([] {
+    auto const idx = osf::throwing::unwrap(w.addChannel([] {
         osf::ChannelDef d;
         d.name = "a";
-        d.data_type = osf::DataType::Double;
-        d.channel_type = osf::ChannelType::Scalar;
+        d.dataType = osf::DataType::Double;
+        d.channelType = osf::ChannelType::Scalar;
         return d;
     }()));
     EXPECT_EQ(idx, 0u);                       // unwrap(Result<uint16_t>)
@@ -142,7 +142,7 @@ TEST(Throwing, unwrap_void_success_does_not_throw) {
 }
 
 TEST(Throwing, unwrap_void_failure_throws) {
-    TempFileGuard g{make_temp_path()};
+    TempFileGuard g{makeTempPath()};
     osf::StreamingWriter w{g.path};
     // start() with no channels → InvalidArgument.
     try {
@@ -155,7 +155,7 @@ TEST(Throwing, unwrap_void_failure_throws) {
 
 TEST(Throwing, unwrap_value_returns_underlying_value) {
     // unwrap on a Result<T> from the core API yields T.
-    auto const dt = osf::throwing::unwrap(osf::parse_data_type("double"));
+    auto const dt = osf::throwing::unwrap(osf::parseDataType("double"));
     EXPECT_EQ(dt, osf::DataType::Double);
 }
 
@@ -163,7 +163,7 @@ TEST(Throwing, unwrap_value_returns_underlying_value) {
 
 TEST(Throwing, exception_carries_code_and_message) {
     try {
-        (void)osf::throwing::unwrap(osf::parse_data_type("gpsdata"));
+        (void)osf::throwing::unwrap(osf::parseDataType("gpsdata"));
         FAIL() << "expected osf::Exception";
     } catch (osf::Exception const& e) {
         EXPECT_EQ(e.code(), osf::Error::Code::RemovedInSpec);

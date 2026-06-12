@@ -7,7 +7,7 @@
 
 #include <gtest/gtest.h>
 
-#include <osf/osf.hpp>
+#include <osf/osf.h>
 
 namespace {
 
@@ -38,9 +38,9 @@ TEST(Version, NotEmpty) {
 }
 
 TEST(ErrorCategoryName, ReturnsKnownNames) {
-    EXPECT_EQ(osf::error_category_name(osf::Error::Code::ParseError),
+    EXPECT_EQ(osf::errorCategoryName(osf::Error::Code::ParseError),
               "ParseError");
-    EXPECT_EQ(osf::error_category_name(osf::Error::Code::Unknown),
+    EXPECT_EQ(osf::errorCategoryName(osf::Error::Code::Unknown),
               "Unknown");
 }
 

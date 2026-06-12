@@ -26,7 +26,7 @@ cmake -B build -D OSF_BUILD_C_API=ON
 cmake --build build
 ```
 
-Der einzige Header ist `osf/c_api.h` — er hängt nur von `<stdint.h>` /
+Der einzige Header ist `osf/capi.h` — er hängt nur von `<stdint.h>` /
 `<stddef.h>` ab und ist für C++-Konsumenten `extern "C"`-geschützt.
 **Keine C++-Exception überquert jemals die ABI-Grenze** (jeder
 Einstiegspunkt ist try/catch-gekapselt).
@@ -110,7 +110,7 @@ Re-Export ab.
 ## Vollständiges C-Beispiel
 
 ```c
-#include <osf/c_api.h>
+#include <osf/capi.h>
 #include <stdio.h>
 #include <stdlib.h>
 

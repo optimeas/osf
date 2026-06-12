@@ -6,7 +6,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(osf
-    VERSION 0.0.1
+    VERSION 0.1.0
     DESCRIPTION "Open Streaming Format — C++ implementation"
     LANGUAGES CXX
 )
@@ -51,8 +51,8 @@ include(CompilerWarnings)
 # ---------------------------------------------------------------------------
 
 configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.hpp.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/osf/version.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/osf/version.h"
     @ONLY
 )
 
@@ -133,21 +133,21 @@ endif()
 # OUTPUT_NAME property keeps the produced file as libosf.a / osf.lib.
 add_library(osf_core
     src/block.cpp
-    src/block_encode.cpp
+    src/blockencode.cpp
     src/compression.cpp
-    src/block_writer.cpp
-    src/data_channel.cpp
-    src/durable_file.cpp
+    src/blockwriter.cpp
+    src/datachannel.cpp
+    src/durablefile.cpp
     src/error.cpp
     src/header.cpp
     src/manager.cpp
     src/metablock.cpp
-    src/metablock_xml.cpp
+    src/metablockxml.cpp
     src/reader.cpp
-    src/stale_value_guard.cpp
+    src/stalevalueguard.cpp
     src/stats.cpp
-    src/streaming_writer.cpp
-    src/writer_common.cpp
+    src/streamingwriter.cpp
+    src/writercommon.cpp
     src/types.cpp
     third_party/pugixml/pugixml.cpp
 )
@@ -179,17 +179,17 @@ endif()
 # ---------------------------------------------------------------------------
 # osf-c — C ABI shared library (DECISIONS §23). Built only when
 # OSF_BUILD_C_API=ON. Wraps osf_core (static, folded in) behind a pure-C99
-# extern "C" surface; the public header is include/osf/c_api.h.
+# extern "C" surface; the public header is include/osf/capi.h.
 # ---------------------------------------------------------------------------
 
 if(OSF_BUILD_C_API)
-    # The C ABI test (tests/c_api/test_c_api.c) is compiled as C; the
+    # The C ABI test (tests/capi/test_capi.c) is compiled as C; the
     # project is otherwise CXX-only. Enable C here so multi-config (MSVC,
     # auto-enables C) and single-config (Make/Ninja, does not) generators
     # both work. No-op for the default build (option OFF).
     enable_language(C)
 
-    add_library(osf_c SHARED src/c_api.cpp)
+    add_library(osf_c SHARED src/capi.cpp)
     add_library(osf::c ALIAS osf_c)
     set_target_properties(osf_c PROPERTIES
         OUTPUT_NAME osf-c

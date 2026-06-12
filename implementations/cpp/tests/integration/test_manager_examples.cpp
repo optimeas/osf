@@ -8,7 +8,7 @@
 
 #include <gtest/gtest.h>
 
-#include <osf/osf.hpp>
+#include <osf/osf.h>
 
 #include <cstddef>
 #include <filesystem>
@@ -24,7 +24,7 @@ protected:
             << "OSF_EXAMPLES_DIR does not exist: " << dir;
     }
 
-    static std::filesystem::path examples_dir() {
+    static std::filesystem::path examplesDir() {
         return std::filesystem::path{OSF_EXAMPLES_DIR};
     }
 };
@@ -37,7 +37,7 @@ protected:
 // ---------------------------------------------------------------------
 
 TEST_F(ManagerExamplesTest, every_generated_reference_file_loads_clean) {
-    auto generated = examples_dir() / "generated";
+    auto generated = examplesDir() / "generated";
     ASSERT_TRUE(std::filesystem::exists(generated));
 
     int read = 0;
@@ -46,27 +46,27 @@ TEST_F(ManagerExamplesTest, every_generated_reference_file_loads_clean) {
         auto filename = entry.path().filename().string();
         SCOPED_TRACE("file: " + filename);
 
-        auto mgr = osf::DataManager::load_from_file(entry.path());
+        auto mgr = osf::DataManager::loadFromFile(entry.path());
         ASSERT_TRUE(mgr.has_value()) << "load failed for " << filename
                                      << ": " << mgr.error().message;
 
         EXPECT_FALSE(mgr->channels().empty());
-        EXPECT_GT(mgr->stats.blocks_read, 0u);
+        EXPECT_GT(mgr->stats.blocksRead, 0u);
 
         // At least one channel must have produced samples.
-        bool any_samples = false;
+        bool anySamples = false;
         for (auto const& ch : mgr->channels()) {
-            if (osf::channel_sample_count(ch) > 0) {
-                any_samples = true;
+            if (osf::channelSampleCount(ch) > 0) {
+                anySamples = true;
                 break;
             }
         }
-        EXPECT_TRUE(any_samples);
+        EXPECT_TRUE(anySamples);
 
         // channel-by-name lookup works for the first channel.
         if (!mgr->channels().empty()) {
             auto const& first_name =
-                osf::channel_name(mgr->channels().front());
+                osf::channelName(mgr->channels().front());
             EXPECT_NE(mgr->channel(first_name), nullptr);
         }
 
@@ -81,8 +81,8 @@ TEST_F(ManagerExamplesTest, every_generated_reference_file_loads_clean) {
 // ---------------------------------------------------------------------
 
 TEST_F(ManagerExamplesTest, osf4_equidistant_first_channel_is_equidistant) {
-    auto mgr = osf::DataManager::load_from_file(
-        examples_dir() / "generated" / "osf4_equidistant.osf");
+    auto mgr = osf::DataManager::loadFromFile(
+        examplesDir() / "generated" / "osf4_equidistant.osf");
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
 
     ASSERT_FALSE(mgr->channels().empty());
@@ -90,50 +90,50 @@ TEST_F(ManagerExamplesTest, osf4_equidistant_first_channel_is_equidistant) {
     auto const* eq = std::get_if<osf::EquidistantChannel>(&dc);
     ASSERT_NE(eq, nullptr) << "first channel of osf4_equidistant is not Equidistant";
     EXPECT_FALSE(eq->segments.empty());
-    EXPECT_GT(eq->segments.front().sample_rate_hz, 0.0);
+    EXPECT_GT(eq->segments.front().sampleRateHz, 0.0);
 
-    // samples_vector reconstructs per-sample timestamps; cross-check
+    // samplesVector reconstructs per-sample timestamps; cross-check
     // count with the segment totals.
-    auto samples = eq->samples_vector();
+    auto samples = eq->samplesVector();
     std::size_t expected = 0;
-    for (auto const& s : eq->segments) expected += s.sample_count;
+    for (auto const& s : eq->segments) expected += s.sampleCount;
     EXPECT_EQ(samples.size(), expected);
 }
 
 TEST_F(ManagerExamplesTest, osf5_gpslocation_has_a_gps_channel) {
-    auto mgr = osf::DataManager::load_from_file(
-        examples_dir() / "generated" / "osf5_gpslocation.osf");
+    auto mgr = osf::DataManager::loadFromFile(
+        examplesDir() / "generated" / "osf5_gpslocation.osf");
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
 
-    bool saw_gps = false;
+    bool sawGps = false;
     for (auto const& ch : mgr->channels()) {
-        if (osf::channel_data_type(ch) == osf::DataType::GpsLocation) {
-            saw_gps = true;
+        if (osf::channelDataType(ch) == osf::DataType::GpsLocation) {
+            sawGps = true;
             // The reference file emits GPS as a timestamped channel.
             auto const* ts = std::get_if<osf::TimestampedChannel>(&ch);
             ASSERT_NE(ts, nullptr);
-            EXPECT_GT(osf::numeric_values_len(ts->values), 0u);
+            EXPECT_GT(osf::numericValuesLen(ts->values), 0u);
         }
     }
-    EXPECT_TRUE(saw_gps);
+    EXPECT_TRUE(sawGps);
 }
 
 TEST_F(ManagerExamplesTest, osf4_timestamped_string_has_string_channel) {
-    auto mgr = osf::DataManager::load_from_file(
-        examples_dir() / "generated" / "osf4_timestamped_string.osf");
+    auto mgr = osf::DataManager::loadFromFile(
+        examplesDir() / "generated" / "osf4_timestamped_string.osf");
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
 
-    bool saw_string = false;
+    bool sawString = false;
     for (auto const& ch : mgr->channels()) {
-        if (osf::channel_data_type(ch) == osf::DataType::String) {
-            saw_string = true;
+        if (osf::channelDataType(ch) == osf::DataType::String) {
+            sawString = true;
             auto const* var = std::get_if<osf::VariableChannel>(&ch);
             ASSERT_NE(var, nullptr);
-            ASSERT_TRUE(var->string_values.has_value());
-            EXPECT_FALSE(var->string_values->empty());
+            ASSERT_TRUE(var->stringValues.has_value());
+            EXPECT_FALSE(var->stringValues->empty());
         }
     }
-    EXPECT_TRUE(saw_string);
+    EXPECT_TRUE(sawString);
 }
 
 // ---------------------------------------------------------------------
@@ -143,21 +143,21 @@ TEST_F(ManagerExamplesTest, osf4_timestamped_string_has_string_channel) {
 // ---------------------------------------------------------------------
 
 TEST_F(ManagerExamplesTest, motorbike_osf_loads_clean) {
-    auto path = examples_dir() / "motorbike.osf";
+    auto path = examplesDir() / "motorbike.osf";
     if (!std::filesystem::exists(path)) GTEST_SKIP() << "motorbike.osf missing";
-    auto mgr = osf::DataManager::load_from_file(path);
+    auto mgr = osf::DataManager::loadFromFile(path);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     EXPECT_FALSE(mgr->channels().empty());
-    EXPECT_GT(mgr->stats.blocks_total, 0u);
+    EXPECT_GT(mgr->stats.blocksTotal, 0u);
 }
 
 TEST_F(ManagerExamplesTest, steam_loco_osf_loads_clean) {
-    auto path = examples_dir() / "steam_loco.osf";
+    auto path = examplesDir() / "steam_loco.osf";
     if (!std::filesystem::exists(path)) GTEST_SKIP() << "steam_loco.osf missing";
-    auto mgr = osf::DataManager::load_from_file(path);
+    auto mgr = osf::DataManager::loadFromFile(path);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     EXPECT_FALSE(mgr->channels().empty());
-    EXPECT_GT(mgr->stats.blocks_total, 0u);
+    EXPECT_GT(mgr->stats.blocksTotal, 0u);
 }
 
 // ---------------------------------------------------------------------
@@ -165,11 +165,11 @@ TEST_F(ManagerExamplesTest, steam_loco_osf_loads_clean) {
 // ---------------------------------------------------------------------
 
 TEST_F(ManagerExamplesTest, weather_station_osfz_loads_transparently) {
-    auto path = examples_dir() / "weather_station.osfz";
+    auto path = examplesDir() / "weather_station.osfz";
     if (!std::filesystem::exists(path)) GTEST_SKIP() << "weather_station.osfz missing";
-    auto mgr = osf::DataManager::load_from_file(path);
+    auto mgr = osf::DataManager::loadFromFile(path);
     ASSERT_TRUE(mgr.has_value()) << mgr.error().message;
     EXPECT_TRUE(mgr->stats.compressed);
-    EXPECT_EQ(mgr->stats.compression_format, osf::CompressionFormat::Gzip);
+    EXPECT_EQ(mgr->stats.compressionFormat, osf::CompressionFormat::Gzip);
     EXPECT_FALSE(mgr->channels().empty());
 }

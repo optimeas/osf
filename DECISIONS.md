@@ -231,7 +231,7 @@ against power loss. The output format for writer-produced OSFZ is
      process must not exit until all gzip threads have been joined; or
    - **(b) an external process** invoked via CLI after the file is closed.
 3. **The `BlockWriter` accumulates the entire file in memory and writes
-   atomically** at `write_to_file` / `write_to`. Because there is no
+   atomically** at `writeToFile` / `writeTo`. Because there is no
    partial-stream or power-loss truncation risk, the `BlockWriter` **MAY
    compress inline and emit OSFZ directly** without a separate post-close
    step.
@@ -443,21 +443,27 @@ The library follows a deliberate, consistent naming scheme throughout:
 
 - **Types** use `PascalCase` — `DataManager`, `BlockWriter`, `StreamingWriter`,
   `DecompressingIStream`, `ControlKind`, `BlockKind`, etc.
-- **Functions and methods** use `snake_case` — `load_from_file()`,
-  `write_to_file()`, `add_channel()`, `next()`, etc.
-
-This mirrors the Rust reference implementation (where the same split is
-idiomatic) and the C ABI (`osf_load_file`, `osf_write_to_file`, …), so
-all three surfaces read consistently.
+- **Methods and free functions** use `camelCase` — `loadFromFile()`,
+  `writeToFile()`, `addChannel()`, `channelByIndex()`, `asDoublesFlat()`, etc.
+- **Public struct fields** use `camelCase` without a prefix — `blocksTotal`,
+  `sizeOfLengthValue`, `startTimestampNs`, `compressionFormat`, etc.
+- **Private members** use `m_` + `camelCase` — `m_channelData`, etc.
+- **Constants** use `UPPER_SNAKE_CASE`.
+- **Header file names** are lowercase without separators, `.h` extension —
+  `blockwriter.h`, `streamingwriter.h`, `datachannel.h`, etc.
+  Internal headers in `src/` use a `_p.h` suffix.
+- The **C ABI** (`osf_*` symbols in `osf/capi.h`) keeps C-conventional
+  `snake_case` and is exempt from the C++ naming rules.
 
 The **`Kind` suffix** on variant-tag enumerations (`ControlKind`,
 `BlockKind`, `ChannelData::Kind`) is a deliberate idiom that avoids
 collisions between the enum type and the value names it exports. It is
 kept consistently across all such enumerations and is **not** renamed.
 
-> **Decision:** Renaming the public API would break the entire library surface
-> and the C ABI for no functional gain; the convention is documented here to
-> answer reviewer questions.
+> **Revised 2026-06-12:** aligned to the smartCORE coding style sheet
+> (camelCase methods/free functions, camelCase public fields, `m_` private
+> members, lowercase `.h` file names, `_p.h` internal headers; C ABI exempt).
+> Supersedes the 2026-06-10 review-round decision to keep `snake_case`.
 
 ### Build System: CMake (>= 3.20)
 
@@ -1064,7 +1070,7 @@ a single `osf_write_to_file(manager, path)` re-export (always OSF5, §6). A
 sample-by-sample C builder, per-exact-type numeric getters, and a
 memory/stream load entry are out of scope (BACKLOG).
 
-**Public header.** `include/osf/c_api.h` — pure C99, depends only on
+**Public header.** `include/osf/capi.h` — pure C99, depends only on
 `<stdint.h>` / `<stddef.h>`, `extern "C"`-guarded for C++ consumers.
 Export decoration via the `OSF_C_API` macro: `__declspec(dllexport)` when
 building (`OSF_C_BUILDING` defined), `__declspec(dllimport)` for consumers

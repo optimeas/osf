@@ -37,10 +37,10 @@ using Result = tl::expected<T, Error>;
 Grundidiom:
 
 ```cpp
-auto r = osf::DataManager::load_from_file(pfad);
+auto r = osf::DataManager::loadFromFile(pfad);
 if (!r) {
     log("Laden fehlgeschlagen [{}]: {}",
-        osf::error_category_name(r.error().code),   // stabiler Name, z. B. "io_error"
+        osf::errorCategoryName(r.error().code),   // stabiler Name, z. B. "io_error"
         r.error().message);
     return;
 }
@@ -53,10 +53,10 @@ Regeln:
   Message ist nicht Teil der API und darf sich ändern.
 - Alle `Result`-Rückgaben sind `[[nodiscard]]` — der Compiler mahnt
   ignorierte Fehler an.
-- `error_category_name(code)` liefert einen stabilen String-Bezeichner
+- `errorCategoryName(code)` liefert einen stabilen String-Bezeichner
   für Logs (statisch, kein Besitz).
 - `Result<void>` signalisiert reine Erfolg/Fehler-Operationen
-  (`writer.start()`, `write_to_file(...)`, …): `if (!r) …`.
+  (`writer.start()`, `writeToFile(...)`, …): `if (!r) …`.
 
 ## Fehlercode-Katalog
 
@@ -82,7 +82,7 @@ Regeln:
 
 | Code | Bedeutung |
 |---|---|
-| `InvalidMetablock` | Strukturfehler: Pflichtfeld fehlt, Zahl nicht parsebar, `sizeoflengthvalue` ≠ 2/4 (würde sonst jeden Block-Read still korrumpieren), Wurzelelement falsch |
+| `InvalidMetablock` | Strukturfehler: Pflichtfeld fehlt, Zahl nicht parsebar, `sizeOfLengthValue` ≠ 2/4 (würde sonst jeden Block-Read still korrumpieren), Wurzelelement falsch |
 | `JsonParseError` | OSF5: Metablock-Body ist kein gültiges JSON (Parser-Diagnose in `message`) |
 | `XmlParseError` | OSF4: Metablock-Body ist kein wohlgeformtes XML (Diagnose + Byte-Offset in `message`) |
 | `RemovedInSpec` | Datei verwendet einen mit Spec-Rev 2026-05-04 **entfernten** Datentyp (`pair`, `triple`, `candata`, `gpsdata`). Wird hart abgelehnt — das alte Payload-Layout ist aus einem aktuellen Build nicht reproduzierbar; die Message nennt den Ersatz |
@@ -96,13 +96,13 @@ Regeln:
 | `ChannelMixedBlockTypes` | Ein Kanal liefert sowohl äquidistante (`bcStartData`/`bcContinuedData`) als auch timestamped Blöcke — von der Spec verboten |
 | `ContinuedDataWithoutStart` | `bcContinuedData` ohne vorausgehendes `bcStartData` — ohne offenes Segment hat die Fortsetzung keine Zeitbasis |
 | `RelStampWithoutAnchor` | `bcContinuedRelStampData` ohne vorherigen absoluten Zeitstempel — die Deltas haben keinen Anker |
-| `DataTypeMismatch` | Angeforderter Typ ≠ gespeicherter Typ (z. B. `as_doubles_flat` auf einem `int32`-Kanal, `as_strings` auf einem Binary-Kanal) |
+| `DataTypeMismatch` | Angeforderter Typ ≠ gespeicherter Typ (z. B. `asDoublesFlat` auf einem `int32`-Kanal, `asStrings` auf einem Binary-Kanal) |
 
 ### Was bewusst **kein** Fehler ist
 
 | Situation | Verhalten |
 |---|---|
-| Datei endet mitten im Block (Stromausfall) | Best-Effort: alle vollständigen Blöcke werden geliefert, `stats.blocks_truncated = 1`, Iteration endet sauber |
+| Datei endet mitten im Block (Stromausfall) | Best-Effort: alle vollständigen Blöcke werden geliefert, `stats.blocksTruncated = 1`, Iteration endet sauber |
 | Unbekannter zukünftiger Datentyp/Kanaltyp | Kanal parst als `Unsupported`, Blöcke werden als `Skipped` ausgerichtet konsumiert, restliche Kanäle laden normal |
 | Deprecated/reservierte Control-Bytes (alte Felddateien) | `BlockKind::Skipped` mit `SkipReason`, Zähler in `stats` |
 | Deprecated Kanal-Felder (`scale`, `offset`, `physicalunit1..3`, …) | stillschweigend toleriert und ignoriert (reale Felddateien tragen sie alle) |
@@ -110,22 +110,22 @@ Regeln:
 
 ## Die werfende Schicht — `osf::throwing`
 
-Header-only, opt-in (`#include <osf/throwing.hpp>`), bewusst **nicht**
-im Umbrella-Header `<osf/osf.hpp>` und nicht in die Bibliothek
+Header-only, opt-in (`#include <osf/throwing.h>`), bewusst **nicht**
+im Umbrella-Header `<osf/osf.h>` und nicht in die Bibliothek
 einkompiliert. Wer sie nie einbindet, zieht keinerlei
 Exception-Maschinerie ein.
 
 ```cpp
-#include <osf/throwing.hpp>
+#include <osf/throwing.h>
 
 try {
     auto mgr = osf::throwing::load("messung.osf");      // DataManager oder wirft
-    osf::throwing::write_to_file(mgr, "kopie.osf");
+    osf::throwing::writeToFile(mgr, "kopie.osf");
 
     osf::StreamingWriter w{pfad};
-    auto ch = osf::throwing::unwrap(w.add_channel(def)); // Result<T> -> T oder wirft
+    auto ch = osf::throwing::unwrap(w.addChannel(def)); // Result<T> -> T oder wirft
     osf::throwing::unwrap(w.start());
-    osf::throwing::unwrap(w.write_timestamped_sample<double>(ch, ts, wert));
+    osf::throwing::unwrap(w.writeTimestampedSample<double>(ch, ts, wert));
     osf::throwing::unwrap(w.close());
 } catch (osf::Exception const& e) {
     // e.what()  — Message (oder Kategorie-Name, wenn Message leer)
@@ -140,7 +140,7 @@ Die Schicht besteht aus genau drei Bausteinen:
 |---|---|
 | `osf::Exception : std::runtime_error` | trägt den vollständigen `osf::Error`; lebt in `osf`, nicht `osf::throwing` |
 | `osf::throwing::unwrap(Result<T>)` | universeller Adapter: Wert herausziehen oder werfen. Funktioniert mit **jedem** `Result` des Kerns, auch von Writer-Methoden — deshalb braucht es keine werfenden Wrapper pro Methode |
-| `osf::throwing::load / write_to_file / write_to` | werfende Pendants der häufigsten High-Level-Operationen |
+| `osf::throwing::load / writeToFile / writeTo` | werfende Pendants der häufigsten High-Level-Operationen |
 
 ## Stilwahl in der Praxis
 

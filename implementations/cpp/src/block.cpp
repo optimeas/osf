@@ -1,46 +1,46 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
-#include <osf/block.hpp>
+#include <osf/block.h>
 
 namespace osf {
 
 namespace {
 
 template <typename Variant>
-std::size_t variant_vector_len(Variant const& v) noexcept {
+std::size_t variantVectorLen(Variant const& v) noexcept {
     return std::visit([](auto const& vec) noexcept { return vec.size(); }, v);
 }
 
 }  // anonymous namespace
 
-std::size_t numeric_payload_len(NumericPayload const& p) noexcept {
-    return variant_vector_len(p);
+std::size_t numericPayloadLen(NumericPayload const& p) noexcept {
+    return variantVectorLen(p);
 }
 
-bool numeric_payload_empty(NumericPayload const& p) noexcept {
-    return numeric_payload_len(p) == 0;
+bool numericPayloadEmpty(NumericPayload const& p) noexcept {
+    return numericPayloadLen(p) == 0;
 }
 
-std::size_t timestamped_payload_len(TimestampedPayload const& p) noexcept {
-    return variant_vector_len(p);
+std::size_t timestampedPayloadLen(TimestampedPayload const& p) noexcept {
+    return variantVectorLen(p);
 }
 
-bool timestamped_payload_empty(TimestampedPayload const& p) noexcept {
-    return timestamped_payload_len(p) == 0;
+bool timestampedPayloadEmpty(TimestampedPayload const& p) noexcept {
+    return timestampedPayloadLen(p) == 0;
 }
 
-std::size_t rel_timestamped_payload_len(RelTimestampedPayload const& p) noexcept {
-    return variant_vector_len(p);
+std::size_t relTimestampedPayloadLen(RelTimestampedPayload const& p) noexcept {
+    return variantVectorLen(p);
 }
 
-bool rel_timestamped_payload_empty(RelTimestampedPayload const& p) noexcept {
-    return rel_timestamped_payload_len(p) == 0;
+bool relTimestampedPayloadEmpty(RelTimestampedPayload const& p) noexcept {
+    return relTimestampedPayloadLen(p) == 0;
 }
 
-ControlByte decode_control_byte(std::uint8_t byte) noexcept {
+ControlByte decodeControlByte(std::uint8_t byte) noexcept {
     ControlByte out;
-    out.multi_sample = (byte & 0x80u) != 0;
+    out.multiSample = (byte & 0x80u) != 0;
     out.raw = static_cast<std::uint8_t>(byte & 0x7Fu);
     switch (out.raw) {
         case 0: out.kind = ControlKind::Reserved;              break;

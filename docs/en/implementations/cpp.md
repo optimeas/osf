@@ -19,16 +19,13 @@ last_update:
 
 # C++ implementation
 
-A **standalone C++17 implementation** of the Open Streaming Format — no FFI,
-no Rust dependency, idiomatic modern C++. It reads `.osf` and `.osfz` files
-and writes OSF5. The implementation was built as a parallel implementation
-to the Rust core, not as a port.
+A **standalone C++17 implementation** of the Open Streaming Format with no
+external runtime dependencies beyond zlib — no FFI, idiomatic modern C++. It
+reads `.osf` and `.osfz` files and writes OSF5.
 
 ## Capabilities
 
-The planned implementation order (see
-[DECISIONS §20](https://github.com/optimeas/osf/blob/main/DECISIONS.md)) is
-**fully complete**. The read and write paths are covered by a
+The implementation is **fully complete**. The read and write paths are covered by a
 GoogleTest/ctest suite (0 warnings under MSVC `/W4 /permissive-`), and CI
 builds and tests on **Linux, macOS and Windows**.
 
@@ -45,7 +42,7 @@ builds and tests on **Linux, macOS and Windows**.
 - `StreamingWriter` — embedded, sample by sample, `fsync` per block
   (power-loss safe), constant memory footprint
 - `BlockWriter` — analyst-friendly, accumulates in memory and writes the
-  whole file at the end; auto-bumps `sizeoflengthvalue` from 2 → 4 when
+  whole file at the end; auto-bumps `sizeOfLengthValue` from 2 → 4 when
   needed
 - `StaleValueGuard` — optional freshness layer that re-emits the last value
   of idle channels
@@ -54,7 +51,7 @@ builds and tests on **Linux, macOS and Windows**.
 
 - A **throwing convenience layer** (`osf::throwing`) over the `Result<T>`
   core for callers that prefer exceptions
-- The **C ABI library `osf-c`** (`osf/c_api.h`) — a pure C99 layer for
+- The **C ABI library `osf-c`** (`osf/capi.h`) — a pure C99 layer for
   cross-language use (DLL/shared object)
 
 ## Architecture at a glance
@@ -69,14 +66,14 @@ thing to non-C++ consumers.
 ```mermaid
 flowchart LR
     F([".osf / .osfz file"]) --> D["DecompressingIStream<br/>gzip · zlib · plain<br/>(auto-detect)"]
-    D --> H["parse_magic_header"]
+    D --> H["parseMagicHeader"]
     H --> M["MetaBlock parser<br/>OSF5 JSON · OSF4 XML"]
     M --> B["BlockReader<br/>raw block stream"]
     B --> DM["DataManager<br/>typed channel assembly"]
     DM --> C["DataChannel<br/>Equidistant · Timestamped · Variable"]
 ```
 
-`DataManager::load_from_file()` drives this whole pipeline; OSFZ is detected and
+`DataManager::loadFromFile()` drives this whole pipeline; OSFZ is detected and
 inflated transparently, so `.osf` and `.osfz` use the same call.
 
 ### Write path (OSF5)
@@ -88,9 +85,9 @@ flowchart TB
         SW["StreamingWriter<br/>embedded · fsync per block"]
         BW["BlockWriter<br/>analyst · in-memory"]
     end
-    SW --> WC["writer_common<br/>chunking · build_metablock"]
+    SW --> WC["writercommon_p<br/>chunking · buildMetablock"]
     BW --> WC
-    DM["DataManager (loaded)"] -. "osf::write_to_file(mgr, path)" .-> BW
+    DM["DataManager (loaded)"] -. "osf::writeToFile(mgr, path)" .-> BW
     WC --> OUT([".osf (OSF5)"])
 ```
 
@@ -101,7 +98,7 @@ flowchart TB
     APP["C++ application"] --> CORE["osf::osf core<br/>exception-free · Result&lt;T&gt;"]
     APP -. "opt-in" .-> THR["osf::throwing<br/>exception wrapper"]
     THR --> CORE
-    EXT["C · C#/P-Invoke · OCX consumer"] --> CAPI["osf-c<br/>pure C99 ABI · osf/c_api.h"]
+    EXT["C · C#/P-Invoke · OCX consumer"] --> CAPI["osf-c<br/>pure C99 ABI · osf/capi.h"]
     CAPI --> CORE
 ```
 
@@ -109,19 +106,19 @@ flowchart TB
 
 | You want to… | Use | Notes |
 |---|---|---|
-| Read a file, get typed channels | `osf::DataManager` | High-level entry point — `load_from_file()`, `channel("name")`. Reads `.osf` and `.osfz`. |
+| Read a file, get typed channels | `osf::DataManager` | High-level entry point — `loadFromFile()`, `channel("name")`. Reads `.osf` and `.osfz`. |
 | Iterate the raw block stream | `osf::BlockReader` | Lower-level; advanced / streaming consumers. |
 | Hold a channel's samples | `osf::DataChannel` | Variant over Equidistant / Timestamped / Variable; typed flat accessors. |
 | Record on an embedded device | `osf::StreamingWriter` | `fsync` per block, constant memory, power-loss safe. |
-| Write a complete file in one go | `osf::BlockWriter` | Accumulates in memory, emits at `write_to_file()`; auto-bumps `sizeoflengthvalue`. |
+| Write a complete file in one go | `osf::BlockWriter` | Accumulates in memory, emits at `writeToFile()`; auto-bumps `sizeOfLengthValue`. |
 | Keep idle channels "fresh" | `osf::StaleValueGuard` | Re-emits the last value of channels idle past a threshold. |
-| Round-trip / OSF4 → OSF5 | free `osf::write_to_file(mgr, …)` | Loads a `DataManager` into a `BlockWriter` and writes OSF5. |
+| Round-trip / OSF4 → OSF5 | free `osf::writeToFile(mgr, …)` | Loads a `DataManager` into a `BlockWriter` and writes OSF5. |
 | Use exceptions, not `Result<T>` | `osf::throwing` | Opt-in header; not compiled into the core. |
-| Call from C, C#, OCX, … | `osf-c` (`osf/c_api.h`) | Pure C99 ABI; build with `-D OSF_BUILD_C_API=ON`. |
+| Call from C, C#, OCX, … | `osf-c` (`osf/capi.h`) | Pure C99 ABI; build with `-D OSF_BUILD_C_API=ON`. |
 
 ### Runnable examples
 
-`implementations/cpp/examples/` ships four small programs over `<osf/osf.hpp>` —
+`implementations/cpp/examples/` ships four small programs over `<osf/osf.h>` —
 **`inspect`** (header / metadata / channels, transparent OSFZ), **`dump`**
 (sample values), **`write`** (synthesize and write OSF5) and **`copy`**
 (round-trip). They build with `-D OSF_BUILD_EXAMPLES=ON` (on by default).
@@ -169,25 +166,26 @@ The core is **exception-free**: operations that can fail return
 ### Reading
 
 ```cpp
-#include <osf/manager.hpp>
+#include <osf/manager.h>
 
-auto result = osf::DataManager::load_from_file("measurement.osf");  // also .osfz
+auto result = osf::DataManager::loadFromFile("measurement.osf");  // also .osfz
 if (!result) {
     // result.error().message  —  structured error, no exception
     return;
 }
 osf::DataManager const& mgr = *result;
 
-// Address a channel by name (mandatory, DECISIONS §10)
+// Address a channel by name
 if (osf::DataChannel const* ch = mgr.channel("Sensor.Temperature")) {
-    auto values = ch->as_doubles_flat();   // typed access
+    auto values = osf::asDoublesFlat(
+        std::get<osf::TimestampedChannel>(*ch));   // typed access
 }
 ```
 
 Callers who prefer exceptions use the opt-in layer:
 
 ```cpp
-#include <osf/throwing.hpp>
+#include <osf/throwing.h>
 
 auto mgr = osf::throwing::load("measurement.osf");   // throws osf::Exception on error
 ```
@@ -195,23 +193,23 @@ auto mgr = osf::throwing::load("measurement.osf");   // throws osf::Exception on
 ### Writing (OSF5)
 
 ```cpp
-#include <osf/block_writer.hpp>
+#include <osf/blockwriter.h>
 
 osf::BlockWriter writer;
-auto idx = writer.add_channel(/* name, data type, channel type, … */);
+auto idx = writer.addChannel(/* name, data type, channel type, … */);
 // … add samples to idx …
-writer.write_to_file("output.osf");
+writer.writeToFile("output.osf");
 ```
 
 For embedded, power-loss-safe writing there is the `StreamingWriter`
 (`fsync` per block) instead. A loaded `DataManager` can be written straight
-back as OSF5 with the free function `osf::write_to_file(mgr, path)`
+back as OSF5 with the free function `osf::writeToFile(mgr, path)`
 (round-trip / OSF4 → OSF5).
 
 ### C ABI (`osf-c`)
 
 With `-D OSF_BUILD_C_API=ON` the shared library `osf-c` is built in addition,
-with a pure C99 interface (`osf/c_api.h`): opaque handles (`osf_manager`,
+with a pure C99 interface (`osf/capi.h`): opaque handles (`osf_manager`,
 `osf_channel`), `osf_status` codes, a thread-local
 `osf_last_error_message()` and copy-out readers for timestamps and values —
 plus `osf_write_to_file` for the round-trip write path. No C++ exception
@@ -220,11 +218,10 @@ ActiveX/OCX and future language bindings.
 
 ## Notes
 
-- **Only OSF5 is written** (DECISIONS §6) — even when the source was an OSF4
-  file.
-- **OSFZ on write is a post-close step** (DECISIONS §12): the writers never
-  compress inline; OSFZ (gzip) is produced *after* the `.osf` file is finalized
-  — by a forthcoming post-close compressor (background thread) or a standalone
+- **Only OSF5 is written** — even when the source was an OSF4 file.
+- **OSFZ on write is a post-close step**: the writers never compress inline;
+  OSFZ (gzip) is produced *after* the `.osf` file is finalized — by a
+  forthcoming post-close compressor (background thread) or a standalone
   compress CLI. OSFZ is **read** transparently.
 - **Best-effort on read**: truncated files yield all data up to the last
   fully readable block, without crashing.
@@ -238,7 +235,4 @@ ActiveX/OCX and future language bindings.
 - Build guide: [`BUILD.md`](https://github.com/optimeas/osf/blob/main/implementations/cpp/BUILD.md)
 - API reference: generate with Doxygen via `-D OSF_BUILD_DOCS=ON` (the
   `osf-docs` target) — see `BUILD.md`
-- Architecture and phased plan:
-  [DECISIONS §20](https://github.com/optimeas/osf/blob/main/DECISIONS.md) and
-  the C ABI in §23
 - Format specification: chapter [OSF format](../osf_general.md)

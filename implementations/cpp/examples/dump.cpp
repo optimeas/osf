@@ -10,7 +10,7 @@
 // max-samples defaults to 20.  String/binary channels are noted but not
 // printed sample-by-sample (they display a count + first/last timestamp).
 
-#include <osf/osf.hpp>
+#include <osf/osf.h>
 
 #include <cstdlib>
 #include <iomanip>
@@ -21,7 +21,7 @@
 namespace {
 
 // Human-readable data-type name.
-std::string dt_name(osf::DataType dt) {
+std::string dtName(osf::DataType dt) {
     switch (dt) {
         case osf::DataType::Bool:        return "bool";
         case osf::DataType::Int8:        return "int8";
@@ -43,7 +43,7 @@ std::string dt_name(osf::DataType dt) {
 }
 
 // Print a NumericValueRef as a plain number.
-void print_value(osf::NumericValueRef const& v) {
+void printValue(osf::NumericValueRef const& v) {
     std::visit([](auto const& val) {
         using T = std::decay_t<decltype(val)>;
         if constexpr (std::is_same_v<T, bool>) {
@@ -57,26 +57,26 @@ void print_value(osf::NumericValueRef const& v) {
     }, v);
 }
 
-// Dump up to max_samples from an EquidistantChannel.
-void dump_equidistant(osf::EquidistantChannel const& ch, std::size_t max_samples) {
-    auto sv = ch.samples_vector();
+// Dump up to maxSamples from an EquidistantChannel.
+void dumpEquidistant(osf::EquidistantChannel const& ch, std::size_t maxSamples) {
+    auto sv = ch.samplesVector();
     std::size_t const total = sv.size();
-    std::size_t const limit = std::min(total, max_samples);
+    std::size_t const limit = std::min(total, maxSamples);
 
     std::cout << "channel: " << ch.name
               << "  type=equidistant"
-              << "  dtype=" << dt_name(ch.data_type)
+              << "  dtype=" << dtName(ch.dataType)
               << "  samples=" << total;
-    if (ch.physical_unit.has_value()) {
-        std::cout << "  unit=" << *ch.physical_unit;
+    if (ch.physicalUnit.has_value()) {
+        std::cout << "  unit=" << *ch.physicalUnit;
     }
     std::cout << "\n";
 
     for (std::size_t i = 0; i < limit; ++i) {
         std::cout << "  [" << std::setw(6) << i << "]  ts="
-                  << std::setw(20) << sv[i].timestamp_ns
+                  << std::setw(20) << sv[i].timestampNs
                   << "  val=";
-        print_value(sv[i].value);
+        printValue(sv[i].value);
         std::cout << "\n";
     }
     if (total > limit) {
@@ -84,25 +84,25 @@ void dump_equidistant(osf::EquidistantChannel const& ch, std::size_t max_samples
     }
 }
 
-// Dump up to max_samples from a TimestampedChannel.
-void dump_timestamped(osf::TimestampedChannel const& ch, std::size_t max_samples) {
-    auto sv = ch.samples_vector();
+// Dump up to maxSamples from a TimestampedChannel.
+void dumpTimestamped(osf::TimestampedChannel const& ch, std::size_t maxSamples) {
+    auto sv = ch.samplesVector();
     std::size_t const total = sv.size();
-    std::size_t const limit = std::min(total, max_samples);
+    std::size_t const limit = std::min(total, maxSamples);
 
     std::cout << "channel: " << ch.name
               << "  type=timestamped"
               << "  samples=" << total;
-    if (ch.physical_unit.has_value()) {
-        std::cout << "  unit=" << *ch.physical_unit;
+    if (ch.physicalUnit.has_value()) {
+        std::cout << "  unit=" << *ch.physicalUnit;
     }
     std::cout << "\n";
 
     for (std::size_t i = 0; i < limit; ++i) {
         std::cout << "  [" << std::setw(6) << i << "]  ts="
-                  << std::setw(20) << sv[i].timestamp_ns
+                  << std::setw(20) << sv[i].timestampNs
                   << "  val=";
-        print_value(sv[i].value);
+        printValue(sv[i].value);
         std::cout << "\n";
     }
     if (total > limit) {
@@ -111,12 +111,12 @@ void dump_timestamped(osf::TimestampedChannel const& ch, std::size_t max_samples
 }
 
 // Dump a VariableChannel (string or binary) — show count and timestamps only.
-void dump_variable(osf::VariableChannel const& ch, std::size_t max_samples) {
-    std::size_t const total = ch.timestamps_ns.size();
-    std::size_t const limit = std::min(total, max_samples);
+void dumpVariable(osf::VariableChannel const& ch, std::size_t maxSamples) {
+    std::size_t const total = ch.timestampsNs.size();
+    std::size_t const limit = std::min(total, maxSamples);
 
     std::string const kind =
-        (ch.data_type == osf::DataType::String) ? "string" : "binary";
+        (ch.dataType == osf::DataType::String) ? "string" : "binary";
 
     std::cout << "channel: " << ch.name
               << "  type=variable  dtype=" << kind
@@ -124,9 +124,9 @@ void dump_variable(osf::VariableChannel const& ch, std::size_t max_samples) {
 
     for (std::size_t i = 0; i < limit; ++i) {
         std::cout << "  [" << std::setw(6) << i << "]  ts="
-                  << std::setw(20) << ch.timestamps_ns[i];
-        if (ch.data_type == osf::DataType::String && ch.string_values.has_value()) {
-            std::string const& s = (*ch.string_values)[i];
+                  << std::setw(20) << ch.timestampsNs[i];
+        if (ch.dataType == osf::DataType::String && ch.stringValues.has_value()) {
+            std::string const& s = (*ch.stringValues)[i];
             // Print at most 60 chars to keep output tidy.
             if (s.size() <= 60) {
                 std::cout << "  val=\"" << s << "\"";
@@ -135,8 +135,8 @@ void dump_variable(osf::VariableChannel const& ch, std::size_t max_samples) {
             }
         } else {
             // Binary: just print byte count.
-            if (ch.binary_values.has_value()) {
-                std::cout << "  " << (*ch.binary_values)[i].size() << " bytes";
+            if (ch.binaryValues.has_value()) {
+                std::cout << "  " << (*ch.binaryValues)[i].size() << " bytes";
             }
         }
         std::cout << "\n";
@@ -155,8 +155,8 @@ int main(int argc, char** argv) {
     }
 
     std::string const path         = argv[1];
-    std::string const channel_name = (argc >= 3) ? argv[2] : "";
-    std::size_t       max_samples  = 20;
+    std::string const channelName = (argc >= 3) ? argv[2] : "";
+    std::size_t       maxSamples  = 20;
 
     if (argc >= 4) {
         char* end = nullptr;
@@ -165,10 +165,10 @@ int main(int argc, char** argv) {
             std::cerr << "dump: max-samples must be a non-negative integer\n";
             return 2;
         }
-        max_samples = static_cast<std::size_t>(n);
+        maxSamples = static_cast<std::size_t>(n);
     }
 
-    auto result = osf::DataManager::load_from_file(path);
+    auto result = osf::DataManager::loadFromFile(path);
     if (!result) {
         std::cerr << path << ": " << result.error().message << "\n";
         return 1;
@@ -183,12 +183,12 @@ int main(int argc, char** argv) {
 
     // Select channel.
     osf::DataChannel const* dc = nullptr;
-    if (channel_name.empty()) {
+    if (channelName.empty()) {
         dc = &mgr.channels()[0];
     } else {
-        dc = mgr.channel(channel_name);
+        dc = mgr.channel(channelName);
         if (!dc) {
-            std::cerr << path << ": channel not found: " << channel_name << "\n";
+            std::cerr << path << ": channel not found: " << channelName << "\n";
             return 1;
         }
     }
@@ -196,11 +196,11 @@ int main(int argc, char** argv) {
     std::visit([&](auto const& ch) {
         using T = std::decay_t<decltype(ch)>;
         if constexpr (std::is_same_v<T, osf::EquidistantChannel>) {
-            dump_equidistant(ch, max_samples);
+            dumpEquidistant(ch, maxSamples);
         } else if constexpr (std::is_same_v<T, osf::TimestampedChannel>) {
-            dump_timestamped(ch, max_samples);
+            dumpTimestamped(ch, maxSamples);
         } else {
-            dump_variable(ch, max_samples);
+            dumpVariable(ch, maxSamples);
         }
     }, *dc);
 

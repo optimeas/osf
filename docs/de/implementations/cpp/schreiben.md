@@ -26,9 +26,9 @@ zwei sehr unterschiedliche Einsatzprofile ab:
 | Speicher | konstant (Scratch-Puffer) | sammelt alle Samples im RAM |
 | Durabilität | `fsync` pro Block — ausfallsicher bei Stromverlust | kein fsync; Datei entsteht am Ende |
 | Senke | Dateipfad | Dateipfad **oder** `std::ostream` (Memory, Socket) |
-| `sizeoflengthvalue` | fix ab `start()` (Metablock liegt auf Platte) | automatischer Bump 2 → 4 bei Bedarf |
-| Lebenszyklus | Configure → `start()` → Schreiben → `close()` | Sammeln → `write_to_file()` / `write_to()` (beliebig oft) |
-| Mehrfach-Emission | nein (eine Datei pro Instanz) | ja (`write_to*` ist `const`) |
+| `sizeOfLengthValue` | fix ab `start()` (Metablock liegt auf Platte) | automatischer Bump 2 → 4 bei Bedarf |
+| Lebenszyklus | Configure → `start()` → Schreiben → `close()` | Sammeln → `writeToFile()` / `writeTo()` (beliebig oft) |
+| Mehrfach-Emission | nein (eine Datei pro Instanz) | ja (`writeTo*` ist `const`) |
 
 Beide teilen sich die Kanal-Beschreibung `osf::ChannelDef` und dieselben
 Schreibfamilien (äquidistant, timestamped numerisch, GPS, String/Binary).
@@ -37,21 +37,21 @@ Schreibfamilien (äquidistant, timestamped numerisch, GPS, String/Binary).
 
 ```cpp
 osf::ChannelDef def;
-def.name          = "motor.drehzahl";          // Pflicht
-def.data_type     = osf::DataType::Double;     // Pflicht
-def.channel_type  = osf::ChannelType::Scalar;  // Pflicht (Scalar = Konvention)
-def.size_of_length_value = 2;                  // 2 (Standard) oder 4
-def.physical_unit = "1/min";                   // optional
-def.display_name  = "Motordrehzahl";           // optional
-// ferner: physical_dimension, mime_type, reference, comment, time_increment_ns
+def.name             = "motor.drehzahl";         // Pflicht
+def.dataType         = osf::DataType::Double;    // Pflicht
+def.channelType      = osf::ChannelType::Scalar; // Pflicht (Scalar = Konvention)
+def.sizeOfLengthValue = 2;                       // 2 (Standard) oder 4
+def.physicalUnit     = "1/min";                  // optional
+def.displayName      = "Motordrehzahl";          // optional
+// ferner: physicalDimension, mimeType, reference, comment, timeIncrementNs
 ```
 
-`add_channel(def)` liefert den Kanalindex (sequenziell ab 0), den alle
+`addChannel(def)` liefert den Kanalindex (sequenziell ab 0), den alle
 Schreibaufrufe verwenden. Abgelehnt werden (`InvalidArgument`):
-`size_of_length_value` ≠ 2/4, `Unsupported`-Typen, mehr als 65535
+`sizeOfLengthValue` ≠ 2/4, `Unsupported`-Typen, mehr als 65535
 Kanäle — beim `StreamingWriter` zusätzlich jeder Aufruf nach `start()`.
 
-### `size_of_length_value` richtig wählen
+### `sizeOfLengthValue` richtig wählen
 
 Das Längenfeld jedes Blocks ist 2 oder 4 Bytes breit und begrenzt die
 Blockgröße (~64 KB bzw. ~2 GB). Praktische Regeln:
@@ -82,21 +82,21 @@ stateDiagram-v2
 ```
 
 ```cpp
-#include <osf/streaming_writer.hpp>
+#include <osf/streamingwriter.h>
 
 osf::StreamingWriter w("aufzeichnung.osf");
-w.set_creator("logger-fw/3.2");                 // Metadaten vor start()
-w.set_tag("pruefstand-7");
+w.setCreator("logger-fw/3.2");                 // Metadaten vor start()
+w.setTag("pruefstand-7");
 
-auto rpm = w.add_channel(rpm_def);              // Result<uint16_t>
-auto gps = w.add_channel(gps_def);
+auto rpm = w.addChannel(rpm_def);              // Result<uint16_t>
+auto gps = w.addChannel(gps_def);
 if (!rpm || !gps) { /* … */ }
 
 if (auto r = w.start(); !r) { /* Datei offen, Metablock geschrieben */ }
 
 // Aufzeichnungsschleife
 while (running) {
-    auto r = w.write_timestamped_sample<double>(*rpm, now_ns(), read_rpm());
+    auto r = w.writeTimestampedSample<double>(*rpm, now_ns(), read_rpm());
     if (!r) { /* I/O-Fehler => Writer ist Broken; abbrechen */ break; }
 }
 
@@ -128,56 +128,56 @@ Garantien und Verhalten:
 
 ```cpp
 // Äquidistant (nur float/double per Spec) — Segment öffnen + verlängern:
-w.start_equidistant_segment(ch, t0_ns, 1000.0 /*Hz*/, daten.data(), daten.size());
-w.append_equidistant_samples(ch, weitere.data(), weitere.size());   // braucht offenes Segment
+w.startEquidistantSegment(ch, t0_ns, 1000.0 /*Hz*/, daten.data(), daten.size());
+w.appendEquidistantSamples(ch, weitere.data(), weitere.size());   // braucht offenes Segment
 
 // Timestamped numerisch (11 Typen, Template):
-w.write_timestamped_sample<std::int32_t>(ch, ts_ns, wert);
-w.write_timestamped_samples<double>(ch, ts_array, werte, n);        // parallele Arrays
+w.writeTimestampedSample<std::int32_t>(ch, ts_ns, wert);
+w.writeTimestampedSamples<double>(ch, ts_array, werte, n);        // parallele Arrays
 
 // GPS (eigene Symbole, kein Template):
-w.write_timestamped_gps_sample(ch, ts_ns, osf::GpsLocation{lat, lon, alt});
+w.writeTimestampedGpsSample(ch, ts_ns, osf::GpsLocation{lat, lon, alt});
 
 // String/Binary (ein Sample pro Block per Spec; OSF5: kein 0x00-Terminator):
-w.write_timestamped_string(ch, ts_ns, "Ereignis: Tür offen");
-w.write_timestamped_binary(ch, ts_ns, osf::BinarySample::from_vector(jpeg_bytes));
+w.writeTimestampedString(ch, ts_ns, "Ereignis: Tür offen");
+w.writeTimestampedBinary(ch, ts_ns, osf::BinarySample::fromVector(jpeg_bytes));
 ```
 
 Jeder Mehr-Sample-Aufruf wird automatisch auf die Blockkapazität des
 Kanals gechunkt (ein fsync pro Block). Ein neues
-`start_equidistant_segment` öffnet bewusst ein **neues** Segment —
+`startEquidistantSegment` öffnet bewusst ein **neues** Segment —
 Lücken zwischen Segmenten sind das spec-gemäße Mittel, um
 Aufzeichnungspausen darzustellen.
 
 ## `BlockWriter` — sammeln und emittieren
 
 ```cpp
-#include <osf/block_writer.hpp>
+#include <osf/blockwriter.h>
 
 osf::BlockWriter w;
-w.set_creator("analyse-tool/1.0");
+w.setCreator("analyse-tool/1.0");
 
-auto ch = w.add_channel(def);
-w.add_equidistant_segment(*ch, t0_ns, 100.0, samples.data(), samples.size());
-w.add_timestamped_sample<double>(*ev, ts_ns, 42.0);
-w.add_string_sample(*log, ts_ns, "Kalibrierung ok");
+auto ch = w.addChannel(def);
+w.addEquidistantSegment(*ch, t0_ns, 100.0, samples.data(), samples.size());
+w.addTimestampedSample<double>(*ev, ts_ns, 42.0);
+w.addStringSample(*log, ts_ns, "Kalibrierung ok");
 
-if (auto r = w.write_to_file("ergebnis.osf"); !r) { /* … */ }
+if (auto r = w.writeToFile("ergebnis.osf"); !r) { /* … */ }
 
 std::ostringstream mem;                 // oder in einen beliebigen ostream
-if (auto r = w.write_to(mem); !r) { /* … */ }
+if (auto r = w.writeTo(mem); !r) { /* … */ }
 ```
 
-- Die `add_*`-Familie spiegelt die `write_*`-Familie des
+- Die `add*`-Familie spiegelt die `write*`-Familie des
   Streaming-Writers (gleiche Typen, gleiche Validierung), sammelt aber
   nur im Speicher; Chunking in spec-konforme Blöcke passiert beim Emit.
-- `write_to_file` / `write_to` sind **`const`** — dieselbe Instanz darf
+- `writeToFile` / `writeTo` sind **`const`** — dieselbe Instanz darf
   mehrfach emittiert werden (z. B. Datei + Netzwerk).
 - **Auto-Bump:** Variable Kanäle, deren größtes Sample nicht in das
   deklarierte u16-Längenfeld passt, bekommen für die Emission
-  `sizeoflengthvalue = 4`.
+  `sizeOfLengthValue = 4`.
 - Kein fsync — Durabilität liegt beim Aufrufer.
-- `channel_index("name")` und `channel_count()` helfen, wenn die
+- `channelIndex("name")` und `channelCount()` helfen, wenn die
   Indizes nicht mitgeführt werden.
 
 ## Automatische Metadaten-Defaults
@@ -187,10 +187,10 @@ Defaults an:
 
 | Feld | Verhalten wenn nicht gesetzt |
 |---|---|
-| `created_utc` | **immer** automatisch gestempelt (aktuelle UTC-Zeit, `YYYY-MM-DDTHH:MM:SSZ`) |
+| `createdUtc` | **immer** automatisch gestempelt (aktuelle UTC-Zeit, `YYYY-MM-DDTHH:MM:SSZ`; der On-Disk-JSON-Schlüssel lautet `created_utc`) |
 | `creator` | `osf-cpp/<Bibliotheksversion>` |
 | `tag` | `default` |
-| `reason`, `created_at_*`, `namespace_sep`, `comment` | weggelassen (nicht als `null` geschrieben) |
+| `reason`, `createdAt*`, `namespaceSep`, `comment` | weggelassen (nicht als `null` geschrieben, wenn nicht gesetzt) |
 
 ## `StaleValueGuard` — inaktive Kanäle frisch halten
 
@@ -203,14 +203,14 @@ Guard als Write-Through-Wrapper über einem gestarteten
 `StreamingWriter`:
 
 ```cpp
-#include <osf/stale_value_guard.hpp>
+#include <osf/stalevalueguard.h>
 
 osf::StreamingWriter w(path);
 /* … konfigurieren, start() … */
 osf::StaleValueGuard guard(w);                  // Default: 100 s; eigener Wert möglich
 
 // Timestamped-Writes durch den Guard routen (cached den letzten Wert):
-guard.write_timestamped_sample<double>(temp_ch, ts_ns, 21.5);
+guard.writeTimestampedSample<double>(temp_ch, ts_ns, 21.5);
 
 // Periodisch (z. B. im Aufzeichnungs-Tick):
 auto reemitted = guard.poll(now_ns);            // Result<std::size_t>
@@ -226,7 +226,7 @@ Eigenschaften:
 - Nur numerische + GPS-Kanäle; String/Binary bewusst nicht (große
   Blobs wiederholen wäre kontraproduktiv).
 - Kanäle werden beim ersten Write-Through automatisch erfasst;
-  `is_tracked` / `forget` / `clear` steuern das Tracking.
+  `isTracked` / `forget` / `clear` steuern das Tracking.
 - Echte Writes setzen die Inaktivitätsuhr zurück — aktiv beschriebene
   Kanäle bekommen nie eine synthetische Wiederholung.
 
@@ -236,18 +236,18 @@ Einen geladenen `DataManager` wieder herausschreiben (auch als
 OSF4 → OSF5-Konvertierung):
 
 ```cpp
-#include <osf/manager.hpp>
-#include <osf/block_writer.hpp>
+#include <osf/manager.h>
+#include <osf/blockwriter.h>
 
-auto mgr = osf::DataManager::load_from_file("alt.osf");      // auch OSF4 / OSFZ
+auto mgr = osf::DataManager::loadFromFile("alt.osf");      // auch OSF4 / OSFZ
 if (!mgr) { /* … */ }
 
-if (auto r = osf::write_to_file(*mgr, "neu.osf"); !r) { /* … */ }   // immer OSF5
+if (auto r = osf::writeToFile(*mgr, "neu.osf"); !r) { /* … */ }   // immer OSF5
 ```
 
-Intern baut `BlockWriter::from_manager(mgr)` einen Writer aus den
+Intern baut `BlockWriter::fromManager(mgr)` einen Writer aus den
 typisierten Kanälen; wer vor dem Schreiben filtern oder umbenennen
-will, benutzt `from_manager` direkt und arbeitet auf dem Writer.
+will, benutzt `fromManager` direkt und arbeitet auf dem Writer.
 
 Erhalten bleiben: Kanalnamen, Datentypen, Sample-Werte (bitgenau),
 Segmentgrenzen, Datei-Metadaten (außer `created_utc`, das beim

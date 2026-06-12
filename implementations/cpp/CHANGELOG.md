@@ -4,6 +4,43 @@ All notable changes to the C++ implementation of OSF will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2026-06-12
+
+### Changed — **BREAKING**
+
+The entire public API has been renamed to the unified C++ coding style.
+Existing code that uses the C++ library must be updated accordingly.
+The **C ABI** (`osf_*` symbols, `osf/capi.h`) and all **wire-format JSON/XML
+keys** (`created_utc`, `created_at_*`, …) are **not** affected.
+
+- **Methods and free functions:** renamed from `snake_case` to `camelCase`.
+  Examples: `load_from_file` → `loadFromFile`, `write_to_file` → `writeToFile`,
+  `add_channel` → `addChannel`, `parse_magic_header` → `parseMagicHeader`,
+  `as_doubles_flat` → `asDoublesFlat` (and all other `as*Flat` helpers),
+  `set_creator` → `setCreator`, `with_file_size` → `withFileSize`,
+  `from_manager` → `fromManager`, `channel_by_index` → `channelByIndex`,
+  `error_category_name` → `errorCategoryName`, `format_bytes` → `formatBytes`,
+  `detect_compression` → `detectCompression`,
+  `write_timestamped_sample` → `writeTimestampedSample`, etc.
+- **Public struct fields:** renamed from `snake_case` to `camelCase` (no prefix).
+  Examples: `blocks_total` → `blocksTotal`,
+  `size_of_length_value` → `sizeOfLengthValue`,
+  `start_timestamp_ns` → `startTimestampNs`, `file_info` → `fileInfo`,
+  `created_utc` → `createdUtc` (the C++ field; the on-disk JSON key stays
+  `created_utc`), `sample_rate_hz` → `sampleRateHz`,
+  `data_type` → `dataType`, `channel_type` → `channelType`,
+  `per_channel` → `perChannel`, `time_range_ns` → `timeRangeNs`,
+  `trailer_seen` → `trailerSeen`, `compression_format` → `compressionFormat`, etc.
+- **Private members:** renamed from trailing-underscore to `m_` + `camelCase`
+  prefix throughout the implementation (`m_channelData`, `m_writer`, etc.).
+- **Header file names:** public headers moved to lowercase, no-separator,
+  `.h` extension: `osf/osf.h`, `osf/blockwriter.h`, `osf/streamingwriter.h`,
+  `osf/stalevalueguard.h`, `osf/datachannel.h`, `osf/binarysample.h`,
+  `osf/capi.h` (was `c_api.h`), etc. Internal implementation headers in
+  `src/` renamed to the `_p.h` suffix (`blockencode_p.h`, `writercommon_p.h`,
+  `durablefile_p.h`, `binaryio_p.h`). The CMake template file became
+  `cmake/version.h.in`.
+
 ## [Unreleased]
 
 ### Fixed

@@ -1,12 +1,18 @@
 # Claude Code Session State
 
-Last updated: 2026-06-12 (German C++ developer handbook —
-`docs/de/implementations/cpp/` with 8 detail pages + reworked `cpp.md`
-entry page; Doxygen comment pass over the public headers; **DECISIONS §13
-conformance fix**: C++ writers now stamp `created_utc` and default
-`creator`/`tag` like the Rust writer. §20 stays complete (phases 1–11);
-ctest baseline is now **321/321** with `OSF_BUILD_C_API=ON`. EN mirror of
-the new docs subtree is an open follow-up).
+Last updated: 2026-06-12 (**C++ smartCORE-style refactoring — BREAKING
+API rename**: the whole `implementations/cpp/` tree moved to camelCase
+methods/free functions + camelCase public struct fields, `m_`-prefixed
+private members, lowercase no-separator `.h` file names
+(`blockwriter.h`, `capi.h`, …) and `_p.h` internal headers, per the
+smartCORE coding style sheet. The `osf-c` C ABI surface and the
+wire-format keys (`created_utc`, `created_at_*`) are deliberately
+unchanged. cpp package version 0.0.1 → **0.1.0**; DECISIONS §20 naming
+bullets revised (supersedes the 2026-06-10 keep-snake_case decision).
+ctest baseline stays **321/321** with `OSF_BUILD_C_API=ON`. Older
+session notes below may still cite pre-rename spellings — the headers
+under `implementations/cpp/include/osf/` are ground truth. EN mirror of
+the cpp docs subtree remains an open follow-up).
 
 This file is a hand-off document for the next Claude Code session. Read
 [STATUS.md](STATUS.md) and [DECISIONS.md](DECISIONS.md) for the
@@ -30,6 +36,36 @@ The repo currently advances on two independent tracks:
 A brief may also be repo-wide.
 
 ## Recent sessions (since 2026-05-22)
+
+### C++ smartCORE coding-style refactoring (2026-06-12)
+
+Burkhard supplied the smartCORE coding style sheet
+(`V:\bitbucket\smartcore\coding-style-sheet-design.md`) and chose **full
+alignment including the API break** (4 scope decisions: full API; full
+file renames `.hpp`→`.h` lowercase no-separator; C ABI exempt; public
+struct fields camelCase WITHOUT `m_`). Spec + plan live in
+osf-superpowers (`specs/2026-06-12-cpp-smartcore-style-design.md`,
+`plans/2026-06-12-cpp-smartcore-style.md`). Executed via
+subagent-driven-development in an EnterWorktree worktree, 4 mechanical
+layers, each verified at **321/321 ctest**:
+
+1. `5fbbf04` file renames (45 files; `_p.h` internal headers; `capi.h`)
+2. `d9ac260` public API → camelCase (~160-entry word-boundary table;
+   wire-literal restore pass; flat-accessor macros now paste
+   `as##SUFFIX##Flat`) + `aaddce7` comment/assert fixups
+3. `72c8850` private members → `m_` + camelCase (47 names)
+4. `6a5355e`/`e3dc3c9` src/include internal helpers + locals;
+   `6ce7026`/`87ceb11` tests/examples locals + `osftest` namespace
+   (GoogleTest test NAMES and the pure-C `test_capi.c` deliberately
+   unchanged)
+
+Docs: `71250f9` (handbook DE 8 pages + `cpp.md` + EN page + README +
+cpp CHANGELOG **0.1.0 BREAKING** + CMake version) and `2367003`
+(DECISIONS §20 naming revision + STATUS C++ section + root CHANGELOG
+Unreleased) + `17a8c0d` review fixups (standalone-rule scrub: no Rust
+comparison, no "smartCORE" wording in consumer-visible cpp docs).
+Historical records (old CHANGELOG entries, dated decision narratives)
+deliberately keep pre-rename spellings.
 
 ### C++ human-review round 1 response (2026-06-10)
 
@@ -69,11 +105,11 @@ host (use PowerShell); scoped subagent build/commit allow-rules were added to
 
 Added the `osf-c` C ABI shared library — the final §20 phase, so **the
 C++ Implementation Order is now complete (1–11)**. DECISIONS §23 is the
-contract. New `include/osf/c_api.h` (pure-C99 `extern "C"`) +
-`src/c_api.cpp` wrap `DataManager` + the round-trip write behind opaque
+contract. New `include/osf/capi.h` (pure-C99 `extern "C"`) +
+`src/capi.cpp` wrap `DataManager` + the round-trip write behind opaque
 handles, `osf_status` codes, a thread-local last-error, and
 caller-buffer copy-out readers; built only when `OSF_BUILD_C_API=ON`. A
-standalone C99 test (`tests/c_api/test_c_api.c`) proves C-compat + DLL
+standalone C99 test (`tests/capi/test_capi.c`) proves C-compat + DLL
 linkage; CI builds + runs it on Linux/macOS/Windows. Cross-compiler fixes
 on the branch: `enable_language(C)`, `CMAKE_POSITION_INDEPENDENT_CODE`.
 ctest 304 → **305/305 green** with the C API on. Branch `phase-11-c-api`.
@@ -87,19 +123,19 @@ that configures + builds + runs ctest with warnings-as-errors, gating
 `summary`. New opt-in CMake option `OSF_WARNINGS_AS_ERRORS` (default OFF;
 CI ON) drives `/WX` / `-Werror`. First-ever GCC/AppleClang build; two
 hits fixed — a C4127 dead Float/Double branch in `block_writer.cpp`
-(→ static_assert) and an unused `put_bytes` test helper. Verified by
+(→ static_assert) and an unused `putBytes` test helper. Verified by
 dispatching CI on the branch (`gh workflow run ci.yml --ref phase-10-ci`)
 until all three OS legs + the full run were green (304/304 ctest each).
 Branch `phase-10-ci`. Next: Phase 11 (C ABI wrapper, the last phase).
 
 ### C++ Phase 9 — throwing convenience layer (2026-06-03)
 
-Added the opt-in, header-only throwing layer `include/osf/throwing.hpp`
+Added the opt-in, header-only throwing layer `include/osf/throwing.h`
 (DECISIONS §20). `osf::Exception : std::runtime_error` wraps an
 `osf::Error`; `osf::throwing::unwrap(Result<T>)` returns the value or
 throws (works on any core `Result`, incl. writer methods — confirmed
 scope: no per-method writer wrappers); free `throwing::load` /
-`write_to_file` / `write_to`. NOT in the `osf.hpp` umbrella and NOT
+`writeToFile` / `writeTo`. NOT in the `osf.h` umbrella and NOT
 compiled into the library, so consumers who never include it pull in
 nothing extra (verified by grep). New `test_throwing.cpp` (10 cases);
 ctest 294 → **304/304 green**. Branch `phase-9-throwing`. Next: Phase 10
@@ -109,7 +145,7 @@ ctest 294 → **304/304 green**. Branch `phase-9-throwing`. Next: Phase 10
 
 Added transparent gzip/zlib decompression on the read path, removing the
 `DataManager` OSFZ-rejection stub. New `osf::DecompressingIStream`
-(`include/osf/compression.hpp` / `src/compression.cpp`) classifies a
+(`include/osf/compression.h` / `src/compression.cpp`) classifies a
 stream by its leading two bytes and inflates on demand via a custom
 `std::streambuf` (constant-memory; `inflateInit2(MAX_WBITS|32)`
 auto-detect; `z_stream` behind a PIMPL). `DataManager` wraps its input
@@ -128,8 +164,8 @@ Rust/Delphi reference): a write-through wrapper caching each timestamped
 channel's last `(timestamp, value)`; `poll(now_ns)` re-emits the cached
 value of any channel idle `>= repeat_interval_ns` (default 100 s),
 once per poll, for numeric + GPS channels (string/binary excluded; no
-backfill, no internal clock/thread). New `include/osf/stale_value_guard.hpp`
-+ `src/stale_value_guard.cpp` + 12 unit tests; ctest 271 → **283/283
+backfill, no internal clock/thread). New `include/osf/stalevalueguard.h`
++ `src/stalevalueguard.cpp` + 12 unit tests; ctest 271 → **283/283
 green**. Branch `phase-7d-stale-value-guard`. Next: Phase 8 (OSFZ read).
 
 ### Cross-implementation null-terminator cleanup (2026-05-24, 2026-05-25)
@@ -244,47 +280,47 @@ green** on every leg with `OSF_BUILD_C_API=ON` (0 warnings under
 
 Naming note: `osf::DataChannel` (the assembled-samples variant) is
 distinct from `osf::Channel` (the metablock-level channel
-*definition*, sitting in `metablock.hpp`). The Rust reference has
+*definition*, sitting in `metablock.h`). The Rust reference has
 them in separate modules; in C++ they share `namespace osf` so the
 names differ.
 
-The two writers share `src/writer_common.{hpp,cpp}` (chunking
+The two writers share `src/writercommon_p.h + writercommon.cpp` (chunking
 helpers, sizing constants, `build_metablock`). `BlockWriter`
-accumulates in memory and emits at `write_to_file` / `write_to`,
+accumulates in memory and emits at `writeToFile` / `writeTo`,
 auto-bumping variable `sizeoflengthvalue` 2 → 4; `StreamingWriter`
 fsyncs per block and cannot auto-bump. Both emit `channeltype:
 scalar` for non-equidistant channels (Delphi reference convention).
 Rust reference: `implementations/rust/osf-core/src/writer.rs`.
 
 `StaleValueGuard` (Phase 7d) is a write-through wrapper over
-`StreamingWriter` at `include/osf/stale_value_guard.hpp` /
-`src/stale_value_guard.cpp`: it caches each timestamped channel's last
+`StreamingWriter` at `include/osf/stalevalueguard.h` /
+`src/stalevalueguard.cpp`: it caches each timestamped channel's last
 `(timestamp, value)` and `poll(now_ns)` re-emits the cached value of any
 channel idle `>= repeat_interval_ns` (default 100 s), once per poll, for
 numeric + GPS channels (no backfill, no internal clock/thread). No
 Rust/Delphi reference — from-scratch C++ design.
 
 Phase 8 (transparent OSFZ read) added `osf::DecompressingIStream`
-(`include/osf/compression.hpp` / `src/compression.cpp`): a `std::istream`
+(`include/osf/compression.h` / `src/compression.cpp`): a `std::istream`
 that classifies a stream by its leading two bytes (gzip `0x1F 0x8B`,
 zlib `0x78 {01,5E,9C,DA}`, else plain) and inflates on demand via a
 custom `std::streambuf` (constant-memory; `inflateInit2(MAX_WBITS|32)`
 auto-detect; `z_stream` behind a PIMPL so the header is zlib-free).
 `DataManager` wraps its input before the magic-header parse and sets
-`stats.compressed` / `compression_format`; `parse_magic_header` stays
+`stats.compressed` / `compression_format`; `parseMagicHeader` stays
 non-decompressing. zlib is a PRIVATE `osf_core` dependency via
 `OSF_USE_SYSTEM_ZLIB` (default FetchContent zlib 1.3.2, pinned tarball
 + SHA256; `ON` → `find_package(ZLIB)`). Mirrors the Rust `compression`
 module.
 
 Phase 9 (throwing convenience layer) added the opt-in, header-only
-`include/osf/throwing.hpp`: `osf::Exception : std::runtime_error` wraps
+`include/osf/throwing.h`: `osf::Exception : std::runtime_error` wraps
 an `osf::Error` (`what()` = message or category name; `code()` /
 `error()` for structured detail); `osf::throwing::unwrap(Result<T>)`
 returns the value or throws — works on any core `Result` incl. the
 writer methods, so no per-method wrappers; free `throwing::load(path)` /
-`load(istream&)` and `write_to_file(mgr,path)` / `write_to(mgr,ostream&)`.
-Header-only, NOT in the `osf.hpp` umbrella and NOT compiled into the
+`load(istream&)` and `writeToFile(mgr,path)` / `writeTo(mgr,ostream&)`.
+Header-only, NOT in the `osf.h` umbrella and NOT compiled into the
 library — opt-in by design.
 
 Phase 10 (CI integration) wired the C++ build into `.github/workflows/ci.yml`:
@@ -299,13 +335,13 @@ unused test helper). Note: the CI Windows MSVC is *older* than the local
 verify on CI (`gh workflow run ci.yml --ref <branch>`).
 
 Phase 11 (C ABI wrapper, the final §20 phase) added the `osf-c` shared
-library (DECISIONS §23): `include/osf/c_api.h` (pure-C99 `extern "C"`) +
-`src/c_api.cpp`, built only when `OSF_BUILD_C_API=ON`. Opaque
+library (DECISIONS §23): `include/osf/capi.h` (pure-C99 `extern "C"`) +
+`src/capi.cpp`, built only when `OSF_BUILD_C_API=ON`. Opaque
 `osf_manager` (owns a `DataManager`) + borrowed `osf_channel` handles;
 `osf_status` codes mirroring `Error::Code`; thread-local last-error;
 caller-buffer copy-out readers (timestamps/f64/i64/gps) + borrowed
 string/binary accessors; round-trip `osf_write_to_file` (OSF5). A
-standalone C99 test (`tests/c_api/test_c_api.c`) proves C-compat + DLL
+standalone C99 test (`tests/capi/test_capi.c`) proves C-compat + DLL
 linkage; CI builds it on all three OSes. Two cross-compiler CMake fixes:
 `enable_language(C)` and `CMAKE_POSITION_INDEPENDENT_CODE` (fold the
 static core into the shared lib). Scope was read + round-trip write; a

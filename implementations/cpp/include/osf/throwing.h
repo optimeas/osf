@@ -1,0 +1,138 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Optimeas GmbH
+
+/**
+ * @file throwing.h
+ * @brief Opt-in, exception-throwing convenience layer over the
+ *        Result-based core API.
+ *
+ * The entire OSF C++ core API is `Result<T>` (= `tl::expected<T, Error>`)
+ * based: every fallible operation returns a `Result` the caller inspects.
+ * Some consumers prefer RAII-style error propagation via exceptions. This
+ * header exposes the same high-level operations as throwing functions,
+ * plus an `unwrap` escape-hatch that turns any `Result<T>` into a value
+ * (or an `osf::Exception`).
+ *
+ * Header-only and opt-in: consumers who never include `<osf/throwing.h>`
+ * never pull in this layer. It is intentionally NOT part of the
+ * `<osf/osf.h>` umbrella and is not compiled into the `osf` library.
+ *
+ * @code
+ * #include <osf/throwing.h>
+ * try {
+ *     auto manager = osf::throwing::load("data.osf");
+ *     osf::throwing::writeToFile(manager, "out.osf");
+ *
+ *     osf::StreamingWriter w{path};
+ *     osf::throwing::unwrap(w.start());           // throws on error
+ *     osf::throwing::unwrap(
+ *         w.writeTimestampedSample<double>(ch, ts, value));
+ * } catch (osf::Exception const& e) {
+ *     log(e.code(), e.what());
+ * }
+ * @endcode
+ */
+
+#pragma once
+
+#include "osf/blockwriter.h"   // ::osf::writeToFile / writeTo(DataManager, …)
+#include "osf/error.h"
+#include "osf/manager.h"        // DataManager::loadFromFile / loadFromStream
+
+#include <filesystem>
+#include <istream>
+#include <ostream>
+#include <stdexcept>
+#include <string>
+#include <utility>
+
+namespace osf {
+
+/**
+ * @brief Exception carrying an `osf::Error`, thrown by the `osf::throwing`
+ *        layer.
+ *
+ * `what()` is the underlying `Error`'s message (or the stable category
+ * name when the message is empty); `code()` / `error()` expose the
+ * structured detail. Lives in namespace `osf` (not `osf::throwing`) by
+ * design.
+ */
+class Exception : public std::runtime_error {
+public:
+    explicit Exception(Error err)
+        : std::runtime_error(
+              err.message.empty()
+                  ? std::string(errorCategoryName(err.code))
+                  : err.message),
+          m_error(std::move(err)) {}
+
+    /// The full structured error.
+    [[nodiscard]] Error const& error() const noexcept { return m_error; }
+
+    /// The error category code.
+    [[nodiscard]] Error::Code code() const noexcept { return m_error.code; }
+
+private:
+    Error m_error;
+};
+
+namespace throwing {
+
+/**
+ * @brief Return the value of a successful `Result`, or throw
+ *        `osf::Exception` carrying its `Error`.
+ *
+ * Works on any `Result<T>` from the core API — including the writer
+ * methods, which keeps the throwing layer thin (no per-method wrappers):
+ * @code
+ * auto idx = osf::throwing::unwrap(writer.addChannel(def));  // -> uint16_t
+ * osf::throwing::unwrap(writer.start());                      // -> void
+ * @endcode
+ *
+ * The `Result` is taken by value: a prvalue from a call expression moves
+ * in and out; an lvalue is copied in (rare).
+ */
+template <typename T>
+T unwrap(Result<T> r) {
+    if (r) {
+        return std::move(r).value();
+    }
+    throw Exception(std::move(r).error());
+}
+
+/// `Result<void>` overload (preferred over the template for void).
+inline void unwrap(Result<void> r) {
+    if (!r) {
+        throw Exception(std::move(r).error());
+    }
+}
+
+// ── Read ──────────────────────────────────────────────────────────────
+
+/// Load an OSF / OSFZ file, or throw `osf::Exception`.
+inline DataManager load(std::filesystem::path const& path) {
+    return unwrap(DataManager::loadFromFile(path));
+}
+
+/// Load from a seekable input stream, or throw `osf::Exception`.
+inline DataManager load(std::istream& in) {
+    return unwrap(DataManager::loadFromStream(in));
+}
+
+// ── Write (always OSF5) ───────────────────────────────────────────────
+
+/// Write \p mgr to \p path as OSF5, or throw `osf::Exception`.
+inline void writeToFile(DataManager const& mgr,
+                          std::filesystem::path path) {
+    // Fully qualified to call the core (non-throwing) convenience
+    // function, not recurse into this overload.
+    unwrap(::osf::writeToFile(mgr, std::move(path)));
+}
+
+/// Write \p mgr to \p out as OSF5, or throw `osf::Exception`.
+inline void writeTo(DataManager const& mgr, std::ostream& out) {
+    unwrap(::osf::writeTo(mgr, out));
+}
+
+}  // namespace throwing
+}  // namespace osf

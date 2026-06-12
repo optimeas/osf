@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Optimeas GmbH
 
-#include <osf/header.hpp>
+#include <osf/header.h>
 
 #include <charconv>
 #include <fstream>
@@ -19,7 +19,7 @@ namespace {
 //   - MagicHeaderTooLong   if no '\n' within MAX_MAGIC_HEADER_LEN bytes.
 //   - IoError              on a real stream failure (badbit set).
 //   - InvalidMagicHeader   on EOF before any '\n'.
-Result<std::string> read_first_line(std::istream& in) {
+Result<std::string> readFirstLine(std::istream& in) {
     std::string buf;
     buf.reserve(48);
 
@@ -54,7 +54,7 @@ Result<std::string> read_first_line(std::istream& in) {
     return buf;
 }
 
-Result<OsfVersion> identifier_to_version(std::string_view identifier) {
+Result<OsfVersion> identifierToVersion(std::string_view identifier) {
     if (identifier == "OSF4" ||
         identifier == "OCEAN_STREAM_FORMAT4" ||
         identifier == "OCEAN_STREAMING_FORMAT4") {
@@ -68,7 +68,7 @@ Result<OsfVersion> identifier_to_version(std::string_view identifier) {
         "unknown OSF identifier: " + std::string{identifier}});
 }
 
-Result<MagicHeader> parse_magic_header_line(std::string_view line) {
+Result<MagicHeader> parseMagicHeaderLine(std::string_view line) {
     auto sep = line.find(' ');
     if (sep == std::string_view::npos) {
         return tl::make_unexpected(Error{
@@ -79,9 +79,9 @@ Result<MagicHeader> parse_magic_header_line(std::string_view line) {
     auto identifier = line.substr(0, sep);
     auto rest = line.substr(sep + 1);
 
-    auto version_result = identifier_to_version(identifier);
-    if (!version_result) {
-        return tl::make_unexpected(std::move(version_result).error());
+    auto versionResult = identifierToVersion(identifier);
+    if (!versionResult) {
+        return tl::make_unexpected(std::move(versionResult).error());
     }
 
     // Trim trailing whitespace; an empty rest after trimming means
@@ -92,45 +92,45 @@ Result<MagicHeader> parse_magic_header_line(std::string_view line) {
             Error::Code::InvalidMagicHeader,
             "missing metablock length after identifier \"" + std::string{identifier} + "\""});
     }
-    auto len_str = rest.substr(0, end + 1);
+    auto lenStr = rest.substr(0, end + 1);
 
-    std::uint64_t metablock_len = 0;
-    auto [ptr, ec] = std::from_chars(len_str.data(),
-                                     len_str.data() + len_str.size(),
-                                     metablock_len);
-    if (ec != std::errc{} || ptr != len_str.data() + len_str.size()) {
+    std::uint64_t metablockLen = 0;
+    auto [ptr, ec] = std::from_chars(lenStr.data(),
+                                     lenStr.data() + lenStr.size(),
+                                     metablockLen);
+    if (ec != std::errc{} || ptr != lenStr.data() + lenStr.size()) {
         return tl::make_unexpected(Error{
             Error::Code::InvalidMagicHeader,
-            "metablock length is not a valid uint64: \"" + std::string{len_str} + "\""});
+            "metablock length is not a valid uint64: \"" + std::string{lenStr} + "\""});
     }
 
-    return MagicHeader{*version_result, metablock_len};
+    return MagicHeader{*versionResult, metablockLen};
 }
 
 }  // anonymous namespace
 
-Result<MagicHeader> parse_magic_header(std::istream& in) {
-    auto line_result = read_first_line(in);
-    if (!line_result) {
-        return tl::make_unexpected(std::move(line_result).error());
+Result<MagicHeader> parseMagicHeader(std::istream& in) {
+    auto lineResult = readFirstLine(in);
+    if (!lineResult) {
+        return tl::make_unexpected(std::move(lineResult).error());
     }
-    return parse_magic_header_line(*line_result);
+    return parseMagicHeaderLine(*lineResult);
 }
 
-Result<MagicHeader> parse_magic_header(std::uint8_t const* data, std::size_t size) {
+Result<MagicHeader> parseMagicHeader(std::uint8_t const* data, std::size_t size) {
     std::string buf{reinterpret_cast<char const*>(data), size};
     std::istringstream stream{std::move(buf)};
-    return parse_magic_header(static_cast<std::istream&>(stream));
+    return parseMagicHeader(static_cast<std::istream&>(stream));
 }
 
-Result<MagicHeader> parse_magic_header(std::filesystem::path const& path) {
+Result<MagicHeader> parseMagicHeader(std::filesystem::path const& path) {
     std::ifstream stream{path, std::ios::binary};
     if (!stream.is_open()) {
         return tl::make_unexpected(Error{
             Error::Code::IoError,
             "failed to open file: " + path.string()});
     }
-    return parse_magic_header(static_cast<std::istream&>(stream));
+    return parseMagicHeader(static_cast<std::istream&>(stream));
 }
 
 }  // namespace osf
