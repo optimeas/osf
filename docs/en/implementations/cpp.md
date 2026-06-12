@@ -19,10 +19,9 @@ last_update:
 
 # C++ implementation
 
-A **standalone C++17 implementation** of the Open Streaming Format — no FFI,
-no Rust dependency, idiomatic modern C++. It reads `.osf` and `.osfz` files
-and writes OSF5. The implementation was built as a parallel implementation
-to the Rust core, not as a port.
+A **standalone C++17 implementation** of the Open Streaming Format with no
+external runtime dependencies beyond zlib — no FFI, idiomatic modern C++. It
+reads `.osf` and `.osfz` files and writes OSF5.
 
 ## Capabilities
 

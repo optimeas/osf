@@ -28,7 +28,7 @@ zwei sehr unterschiedliche Einsatzprofile ab:
 | Senke | Dateipfad | Dateipfad **oder** `std::ostream` (Memory, Socket) |
 | `sizeOfLengthValue` | fix ab `start()` (Metablock liegt auf Platte) | automatischer Bump 2 → 4 bei Bedarf |
 | Lebenszyklus | Configure → `start()` → Schreiben → `close()` | Sammeln → `writeToFile()` / `writeTo()` (beliebig oft) |
-| Mehrfach-Emission | nein (eine Datei pro Instanz) | ja (`write_to*` ist `const`) |
+| Mehrfach-Emission | nein (eine Datei pro Instanz) | ja (`writeTo*` ist `const`) |
 
 Beide teilen sich die Kanal-Beschreibung `osf::ChannelDef` und dieselben
 Schreibfamilien (äquidistant, timestamped numerisch, GPS, String/Binary).
@@ -145,7 +145,7 @@ w.writeTimestampedBinary(ch, ts_ns, osf::BinarySample::fromVector(jpeg_bytes));
 
 Jeder Mehr-Sample-Aufruf wird automatisch auf die Blockkapazität des
 Kanals gechunkt (ein fsync pro Block). Ein neues
-`start_equidistant_segment` öffnet bewusst ein **neues** Segment —
+`startEquidistantSegment` öffnet bewusst ein **neues** Segment —
 Lücken zwischen Segmenten sind das spec-gemäße Mittel, um
 Aufzeichnungspausen darzustellen.
 

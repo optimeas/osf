@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed — **BREAKING**
 
-The entire public API has been renamed to the smartCORE coding style sheet.
+The entire public API has been renamed to the unified C++ coding style.
 Existing code that uses the C++ library must be updated accordingly.
 The **C ABI** (`osf_*` symbols, `osf/capi.h`) and all **wire-format JSON/XML
 keys** (`created_utc`, `created_at_*`, …) are **not** affected.

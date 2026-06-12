@@ -165,7 +165,7 @@ Kanal des deklarierten Typs materialisiert.
 |---|---|---|
 | Unit | `tests/unit/test_*.cpp` | synthetische Bytes/Strukturen, eine Datei pro Modul |
 | Integration | `tests/integration/*_examples.cpp` | echte Dateien aus `examples/` (Felddaten + 17 generierte Referenzdateien) |
-| Round-Trip | `tests/integration/roundtrip_helper.hpp` | Laden → Schreiben → Reload → **bitgenauer** Sample-Vergleich |
+| Round-Trip | `tests/integration/roundtriphelper.h` | Laden → Schreiben → Reload → **bitgenauer** Sample-Vergleich |
 | C-ABI | `tests/c_api/test_c_api.c` | eigenständiges C99-Programm, beweist C-Linkage |
 
 Vor jedem Push gilt: kompletter ctest-Lauf lokal grün (aktuell 321
