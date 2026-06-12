@@ -303,7 +303,7 @@ public:
         BinarySample value);
 
 private:
-    // Type trait: which T are supported by write_timestamped_*<T>.
+    // Type trait: which T are supported by writeTimestamped*<T>.
     template <typename T>
     struct IsTimestampedNumeric : std::false_type {};
 

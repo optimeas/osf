@@ -36,7 +36,7 @@
  *   - Channels auto-track on their first successful write-through; a
  *     channel never written through the guard is never re-emitted.
  *   - Channel-type validation is delegated to the writer: re-emit calls
- *     the same write_timestamped_* methods, so a non-timestamped channel
+ *     the same writeTimestamped* methods, so a non-timestamped channel
  *     is rejected there.
  *
  * Thread safety: not thread-safe (same contract as StreamingWriter).

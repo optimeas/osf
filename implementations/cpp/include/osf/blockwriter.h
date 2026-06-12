@@ -218,7 +218,7 @@ public:
 private:
     struct ChannelData;   // fully defined in blockwriter.cpp
 
-    // Type trait: which T are supported by add_timestamped_*<T>.
+    // Type trait: which T are supported by addTimestamped*<T>.
     template <typename T>
     struct IsTimestampedNumeric : std::false_type {};
 
@@ -286,7 +286,7 @@ Result<void> BlockWriter::addTimestampedSample(
                   "T must be one of: bool, int8_t..int64_t, "
                   "uint8_t..uint64_t, float, double. Use "
                   "addTimestampedGpsSample for GpsLocation, "
-                  "addString/binary for variable-length data.");
+                  "addStringSample / addBinarySample for variable-length data.");
     return addTimestampedSamplesImpl<T>(channel, &timestampNs, &value, 1);
 }
 
@@ -298,7 +298,7 @@ Result<void> BlockWriter::addTimestampedSamples(
                   "T must be one of: bool, int8_t..int64_t, "
                   "uint8_t..uint64_t, float, double. Use "
                   "addTimestampedGpsSamples for GpsLocation, "
-                  "addTimestampedString/binary for variable-length data.");
+                  "addStringSamples / addBinarySamples for variable-length data.");
     return addTimestampedSamplesImpl<T>(channel, timestampsNs, values, count);
 }
 
