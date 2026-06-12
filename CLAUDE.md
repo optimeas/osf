@@ -11,8 +11,11 @@ unchanged. cpp package version 0.0.1 → **0.1.0**; DECISIONS §20 naming
 bullets revised (supersedes the 2026-06-10 keep-snake_case decision).
 ctest baseline stays **321/321** with `OSF_BUILD_C_API=ON`. Older
 session notes below may still cite pre-rename spellings — the headers
-under `implementations/cpp/include/osf/` are ground truth. EN mirror of
-the cpp docs subtree remains an open follow-up).
+under `implementations/cpp/include/osf/` are ground truth. The EN mirror
+of the cpp docs subtree is now **done** (`0a0fdb3`:
+`docs/en/implementations/cpp/`, 8 pages + entry rework, against the new
+camelCase API); Docusaurus sync of the changed DE+EN handbook remains an
+open follow-up).
 
 This file is a hand-off document for the next Claude Code session. Read
 [STATUS.md](STATUS.md) and [DECISIONS.md](DECISIONS.md) for the
