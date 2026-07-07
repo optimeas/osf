@@ -8,7 +8,7 @@ keywords:
   - Fileformat
   - XML
 last_update:
-  date: 2026-05-04
+  date: 2026-07-07
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -22,6 +22,8 @@ Dieses Dokument beschreibt alle Aspekte des **Open Streaming Formats Version 4
 Es ergänzt die Datei [`osf_general.md`](../osf_general.md), in der alle für OSF4 und OSF5 gemeinsamen Strukturen erklärt sind.
 
 OSF4 ist die klassische Version des Formats. Sie nutzt ausschließlich **XML** für den Metablock und bildet die Basis für die Abwärtskompatibilität in OSF5.
+
+Das Integritätsprofil (CRC32C / Signierung) existiert ab OSF5; OSF4-Dateien sind davon nicht betroffen. Siehe [OSF5-Integritätsprofil](osf5_integrity.md).
 
 
 

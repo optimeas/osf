@@ -12,7 +12,7 @@ keywords:
   - OSF5
   - OSF
 last_update:
-  date: 2026-05-04
+  date: 2026-07-07
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -111,6 +111,33 @@ Aus Gründen der Kompatibilität erkennen OSF-Implementierungen mehrere Header:
 * **OCEAN\_STREAM\_FORMAT4** – Legacy-Kennung für OSF4-Dateien, die in ausgelieferten Geräten weiterhin geschrieben wird; muss von Lesern unterstützt werden
 * **OCEAN\_STREAMING\_FORMAT4** – ältere historische Schreibweise; ebenfalls als OSF4 zu interpretieren
 * **OSF5** – OSF5-Datei
+
+### Header-Token (optionale Zusatzfelder)
+
+Die OSF5-Header-Zeile KANN nach der Metablock-Länge optionale, durch
+Leerzeichen getrennte Token tragen:
+
+```
+header-line = identifier SP metablock-len *(SP token) LF
+token       = key ":" value
+```
+
+Dabei besteht `key` aus Kleinbuchstaben `a-z`, Ziffern `0-9` und dem
+Bindestrich `-`; `value` sind sichtbare Zeichen ohne Leerzeichen. Zwischen
+den Feldern steht genau ein Leerzeichen; vor dem abschließenden LF steht
+kein Leerzeichen.
+
+Token sind **„must understand"**: Trifft ein Leser auf einen `key`, den er
+nicht kennt, MUSS er die Datei ablehnen — mit einer Diagnose wie
+`unknown header token '<key>'`, **nicht** als Zahl-Parse-Fehler.
+
+Token sind ein **reines OSF5-Feature**: Die OSF4-Legacy-Kennungen (`OSF4`,
+`OCEAN_STREAM_FORMAT4`, `OCEAN_STREAMING_FORMAT4`) DÜRFEN KEINE Token tragen;
+ein Token nach einer OSF4-Kennung ist eine fehlerhafte Datei.
+
+Die definierten Keys (`crc32c`, `ed25519`) und ihre Bedeutung sind im
+Integritätsprofil festgelegt — siehe
+[OSF5-Integritätsprofil](references/osf5_integrity.md).
 
 ### Erkennung des Metablock-Formats
 

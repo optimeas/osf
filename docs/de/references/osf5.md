@@ -8,7 +8,7 @@ keywords:
   - Fileformat
   - JSON
 last_update:
-  date: 2026-05-04
+  date: 2026-07-07
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -62,6 +62,7 @@ Die Struktur entspricht funktional der XML-Variante aus OSF4, ist jedoch leichte
     "version": 5,
     "created_utc": "2025-07-27T12:00:00Z",
     "creator": "smartdevice:15002000001",
+    "file_uuid": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
     "channels": [
       {
         "index": 0,
@@ -79,6 +80,10 @@ Die Struktur entspricht funktional der XML-Variante aus OSF4, ist jedoch leichte
 
 - **Unterschied zu OSF4:** JSON statt XML, aber gleiche logische Inhalte.  
 - **Kompatibilität:** OSF5 kann weiterhin OSF4-XML interpretieren.
+
+#### Datei-weiter Parameter `file_uuid`
+
+Das `osf`-Objekt kann auf Datei-Ebene den Parameter **`file_uuid`** tragen — eine UUID (Version 4), gespeichert als JSON-String. Er dient der **Dateiidentität** und ist die Schnittstelle, über die die höhere Systemebene die dateiübergreifende Sequenz-/Replay-Prüfung durchführt (Schnittstelle im Sinne der EN 50159). `file_uuid` ist auf der Integritätsstufe *signed* **verpflichtend** und wird auf allen anderen Stufen **empfohlen**.
 
 
 ## Vereinfachungen im Steuerbyte (Blocktypen)
@@ -100,6 +105,12 @@ OSF5 übernimmt die Blockstruktur aus OSF4, reduziert aber die Anzahl der genutz
 | 5    | `bcContinuedData`  | Daten mit fester Abtastrate fortsetzen. |
 | 6    | `bcStartData`      | Startblock mit fester Abtastrate. |
 | 8    | `bcAbsTimeStampData` | Daten mit absolutem Zeitstempel. |
+| 9    | `bcIntegritySignature` | Integritäts-Signaturanker (nur Stufe *signed*, Kanal `0xFFFE`). Siehe [Integritätsprofil](osf5_integrity.md). Bit 7 = 0. |
+
+
+## Integritätsprofil
+
+OSF5 definiert ein **optionales dreistufiges Integritätsprofil** (none ⊂ crc ⊂ signed), das durch ein optionales Token im Magic Header deklariert wird. Stufe *crc* ergänzt jeden Block um eine Rahmen-Prüfsumme (CRC32C); Stufe *signed* ergänzt zusätzlich eine Ed25519-Signaturkette mit im Metablock eingebetteten X.509-Zertifikaten. Ohne deklariertes Token bleibt eine Datei auf Stufe *none* und verhält sich exakt wie bisher. Die vollständige normative Beschreibung steht in der Spezifikation [Integritätsprofil](osf5_integrity.md).
 
 
 ## Unterstützte Datentypen in OSF5

@@ -8,7 +8,7 @@ keywords:
   - File format
   - JSON
 last_update:
-  date: 2026-05-04
+  date: 2026-07-07
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -62,6 +62,7 @@ The structure is functionally equivalent to the XML variant in OSF4, but is easi
     "version": 5,
     "created_utc": "2025-07-27T12:00:00Z",
     "creator": "smartdevice:15002000001",
+    "file_uuid": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
     "channels": [
       {
         "index": 0,
@@ -79,6 +80,10 @@ The structure is functionally equivalent to the XML variant in OSF4, but is easi
 
 - **Difference from OSF4:** JSON instead of XML, but the same logical content.  
 - **Compatibility:** OSF5 can still interpret OSF4 XML.
+
+#### File-level parameter `file_uuid`
+
+At the file level the `osf` object may carry the parameter **`file_uuid`** — a UUID (version 4), stored as a JSON string. It serves as the **file identity** and is the interface by which the higher system level performs cross-file sequence/replay checking (interface in the sense of EN 50159). `file_uuid` is **mandatory** at integrity level *signed* and **recommended** at all other levels.
 
 
 ## Simplifications in the control byte (block types)
@@ -100,6 +105,12 @@ OSF5 keeps the block structure from OSF4 but reduces the number of used block ty
 | 5     | `bcContinuedData`  | Continue data with a fixed sample rate. |
 | 6     | `bcStartData`      | Start block with a fixed sample rate. |
 | 8     | `bcAbsTimeStampData` | Data with an absolute timestamp. |
+| 9     | `bcIntegritySignature` | Integrity signature anchor (level *signed* only, channel `0xFFFE`). See [Integrity Profile](osf5_integrity.md). Bit 7 = 0. |
+
+
+## Integrity Profile
+
+OSF5 defines an **optional three-level integrity profile** (none ⊂ crc ⊂ signed), declared by an optional token in the magic header. Level *crc* adds a per-block frame checksum (CRC32C); level *signed* additionally adds an Ed25519 signature chain with X.509 certificates embedded in the metablock. Without a declared token a file stays at level *none* and behaves exactly as before. The full normative description is in the [Integrity Profile](osf5_integrity.md) specification.
 
 
 ## Supported data types in OSF5
