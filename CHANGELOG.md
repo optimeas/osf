@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **OSF5 integrity profile — specification revision (2026-07-07).** New normative
+  spec `docs/{de,en}/references/osf5_integrity.md` describing an **optional**
+  three-level integrity profile for OSF5 (`none ⊂ crc ⊂ signed`): a "must
+  understand" magic-header token declares the level; level *crc* adds a per-block
+  frame **CRC32C** (fail-closed framing, effective payload = LEN − 4); level
+  *signed* adds a SHA-256 hash chain with periodic **Ed25519** signature anchors
+  (`bcIntegritySignature = 9` on the reserved file-wide channel `0xFFFE`) plus
+  metablock-embedded **X.509** certificates for offline third-party verification.
+  OSF4 is unaffected; profile-less OSF5 files stay valid. Supporting doc changes:
+  `osf_general.md` (header-token grammar + must-understand rule), `osf5.md`
+  (control byte 9, integrity overview, new `file_uuid` metablock parameter),
+  `osf4.md` (not-affected note), `index.md` (feature mention). New decision record
+  DECISIONS §24. Rationale: concept paper (Zenodo, DOI 10.5281/zenodo.21227942);
+  current-parser starting point: `AUDIT_INTEGRITY_O1.md`. **Documentation only —
+  no implementation changes** (those follow via separate task briefs).
 - **German developer handbook for the C++ implementation** — new subtree `docs/de/implementations/cpp/` with eight in-depth pages ([Architektur](docs/de/implementations/cpp/architektur.md), [Lesen](docs/de/implementations/cpp/lesen.md), [Schreiben](docs/de/implementations/cpp/schreiben.md), [Fehlerbehandlung](docs/de/implementations/cpp/fehlerbehandlung.md) incl. the complete error-code catalogue, [C-ABI](docs/de/implementations/cpp/c-abi.md) incl. function catalogue + C/P-Invoke examples, [Bauen & Einbinden](docs/de/implementations/cpp/bauen.md) incl. `add_subdirectory`/FetchContent consumption snippets, [Kochbuch](docs/de/implementations/cpp/kochbuch.md) with copy-ready recipes, and [Interna](docs/de/implementations/cpp/interna.md) for contributors). `docs/de/implementations/cpp.md` reworked into the overview/entry page linking the handbook. The English mirror of the new subtree is an open follow-up.
 
 ### Fixed

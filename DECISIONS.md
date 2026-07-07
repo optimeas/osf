@@ -1113,3 +1113,76 @@ triples; `osf_channel_string_at` / `binary_at` return borrowed views.
 the function set grows additively. `osf_version()` returns the core
 version string. The default build (`OSF_BUILD_C_API=OFF`) and the core
 library are unaffected — the C ABI is purely additive.
+
+## 24. OSF5 Integrity Profile
+
+**Decision (spec revision 2026-07-07):** OSF5 gains an **optional integrity
+profile** — block-accurate corruption detection plus streaming-capable,
+third-party-verifiable provenance. This is a **spec revision**, not a new
+format: files without the profile stay valid, and OSF4 is unaffected. The
+normative text is [`docs/{de,en}/references/osf5_integrity.md`](docs/en/references/osf5_integrity.md);
+the rationale is the published concept paper (Zenodo, DOI
+[10.5281/zenodo.21227942](https://doi.org/10.5281/zenodo.21227942)); the
+current-parser starting point is [`AUDIT_INTEGRITY_O1.md`](AUDIT_INTEGRITY_O1.md).
+This decision records the design choices; the four implementations follow via
+separate task briefs (CRC first across all, then signing/PKI).
+
+**Three-level ladder (`none ⊂ crc ⊂ signed`).** One declaration per file, whole-
+file granularity, writers choose freely, **every conformant OSF5 reader must
+process all levels** — one format with a profile, not three dialects. Keeps the
+minimal-embedded-writer option while avoiding fragmentation.
+
+**Header token, "must understand" (supersedes the earlier O3 direction).** The
+level is declared by an optional whitespace-separated token on the magic-header
+line (`crc32c:<8 HEXDIG upper>`, `ed25519:<keyid>`). Tokens are must-understand:
+an unknown key **rejects the file** (fail-closed). Rationale: for variable-length
+payloads an integrity-unaware reader cannot tell appended CRC bytes from data, so
+fail-open would cause silent corruption. The `crc32c` token also carries the
+metablock CRC (the only self-unprotectable part), fixing the verification order:
+token → metablock CRC → parse → blocks.
+
+**Frame-CRC framing, fail-closed (audit consequence B).** Level crc adds a
+CRC32C (Castagnoli) over the whole frame (channel index + length field + control
+byte + payload); it is the last 4 bytes of the data area, counted in the length
+field (effective payload = LEN − 4). Normative implementation rule: when the
+profile is active the CRC is **part of the framing and separated before the typed
+parser runs** — a post-hoc "residual == 0" check is insufficient for
+string/binary. Block-CRC error ⇒ skip + count; metablock-CRC error ⇒ reject file.
+
+**`bcIntegritySignature = 9` on channel `0xFFFE` (supersedes the earlier O9
+direction).** Level signed adds control byte 9 (Bit 7 = 0) on the reserved,
+un-declared file-wide integrity channel `0xFFFE` (distinct from OSF4's `0xFFFF`
+info/trailer channel). Payload: `uint32 anchor_seq`, `int64 signing_time_ns`,
+`byte[32] chain_hash`, `byte[64] Ed25519 signature`, `uint8 keyid_len` + keyid.
+Chosen so **non-signed readers skip it via the length field** (audit C: Rust/C++/
+Java already do). A SHA-256 hash chain `H(0)=SHA256(header ‖ metablock)`,
+`H(i)=SHA256(H(i−1) ‖ Frame_i)` (frames incl. their CRC; signature blocks
+included) gives streaming-capable tamper detection; a single closing signature
+would be lost on power failure, a per-block signature would be too costly.
+
+**Cadence default (supersedes the earlier O8 direction):** configurable;
+normative default **time-based 10 s**, plus a **mandatory anchor at regular file
+close**. Power-loss semantics are explicit: signed up to the last anchor, tail
+CRC-valid but unsigned; the verification report names both.
+
+**Certificates in the metablock (supersedes the earlier O15 direction).** An
+optional `integrity.certificates` object at the `osf` level embeds the DER chain
+(leaf first, **root never embedded**), so it is covered by the metablock CRC and
+H(0) and a file is a self-contained, offline-verifiable evidence object. The
+object is **data, not the profile declaration** — the declaration remains the
+header token alone.
+
+**Validity "at signing time" (Variant A).** Verification asks whether the
+certificate was valid at `signing_time_ns`, so measurement data outlives
+certificate lifetimes; the residual back-dating weakness is documented and
+closable via RFC 3161 timestamps without a format change. Revocation via signed
+lists, best-effort, status reported.
+
+**`file_uuid` metablock parameter.** A UUID-v4 file identity (mandatory at level
+signed, recommended otherwise) is the deliberate, narrow interface by which the
+higher **system level** handles cross-file replay/deletion (EN 50159 file-level
+threats); gap-freeness across files is explicitly out of the file format's scope.
+
+**Transformation policy.** Merge/convert/export end the device-signature domain
+by design: the result falls back to level crc and records provenance in `infos`;
+optional organization re-signing is a distinct, labelled statement.
