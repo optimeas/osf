@@ -57,4 +57,10 @@ Each language implementation should follow the idiomatic style of that language.
 
 ## License
 
-By contributing to this repository you agree that your contributions will be licensed under the MIT License.
+By contributing **source code** to this repository you agree that your
+contributions will be licensed under the MIT License.
+
+By contributing **documentation** under `docs/` you agree that your
+contributions will be licensed under Creative Commons Attribution 4.0
+International (CC BY 4.0), and that they are attributed to "optiMEAS GmbH und
+optiMEAS Switzerland GmbH".
