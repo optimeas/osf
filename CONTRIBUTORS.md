@@ -5,9 +5,10 @@ Format project. It is independent of the license attribution (which is uniformly
 "optiMEAS GmbH und optiMEAS Switzerland GmbH") and simply credits the individuals
 involved.
 
-- **Burkhard Schranz** — Konzept & Projektleitung (optiMEAS)
-- **Jens-Achim Kessel** — Mitgründer optiMEAS; C++ / libosf (optiMEAS)
-- **Matthias Klein** — Impuls CRA/Integritätsthema; technische Begleitung (optiMEAS)
-- **Patrick Langfeld** — Tooling & Workflows (optiMEAS)
+- **Burkhard Schranz** — Concept & Project Management (optiMEAS)
+- **Dr. Jens-Achim Kessel** — Co-founder of optiMEAS; C++ / libosf; Development Lead (optiMEAS)
+- **Dr. Patrick Langfeld** — Co-founder of optiMEAS; Tooling & Workflows (optiMEAS)
+- **Matthias Klein** — CRA/Integrity Initiative; Technical Support; Software Development (optiMEAS)
+- **Oleh Halushchak** — Lead Java Developer, optiCloud
 
 New contributors are welcome — add yourself in the same format.
