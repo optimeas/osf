@@ -130,6 +130,23 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before
 
 ## License
 
-Copyright 2026 Optimeas GmbH
+This repository is licensed in two parts:
 
-Licensed under the MIT License. See [LICENSE](LICENSE) for the full text.
+- **Source code** — MIT License. See [`LICENSE`](LICENSE) for the full text.
+- **Specification & documentation** (`docs/`) — Creative Commons Attribution 4.0
+  International (CC BY 4.0). See [`docs/LICENSE`](docs/LICENSE). Attribution:
+  optiMEAS GmbH und optiMEAS Switzerland GmbH.
+
+Copyright © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH.
+
+## Citing / Zitieren
+
+The OSF5 integrity concept paper is published on Zenodo (CC BY 4.0). When citing
+it, please use:
+
+> Schranz, B. / optiMEAS GmbH & optiMEAS Switzerland GmbH (2026):
+> Integrität und Signierung in Streaming-Messdatenformaten: Der OSF5-Ansatz.
+> Zenodo. https://doi.org/10.5281/zenodo.21227942
+
+A repository copy of the paper is kept under [`docs/papers/`](docs/papers/); the
+Zenodo record is the citable reference.
