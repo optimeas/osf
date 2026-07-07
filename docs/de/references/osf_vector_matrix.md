@@ -13,6 +13,8 @@ keywords:
 last_update:
   date: 2026-05-04
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇬🇧 [English version](../../en/references/osf_vector_matrix.md)
@@ -23,3 +25,4 @@ In diesem Dokument werden ausschließlich Funktionen und Eigenschaften beschrieb
 
 ![Working on it](../media/weareworkingonit.png)
 
+> Dieses Dokument ist lizenziert unter [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.de). Namensnennung: optiMEAS GmbH und optiMEAS Switzerland GmbH.

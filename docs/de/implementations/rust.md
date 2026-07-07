@@ -12,6 +12,8 @@ keywords:
 last_update:
   date: 2026-06-04
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇬🇧 [English version](../../en/implementations/rust.md)
@@ -154,3 +156,5 @@ Der Reader erkennt komprimierte OSF-Dateien an den ersten zwei Bytes
   Verzeichnis `implementations/rust/osf-core/`
 - Python-Anbindung darüber: [Python-Integration](../integrations/python.md)
 - Format-Spezifikation: Kapitel [OSF-Format](../osf_general.md)
+
+> Dieses Dokument ist lizenziert unter [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.de). Namensnennung: optiMEAS GmbH und optiMEAS Switzerland GmbH.

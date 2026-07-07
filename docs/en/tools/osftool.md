@@ -13,6 +13,8 @@ keywords:
 last_update:
   date: 2026-05-22
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇩🇪 [Deutsche Version](../../de/tools/osftool.md)
@@ -381,3 +383,5 @@ osftool config reset                    # restore the defaults
 ```
 
 A command-line flag always overrides the configured default for that single invocation.
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

@@ -13,6 +13,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇩🇪 [German version](../../de/implementations/cpp.md)
@@ -271,3 +273,5 @@ catalogue and examples: [C ABI](cpp/c-abi.md).
 - API reference: generate with Doxygen via `-D OSF_BUILD_DOCS=ON` (the
   `osf-docs` target) — see [Building & integrating](cpp/building.md)
 - Format specification: chapter [OSF format](../osf_general.md)
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

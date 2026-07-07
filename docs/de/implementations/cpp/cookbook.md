@@ -12,6 +12,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 # Kochbuch
@@ -250,3 +252,5 @@ int main(int argc, char** argv) try {
 
 Siehe das vollständige Beispiel auf der Seite [C-ABI](c-abi.md) — laden,
 Kanäle auflisten, Copy-out-Reader, `osf_write_to_file`.
+
+> Dieses Dokument ist lizenziert unter [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.de). Namensnennung: optiMEAS GmbH und optiMEAS Switzerland GmbH.

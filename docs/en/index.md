@@ -14,6 +14,8 @@ keywords:
 last_update:
   date: 2026-05-04
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇩🇪 [German version](../de/index.md)
@@ -69,3 +71,5 @@ The core architecture allows all time-related data to be stored in a single, con
 -   Flexible magic headers (`OSF4`, `OSF5`, `OCEAN_STREAM_FORMAT4`, `OCEAN_STREAMING_FORMAT4`) with automatic detection of XML (`<`) or JSON (`{`).
 
 The following describes what makes OSF as a format — **applicable equally to OSF4 and OSF5**. Details about specific features and about vector or matrix channels are available in dedicated documents.
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

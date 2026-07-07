@@ -14,6 +14,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇬🇧 [English version](../../en/implementations/index.md)
@@ -58,3 +60,5 @@ Den jeweils aktuellsten Stand führt das Repository auf
 Alle Implementierungen lesen denselben Satz an
 [Beispieldateien](../examples/osf_file_examples.md) und folgen denselben
 semantischen Regeln der Spezifikation.
+
+> Dieses Dokument ist lizenziert unter [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.de). Namensnennung: optiMEAS GmbH und optiMEAS Switzerland GmbH.

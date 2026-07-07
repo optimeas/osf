@@ -1,3 +1,8 @@
+---
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
+---
+
 # OSF Specification Documents
 
 The formal specification for the Open Streaming Format is maintained in two
@@ -22,5 +27,7 @@ Each language directory follows the same layout:
 
 ---
 
-Specification documents are maintained by Optimeas GmbH and are licensed under the MIT License.
+Specification documents are maintained by optiMEAS GmbH and optiMEAS Switzerland GmbH and are licensed under [CC BY 4.0](LICENSE).
 To propose a change to the specification, open an issue on GitHub with the label `specification`.
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

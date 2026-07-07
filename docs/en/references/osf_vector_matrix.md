@@ -13,6 +13,8 @@ keywords:
 last_update:
   date: 2026-05-04
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇩🇪 [German version](../../de/references/osf_vector_matrix.md)
@@ -22,3 +24,5 @@ last_update:
 This document covers exclusively features and properties that apply only to the OSF 5 format.
 
 ![Working on it](../media/weareworkingonit.png)
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

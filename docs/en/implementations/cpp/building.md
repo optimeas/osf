@@ -12,6 +12,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 # Building & integrating
@@ -172,3 +174,5 @@ the CI run; verify a branch with `gh workflow run ci.yml --ref <branch>`.
 - **ctest finds 0 tests:** `gtest_discover_tests` runs the test binaries
   at configure time; in sandboxed environments start the binary directly
   and check the configure log.
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

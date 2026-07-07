@@ -14,6 +14,8 @@ keywords:
 last_update:
   date: 2026-05-04
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇬🇧 [English version](../en/index.md)
@@ -69,3 +71,5 @@ Die Kernarchitektur ermöglicht es, alle zeitbezogenen Daten in einer einzigen, 
 -   Flexible Magic Header (`OSF4`, `OSF5`, `OCEAN_STREAM_FORMAT4`, `OCEAN_STREAMING_FORMAT4`) mit automatischer Erkennung von XML (`<`) oder JSON (`{`).
 
 Im Folgenden wird beschrieben, was OSF als Format ausmacht – **allgemeingültig für OSF4 und OSF5**. Details zu spezifischen Funktionen und zu Vektor- oder Matrix-Kanälen finden sich in eigenen Dokumenten.
+
+> Dieses Dokument ist lizenziert unter [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.de). Namensnennung: optiMEAS GmbH und optiMEAS Switzerland GmbH.

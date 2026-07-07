@@ -12,6 +12,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 # Schreiben
@@ -264,3 +266,5 @@ Kanalindex — der Writer vergibt sequenziell 0..N neu.
   OSF4-Lesealtbestand; Writer emittieren absolute Zeitstempel.
 - **Keine Zeitstempel-Validierung** — Monotonie ist laut Spec nicht
   gefordert und wird nicht erzwungen.
+
+> Dieses Dokument ist lizenziert unter [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.de). Namensnennung: optiMEAS GmbH und optiMEAS Switzerland GmbH.

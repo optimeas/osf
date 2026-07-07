@@ -13,6 +13,8 @@ keywords:
 last_update:
   date: 2026-05-06
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇩🇪 [Deutsche Version](../../de/integrations/python.md)
@@ -234,3 +236,5 @@ Detailed example notebooks and scripts will follow in a separate section. Planne
 - Source code on GitHub: [github.com/optimeas/osf](https://github.com/optimeas/osf), directory `implementations/python/`
 - Build and release process: see [`BUILD.md`](https://github.com/optimeas/osf/blob/main/implementations/python/BUILD.md) in the repository
 - Format specification: see the [OSF format](../osf_general.md) chapter in this documentation
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

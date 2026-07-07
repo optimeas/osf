@@ -13,6 +13,8 @@ keywords:
 last_update:
   date: 2026-05-06
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇬🇧 [English version](../../en/integrations/python.md)
@@ -234,3 +236,5 @@ Ausführliche Beispielnotebooks und Skripte folgen in einer separaten Sektion. G
 - Quellcode auf GitHub: [github.com/optimeas/osf](https://github.com/optimeas/osf), Verzeichnis `implementations/python/`
 - Build- und Release-Prozess: siehe [`BUILD.md`](https://github.com/optimeas/osf/blob/main/implementations/python/BUILD.md) im Repository
 - Format-Spezifikation: siehe das Kapitel [OSF-Format](../osf_general.md) in dieser Dokumentation
+
+> Dieses Dokument ist lizenziert unter [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.de). Namensnennung: optiMEAS GmbH und optiMEAS Switzerland GmbH.

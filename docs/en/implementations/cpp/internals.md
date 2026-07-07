@@ -12,6 +12,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 # Internals
@@ -183,3 +185,5 @@ If a future spec revision adds a data type:
 
 That the list is long is by design: every layer is explicitly typed,
 nothing is routed through `void*` or runtime casts.
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

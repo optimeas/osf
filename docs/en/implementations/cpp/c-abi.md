@@ -12,6 +12,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 # C ABI — the `osf-c` library
@@ -179,3 +181,5 @@ the **same** thread.
 `__attribute__((visibility("default")))` (ELF/Mach-O), and to
 `dllimport` when consuming. Consumers need define nothing — just include
 the header and link against `osf-c`.
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

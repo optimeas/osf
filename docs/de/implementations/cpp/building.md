@@ -12,6 +12,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 # Bauen & Einbinden
@@ -176,3 +178,5 @@ CI-MSVC-Version kann von der lokalen abweichen — ein lokal sauberer
 - **ctest findet 0 Tests:** `gtest_discover_tests` führt die
   Test-Binaries zur Configure-Zeit aus; in sandboxed Umgebungen das
   Binary direkt starten und das Configure-Log prüfen.
+
+> Dieses Dokument ist lizenziert unter [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.de). Namensnennung: optiMEAS GmbH und optiMEAS Switzerland GmbH.

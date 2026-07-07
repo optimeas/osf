@@ -12,6 +12,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 # Architektur der C++-Implementierung
@@ -270,3 +272,5 @@ implementations/cpp/
 - [Bauen & Einbinden — CMake, Optionen, CI](building.md)
 - [Kochbuch — Rezepte für typische Aufgaben](cookbook.md)
 - [Interna — Encoder, Chunking, Builder-Zustandsmaschine](internals.md)
+
+> Dieses Dokument ist lizenziert unter [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.de). Namensnennung: optiMEAS GmbH und optiMEAS Switzerland GmbH.

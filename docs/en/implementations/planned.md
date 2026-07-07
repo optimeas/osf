@@ -13,6 +13,8 @@ keywords:
 last_update:
   date: 2026-06-04
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇩🇪 [German version](../../de/implementations/planned.md)
@@ -37,3 +39,5 @@ The repository on [GitHub](https://github.com/optimeas/osf) carries the
 current status — and whether work has already begun. If you are interested in
 a particular language, the [specification](../osf_general.md) and the
 existing implementations are worth a look as a template.
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

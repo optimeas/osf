@@ -14,6 +14,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇩🇪 [German version](../../de/implementations/index.md)
@@ -58,3 +60,5 @@ up-to-date status.
 All implementations read the same set of
 [example files](../examples/osf_file_examples.md) and follow the same
 semantic rules of the specification.
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

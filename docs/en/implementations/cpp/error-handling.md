@@ -12,6 +12,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 # Error handling
@@ -155,3 +157,5 @@ The `StreamingWriter` remembers the first I/O error ("Broken" state) and
 returns it on **every** subsequent call, including `close()`. In write
 loops a single error check per iteration is therefore enough; the cause
 is not lost even when evaluated only at the end.
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

@@ -12,6 +12,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 # Reading
@@ -280,3 +282,5 @@ for (auto const& [idx, cs] : mgr.stats.perChannel)
   use `BlockReader` in streaming mode.
 - Flat accessors copy. A single `std::get` and working directly on the
   vector is the faster form for repeated access.
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

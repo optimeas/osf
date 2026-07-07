@@ -11,6 +11,8 @@ keywords:
 last_update:
   date: 2026-05-20
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇩🇪 [Deutsche Version](../../de/tools/index.md)
@@ -24,3 +26,5 @@ Currently available:
 - **[osftool](osftool.md)** — A verb-based command-line tool for merging, exporting, inspecting, converting, and verifying OSF and OSFZ files.
 
 For the current status, see [GitHub](https://github.com/optimeas/osf).
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

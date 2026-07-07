@@ -12,6 +12,8 @@ keywords:
 last_update:
   date: 2026-06-12
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 # Cookbook
@@ -248,3 +250,5 @@ int main(int argc, char** argv) try {
 
 See the complete example on the [C ABI](c-abi.md) page — load, list
 channels, copy-out readers, `osf_write_to_file`.
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.

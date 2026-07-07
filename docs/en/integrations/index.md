@@ -11,6 +11,8 @@ keywords:
 last_update:
   date: 2026-06-04
   author: Optimeas GmbH
+license: CC-BY-4.0
+copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 ---
 
 🇩🇪 [German version](../../de/integrations/index.md)
@@ -34,3 +36,5 @@ Currently available:
 Bindings to Apache Arrow, PyTorch, TensorFlow, MCP and LangChain are planned
 — see [Planned integrations](planned.md). The repository on
 [GitHub](https://github.com/optimeas/osf) carries the current status.
+
+> This document is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution: optiMEAS GmbH and optiMEAS Switzerland GmbH.
