@@ -25,6 +25,11 @@ type
     [Test] procedure Ed25519WithoutCrcRejected;
     [Test] procedure Ed25519UppercaseRejected;
     [Test] procedure Ed25519BeforeCrcRejected;
+    // Fix 1 — strict single-space grammar (spec 1.2): no trailing space,
+    // exactly one space between fields.
+    [Test] procedure TrailingSpaceRejected;
+    [Test] procedure TrailingSpaceAfterTokenRejected;
+    [Test] procedure DoubleSpaceRejected;
   end;
 
 implementation
@@ -96,6 +101,22 @@ end;
 procedure TFilerHeaderTests.Ed25519BeforeCrcRejected;
 begin
   Assert.Contains(TokenizeError('OSF5 16 ed25519:0123456789abcdef crc32c:9A3F01BC'), 'ed25519');
+end;
+
+procedure TFilerHeaderTests.TrailingSpaceRejected;
+begin
+  Assert.Contains(TokenizeError('OSF5 16 '), 'malformed');
+end;
+
+procedure TFilerHeaderTests.TrailingSpaceAfterTokenRejected;
+begin
+  Assert.Contains(TokenizeError('OSF5 16 crc32c:ABCD1234 '), 'malformed');
+end;
+
+procedure TFilerHeaderTests.DoubleSpaceRejected;
+begin
+  // A double space collapses to an empty field, which must be rejected.
+  Assert.AreNotEqual('', TokenizeError('OSF5  16'));
 end;
 
 initialization

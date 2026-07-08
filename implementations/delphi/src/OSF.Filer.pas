@@ -364,6 +364,7 @@ resourcestring
   SOSFLogOSFZDetected = 'OSFZ container detected, decompressing on the fly: %s';
   // Integrity profile (OSF5 level crc).
   SOSFUnknownHeaderToken = 'unknown header token ''%s''';
+  SOSFMalformedHeaderLine = 'malformed magic header line: fields must be separated by a single space with no trailing space';
   SOSFTokenNotAllowedOSF4 = 'header token ''%s'' is not allowed on an OSF4 identifier';
   SOSFInvalidCrc32cToken = 'crc32c header token must be 8 uppercase hex digits: "%s"';
   SOSFInvalidEd25519Token = 'ed25519 header keyid must be 16 lowercase hex digits: "%s"';
@@ -973,8 +974,10 @@ begin
   for I := 2 to High(Parts) do
   begin
     Token := Parts[I];
+    // An empty field means a double or trailing space — the spec requires
+    // exactly one space between fields and no trailing space (Fix 1).
     if Token = '' then
-      Continue;
+      raise EOSFFormatError.Create(SOSFMalformedHeaderLine);
     // Header tokens are an OSF5-only feature.
     if FVersion <> osvOSF5 then
       raise EOSFFormatError.CreateFmt(SOSFTokenNotAllowedOSF4, [Token]);
