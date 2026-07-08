@@ -332,6 +332,27 @@ osf_set_warnings(test_writer_common)
 gtest_discover_tests(test_writer_common)
 
 # ---------------------------------------------------------------------------
+# test_crc32c — internal CRC32C (integrity profile) unit tests.
+# ---------------------------------------------------------------------------
+
+add_executable(test_crc32c
+    unit/test_crc32c.cpp
+)
+
+target_link_libraries(test_crc32c PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_include_directories(test_crc32c PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src"
+)
+
+osf_set_warnings(test_crc32c)
+
+gtest_discover_tests(test_crc32c)
+
+# ---------------------------------------------------------------------------
 # test_header_examples — magic-header tests against reference files.
 # ---------------------------------------------------------------------------
 

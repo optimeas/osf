@@ -135,6 +135,7 @@ add_library(osf_core
     src/block.cpp
     src/blockencode.cpp
     src/compression.cpp
+    src/crc32c.cpp
     src/blockwriter.cpp
     src/datachannel.cpp
     src/durablefile.cpp
