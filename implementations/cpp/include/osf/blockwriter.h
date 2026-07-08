@@ -79,6 +79,12 @@ public:
     void setNamespaceSep(std::string value);
     /// Free-form file comment.
     void setComment(std::string value);
+
+    /// Enable the OSF5 integrity profile. `IntegrityProfile::Crc32c` emits a
+    /// metablock `crc32c` header token and a per-block frame CRC32C; `None`
+    /// (default) writes no integrity data. Signing (`Ed25519`) is not
+    /// supported and makes writeTo()/writeToFile() fail.
+    void setIntegrity(IntegrityProfile profile);
     /// Geolocation of the recording (`createdAtLatitude` /
     /// `_longitude` / `_altitude`); decimal degrees and meters.
     void setLocation(double latitude, double longitude, double altitude);
@@ -252,15 +258,17 @@ private:
 
     [[nodiscard]] Result<void> emitChannel(std::ostream& out,
         std::vector<std::uint8_t>& buf, std::uint16_t ci, std::uint8_t sov,
-        ChannelData const& cd) const;
+        ChannelData const& cd, bool frameCrc) const;
 
+    // Applies the frame CRC in place (when `frameCrc`) then writes `buf`.
     [[nodiscard]] Result<void> writeBlockBytes(std::ostream& out,
-        std::vector<std::uint8_t> const& buf) const;
+        std::vector<std::uint8_t>& buf, std::uint8_t sov, bool frameCrc) const;
 
     FileInfoFields                                    m_fileInfo;
     std::vector<ChannelDef>                           m_channels;
     std::vector<ChannelData>                          m_channelData;
     std::unordered_map<std::string, std::uint16_t>    m_nameToIndex;
+    IntegrityProfile                                  m_integrity = IntegrityProfile::None;
 };
 
 // ── IsTimestampedNumeric specializations ─────────────────────────────

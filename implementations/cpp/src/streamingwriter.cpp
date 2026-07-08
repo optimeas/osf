@@ -4,6 +4,7 @@
 #include "osf/streamingwriter.h"
 
 #include "blockencode_p.h"           // osf::detail::encode*
+#include "crc32c_p.h"                // osf::detail::crc32c
 #include "durablefile_p.h"           // osf::detail::DurableFile
 #include "writercommon_p.h"          // osf::detail chunking helpers + constants
 #include "osf/metablock.h"          // FileInfo, Channel, MetaBlock, serializeMetablockJson
@@ -11,6 +12,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <sstream>
 #include <type_traits>
@@ -93,7 +95,9 @@ StreamingWriter::StreamingWriter(StreamingWriter&& other) noexcept
       m_createdAtLongitude{other.m_createdAtLongitude},
       m_createdAtAltitude{other.m_createdAtAltitude},
       m_namespaceSep{std::move(other.m_namespaceSep)},
-      m_comment{std::move(other.m_comment)} {
+      m_comment{std::move(other.m_comment)},
+      m_integrity{other.m_integrity},
+      m_frameCrc{other.m_frameCrc} {
     other.m_state = State::Closed;
 }
 
@@ -115,6 +119,8 @@ StreamingWriter& StreamingWriter::operator=(StreamingWriter&& other) noexcept {
         m_createdAtAltitude   = other.m_createdAtAltitude;
         m_namespaceSep         = std::move(other.m_namespaceSep);
         m_comment               = std::move(other.m_comment);
+        m_integrity             = other.m_integrity;
+        m_frameCrc              = other.m_frameCrc;
         other.m_state = State::Closed;
     }
     return *this;
@@ -127,6 +133,7 @@ void StreamingWriter::setTag(std::string value)           { m_tag       = std::m
 void StreamingWriter::setReason(std::string value)        { m_reason    = std::move(value); }
 void StreamingWriter::setNamespaceSep(std::string value) { m_namespaceSep = std::move(value); }
 void StreamingWriter::setComment(std::string value)       { m_comment   = std::move(value); }
+void StreamingWriter::setIntegrity(IntegrityProfile profile) { m_integrity = profile; }
 
 void StreamingWriter::setLocation(double latitude, double longitude,
                                    double altitude) {
@@ -188,6 +195,13 @@ Result<void> StreamingWriter::start() {
             Error::Code::InvalidArgument,
             "start: no channels declared"));
     }
+    if (m_integrity == IntegrityProfile::Ed25519) {
+        return tl::make_unexpected(makeError(
+            Error::Code::InvalidArgument,
+            "start: this writer implements integrity level crc only; "
+            "signing (ed25519) is not supported"));
+    }
+    m_frameCrc = (m_integrity == IntegrityProfile::Crc32c);
 
     // Open the file via DurableFile.
     auto df = detail::DurableFile::create(m_path);
@@ -208,10 +222,18 @@ Result<void> StreamingWriter::start() {
     fi.comment = m_comment;
     MetaBlock meta = detail::buildMetablock(fi, m_channels);
 
-    // Serialize the metablock and build the magic-header line.
+    // Serialize the metablock and build the magic-header line. At integrity
+    // level crc a `crc32c` token carrying the metablock CRC is appended.
     std::string const jsonBody = serializeMetablockJson(meta);
-    std::string const magicLine =
-        "OSF5 " + std::to_string(jsonBody.size()) + "\n";
+    std::string magicLine = "OSF5 " + std::to_string(jsonBody.size());
+    if (m_frameCrc) {
+        std::uint32_t const crc =
+            osf::detail::crc32c(jsonBody.data(), jsonBody.size());
+        char tok[24];
+        std::snprintf(tok, sizeof(tok), " crc32c:%08X", crc);
+        magicLine += tok;
+    }
+    magicLine += "\n";
 
     // Helper for best-effort unlink + failed-start cleanup.
     auto failWithUnlink = [&](Error err) -> Result<void> {
@@ -269,8 +291,8 @@ Result<void> StreamingWriter::close() {
 
 // ── doWriteBlock — the I/O gate ────────────────────────────────────
 
-Result<void> StreamingWriter::doWriteBlock(std::uint8_t const* data,
-                                             std::size_t size) {
+Result<void> StreamingWriter::doWriteBlock(std::vector<std::uint8_t>& block,
+                                             std::uint8_t sov) {
     if (m_state == State::Broken) {
         return tl::make_unexpected(*m_stickyError);
     }
@@ -279,7 +301,10 @@ Result<void> StreamingWriter::doWriteBlock(std::uint8_t const* data,
             Error::Code::InvalidArgument,
             "doWriteBlock: writer not in Streaming state"));
     }
-    if (auto wr = m_durableFile->write(data, size); !wr) {
+    if (m_frameCrc) {
+        osf::detail::applyFrameCrc(block, sov);
+    }
+    if (auto wr = m_durableFile->write(block.data(), block.size()); !wr) {
         m_state = State::Broken;
         m_stickyError = wr.error();
         return tl::make_unexpected(*m_stickyError);
@@ -427,7 +452,7 @@ Result<void> StreamingWriter::writeTimestampedGpsSamples(
     // doubles for latitude, longitude, altitude per block.h:57-72).
     std::size_t const maxPerBlock =
         osf::detail::maxSamplesPerTimestampedBlock(
-            /*valueSize=*/osf::detail::GPS_WIRE_SIZE, sov);
+            /*valueSize=*/osf::detail::GPS_WIRE_SIZE, sov, m_frameCrc);
 
     std::size_t written = 0;
     while (written < count) {
@@ -439,8 +464,7 @@ Result<void> StreamingWriter::writeTimestampedGpsSamples(
                 timestampsNs + written, values + written, chunk); !enc) {
             return enc;
         }
-        if (auto wr = doWriteBlock(m_scratchBuffer.data(),
-                                      m_scratchBuffer.size()); !wr) {
+        if (auto wr = doWriteBlock(m_scratchBuffer, sov); !wr) {
             return wr;
         }
         written += chunk;
@@ -466,7 +490,7 @@ Result<void> StreamingWriter::writeTimestampedString(
         return tl::make_unexpected(*err);
     }
     auto const sov = sovFor(channel);
-    std::size_t const capacity = osf::detail::variableSampleCapacity(sov);
+    std::size_t const capacity = osf::detail::variableSampleCapacity(sov, m_frameCrc);
     if (value.size() > capacity) {
         return tl::make_unexpected(makeError(
             Error::Code::InvalidBlock,
@@ -483,7 +507,7 @@ Result<void> StreamingWriter::writeTimestampedString(
             m_scratchBuffer, channel, sov, timestampNs, value); !enc) {
         return enc;
     }
-    return doWriteBlock(m_scratchBuffer.data(), m_scratchBuffer.size());
+    return doWriteBlock(m_scratchBuffer, sov);
 }
 
 Result<void> StreamingWriter::writeTimestampedBinary(
@@ -493,7 +517,7 @@ Result<void> StreamingWriter::writeTimestampedBinary(
         return tl::make_unexpected(*err);
     }
     auto const sov = sovFor(channel);
-    std::size_t const capacity = osf::detail::variableSampleCapacity(sov);
+    std::size_t const capacity = osf::detail::variableSampleCapacity(sov, m_frameCrc);
     if (value.size > capacity) {
         return tl::make_unexpected(makeError(
             Error::Code::InvalidBlock,
@@ -510,7 +534,7 @@ Result<void> StreamingWriter::writeTimestampedBinary(
             m_scratchBuffer, channel, sov, timestampNs, value); !enc) {
         return enc;
     }
-    return doWriteBlock(m_scratchBuffer.data(), m_scratchBuffer.size());
+    return doWriteBlock(m_scratchBuffer, sov);
 }
 
 // ── writeTimestampedSamplesImpl<T> ────────────────────────────────
@@ -531,7 +555,7 @@ Result<void> StreamingWriter::writeTimestampedSamplesImpl(
 
     auto const sov = sovFor(channel);
     std::size_t const maxPerBlock =
-        osf::detail::maxSamplesPerTimestampedBlock(sizeof(T), sov);
+        osf::detail::maxSamplesPerTimestampedBlock(sizeof(T), sov, m_frameCrc);
 
     std::size_t written = 0;
     while (written < count) {
@@ -543,8 +567,7 @@ Result<void> StreamingWriter::writeTimestampedSamplesImpl(
                 timestampsNs + written, values + written, chunk); !enc) {
             return enc;
         }
-        if (auto wr = doWriteBlock(m_scratchBuffer.data(),
-                                      m_scratchBuffer.size()); !wr) {
+        if (auto wr = doWriteBlock(m_scratchBuffer, sov); !wr) {
             return wr;
         }
         written += chunk;
@@ -576,9 +599,9 @@ Result<void> StreamingWriter::startEquidistantSegmentImpl(
 
     auto const sov = sovFor(channel);
     std::size_t const maxFirst =
-        osf::detail::maxSamplesPerStartBlock(sizeof(T), sov);
+        osf::detail::maxSamplesPerStartBlock(sizeof(T), sov, m_frameCrc);
     std::size_t const maxCont =
-        osf::detail::maxSamplesPerContinuedBlock(sizeof(T), sov);
+        osf::detail::maxSamplesPerContinuedBlock(sizeof(T), sov, m_frameCrc);
 
     // First chunk as bcStartData.
     std::size_t const first = std::min(count, maxFirst);
@@ -588,8 +611,7 @@ Result<void> StreamingWriter::startEquidistantSegmentImpl(
             samples, first); !enc) {
         return enc;
     }
-    if (auto wr = doWriteBlock(m_scratchBuffer.data(),
-                                  m_scratchBuffer.size()); !wr) {
+    if (auto wr = doWriteBlock(m_scratchBuffer, sov); !wr) {
         return wr;
     }
     m_channelStates[channel].segmentOpen = true;
@@ -605,8 +627,7 @@ Result<void> StreamingWriter::startEquidistantSegmentImpl(
                 samples + written, chunk); !enc) {
             return enc;
         }
-        if (auto wr = doWriteBlock(m_scratchBuffer.data(),
-                                      m_scratchBuffer.size()); !wr) {
+        if (auto wr = doWriteBlock(m_scratchBuffer, sov); !wr) {
             return wr;
         }
         written += chunk;
@@ -635,7 +656,7 @@ Result<void> StreamingWriter::appendEquidistantSamplesImpl(
 
     auto const sov = sovFor(channel);
     std::size_t const maxCont =
-        osf::detail::maxSamplesPerContinuedBlock(sizeof(T), sov);
+        osf::detail::maxSamplesPerContinuedBlock(sizeof(T), sov, m_frameCrc);
 
     std::size_t written = 0;
     while (written < count) {
@@ -647,8 +668,7 @@ Result<void> StreamingWriter::appendEquidistantSamplesImpl(
                 samples + written, chunk); !enc) {
             return enc;
         }
-        if (auto wr = doWriteBlock(m_scratchBuffer.data(),
-                                      m_scratchBuffer.size()); !wr) {
+        if (auto wr = doWriteBlock(m_scratchBuffer, sov); !wr) {
             return wr;
         }
         written += chunk;

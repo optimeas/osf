@@ -43,22 +43,32 @@ constexpr std::size_t maxPayloadForSov(std::uint8_t sov) noexcept {
 }
 
 // bcStartData multi-sample: payload = [u8 ctrl][i64 ts][f64 rate]
-// [u32 N][N * valueSize]. Overhead = 21.
+// [u32 N][N * valueSize]. Overhead = 21. When `frameCrc` is set the block
+// budget is reduced by 4 to leave room for the integrity frame CRC.
 std::size_t maxSamplesPerStartBlock(std::size_t valueSize,
-                                        std::uint8_t sov) noexcept;
+                                        std::uint8_t sov,
+                                        bool frameCrc = false) noexcept;
 
 // bcContinuedData multi-sample: payload = [u8 ctrl][u32 N]
 // [N * valueSize]. Overhead = 5.
 std::size_t maxSamplesPerContinuedBlock(std::size_t valueSize,
-                                            std::uint8_t sov) noexcept;
+                                            std::uint8_t sov,
+                                            bool frameCrc = false) noexcept;
 
 // bcAbsTimeStampData multi-sample: payload = [u8 ctrl][u32 N]
 // [N * (8 + valueSize)]. Overhead = 5.
 std::size_t maxSamplesPerTimestampedBlock(std::size_t valueSize,
-                                              std::uint8_t sov) noexcept;
+                                              std::uint8_t sov,
+                                              bool frameCrc = false) noexcept;
 
 // Effective max sample size for a single-sample variable block.
-std::size_t variableSampleCapacity(std::uint8_t sov) noexcept;
+std::size_t variableSampleCapacity(std::uint8_t sov, bool frameCrc = false) noexcept;
+
+// Integrity level crc: patch an encoded block `[u16 ci][len(sov)][payload]`
+// in place so the length field also counts the 4-byte frame CRC, then append
+// the CRC32C over the whole frame (channel index, length field, payload).
+// Shared by both writers so the on-wire form is single-sourced.
+void applyFrameCrc(std::vector<std::uint8_t>& block, std::uint8_t sov) noexcept;
 
 // Writer-controllable file-info fields. `createdUtc` and `version`
 // are not carried here — buildMetablock stamps them at assembly time
