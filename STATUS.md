@@ -226,11 +226,30 @@ table-based CRC-32/ISCSI; check value `0xE3069283`, byte-identical to Rust/C++;
 **OSFCrcRefGen** (`demos/osfgenerator/`) writes Delphi CRC reference files into
 `examples/generated/integrity/` (`*_crc_delphi.osf`). **Cross-validated
 bidirectionally with Rust** (Rust reads Delphi files and vice versa, 0 CRC
-failures, byte-identical CRCs). Tests: **`OSFIntegritySelfTest.dpr`** (CRC
-vectors + 5 tokenizer negatives + writer round-trip + Rust cross-validation,
-all pass) plus osftool negative cases (metablock/numeric/string byte flips,
-unknown token, control-byte-9 skip) with the documented exit codes. Verified
-with dcc32/dcc64; `OSFCompileCheck` clean.
+failures, byte-identical CRCs).
+
+**Tests — DUnitX suite** (`implementations/delphi/tests/OSFTests.dpr`, 26 tests,
+green under **dcc32 and dcc64**): `Test.OSF.CRC32C` (vectors incl. RFC 3720),
+`Test.OSF.Filer.Header` (tokenizer matrix + strict-space cases), and
+`Test.OSF.Filer.Integrity` (metablock/frame CRC good+corrupt per block type,
+Fix C control-byte-9 skip, `VerificationStatus`, write/read round-trip,
+writer-overflow boundary, and cross-validation reading the Rust + Delphi
+`integrity/*.osf` reference files). Build with the DUnitX source on the unit +
+include path and `.dcu` output routed to a writable dir:
+
+```
+set DX=C:\Program Files (x86)\Embarcadero\Studio\23.0\source\DUnitX
+dcc32 -B -Q -U"%DX%" -I"%DX%" -NU"dcu32" OSFTests.dpr   # (dcc64 / dcu64 likewise)
+OSFTests.exe   # exit 0 = all pass
+```
+
+Two spec-conformance fixes landed with RED-first tests: **Fix 1** — strict
+single-space magic-header grammar (trailing/double space now rejected, matching
+Rust); **Fix 2** — writer guard against a u16 length-field overflow when the
+frame CRC (+4) is counted (raises instead of silent wrap). Also verified via
+osftool negative cases (metablock/numeric/string byte flips, unknown token,
+control-byte-9 skip) with documented exit codes; `OSFCompileCheck` + osftool
+compile clean.
 
 ---
 
@@ -821,9 +840,12 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 ## Open / known follow-ups
 
-- **DUnitX test suite** for the Delphi implementation — not started; only
-  `OSFCompileCheck.dpr` exists today. Brief F3 from the spec-revision task
-  was deferred; would be its own scaffolding effort.
+- **DUnitX test suite** for the Delphi implementation — **started
+  (2026-07-08).** `implementations/delphi/tests/OSFTests.dpr` (DUnitX console
+  runner, 26 tests, dcc32 + dcc64 green) covers `OSF.CRC32C`, the header
+  tokenizer, and the integrity read/write path. Structured for extension (one
+  `Test.OSF.*` unit per area); the older OSF library units (merger, exporters,
+  cache, …) are not yet covered — incremental follow-up.
 - **Rust** — read path complete (header + metablock + block reader +
   DataManager + transparent OSFZ); OSF5 writer landed with full
   round-trip validation.
