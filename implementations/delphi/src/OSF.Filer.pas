@@ -316,6 +316,8 @@ resourcestring
   SOSFWriteHeaderAlreadyCalled = 'WriteHeader has already been called';
   SOSFWriteHeaderBadVersion = 'WriteHeader: unsupported FVersion';
   SOSFWriteBeforeHeader = 'WriteHeader must be called before writing data blocks';
+  SOSFWriterIntegrityOSF5Only = 'The integrity profile is an OSF5-only feature';
+  SOSFWriterSigningUnsupported = 'This writer implements integrity level crc only; signing (ed25519) is not supported';
 
   // AddChannel uniqueness errors.
   SOSFDuplicateChannelIndex = 'AddChannel: duplicate channel index %d';
@@ -1824,7 +1826,17 @@ begin
     raise EOSFException.Create(SOSFWriteHeaderBadVersion);
   end;
 
-  HeaderStr := Format('%s %d'#10, [Magic, Length(MetaBytes)]);
+  // Integrity profile is an OSF5-only feature. The writer supports level crc.
+  if (FIntegrity <> ipNone) and (FVersion <> osvOSF5) then
+    raise EOSFException.Create(SOSFWriterIntegrityOSF5Only);
+  if FIntegrity = ipEd25519 then
+    raise EOSFException.Create(SOSFWriterSigningUnsupported);
+
+  HeaderStr := Format('%s %d', [Magic, Length(MetaBytes)]);
+  if FIntegrity = ipCrc32c then
+    // crc32c token: 8 uppercase hex digits of the metablock CRC.
+    HeaderStr := HeaderStr + ' crc32c:' + IntToHex(CRC32C(MetaBytes[0], Length(MetaBytes)), 8);
+  HeaderStr := HeaderStr + #10;
   HeaderLine := TEncoding.ASCII.GetBytes(HeaderStr);
 
   FStream.WriteBuffer(HeaderLine[0], Length(HeaderLine));
@@ -1835,15 +1847,59 @@ begin
 end;
 
 procedure TOSFFile.WriteDataBlock(Channel: TOSFChannelDef; const Payload: TBytes);
+var
+  Idx: Word;
+  OnWire: UInt32;
+  Crc: TCRC32C;
+  ChanLE: array[0..1] of Byte;
+  LenLE: array[0..3] of Byte;
+  CrcLE: array[0..3] of Byte;
+  LenBytes: Integer;
+  CrcVal: UInt32;
 begin
-  WriteUInt16(Word(Channel.Index));
+  Idx := Word(Channel.Index);
+  // At integrity level crc the frame CRC (4 bytes) is appended and counted in
+  // the length field. The Delphi writer emits one block per call (no splitting
+  // at the length-field boundary), so no chunk reduction is needed.
+  if FIntegrity <> ipNone then
+    OnWire := UInt32(Length(Payload)) + 4
+  else
+    OnWire := UInt32(Length(Payload));
+
+  WriteUInt16(Idx);
   case Channel.LengthFieldSize of
     lfs2:
-      WriteUInt16(Word(Length(Payload)));
+      WriteUInt16(Word(OnWire));
     lfs4:
-      WriteUInt32(UInt32(Length(Payload)));
+      WriteUInt32(OnWire);
   end;
   WriteRawBytes(Payload);
+
+  if FIntegrity <> ipNone then
+  begin
+    // Frame CRC32C over channel index (2 LE) + length field (2/4 LE) + payload.
+    ChanLE[0] := Byte(Idx);
+    ChanLE[1] := Byte(Idx shr 8);
+    LenLE[0] := Byte(OnWire);
+    LenLE[1] := Byte(OnWire shr 8);
+    LenLE[2] := Byte(OnWire shr 16);
+    LenLE[3] := Byte(OnWire shr 24);
+    if Channel.LengthFieldSize = lfs2 then
+      LenBytes := 2
+    else
+      LenBytes := 4;
+    Crc.Init;
+    Crc.Update(ChanLE[0], 2);
+    Crc.Update(LenLE[0], LenBytes);
+    if Length(Payload) > 0 then
+      Crc.Update(Payload[0], Length(Payload));
+    CrcVal := Crc.Final;
+    CrcLE[0] := Byte(CrcVal);
+    CrcLE[1] := Byte(CrcVal shr 8);
+    CrcLE[2] := Byte(CrcVal shr 16);
+    CrcLE[3] := Byte(CrcVal shr 24);
+    FStream.WriteBuffer(CrcLE[0], 4);
+  end;
 end;
 
 procedure TOSFFile.WriteEquidistantBlock(ChannelIndex: Integer; const Samples: array of Double; FirstTimestampNs: Int64);
