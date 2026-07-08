@@ -15,6 +15,7 @@ use crate::manager::PyDataManager;
 use numpy::{PyArray1, PyArrayMethods};
 use osf_core::types::{ChannelType, DataType};
 use osf_core::writer::{ChannelDef, WriterBuilder};
+use osf_core::IntegrityProfile;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -94,6 +95,20 @@ impl PyWriterBuilder {
     ) -> PyResult<PyRefMut<'py, Self>> {
         let inner = slf.take_inner()?;
         slf.inner = Some(inner.comment(value));
+        Ok(slf)
+    }
+
+    /// Enable the integrity profile. `profile="crc32c"` emits a metablock
+    /// `crc32c` header token and a per-block frame CRC32C; `profile="none"`
+    /// (default) writes no integrity data. Signing (`"ed25519"`) is not
+    /// supported by the writer.
+    fn with_integrity<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        profile: &str,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        let p = parse_integrity_str(profile)?;
+        let inner = slf.take_inner()?;
+        slf.inner = Some(inner.with_integrity(p));
         Ok(slf)
     }
 
@@ -295,6 +310,19 @@ fn builder_consumed() -> PyErr {
     crate::error::OsfError::new_err("WriterBuilder already consumed by write_to_file()")
 }
 
+fn parse_integrity_str(s: &str) -> PyResult<IntegrityProfile> {
+    match s {
+        "none" => Ok(IntegrityProfile::None),
+        "crc32c" => Ok(IntegrityProfile::Crc32c),
+        "ed25519" => Err(PyValueError::new_err(
+            "integrity 'ed25519' (signing) is not supported by the writer",
+        )),
+        other => Err(PyValueError::new_err(format!(
+            "unknown integrity {other:?}; expected 'none' or 'crc32c'"
+        ))),
+    }
+}
+
 fn parse_data_type_str(s: &str) -> PyResult<DataType> {
     Ok(match s {
         "bool" => DataType::Bool,
@@ -337,9 +365,23 @@ fn parse_channel_type_str(s: &str) -> PyResult<ChannelType> {
 /// `osf_core::writer::write_to_file(&mgr, path)`. Always emits OSF5
 /// per DECISIONS §6, even when `mgr` was loaded from an OSF4 source.
 #[pyfunction]
-#[pyo3(name = "save")]
-pub fn py_save(py: Python<'_>, manager: &PyDataManager, path: &str) -> PyResult<()> {
+#[pyo3(name = "save", signature = (manager, path, *, integrity = None))]
+pub fn py_save(
+    py: Python<'_>,
+    manager: &PyDataManager,
+    path: &str,
+    integrity: Option<&str>,
+) -> PyResult<()> {
     let path = path.to_string();
-    py.allow_threads(|| osf_core::writer::write_to_file(&manager.inner, path))
-        .map_err(convert_error)
+    let profile = match integrity {
+        Some(s) => parse_integrity_str(s)?,
+        None => IntegrityProfile::None,
+    };
+    py.allow_threads(|| match profile {
+        IntegrityProfile::None => osf_core::writer::write_to_file(&manager.inner, path),
+        p => WriterBuilder::from_manager(&manager.inner)?
+            .with_integrity(p)
+            .write_to_file(path),
+    })
+    .map_err(convert_error)
 }

@@ -97,6 +97,16 @@ class ReaderStats:
     data_section_size_bytes: int
     trailer_seen: bool
 
+    integrity: str
+    """Declared integrity level: ``"none"``, ``"crc32c"``, or ``"ed25519"``."""
+    blocks_crc_failed: int
+    """Blocks dropped because their frame CRC did not match."""
+    blocks_signature_skipped: int
+    """Signature blocks skipped (this reader does not verify signatures)."""
+    verification_status: str
+    """``"none"``, ``"crc_valid"``, ``"invalid"``, or
+    ``"signature_unverifiable"``."""
+
     def __repr__(self) -> str: ...
     def __str__(self) -> str:
         """Human-readable, multi-line summary mirroring the Rust
@@ -129,6 +139,10 @@ class WriterBuilder:
     def __init__(self) -> None: ...
 
     # Builder-style chainable setters.
+    def with_integrity(self, profile: str) -> "WriterBuilder":
+        """Enable integrity level ``crc`` (``profile="crc32c"``) or disable
+        it (``"none"``, default). Signing is not supported by the writer."""
+        ...
     def creator(self, value: str) -> "WriterBuilder": ...
     def tag(self, value: str) -> "WriterBuilder": ...
     def reason(self, value: str) -> "WriterBuilder": ...
@@ -212,11 +226,13 @@ def load(path: str) -> DataManager:
     ...
 
 
-def save(manager: DataManager, path: str) -> None:
+def save(manager: DataManager, path: str, *, integrity: Optional[str] = None) -> None:
     """Write ``manager`` back to disk as an OSF5 file.
 
     Always emits OSF5 — even when the manager was loaded from an
-    OSF4 source — per DECISIONS §6. Releases the GIL during the
+    OSF4 source — per DECISIONS §6. Pass ``integrity="crc32c"`` to emit
+    the integrity profile (metablock token + per-block frame CRC32C);
+    the default writes no integrity data. Releases the GIL during the
     write.
     """
     ...

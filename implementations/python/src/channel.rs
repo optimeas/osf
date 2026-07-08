@@ -254,6 +254,35 @@ impl PyStats {
         self.inner.trailer_seen
     }
 
+    /// Declared integrity level: `"none"`, `"crc32c"`, or `"ed25519"`.
+    #[getter]
+    fn integrity(&self) -> &'static str {
+        match self.inner.integrity {
+            osf_core::IntegrityProfile::None => "none",
+            osf_core::IntegrityProfile::Crc32c => "crc32c",
+            osf_core::IntegrityProfile::Ed25519 => "ed25519",
+        }
+    }
+
+    /// Blocks dropped because their frame CRC did not match.
+    #[getter]
+    fn blocks_crc_failed(&self) -> u64 {
+        self.inner.blocks_crc_failed
+    }
+
+    /// Signature blocks skipped (this reader does not verify signatures).
+    #[getter]
+    fn blocks_signature_skipped(&self) -> u64 {
+        self.inner.blocks_signature_skipped
+    }
+
+    /// Overall verification status: `"none"`, `"crc_valid"`, `"invalid"`,
+    /// or `"signature_unverifiable"`.
+    #[getter]
+    fn verification_status(&self) -> &'static str {
+        self.inner.verification_status()
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "ReaderStats(channels_total={}, blocks_total={}, elapsed_ms={:.2}, compressed={})",
