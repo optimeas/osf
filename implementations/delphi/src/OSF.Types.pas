@@ -29,6 +29,15 @@ const
   // Channel index that identifies the optional info/trailer block.
   OSF_INFO_CHANNEL_INDEX = $FFFF;
 
+  // Channel index of the file-wide integrity signature block
+  // (bcIntegritySignature, control byte 9) at integrity level signed.
+  // Not declared in the meta block; readers skip it via its (always u32)
+  // length field. See DECISIONS §24 / osf5_integrity.md.
+  OSF_SIGNATURE_CHANNEL_INDEX = $FFFE;
+
+  // Control byte value of the integrity signature block (level signed).
+  OSF_BLOCK_TYPE_SIGNATURE = 9;
+
   // Control byte bit definitions.
   // Bit 7 = 1 means the block contains N > 1 samples; the sample count
   // is stored as a uint32 immediately after the control byte.
@@ -54,6 +63,15 @@ type
   TOSFMetaFormat = (
     mfXML,
     mfJSON
+  );
+
+  // Integrity profile declared by the OSF5 magic-header token(s). Strictly
+  // ordered ladder ipNone < ipCrc32c < ipEd25519. This implementation reads
+  // level crc; it reads level signed files but does not verify signatures.
+  TOSFIntegrityProfile = (
+    ipNone,
+    ipCrc32c,
+    ipEd25519
   );
 
   // Block content type - lower 7 bits of the control byte.
@@ -161,6 +179,10 @@ function OSFLengthFieldSizeFromInt(Value: Integer): TOSFLengthFieldSize;
 
 // Version detection from a magic token read out of the header line.
 function OSFVersionFromMagic(const Magic: string): TOSFVersion;
+
+// Returns the status-vocabulary name of an integrity profile:
+// 'none', 'crc32c', or 'ed25519'.
+function OSFIntegrityProfileName(Profile: TOSFIntegrityProfile): string;
 
 // Returns the current UTC time formatted as ISO 8601 with millisecond precision.
 // Example: "2026-05-03T14:22:07.456Z"
@@ -321,6 +343,16 @@ begin
     Result := osvOSF5
   else
     Result := osvUnknown;
+end;
+
+function OSFIntegrityProfileName(Profile: TOSFIntegrityProfile): string;
+begin
+  case Profile of
+    ipCrc32c:  Result := 'crc32c';
+    ipEd25519: Result := 'ed25519';
+  else
+    Result := 'none';
+  end;
 end;
 
 function OSFUtcNowISO8601: string;
