@@ -193,6 +193,45 @@ clean compile signal after refactors.
 (`OSFViewer` only via IDE because of TeeChart); `osfmerger` compiles
 Win64 with `dcc64`. Delphi 12 / RAD Studio 23.0.
 
+### Delphi integrity profile — level `crc` (2026-07-08)
+
+Delphi implements the OSF5 integrity profile at level `crc` plus the two audit
+fixes (`AUDIT_INTEGRITY_O1.md` §4.2). New unit **`OSF.CRC32C`** (pure-Pascal
+table-based CRC-32/ISCSI; check value `0xE3069283`, byte-identical to Rust/C++;
+`CRC32CSelfTest`). In `OSF.Filer`:
+
+- **Fix A (tokenizer):** `ParseHeaderTokens` parses `crc32c` (8 upper hex,
+  strict) and `ed25519` (16 lower hex, only after `crc32c`) magic-header tokens;
+  an unknown key rejects the file (`unknown header token '<key>'`); tokens are
+  rejected on OSF4 identifiers. Profile + counters exposed via `TOSFFile`
+  properties (`IntegrityProfile`, `BlocksCRCFailed`, `BlocksSignatureSkipped`,
+  `BlocksUnknownTypeSkipped`, `VerificationStatus`).
+- **Metablock CRC** verified over the raw bytes before parse; **frame CRC**
+  verified over the whole frame and stripped before the typed decode
+  (fail-closed, effective len = LEN − 4), mismatch skips the block + counts +
+  logs and reads on.
+- **Fix C:** an unknown control byte is skipped via the length field and the
+  scan continues (own counter/log); `FTruncationSeen` only on real truncation.
+  Block reads return a tri-state (`boBlock`/`boSkip`/`boStop`); `ReadNextBlock`
+  loops.
+- **Signed coexistence:** signature blocks (channel `0xFFFE`, u32 length field,
+  control 9) are skipped + counted; `VerificationStatus` reports
+  `signature_unverifiable`.
+- **Writer:** `TOSFFile.IntegrityProfile := ipCrc32c` emits the `crc32c` token
+  (metablock CRC) and a per-block frame CRC (one block per call, no chunk
+  reduction needed). Ed25519 / OSF4-integrity rejected.
+
+**osftool:** `verify` reports the integrity status vocabulary + counters
+(exit 4 on `invalid`); `info` shows `Integrity: none|crc32c|ed25519`.
+**OSFCrcRefGen** (`demos/osfgenerator/`) writes Delphi CRC reference files into
+`examples/generated/integrity/` (`*_crc_delphi.osf`). **Cross-validated
+bidirectionally with Rust** (Rust reads Delphi files and vice versa, 0 CRC
+failures, byte-identical CRCs). Tests: **`OSFIntegritySelfTest.dpr`** (CRC
+vectors + 5 tokenizer negatives + writer round-trip + Rust cross-validation,
+all pass) plus osftool negative cases (metablock/numeric/string byte flips,
+unknown token, control-byte-9 skip) with the documented exit codes. Verified
+with dcc32/dcc64; `OSFCompileCheck` clean.
+
 ---
 
 ## Delphi CLI — osftool

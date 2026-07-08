@@ -1,18 +1,21 @@
 # OSF5 integrity-profile reference files (level `crc`)
 
-Rust-generated OSF5 files that carry the **integrity profile at level `crc`**
-(a `crc32c` magic-header token over the metablock plus a per-block frame
-CRC32C). They exist for cross-implementation validation of integrity-aware
-readers.
+OSF5 files that carry the **integrity profile at level `crc`** (a `crc32c`
+magic-header token over the metablock plus a per-block frame CRC32C). They exist
+for cross-implementation validation of integrity-aware readers.
+
+Rust-generated (`cargo run --example gen_crc_refs` from `implementations/rust/osf-core`):
 
 - `osf5_crc_equidistant.osf` — three equidistant `double` channels.
 - `osf5_crc_variable.osf` — one `string` and one `binary` channel.
 
-Regenerate with:
+Delphi-generated (`OSFCrcRefGen` from `implementations/delphi`):
 
-```
-cargo run --example gen_crc_refs   # from implementations/rust/osf-core
-```
+- `osf5_equidistant_crc_delphi.osf` — three equidistant `double` channels.
+- `osf5_variable_crc_delphi.osf` — one `string` and one `binary` channel.
+
+The Rust and Delphi implementations read each other's files with zero CRC
+failures (byte-identical CRC values in both directions).
 
 **Why a separate directory (not directly in `examples/generated/`):** these
 files require an integrity-aware reader. Integrity-*unaware* consumers — the
