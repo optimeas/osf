@@ -4,6 +4,44 @@ All notable changes to the C++ implementation of OSF will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-09
+
+### Added
+
+OSF5 integrity profile at level `crc` (CRC32C). Additive and backward-compatible:
+profile-less files are read and written exactly as before, and the writer option
+defaults off.
+
+- **Vendored CRC32C** (`src/crc32c.cpp`, `src/crc32c_p.h`): dependency-free,
+  table-based slicing-by-8 CRC-32/ISCSI (Castagnoli). Canonical check value
+  `0xE3069283`.
+- **Reader.** A strict must-understand magic-header tokenizer parses `crc32c`
+  and `ed25519` tokens; an unrecognised key is the new
+  `Error::Code::UnknownHeaderToken`, and a token after an `OSF4` identifier is
+  `InvalidMagicHeader`. The metablock CRC is verified before the parse
+  (`Error::Code::MetablockCrcMismatch`). Under an active profile every block's
+  frame CRC32C is verified fail-closed — the effective payload is `LEN − 4`,
+  carved off before the typed parse; a mismatch skips the block and increments
+  `ReaderStats::blocksCrcFailed`. Signature blocks (reserved channel `0xFFFE`,
+  control byte 9, u32 length) are skipped and counted
+  (`ReaderStats::blocksSignatureSkipped`) so a signed file stays readable.
+  New `ReaderStats::integrity` and `ReaderStats::verificationStatus()`
+  (`none` / `crc_valid` / `invalid` / `signature_unverifiable`). Gzip-wrapped
+  crc files decompress and then verify transparently.
+- **Writer.** `setIntegrity(IntegrityProfile::Crc32c)` on both `StreamingWriter`
+  and `BlockWriter` (default off) emits the `crc32c` token, the metablock CRC,
+  and a per-block frame CRC (implemented once in the shared writer path).
+  `Ed25519` is rejected; `StreamingWriter` fsync/OSFZ behaviour is unchanged.
+- **C ABI (`osf-c`).** Additive, no breaks: `OSF_ERR_UNKNOWN_HEADER_TOKEN` and
+  `OSF_ERR_METABLOCK_CRC_MISMATCH` status codes, an `osf_integrity_profile`
+  enum, and `osf_manager_integrity` / `osf_manager_blocks_crc_failed` /
+  `osf_manager_blocks_signature_skipped` / `osf_manager_verification_status`.
+- **Reference files** read for cross-validation from
+  `examples/generated/integrity/` (two Rust-written, two Delphi-written); the
+  frame/metablock CRC is byte-identical to the Rust implementation.
+
+Signing (level `signed`) is not implemented.
+
 ## [0.1.0] - 2026-06-12
 
 ### Changed — **BREAKING**

@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **OSF5 integrity profile level `crc` — C++ (`osf-cpp` + `osf-c`).** Reader:
+  a strict must-understand magic-header tokenizer (`crc32c` / `ed25519`,
+  `Error::Code::UnknownHeaderToken` on unknown keys, `InvalidMagicHeader` for a
+  token after an `OSF4` identifier), metablock-CRC verification before the parse
+  (`Error::Code::MetablockCrcMismatch`), and fail-closed per-block frame-CRC32C
+  framing (effective payload = `LEN − 4`; a mismatch skips the block and bumps
+  `ReaderStats::blocksCrcFailed`). Signature blocks on channel `0xFFFE` are
+  skipped and counted (`blocksSignatureSkipped`) so signed files stay
+  readable through `DataManager`; `ReaderStats::integrity` /
+  `verificationStatus()` report status. Writer:
+  `setIntegrity(IntegrityProfile::Crc32c)` on **both** `StreamingWriter` and
+  `BlockWriter` (default off) emits the token, metablock CRC, and frame CRCs
+  from the shared writer path. The `osf-c` C ABI gains the two status codes, an
+  `osf_integrity_profile` enum, and integrity/counter/`verification_status`
+  accessors — all additive. Dependency-free vendored CRC32C (check value
+  `0xE3069283`, byte-identical to Rust/Delphi). cpp package **0.2.0**. Signing
+  (level `signed`) is not implemented. **No spec changes.**
 - **OSF5 integrity profile level `crc` — Rust (`osf-core`) + Python (`osfdata`).**
   Reader: a strict, must-understand magic-header tokenizer (`crc32c` /
   `ed25519`, `OsfError::UnknownHeaderToken` on unknown keys), metablock-CRC

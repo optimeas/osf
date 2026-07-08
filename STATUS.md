@@ -606,6 +606,47 @@ develop` (18 passed, 1 skipped).
 Phase 1 (skeleton) completed 2026-05-08; Phase 2 (magic-header parser) completed 2026-05-10; Phase 3 (OSF5 JSON metablock parser) completed 2026-05-19; Phase 4 (OSF4 XML metablock parser) completed 2026-05-23; Phase 5 (block-stream reader) completed 2026-05-23; Phase 6 (typed DataManager) completed 2026-05-23. Reader updated for the version-deterministic null-terminator rule on 2026-05-24. Phase 7a (private block-encoder library) completed 2026-05-26. Phase 7b (`StreamingWriter` — embedded streaming OSF5 writer) completed 2026-05-31. Phase 7c (`BlockWriter` — analyst-style OSF5 writer) completed 2026-06-02. Phase 7d (`StaleValueGuard` — optional freshness layer) completed 2026-06-03. Phase 8 (transparent OSFZ decompression on read) completed 2026-06-03. Phase 9 (throwing convenience layer) completed 2026-06-03. Phase 10 (CI integration) completed 2026-06-03. **Phase 11 (C ABI wrapper) completed 2026-06-04 — the §20 Implementation Order is now complete (phases 1–11).** Per [DECISIONS §20](DECISIONS.md#20-c-implementation-architecture) + [§23](DECISIONS.md#23-c-abi-osf-c).
 Standalone C++17 implementation, parallel to the Rust core — not a port from C, not a wrapper around the Rust crate. Foundation API, magic-header surface, both OSF4 + OSF5 metablock parsers, the block-stream reader (with `ReaderStats`), the typed `DataManager`, the OSF5 block-encoder primitives, **both** user-facing writer classes (`StreamingWriter` + `BlockWriter`), the optional `StaleValueGuard` freshness layer, transparent OSFZ (gzip/zlib) decompression on read, the opt-in throwing convenience layer, and the `osf-c` C ABI shared library are all in place — and CI builds + tests them on Linux/macOS/Windows. **All eleven phases are done;** remaining C++ work is incremental (BACKLOG), not a numbered phase.
 
+### C++ integrity profile — level `crc` (2026-07-09)
+
+`osf-cpp` implements the OSF5 integrity profile at level `crc` (package
+version **0.2.0**). Dependency-free vendored CRC32C (`src/crc32c.cpp`,
+slicing-by-8 CRC-32/ISCSI; canonical check value `0xE3069283`,
+byte-identical to Rust/Delphi). Signing (level `signed`) is out of scope.
+
+- **Reader.** A strict must-understand magic-header tokenizer parses `crc32c`
+  (8 upper hex) and `ed25519` (16 lower hex, only after `crc32c`); an unknown
+  key is `Error::Code::UnknownHeaderToken` (distinct from a malformed-length
+  parse error), and a token after an `OSF4` identifier is `InvalidMagicHeader`
+  (grammar-level). The metablock CRC is verified over the raw bytes before the
+  parse (`Error::Code::MetablockCrcMismatch`). Under an active profile each
+  block's frame CRC32C is verified fail-closed (effective payload = `LEN − 4`,
+  carved off before the typed parse); a mismatch skips the block and bumps
+  `ReaderStats::blocksCrcFailed`. Signature blocks (reserved channel `0xFFFE`,
+  control byte 9, u32 length) are skipped and counted
+  (`blocksSignatureSkipped`) so a signed file stays readable — end-to-end
+  through `DataManager`. `ReaderStats::integrity` and `verificationStatus()`
+  (`none` / `crc_valid` / `invalid` / `signature_unverifiable`) report status.
+  `DecompressingIStream` is unchanged: a gzip-wrapped crc file decompresses and
+  then verifies transparently.
+- **Writer.** `setIntegrity(IntegrityProfile::Crc32c)` on **both**
+  `StreamingWriter` and `BlockWriter` (default off) emits the `crc32c` token,
+  the metablock CRC, and a per-block frame CRC — implemented once in the shared
+  `writercommon` path (frame CRC appended as the last 4 bytes; chunk budgets
+  reduced by 4). `Ed25519` is rejected. `StreamingWriter` fsync/OSFZ behaviour
+  is unchanged.
+- **C ABI (`osf-c`).** Additive: `OSF_ERR_UNKNOWN_HEADER_TOKEN` /
+  `OSF_ERR_METABLOCK_CRC_MISMATCH` status codes, an `osf_integrity_profile`
+  enum, and `osf_manager_integrity` / `_blocks_crc_failed` /
+  `_blocks_signature_skipped` / `_verification_status` accessors.
+- **Tests.** `tests/unit/test_crc32c.cpp` (RFC 3720 vectors), header-tokenizer
+  unit tests, and `tests/integration/test_integrity_examples.cpp` (10 cases:
+  both-writer round-trips, the four cross-implementation reference files under
+  `examples/generated/integrity/` read clean, the negative suite — metablock /
+  numeric / string byte flips, unknown token, OSF4+token, signature block —
+  and a gzip-wrapped crc file). Byte-level cross-validation with Rust is
+  transitive: the CRC primitive matches and the C++ reader reads the Rust
+  reference files with zero failures. **345/345 ctest green.**
+
 **Library targets:**
 
 - `osf::osf` — static library (default; shared if `BUILD_SHARED_LIBS=ON`). Internal CMake name is `osf_core`; `OUTPUT_NAME osf` keeps the produced file as `libosf.a` / `osf.lib`.
@@ -696,7 +737,8 @@ ctest --test-dir build
   runs ctest. FetchContent fetches googletest + zlib over HTTPS on
   the runners (no local-extract workaround needed there).
 - Local (MSVC, Visual Studio 18, with `OSF_BUILD_C_API=ON`): `ctest`
-  reports **321/321 passed** (319 before the two DECISIONS-§13
+  reports **345/345 passed** (321 before the integrity-profile `crc`
+  work added on 2026-07-09; 319 before the two DECISIONS-§13
   metadata-defaults tests added 2026-06-12) with 0 warnings under
   `/W4 /permissive-`. zlib 1.3.2 comes via FetchContent with the
   local-extract workaround (`FETCHCONTENT_SOURCE_DIR_ZLIB`) for the
