@@ -22,6 +22,9 @@ type
       out CrcFailed, UnknownSkipped: UInt32; out Truncated: Boolean;
       out Blocks, Samples: Integer; out Status: string);
     function IntegrityDir: string;
+    // Writes a single binary sample of DataSize bytes to an lfs2 (u16) binary
+    // channel with the crc profile active; returns the raised message or ''.
+    function TryWriteBinarySample(DataSize: Integer): string;
   public
     [Test] procedure WriteReadRoundtripPreservesData;
     [Test] procedure HeaderCarriesCrc32cToken;
@@ -31,7 +34,16 @@ type
     [Test] procedure ControlByte9SkippedInProfilelessFile;
     [Test] procedure VerificationStatusValues;
     [Test] procedure CrossValidationReferenceFiles;
+    // Fix 2 — writer guard against u16 length-field overflow when the frame
+    // CRC (+4) is counted in the length field.
+    [Test] procedure WriterOverflowBoundaryFits;
+    [Test] procedure WriterOverflowByOneRaises;
   end;
+
+const
+  // lfs2 max on-wire block length = u16 max; minus 4 (frame CRC) minus 9
+  // (variable-block header: control byte + int64 timestamp) = max sample data.
+  MAX_LFS2_CRC_SAMPLE = 65535 - 4 - 9;
 
 implementation
 
@@ -322,6 +334,51 @@ begin
   B[DataStart(B) + 6] := B[DataStart(B) + 6] xor $FF;
   ReadCounters(B, Integrity, CrcFailed, Unknown, Truncated, Blocks, Samples, Status);
   Assert.AreEqual('invalid', Status);
+end;
+
+function TFilerIntegrityTests.TryWriteBinarySample(DataSize: Integer): string;
+var
+  MS: TMemoryStream;
+  F: TOSFFile;
+  Ch: TOSFChannelDef;
+  Blob: TBytes;
+begin
+  Result := '';
+  MS := TMemoryStream.Create;
+  F := TOSFFile.Create;
+  try
+    F.CreateForWrite(MS, False, osvOSF5);
+    Ch := TOSFChannelDef.Create(0, 'Ch/Blob', ctBinary, dtBinary);
+    Ch.LengthFieldSize := lfs2;
+    F.AddChannel(Ch);
+    F.IntegrityProfile := ipCrc32c;
+    F.WriteHeader;
+    SetLength(Blob, DataSize);
+    if DataSize > 0 then
+      FillChar(Blob[0], DataSize, $AB);
+    try
+      F.WriteTimestampedSample(0, 100, Blob);
+    except
+      on E: Exception do
+        Result := E.Message;
+    end;
+    F.Close;
+  finally
+    F.Free;
+    MS.Free;
+  end;
+end;
+
+procedure TFilerIntegrityTests.WriterOverflowBoundaryFits;
+begin
+  // Exactly fills the u16 length field (on-wire = 65535): must not raise.
+  Assert.AreEqual('', TryWriteBinarySample(MAX_LFS2_CRC_SAMPLE));
+end;
+
+procedure TFilerIntegrityTests.WriterOverflowByOneRaises;
+begin
+  // One byte over: the length field would overflow — must raise, not wrap.
+  Assert.AreNotEqual('', TryWriteBinarySample(MAX_LFS2_CRC_SAMPLE + 1));
 end;
 
 procedure TFilerIntegrityTests.CrossValidationReferenceFiles;

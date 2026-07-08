@@ -318,6 +318,7 @@ resourcestring
   SOSFWriteBeforeHeader = 'WriteHeader must be called before writing data blocks';
   SOSFWriterIntegrityOSF5Only = 'The integrity profile is an OSF5-only feature';
   SOSFWriterSigningUnsupported = 'This writer implements integrity level crc only; signing (ed25519) is not supported';
+  SOSFBlockLengthOverflow = 'block length %d bytes (incl. frame CRC) overflows the u16 length field of channel %d; use sizeoflengthvalue=4';
 
   // AddChannel uniqueness errors.
   SOSFDuplicateChannelIndex = 'AddChannel: duplicate channel index %d';
@@ -1868,6 +1869,12 @@ begin
     OnWire := UInt32(Length(Payload)) + 4
   else
     OnWire := UInt32(Length(Payload));
+
+  // Guard against a silent u16 length-field wrap-around. The writer does not
+  // split blocks, so with the frame CRC (+4) counted in the length field a
+  // large payload on an lfs2 channel could overflow — fail loudly instead.
+  if (Channel.LengthFieldSize = lfs2) and (OnWire > $FFFF) then
+    raise EOSFFormatError.CreateFmt(SOSFBlockLengthOverflow, [OnWire, Channel.Index]);
 
   WriteUInt16(Idx);
   case Channel.LengthFieldSize of
