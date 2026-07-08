@@ -104,7 +104,7 @@ impl DataManager {
         crate::integrity::verify_metablock_crc(header.metablock_crc, &body)?;
         let meta = crate::parse_metablock(header.version, &body)?;
 
-        let mut block_reader = BlockReader::new(stream, &meta);
+        let mut block_reader = BlockReader::new(stream, &meta).with_integrity(header.integrity);
         if let Some(size) = file_size {
             block_reader = block_reader.with_file_size(size);
         }

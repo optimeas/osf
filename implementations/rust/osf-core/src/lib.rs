@@ -111,7 +111,9 @@ pub fn read_file(
     integrity::verify_metablock_crc(header.metablock_crc, &body)?;
     let meta = parse_metablock(header.version, &body)?;
 
-    let mut block_reader = BlockReader::new(counted, &meta).with_file_size(file_size);
+    let mut block_reader = BlockReader::new(counted, &meta)
+        .with_file_size(file_size)
+        .with_integrity(header.integrity);
     let mut blocks = Vec::new();
     for blk in &mut block_reader {
         blocks.push(blk?);

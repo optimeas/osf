@@ -47,6 +47,20 @@ pub(crate) fn crc32c(bytes: &[u8]) -> u32 {
     ALGO.checksum(bytes)
 }
 
+/// CRC32C over the concatenation of `parts`.
+///
+/// The per-block frame CRC covers the channel index, the length field, the
+/// control byte and the payload; those live in separate buffers on both the
+/// read and write side, so this joins them for a single checksum.
+pub(crate) fn crc32c_of_parts(parts: &[&[u8]]) -> u32 {
+    let total: usize = parts.iter().map(|p| p.len()).sum();
+    let mut buf = Vec::with_capacity(total);
+    for part in parts {
+        buf.extend_from_slice(part);
+    }
+    crc32c(&buf)
+}
+
 /// Verify the metablock CRC declared by the `crc32c` header token against the
 /// raw metablock `body` bytes.
 ///

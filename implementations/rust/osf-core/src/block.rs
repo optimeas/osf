@@ -112,6 +112,14 @@ pub enum SkipReason {
     /// Reserved control byte (0 = `bcReserved`, 2 = `bcTimebaseRealign`)
     /// or any value above 8 the spec does not currently define.
     ReservedBlockType(u8),
+    /// The block's frame CRC (integrity profile level `crc`) did not match
+    /// the recomputed CRC32C. The block is dropped best-effort so the rest
+    /// of the file stays readable.
+    CrcFailed,
+    /// An integrity signature block (`bcIntegritySignature = 9` on the
+    /// reserved channel `0xFFFE`). This crate reads level `crc` but does not
+    /// verify signatures, so the block is skipped via its length field.
+    SignatureBlock,
 }
 
 /// Equidistant numeric payload: a single typed vector for the channel's
