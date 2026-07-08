@@ -7,6 +7,7 @@ program OSFCompileCheck;
 
 uses
   OSF.Types               in 'src\OSF.Types.pas',
+  OSF.CRC32C              in 'src\OSF.CRC32C.pas',
   OSF.Version             in 'src\OSF.Version.pas',
   OSF.Channel             in 'src\OSF.Channel.pas',
   OSF.Log                 in 'src\OSF.Log.pas',
