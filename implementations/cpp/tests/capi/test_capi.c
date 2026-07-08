@@ -69,6 +69,27 @@ int main(void) {
     size_t nv = osf_channel_read_f64(ch, vals, 512);
     CHECK(nv == want, "read_f64 count");
 
+    /* integrity accessors on a plain (no-profile) file */
+    CHECK(osf_manager_integrity(m) == OSF_INTEGRITY_NONE,
+          "plain file integrity == none");
+    CHECK(osf_manager_blocks_crc_failed(m) == 0, "plain file 0 crc failures");
+    CHECK(osf_manager_blocks_signature_skipped(m) == 0,
+          "plain file 0 signature skips");
+    CHECK(strcmp(osf_manager_verification_status(m), "none") == 0,
+          "plain file verification_status == none");
+
+    /* integrity accessors on a crc32c file (Rust reference) */
+    osf_manager* mc = NULL;
+    st = osf_load_file(
+        OSF_EXAMPLES_DIR "/generated/integrity/osf5_crc_equidistant.osf", &mc);
+    CHECK(st == OSF_OK, "load crc file OSF_OK");
+    CHECK(osf_manager_integrity(mc) == OSF_INTEGRITY_CRC32C,
+          "crc file integrity == crc32c");
+    CHECK(osf_manager_blocks_crc_failed(mc) == 0, "crc file 0 crc failures");
+    CHECK(strcmp(osf_manager_verification_status(mc), "crc_valid") == 0,
+          "crc file verification_status == crc_valid");
+    osf_manager_free(mc);
+
     /* round-trip: write the loaded manager out as OSF5, reload, compare */
     const char* out_path = "osf_c_api_test_out.osf";
     st = osf_write_to_file(m, out_path);
