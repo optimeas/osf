@@ -130,5 +130,24 @@
     "channels": [
       {"index": 0, "name": "Sensor/Message", "dataType": "string", "sampleCount": 100, "mode": "variable"}
     ]
+  },
+  "osf5_crc_equidistant.osf": {
+    "version": 5,
+    "path": "generated/integrity/osf5_crc_equidistant.osf",
+    "integrity": "crc32c",
+    "channels": [
+      {"index": 0, "name": "Sensor/Vibration100Hz", "dataType": "double", "sampleCount": 100, "mode": "equidistant"},
+      {"index": 1, "name": "Sensor/Vibration1kHz",  "dataType": "double", "sampleCount": 100, "mode": "equidistant"},
+      {"index": 2, "name": "Sensor/Vibration10kHz", "dataType": "double", "sampleCount": 100, "mode": "equidistant"}
+    ]
+  },
+  "osf5_crc_variable.osf": {
+    "version": 5,
+    "path": "generated/integrity/osf5_crc_variable.osf",
+    "integrity": "crc32c",
+    "channels": [
+      {"index": 0, "name": "Sensor/Log",  "dataType": "string", "sampleCount": 10, "mode": "variable"},
+      {"index": 1, "name": "Sensor/Blob", "dataType": "binary", "sampleCount": 10, "mode": "variable"}
+    ]
   }
 }
