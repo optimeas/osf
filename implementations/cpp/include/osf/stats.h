@@ -30,8 +30,11 @@
 #include <iosfwd>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
+
+#include <osf/integrity.h>
 
 namespace osf {
 
@@ -132,10 +135,36 @@ struct ReaderStats {
     /// Detected compression format on the source stream.
     CompressionFormat compressionFormat = CompressionFormat::None;
 
+    /// Integrity level declared by the file's magic-header token
+    /// (`None` when the file carries no integrity profile).
+    IntegrityProfile integrity = IntegrityProfile::None;
+    /// Blocks dropped because their frame CRC (level `crc`) did not match.
+    std::uint64_t blocksCrcFailed = 0;
+    /// Integrity signature blocks (channel `0xFFFE`, control byte 9) skipped
+    /// because this build reads level `crc` but does not verify signatures.
+    std::uint64_t blocksSignatureSkipped = 0;
+
     /// Per-channel detail keyed by channel index. The reader seeds
     /// every metablock channel with a zero-filled entry on
     /// construction.
     std::unordered_map<std::uint16_t, ChannelStats> perChannel;
+
+    /// Overall integrity verification status, using the vocabulary of the
+    /// OSF5 integrity profile: `"none"`, `"crc_valid"`, `"invalid"`, or
+    /// `"signature_unverifiable"`. This build implements level `crc`; a
+    /// signed file always reports `signature_unverifiable` (its CRC layer is
+    /// still checked and the file stays readable).
+    [[nodiscard]] std::string_view verificationStatus() const noexcept {
+        switch (integrity) {
+            case IntegrityProfile::None:
+                return "none";
+            case IntegrityProfile::Ed25519:
+                return "signature_unverifiable";
+            case IntegrityProfile::Crc32c:
+                return blocksCrcFailed > 0 ? "invalid" : "crc_valid";
+        }
+        return "none";
+    }
 };
 
 /// Format a byte count using the `1.23 MB` style (binary KB / MB / GB thresholds).

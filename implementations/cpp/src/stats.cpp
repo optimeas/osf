@@ -99,6 +99,14 @@ std::ostream& operator<<(std::ostream& os, ReaderStats const& s) {
         os << "Compressed:            yes ("
            << compressionFormatName(s.compressionFormat) << ")\n";
     }
+    if (s.integrity != IntegrityProfile::None) {
+        os << "Integrity:             " << integrityProfileName(s.integrity) << '\n';
+        os << "Blocks CRC-failed:     " << s.blocksCrcFailed << '\n';
+        if (s.blocksSignatureSkipped > 0) {
+            os << "Signature blocks:      " << s.blocksSignatureSkipped
+               << " (skipped, unverified)\n";
+        }
+    }
     return os;
 }
 

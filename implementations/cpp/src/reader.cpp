@@ -4,6 +4,7 @@
 #include <osf/reader.h>
 
 #include "binaryio_p.h"
+#include "crc32c_p.h"
 
 #include <cstring>
 #include <istream>
@@ -620,6 +621,10 @@ void BlockReader::recordSkip(std::uint16_t channelIndex, std::uint32_t length,
             ++m_stats.blocksSkippedDeprecatedType; break;
         case SkipReason::Kind::ReservedBlockType:
             ++m_stats.blocksSkippedReservedType; break;
+        case SkipReason::Kind::CrcFailed:
+            ++m_stats.blocksCrcFailed; break;
+        case SkipReason::Kind::SignatureBlock:
+            ++m_stats.blocksSignatureSkipped; break;
     }
     auto& cs = m_stats.perChannel[channelIndex];
     ++cs.blocksSkipped;
@@ -668,6 +673,31 @@ Result<Block> BlockReader::skipBlock(std::uint16_t channelIndex,
     return blk;
 }
 
+namespace {
+
+// Verify the trailing 4-byte frame CRC over the whole frame (channel index,
+// length field, control byte and payload). `payload` still includes the CRC.
+bool verifyFrameCrc(std::uint16_t channelIndex, std::uint8_t sizeofField,
+                    std::uint32_t length, std::vector<std::uint8_t> const& payload) {
+    std::size_t const split = payload.size() - 4;
+    std::uint32_t const stored = osf::detail::readLeU32(payload.data() + split);
+    std::uint8_t const ciLe[2] = {
+        static_cast<std::uint8_t>(channelIndex & 0xFFu),
+        static_cast<std::uint8_t>((channelIndex >> 8) & 0xFFu)};
+    std::uint8_t const lenLe[4] = {
+        static_cast<std::uint8_t>(length & 0xFFu),
+        static_cast<std::uint8_t>((length >> 8) & 0xFFu),
+        static_cast<std::uint8_t>((length >> 16) & 0xFFu),
+        static_cast<std::uint8_t>((length >> 24) & 0xFFu)};
+    osf::detail::Crc32c c;
+    c.update(ciLe, 2);
+    c.update(lenLe, sizeofField);
+    c.update(payload.data(), split);
+    return c.value() == stored;
+}
+
+}  // namespace
+
 std::optional<Result<Block>> BlockReader::next() {
     if (m_finished) return std::nullopt;
 
@@ -687,6 +717,40 @@ std::optional<Result<Block>> BlockReader::next() {
         auto r = consumeTrailer();
         if (!r) { m_finished = true; return Result<Block>{tl::make_unexpected(r.error())}; }
         return std::nullopt;
+    }
+
+    // Step 2b: integrity signature block (level signed). Channel 0xFFFE is the
+    // reserved file-wide integrity channel and is not declared in the metablock.
+    // This build reads level crc but not signatures, so skip it via its (u32)
+    // length field and count it; a signed file therefore stays readable.
+    if (m_integrity != IntegrityProfile::None && channelIndex == SIGNATURE_CHANNEL_INDEX) {
+        std::uint8_t lb[4];
+        auto lr = streamReadN(*m_stream, lb, 4);
+        if (!lr) { m_finished = true; return Result<Block>{tl::make_unexpected(lr.error())}; }
+        if (!*lr) {
+            if (m_stats.blocksTruncated < 1) m_stats.blocksTruncated = 1;
+            m_finished = true;
+            return std::nullopt;
+        }
+        std::uint32_t const sigLen = osf::detail::readLeU32(lb);
+        m_stats.dataSectionSizeBytes += 4;
+        auto drained = drain(sigLen);
+        if (!drained) { m_finished = true; return Result<Block>{tl::make_unexpected(drained.error())}; }
+        if (!*drained) {
+            if (m_stats.blocksTruncated < 1) m_stats.blocksTruncated = 1;
+            m_finished = true;
+            return std::nullopt;
+        }
+        m_stats.dataSectionSizeBytes += sigLen;
+        SkipReason const reason{SkipReason::Kind::SignatureBlock, 0};
+        recordSkip(channelIndex, sigLen, reason);
+        Block blk;
+        blk.channelIndex = channelIndex;
+        Skipped sk;
+        sk.reason = reason;
+        sk.bytesSkipped = sigLen;
+        blk.kind = std::move(sk);
+        return Result<Block>{std::move(blk)};
     }
 
     // Step 3: channel lookup. An unknown index is a corruption signal
@@ -743,6 +807,29 @@ std::optional<Result<Block>> BlockReader::next() {
     }
     std::vector<std::uint8_t> payload = std::move(**payloadR);
     m_stats.dataSectionSizeBytes += length;
+
+    // Step 6b: frame CRC (integrity level crc). The last four bytes of the data
+    // area are a CRC32C over the whole frame; verify and strip them *before* the
+    // typed parse (fail-closed framing — a residual check after decoding is
+    // insufficient for variable-length payloads). A mismatch skips the block.
+    if (m_integrity != IntegrityProfile::None) {
+        if (payload.size() < 5 ||
+            !verifyFrameCrc(channelIndex, info.sizeOfLengthValue, length, payload)) {
+            SkipReason const reason{SkipReason::Kind::CrcFailed, 0};
+            recordSkip(channelIndex, length, reason);
+            Block blk;
+            blk.channelIndex = channelIndex;
+            Skipped sk;
+            sk.reason = reason;
+            sk.bytesSkipped = length;
+            if (m_captureSkipped) {
+                sk.payload = payload;
+            }
+            blk.kind = std::move(sk);
+            return Result<Block>{std::move(blk)};
+        }
+        payload.resize(payload.size() - 4);  // CRC verified — drop it
+    }
 
     // Step 7: decode control byte and route.
     std::uint8_t const controlRaw = payload[0];
@@ -873,7 +960,8 @@ ReaderStats BlockReader::stats() const {
     s.elapsed = std::chrono::steady_clock::now() - m_started;
     s.blocksTotal = s.blocksRead + s.blocksSkippedUnsupported +
                      s.blocksSkippedDeprecatedType +
-                     s.blocksSkippedReservedType;
+                     s.blocksSkippedReservedType +
+                     s.blocksCrcFailed + s.blocksSignatureSkipped;
     s.channelsWithData = 0;
     for (auto const& [_, cs] : s.perChannel) {
         if (cs.blocksRead + cs.blocksSkipped > 0) ++s.channelsWithData;
