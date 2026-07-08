@@ -1159,6 +1159,9 @@ Java already do). A SHA-256 hash chain `H(0)=SHA256(header ‖ metablock)`,
 `H(i)=SHA256(H(i−1) ‖ Frame_i)` (frames incl. their CRC; signature blocks
 included) gives streaming-capable tamper detection; a single closing signature
 would be lost on power failure, a per-block signature would be too costly.
+Blocks on channel `0xFFFE` always use a 4-byte (`uint32`) length field
+regardless of channel declarations, analogous to the historical `0xFFFF` info
+block.
 
 **Cadence default (supersedes the earlier O8 direction):** configurable;
 normative default **time-based 10 s**, plus a **mandatory anchor at regular file

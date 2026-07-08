@@ -10,7 +10,7 @@ keywords:
   - Signatur
   - PKI
 last_update:
-  date: 2026-07-07
+  date: 2026-07-08
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -183,6 +183,9 @@ Stufe signed ergänzt einen neuen Steuerbyte-Typ und eine laufende Hash-Kette.
   Stufe-signed-Unterstützung überspringen den Block per Längenfeld, genau wie
   jeden anderen unbekannten Blocktyp (siehe §5). `0xFFFE` ist verschieden vom
   `0xFFFF`-Info-/Trailer-Kanal aus OSF4.
+- Blöcke auf dem reservierten Kanal `0xFFFE` verwenden **stets ein 4-Byte-
+  Längenfeld (`uint32`)**, unabhängig von Kanaldeklarationen — analog zum
+  historischen `0xFFFF`-Infoblock.
 - Signaturblöcke tragen selbst eine **Frame-CRC** wie jeder andere Block.
 
 ### Payload (little-endian; Reihenfolge normativ)

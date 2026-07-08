@@ -10,7 +10,7 @@ keywords:
   - Signature
   - PKI
 last_update:
-  date: 2026-07-07
+  date: 2026-07-08
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -180,6 +180,9 @@ Level signed adds a new control-byte type and a running hash chain.
   that is **not** declared in the metablock. Readers without level-signed support
   skip the block via its length field, exactly like any other unknown block type
   (see §5). `0xFFFE` is distinct from the `0xFFFF` info/trailer channel of OSF4.
+- Blocks on the reserved channel `0xFFFE` **always use a 4-byte length field
+  (`uint32`)**, regardless of channel declarations — analogous to the historical
+  `0xFFFF` info block.
 - Signature blocks themselves carry a **frame CRC** like every other block.
 
 ### Payload (little-endian; order is normative)
