@@ -109,6 +109,16 @@ struct Error {
         /// the stream level; surfaced here so the future `DataManager`
         /// has a typed code for the equivalent check.
         DataTypeMismatch,
+        /// The magic header carried an integrity token whose key this build
+        /// does not understand. Header tokens are "must understand" per the
+        /// OSF5 integrity profile, so an unknown key rejects the whole file.
+        /// The offending key is included in `message`.
+        UnknownHeaderToken,
+        /// The declared integrity profile failed verification: the CRC32C of
+        /// the raw metablock bytes did not match the value carried by the
+        /// `crc32c` header token. The metablock is the contract for everything
+        /// that follows, so a mismatch rejects the file.
+        MetablockCrcMismatch,
     };
 
     /// Stable error category — the field to branch on.

@@ -33,8 +33,10 @@
 #include <cstdint>
 #include <filesystem>
 #include <iosfwd>
+#include <optional>
 
 #include <osf/error.h>
+#include <osf/integrity.h>
 
 namespace osf {
 
@@ -68,8 +70,16 @@ struct MagicHeader {
     /// terminating newline. Zero on default-constructed instances.
     std::uint64_t metablockLen = 0;
 
+    /// Integrity level declared by the header tokens (`None` when the line
+    /// carries no integrity token).
+    IntegrityProfile integrity = IntegrityProfile::None;
+    /// CRC32C of the raw metablock bytes, carried by the `crc32c` token.
+    /// Empty unless `integrity` is at least `Crc32c`.
+    std::optional<std::uint32_t> metablockCrc;
+
     friend bool operator==(MagicHeader const& a, MagicHeader const& b) noexcept {
-        return a.version == b.version && a.metablockLen == b.metablockLen;
+        return a.version == b.version && a.metablockLen == b.metablockLen &&
+               a.integrity == b.integrity && a.metablockCrc == b.metablockCrc;
     }
     friend bool operator!=(MagicHeader const& a, MagicHeader const& b) noexcept {
         return !(a == b);
