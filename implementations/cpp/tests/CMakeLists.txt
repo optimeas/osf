@@ -567,6 +567,37 @@ osf_set_warnings(test_compression_examples)
 gtest_discover_tests(test_compression_examples)
 
 # ---------------------------------------------------------------------------
+# test_integrity_examples — OSF5 "crc" integrity profile: writer round-trips,
+# the four cross-implementation reference files, the negative suite, and the
+# gzip-wrapped CRC file. Links zlib directly for the gzip fixture.
+# ---------------------------------------------------------------------------
+
+add_executable(test_integrity_examples
+    integration/test_integrity_examples.cpp
+)
+
+target_link_libraries(test_integrity_examples PRIVATE
+    osf::osf
+    GTest::gtest_main
+    ${OSF_ZLIB_TARGET}
+)
+
+target_compile_definitions(test_integrity_examples PRIVATE
+    OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+
+# roundtriphelper.h lives in the integration/ source dir.
+target_include_directories(test_integrity_examples PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/integration")
+
+if(OSF_ZLIB_INCLUDE_DIRS)
+    target_include_directories(test_integrity_examples PRIVATE ${OSF_ZLIB_INCLUDE_DIRS})
+endif()
+
+osf_set_warnings(test_integrity_examples)
+
+gtest_discover_tests(test_integrity_examples)
+
+# ---------------------------------------------------------------------------
 # test_c_api — C ABI smoke test. A standalone C99 program that links the
 # osf-c shared library; built only when OSF_BUILD_C_API=ON.
 # Proves the header is C-compatible and the DLL/.so links + works.

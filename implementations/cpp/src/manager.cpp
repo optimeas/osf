@@ -693,6 +693,14 @@ Result<DataManager> buildFromStreamImpl(std::istream& stream,
             return tl::make_unexpected(blkR.error());
         }
         Block const& blk = *blkR;
+        // Signature blocks live on the reserved channel 0xFFFE and are not
+        // declared in the metablock; the reader has already skipped and
+        // counted them (blocksSignatureSkipped). They carry no channel data,
+        // so they never map to a builder — keep a signed file readable rather
+        // than rejecting it as an unknown channel index.
+        if (blk.channelIndex == SIGNATURE_CHANNEL_INDEX) {
+            continue;
+        }
         auto it = builderByIndex.find(blk.channelIndex);
         if (it == builderByIndex.end()) {
             std::ostringstream oss;
