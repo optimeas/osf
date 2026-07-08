@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **OSF5 integrity profile, level `crc`.** `ReaderStats` exposes `integrity`
+  (`"none"`/`"crc32c"`/`"ed25519"`), `blocks_crc_failed`,
+  `blocks_signature_skipped`, and `verification_status` (`"none"`/`"crc_valid"`/
+  `"invalid"`/`"signature_unverifiable"`). `WriterBuilder.with_integrity("crc32c")`
+  and `osf.save(mgr, path, integrity="crc32c")` emit the profile (metablock
+  `crc32c` header token + per-block frame CRC32C). Signed files stay readable and
+  CRC-checked (signatures are not verified). Type stubs updated.
+
 ## [0.1.0] - 2026-05-07
 
 Initial release on TestPyPI.

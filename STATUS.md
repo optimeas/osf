@@ -442,6 +442,24 @@ Diagnostics flow through `env_logger`; default `RUST_LOG=warn`, override
 with `debug` for full alias / unknown-field tracing or `error` for
 clean output on files that flood deprecated-field warnings.
 
+**Integrity profile — level `crc` (2026-07-08).** `osf-core` implements the
+OSF5 integrity profile at level `crc` (module `integrity`, `crc` crate for
+CRC32C/Castagnoli). The magic-header parser is a strict must-understand
+tokenizer (`crc32c:<8 upper hex>`, `ed25519:<16 lower hex>`, only after
+`crc32c`); unknown keys → `OsfError::UnknownHeaderToken`. `MagicHeader` carries
+`integrity` + `metablock_crc`. The metablock CRC is verified before parse on
+both read paths (`OsfError::MetablockCrcMismatch`). `BlockReader::with_integrity`
+verifies each block's frame CRC over the whole frame and strips it before the
+typed parse (fail-closed); a mismatch skips the block and bumps
+`ReaderStats.blocks_crc_failed`. Signature blocks (channel `0xFFFE`, control 9)
+are skipped/counted so signed files stay readable; `ReaderStats.integrity` +
+`verification_status()` (`none`/`crc_valid`/`invalid`/`signature_unverifiable`)
+report the state. `WriterBuilder::with_integrity(IntegrityProfile::Crc32c)`
+emits the token + frame CRCs (payload chunking reserves 4 bytes). Reference
+files: `examples/generated/integrity/osf5_crc_{equidistant,variable}.osf` (Rust
+`cargo run --example gen_crc_refs`). Signing (level `signed`) is not
+implemented. **139 → 147 lib tests + `tests/integrity_test.rs` (6)**.
+
 **Next steps:** Python bindings via PyO3 + maturin (Session 7a
 landed; pandas convenience in 7b; CI + wheel matrix in 8).
 
@@ -512,6 +530,14 @@ enough that the Arc-Channel optimisation is not needed yet.
   bumping one requires bumping the other).
 - Pure-Rust dependency graph (no system zlib, no MSVC linker
   surprises).
+
+**Integrity profile — level `crc` (2026-07-08).** The bindings surface the
+integrity profile: `stats.integrity`, `stats.blocks_crc_failed`,
+`stats.blocks_signature_skipped`, `stats.verification_status`, plus
+`WriterBuilder.with_integrity("crc32c")` and `osf.save(mgr, path,
+integrity="crc32c")`. Type stubs updated; `tests/test_integrity.py` (5 run +
+1 skipped — no signed reference file yet). Verified locally via `maturin
+develop` (18 passed, 1 skipped).
 
 **Pending:** pandas `DataFrame` convenience (Session 7b).
 
