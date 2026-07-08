@@ -23,6 +23,7 @@ quick-xml = "0.39.3"
 byteorder = "1.5"
 log = "0.4"
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
+crc = "3"
 
 [dev-dependencies]
 env_logger = "0.11"

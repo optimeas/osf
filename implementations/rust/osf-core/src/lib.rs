@@ -22,6 +22,7 @@ pub mod compression;
 pub mod data_channel;
 pub mod error;
 pub mod header;
+pub mod integrity;
 pub mod manager;
 pub mod meta;
 pub mod meta_json;
@@ -42,6 +43,7 @@ pub use data_channel::{
 pub use manager::DataManager;
 pub use error::OsfError;
 pub use header::{MagicHeader, OsfVersion, parse_magic_header};
+pub use integrity::IntegrityProfile;
 pub use meta::{
     Channel as MetaChannel, FileInfo, Info, MetaBlock, SpectrumType, parse_channel_type,
     parse_data_type,
@@ -106,9 +108,12 @@ pub fn read_file(
     let mut body = vec![0u8; header.metablock_len as usize];
     counted.read_exact(&mut body)?;
     let metablock_size_bytes = header.metablock_len;
+    integrity::verify_metablock_crc(header.metablock_crc, &body)?;
     let meta = parse_metablock(header.version, &body)?;
 
-    let mut block_reader = BlockReader::new(counted, &meta).with_file_size(file_size);
+    let mut block_reader = BlockReader::new(counted, &meta)
+        .with_file_size(file_size)
+        .with_integrity(header.integrity);
     let mut blocks = Vec::new();
     for blk in &mut block_reader {
         blocks.push(blk?);

@@ -38,6 +38,7 @@ use crate::block::{
 };
 use crate::error::OsfError;
 use crate::header::OsfVersion;
+use crate::integrity::IntegrityProfile;
 use crate::meta::MetaBlock;
 use crate::stats::{ChannelStats, ReaderStats};
 use crate::types::{ChannelType, DataType};
@@ -51,6 +52,12 @@ use std::time::Instant;
 /// at the end of an OSF4 file. OSF5 no longer writes it but readers
 /// must tolerate it.
 const TRAILER_CHANNEL_INDEX: u16 = 0xFFFF;
+
+/// Reserved channel index of the file-wide integrity signature block
+/// (`bcIntegritySignature`, control byte 9) at integrity level `signed`.
+/// This crate reads level `crc` but not signatures, so such blocks are
+/// skipped via their length field.
+const SIGNATURE_CHANNEL_INDEX: u16 = 0xFFFE;
 
 /// Length of the magic trailer string written after the info block in
 /// OSF4 files (`OSF_STREAM_END <pos>===…`). Padded to exactly 40 bytes.
@@ -92,6 +99,10 @@ pub struct BlockReader<R: Read> {
     channels: HashMap<u16, ChannelInfo>,
     finished: bool,
     capture_skipped: bool,
+    /// Integrity level declared by the file header. When at least `Crc32c`,
+    /// the reader verifies each block's frame CRC (and strips it before the
+    /// typed parse) and skips signature blocks on channel `0xFFFE`.
+    integrity: IntegrityProfile,
     started: Instant,
     stats: ReaderStats,
 }
@@ -146,9 +157,22 @@ impl<R: Read> BlockReader<R> {
             channels,
             finished: false,
             capture_skipped: false,
+            integrity: IntegrityProfile::None,
             started: Instant::now(),
             stats,
         }
+    }
+
+    /// Declare the file's integrity level (as parsed from the magic-header
+    /// token). When at least [`IntegrityProfile::Crc32c`], the reader
+    /// verifies each block's frame CRC — stripping it before the typed parse
+    /// (fail-closed framing) — and skips signature blocks on channel
+    /// `0xFFFE`. Default is [`IntegrityProfile::None`] (no CRC handling).
+    #[must_use]
+    pub fn with_integrity(mut self, profile: IntegrityProfile) -> Self {
+        self.integrity = profile;
+        self.stats.integrity = profile;
+        self
     }
 
     /// Opt in to capturing the raw payload bytes of skipped blocks.
@@ -177,7 +201,9 @@ impl<R: Read> BlockReader<R> {
         s.blocks_total = s.blocks_read
             + s.blocks_skipped_unsupported
             + s.blocks_skipped_deprecated_type
-            + s.blocks_skipped_reserved_type;
+            + s.blocks_skipped_reserved_type
+            + s.blocks_crc_failed
+            + s.blocks_signature_skipped;
         s.channels_with_data = s
             .per_channel
             .values()
@@ -334,6 +360,70 @@ impl<R: Read> Iterator for BlockReader<R> {
             return None;
         }
 
+        // Step 2b: integrity signature block (level signed). Channel 0xFFFE is
+        // the reserved file-wide integrity channel and is not declared in the
+        // metablock. This crate reads level crc but does not verify
+        // signatures, so the block is skipped via its (u32) length field and
+        // counted; a signed file therefore stays readable and CRC-checked.
+        if self.integrity != IntegrityProfile::None && channel_index == SIGNATURE_CHANNEL_INDEX {
+            let length = match self.inner.read_u32::<LittleEndian>() {
+                Ok(v) => v,
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                    self.stats.blocks_truncated = self.stats.blocks_truncated.max(1);
+                    self.finished = true;
+                    return None;
+                }
+                Err(e) => {
+                    self.finished = true;
+                    return Some(Err(e.into()));
+                }
+            };
+            self.stats.data_section_size_bytes += 4;
+
+            let payload_field = if self.capture_skipped {
+                match self.read_payload(length as usize) {
+                    Ok(Some(buf)) => {
+                        self.stats.data_section_size_bytes += u64::from(length);
+                        Some(buf)
+                    }
+                    Ok(None) => {
+                        self.stats.blocks_truncated = self.stats.blocks_truncated.max(1);
+                        self.finished = true;
+                        return None;
+                    }
+                    Err(e) => {
+                        self.finished = true;
+                        return Some(Err(e));
+                    }
+                }
+            } else {
+                match self.drain(u64::from(length)) {
+                    Ok(true) => self.stats.data_section_size_bytes += u64::from(length),
+                    Ok(false) => {
+                        self.stats.blocks_truncated = self.stats.blocks_truncated.max(1);
+                        self.finished = true;
+                        return None;
+                    }
+                    Err(e) => {
+                        self.finished = true;
+                        return Some(Err(e));
+                    }
+                }
+                None
+            };
+
+            let reason = SkipReason::SignatureBlock;
+            self.record_skip(channel_index, length, &reason);
+            return Some(Ok(Block {
+                channel_index,
+                kind: BlockKind::Skipped {
+                    reason,
+                    bytes_skipped: u64::from(length),
+                    payload: payload_field,
+                },
+            }));
+        }
+
         // Step 3: look up channel info. An index that is not in the
         // metablock is a corruption signal — we cannot even know how
         // wide the length prefix is supposed to be. Fail hard.
@@ -392,7 +482,7 @@ impl<R: Read> Iterator for BlockReader<R> {
         // Step 6: pull the full payload into a Vec. Block sizes are
         // bounded by the spec to fit in `length` (u32 max for
         // sizeoflengthvalue=4), so a single allocation is fine.
-        let payload = match self.read_payload(length_usize) {
+        let mut payload = match self.read_payload(length_usize) {
             Ok(Some(v)) => v,
             Ok(None) => {
                 self.stats.blocks_truncated = self.stats.blocks_truncated.max(1);
@@ -405,6 +495,66 @@ impl<R: Read> Iterator for BlockReader<R> {
             }
         };
         self.stats.data_section_size_bytes += u64::from(length);
+
+        // Step 6b: frame CRC (integrity level crc). The last four bytes of the
+        // data area are a CRC32C over the whole frame (channel index, length
+        // field, control byte, payload). Verify and strip it *before* the
+        // typed parse — fail-closed framing: a residual "== 0" check after
+        // decoding would be insufficient for variable-length (string/binary)
+        // payloads, where surplus bytes are indistinguishable from data.
+        if self.integrity != IntegrityProfile::None {
+            // A profile block needs at least a control byte plus the 4-byte
+            // CRC; anything shorter is corrupt framing.
+            if payload.len() < 5 {
+                let reason = SkipReason::CrcFailed;
+                self.record_skip(channel_index, length, &reason);
+                return Some(Ok(Block {
+                    channel_index,
+                    kind: BlockKind::Skipped {
+                        reason,
+                        bytes_skipped: u64::from(length),
+                        payload: None,
+                    },
+                }));
+            }
+            let split = payload.len() - 4;
+            let stored = u32::from_le_bytes([
+                payload[split],
+                payload[split + 1],
+                payload[split + 2],
+                payload[split + 3],
+            ]);
+            let length_le = length.to_le_bytes();
+            let length_field: &[u8] = match info.size_of_length_value {
+                2 => &length_le[..2],
+                _ => &length_le[..4],
+            };
+            let computed = crate::integrity::crc32c_of_parts(&[
+                &channel_index.to_le_bytes(),
+                length_field,
+                &payload[..split],
+            ]);
+            if computed != stored {
+                let reason = SkipReason::CrcFailed;
+                let payload_field = if self.capture_skipped {
+                    Some(payload[..split].to_vec())
+                } else {
+                    None
+                };
+                self.record_skip(channel_index, length, &reason);
+                return Some(Ok(Block {
+                    channel_index,
+                    kind: BlockKind::Skipped {
+                        reason,
+                        bytes_skipped: u64::from(length),
+                        payload: payload_field,
+                    },
+                }));
+            }
+            // CRC verified — drop it so the typed parser sees only the frame's
+            // control byte and payload.
+            payload.truncate(split);
+        }
 
         // Step 7: decode the control byte and route to the typed
         // parser for the four supported block types. Reserved /
@@ -611,6 +761,12 @@ impl<R: Read> BlockReader<R> {
             }
             SkipReason::ReservedBlockType(_) => {
                 self.stats.blocks_skipped_reserved_type += 1;
+            }
+            SkipReason::CrcFailed => {
+                self.stats.blocks_crc_failed += 1;
+            }
+            SkipReason::SignatureBlock => {
+                self.stats.blocks_signature_skipped += 1;
             }
         }
         let entry = self.stats.per_channel.entry(channel_index).or_default();
@@ -1065,6 +1221,108 @@ mod tests {
             channels,
             infos: Vec::new(),
         }
+    }
+
+    /// Build a data block carrying a valid frame CRC (integrity level `crc`):
+    /// `[u16 channel][len field][inner bytes = control+payload][u32 crc]`.
+    /// `len` counts the inner bytes plus the 4 CRC bytes; the CRC covers the
+    /// channel index, the length field and the inner bytes.
+    fn crc_block(channel: u16, sov: u8, inner: &[u8]) -> Vec<u8> {
+        let length = (inner.len() + 4) as u32;
+        let ci = channel.to_le_bytes();
+        let len_field: Vec<u8> = match sov {
+            2 => (length as u16).to_le_bytes().to_vec(),
+            4 => length.to_le_bytes().to_vec(),
+            other => panic!("bad sov {other}"),
+        };
+        let crc = crate::integrity::crc32c_of_parts(&[&ci, &len_field, inner]);
+        let mut out = Vec::new();
+        out.extend_from_slice(&ci);
+        out.extend_from_slice(&len_field);
+        out.extend_from_slice(inner);
+        out.extend_from_slice(&crc.to_le_bytes());
+        out
+    }
+
+    /// Inner bytes of a single-sample AbsTimeStampData Int64 block:
+    /// `[control=8][i64 ts][i64 value]`.
+    fn absts_i64_inner(ts: i64, value: i64) -> Vec<u8> {
+        let mut inner = vec![8u8];
+        inner.extend_from_slice(&ts.to_le_bytes());
+        inner.extend_from_slice(&value.to_le_bytes());
+        inner
+    }
+
+    #[test]
+    fn frame_crc_valid_block_parses_and_strips_crc() {
+        let meta = make_meta(vec![channel(0, DataType::Int64, 2)]);
+        let bytes = crc_block(0, 2, &absts_i64_inner(1_000, 42));
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta)
+            .with_integrity(IntegrityProfile::Crc32c);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::AbsTimestampData { samples } => match samples {
+                TimestampedPayload::Int64(v) => assert_eq!(v, vec![(1_000, 42)]),
+                other => panic!("expected Int64, got {other:?}"),
+            },
+            other => panic!("expected AbsTimestampData, got {other:?}"),
+        }
+        assert_eq!(r.stats().blocks_crc_failed, 0);
+        assert!(r.next().is_none());
+    }
+
+    #[test]
+    fn frame_crc_corrupt_block_is_skipped_and_stream_continues() {
+        let meta = make_meta(vec![channel(0, DataType::Int64, 2)]);
+        let mut bytes = crc_block(0, 2, &absts_i64_inner(1_000, 42));
+        // Flip the last CRC byte.
+        let last = bytes.len() - 1;
+        bytes[last] ^= 0xFF;
+        // A second, valid block must still be reachable afterwards.
+        bytes.extend_from_slice(&crc_block(0, 2, &absts_i64_inner(2_000, 7)));
+
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta)
+            .with_integrity(IntegrityProfile::Crc32c);
+
+        let first = r.next().unwrap().unwrap();
+        assert_eq!(first.channel_index, 0);
+        match first.kind {
+            BlockKind::Skipped { reason, .. } => assert_eq!(reason, SkipReason::CrcFailed),
+            other => panic!("expected Skipped(CrcFailed), got {other:?}"),
+        }
+
+        let second = r.next().unwrap().unwrap();
+        match second.kind {
+            BlockKind::AbsTimestampData { .. } => {}
+            other => panic!("expected AbsTimestampData, got {other:?}"),
+        }
+        assert_eq!(r.stats().blocks_crc_failed, 1);
+    }
+
+    #[test]
+    fn signature_block_on_fffe_is_skipped() {
+        let meta = make_meta(vec![channel(0, DataType::Int64, 2)]);
+        // A signature block: channel 0xFFFE, control byte 9, some payload.
+        // It also carries a frame CRC like every other block.
+        let mut sig_inner = vec![9u8];
+        sig_inner.extend_from_slice(&[0xAA; 20]);
+        let mut bytes = crc_block(0xFFFE, 4, &sig_inner);
+        // Followed by a normal data block that must remain reachable.
+        bytes.extend_from_slice(&crc_block(0, 2, &absts_i64_inner(2_000, 7)));
+
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta)
+            .with_integrity(IntegrityProfile::Ed25519);
+
+        let first = r.next().unwrap().unwrap();
+        assert_eq!(first.channel_index, 0xFFFE);
+        match first.kind {
+            BlockKind::Skipped { reason, .. } => assert_eq!(reason, SkipReason::SignatureBlock),
+            other => panic!("expected Skipped(SignatureBlock), got {other:?}"),
+        }
+
+        let second = r.next().unwrap().unwrap();
+        assert_eq!(second.channel_index, 0);
+        assert_eq!(r.stats().blocks_signature_skipped, 1);
     }
 
     #[test]

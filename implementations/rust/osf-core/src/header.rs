@@ -24,6 +24,7 @@
 //! (`examples/steam_loco.osf`, `examples/motorbike.osf`) use it.
 
 use crate::error::OsfError;
+use crate::integrity::IntegrityProfile;
 use std::io::Read;
 
 /// Cap on the magic-header line length. The longest valid line is roughly
@@ -49,6 +50,12 @@ pub struct MagicHeader {
     /// Byte length of the metablock that immediately follows the
     /// terminating newline.
     pub metablock_len: u64,
+    /// Integrity level declared by the header tokens (`none` when the line
+    /// carries no integrity token).
+    pub integrity: IntegrityProfile,
+    /// CRC32C of the raw metablock bytes, carried by the `crc32c` token.
+    /// `None` unless `integrity` is at least `Crc32c`.
+    pub metablock_crc: Option<u32>,
 }
 
 /// Read and parse the magic-header line from `reader`.
@@ -110,23 +117,108 @@ fn parse_magic_header_line(line: &str) -> Result<MagicHeader, OsfError> {
 
     let version = identifier_to_version(identifier)?;
 
-    let len_str = rest.trim();
-    if len_str.is_empty() {
+    // The header grammar is `identifier SP metablock-len *(SP token) LF` with
+    // exactly one space between fields and no trailing space. Splitting on a
+    // single ' ' therefore turns a double or trailing space into an empty
+    // field, which is malformed.
+    let mut fields = rest.split(' ');
+
+    let len_field = fields.next().unwrap_or("");
+    if len_field.is_empty() {
         return Err(OsfError::InvalidMagicHeader(format!(
             "missing metablock length after identifier {identifier:?}"
         )));
     }
-
-    let metablock_len: u64 = len_str.parse().map_err(|_| {
+    let metablock_len: u64 = len_field.parse().map_err(|_| {
         OsfError::InvalidMagicHeader(format!(
-            "metablock length is not a valid u64: {len_str:?}"
+            "metablock length is not a valid u64: {len_field:?}"
         ))
     })?;
+
+    let mut integrity = IntegrityProfile::None;
+    let mut metablock_crc = None;
+    let mut saw_crc = false;
+
+    for token in fields {
+        if token.is_empty() {
+            return Err(OsfError::InvalidMagicHeader(
+                "malformed magic header: fields must be separated by a single space with no \
+                 trailing space"
+                    .into(),
+            ));
+        }
+        // Tokens are an OSF5-only feature; OSF4 identifiers must not carry them.
+        if version != OsfVersion::Osf5 {
+            return Err(OsfError::InvalidMagicHeader(format!(
+                "header tokens are only allowed for OSF5; found {token:?} after an OSF4 identifier"
+            )));
+        }
+        let (key, value) = token.split_once(':').ok_or_else(|| {
+            OsfError::InvalidMagicHeader(format!(
+                "malformed header token, expected 'key:value': {token:?}"
+            ))
+        })?;
+        if key.is_empty()
+            || !key
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        {
+            return Err(OsfError::InvalidMagicHeader(format!(
+                "malformed header token key (lowercase a-z, 0-9, '-' only): {key:?}"
+            )));
+        }
+        match key {
+            "crc32c" => {
+                metablock_crc = Some(parse_crc32c_token(value)?);
+                integrity = IntegrityProfile::Crc32c;
+                saw_crc = true;
+            }
+            "ed25519" => {
+                validate_ed25519_keyid(value)?;
+                if !saw_crc {
+                    return Err(OsfError::InvalidMagicHeader(
+                        "ed25519 token is only valid after a crc32c token (crc32c first)".into(),
+                    ));
+                }
+                integrity = IntegrityProfile::Ed25519;
+            }
+            other => return Err(OsfError::UnknownHeaderToken(other.to_string())),
+        }
+    }
 
     Ok(MagicHeader {
         version,
         metablock_len,
+        integrity,
+        metablock_crc,
     })
+}
+
+/// Parse the value of a `crc32c` header token: exactly 8 **uppercase** hex
+/// digits, per the integrity-profile grammar (readers check casing strictly).
+fn parse_crc32c_token(value: &str) -> Result<u32, OsfError> {
+    let is_upper_hex = |b: u8| b.is_ascii_digit() || (b'A'..=b'F').contains(&b);
+    if value.len() != 8 || !value.bytes().all(is_upper_hex) {
+        return Err(OsfError::InvalidMagicHeader(format!(
+            "crc32c token value must be 8 uppercase hex digits, got {value:?}"
+        )));
+    }
+    u32::from_str_radix(value, 16).map_err(|_| {
+        OsfError::InvalidMagicHeader(format!("crc32c token value is not valid hex: {value:?}"))
+    })
+}
+
+/// Validate the value of an `ed25519` header token: exactly 16 **lowercase**
+/// hex digits (the 8-byte key id). Verification of the signature itself is out
+/// of scope for this crate.
+fn validate_ed25519_keyid(value: &str) -> Result<(), OsfError> {
+    let is_lower_hex = |b: u8| b.is_ascii_digit() || (b'a'..=b'f').contains(&b);
+    if value.len() != 16 || !value.bytes().all(is_lower_hex) {
+        return Err(OsfError::InvalidMagicHeader(format!(
+            "ed25519 keyid must be 16 lowercase hex digits, got {value:?}"
+        )));
+    }
+    Ok(())
 }
 
 fn identifier_to_version(identifier: &str) -> Result<OsfVersion, OsfError> {
@@ -217,6 +309,85 @@ mod tests {
         let header = parse(b"OSF5 42\r\n").unwrap();
         assert_eq!(header.version, OsfVersion::Osf5);
         assert_eq!(header.metablock_len, 42);
+    }
+
+    #[test]
+    fn plain_osf5_has_no_integrity() {
+        let header = parse(b"OSF5 895\n").unwrap();
+        assert_eq!(header.integrity, IntegrityProfile::None);
+        assert_eq!(header.metablock_crc, None);
+    }
+
+    #[test]
+    fn parses_crc32c_token() {
+        let header = parse(b"OSF5 84512 crc32c:9A3F01BC\n").unwrap();
+        assert_eq!(header.integrity, IntegrityProfile::Crc32c);
+        assert_eq!(header.metablock_crc, Some(0x9A3F_01BC));
+        assert_eq!(header.metablock_len, 84512);
+    }
+
+    #[test]
+    fn rejects_unknown_header_token() {
+        let err = parse(b"OSF5 100 sha256:ABCD\n").unwrap_err();
+        assert!(
+            matches!(err, OsfError::UnknownHeaderToken(ref k) if k == "sha256"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_token_on_osf4_identifier() {
+        let err = parse(b"OSF4 100 crc32c:9A3F01BC\n").unwrap_err();
+        assert!(matches!(err, OsfError::InvalidMagicHeader(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_crc32c_lowercase_hex() {
+        let err = parse(b"OSF5 100 crc32c:9a3f01bc\n").unwrap_err();
+        assert!(matches!(err, OsfError::InvalidMagicHeader(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_crc32c_wrong_length() {
+        let err = parse(b"OSF5 100 crc32c:9A3F01\n").unwrap_err();
+        assert!(matches!(err, OsfError::InvalidMagicHeader(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_double_space_separator() {
+        let err = parse(b"OSF5  84512\n").unwrap_err();
+        assert!(matches!(err, OsfError::InvalidMagicHeader(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_trailing_space() {
+        let err = parse(b"OSF5 84512 \n").unwrap_err();
+        assert!(matches!(err, OsfError::InvalidMagicHeader(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn parses_crc32c_then_ed25519() {
+        let header = parse(b"OSF5 84512 crc32c:9A3F01BC ed25519:0123456789abcdef\n").unwrap();
+        assert_eq!(header.integrity, IntegrityProfile::Ed25519);
+        assert_eq!(header.metablock_crc, Some(0x9A3F_01BC));
+    }
+
+    #[test]
+    fn rejects_ed25519_without_crc32c() {
+        let err = parse(b"OSF5 84512 ed25519:0123456789abcdef\n").unwrap_err();
+        assert!(matches!(err, OsfError::InvalidMagicHeader(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_ed25519_before_crc32c() {
+        let err = parse(b"OSF5 84512 ed25519:0123456789abcdef crc32c:9A3F01BC\n").unwrap_err();
+        assert!(matches!(err, OsfError::InvalidMagicHeader(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_ed25519_uppercase_keyid() {
+        let err = parse(b"OSF5 84512 crc32c:9A3F01BC ed25519:0123456789ABCDEF\n").unwrap_err();
+        assert!(matches!(err, OsfError::InvalidMagicHeader(_)), "got {err:?}");
     }
 
     #[test]

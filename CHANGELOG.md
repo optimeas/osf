@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **OSF5 integrity profile level `crc` — Rust (`osf-core`) + Python (`osfdata`).**
+  Reader: a strict, must-understand magic-header tokenizer (`crc32c` /
+  `ed25519`, `OsfError::UnknownHeaderToken` on unknown keys), metablock-CRC
+  verification (`OsfError::MetablockCrcMismatch`), and fail-closed per-block
+  frame-CRC32C framing (carved off before the typed parse; a mismatch skips the
+  block and bumps `ReaderStats.blocks_crc_failed`). Signed files stay
+  readable/CRC-checked: signature blocks on channel `0xFFFE` are skipped and
+  counted, `verification_status()` reports `signature_unverifiable`. Writer:
+  `WriterBuilder::with_integrity(IntegrityProfile::Crc32c)` emits the token and
+  frame CRCs. Python mirrors this via `stats.integrity` / counters /
+  `verification_status` and `WriterBuilder.with_integrity` /
+  `save(..., integrity="crc32c")`. New Rust-generated reference files under
+  `examples/generated/integrity/` (`osf5_crc_*.osf`). Depends on the `crc`
+  crate. Signing (level `signed`) is not implemented. **No spec changes.**
 - **OSF5 integrity profile — specification revision (2026-07-07).** New normative
   spec `docs/{de,en}/references/osf5_integrity.md` describing an **optional**
   three-level integrity profile for OSF5 (`none ⊂ crc ⊂ signed`): a "must

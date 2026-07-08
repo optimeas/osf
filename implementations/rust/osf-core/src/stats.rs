@@ -22,6 +22,7 @@
 //!   anything with bits 0–6 ≥ 9) are either spec-internal or genuinely
 //!   unknown.
 
+use crate::integrity::IntegrityProfile;
 use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
@@ -87,6 +88,15 @@ pub struct ReaderStats {
 
     /// Detected compression format on the source stream.
     pub compression_format: CompressionFormat,
+
+    /// Integrity level declared by the file's magic-header token
+    /// (`none` when the file carries no integrity profile).
+    pub integrity: IntegrityProfile,
+    /// Blocks dropped because their frame CRC (level `crc`) did not match.
+    pub blocks_crc_failed: u64,
+    /// Integrity signature blocks (channel `0xFFFE`, control byte 9) skipped
+    /// because this crate reads level `crc` but does not verify signatures.
+    pub blocks_signature_skipped: u64,
 
     /// Per-channel detail keyed by channel index.
     pub per_channel: HashMap<u16, ChannelStats>,
@@ -194,6 +204,36 @@ fn fmt_duration(d: Duration) -> String {
     }
 }
 
+impl ReaderStats {
+    /// Overall integrity verification status, using the vocabulary defined by
+    /// the OSF5 integrity profile.
+    ///
+    /// This crate implements level `crc`; it reads level `signed` files but
+    /// does not verify signatures, so a signed file always reports
+    /// `signature_unverifiable` (its CRC layer is still checked and the file
+    /// stays readable).
+    ///
+    /// - `none` — no integrity profile declared.
+    /// - `crc_valid` — level `crc`, every block CRC verified.
+    /// - `invalid` — level `crc`, at least one block failed its frame CRC.
+    /// - `signature_unverifiable` — level `signed`; signatures are not
+    ///   verified by this crate.
+    #[must_use]
+    pub fn verification_status(&self) -> &'static str {
+        match self.integrity {
+            IntegrityProfile::None => "none",
+            IntegrityProfile::Ed25519 => "signature_unverifiable",
+            IntegrityProfile::Crc32c => {
+                if self.blocks_crc_failed > 0 {
+                    "invalid"
+                } else {
+                    "crc_valid"
+                }
+            }
+        }
+    }
+}
+
 impl fmt::Display for ReaderStats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
@@ -243,6 +283,17 @@ impl fmt::Display for ReaderStats {
         if self.compressed {
             writeln!(f, "Compressed:            yes ({})", self.compression_format)?;
         }
+        if self.integrity != IntegrityProfile::None {
+            writeln!(f, "Integrity:             {}", self.integrity)?;
+            writeln!(f, "Blocks CRC-failed:     {}", self.blocks_crc_failed)?;
+            if self.blocks_signature_skipped > 0 {
+                writeln!(
+                    f,
+                    "Signature blocks:      {} (skipped, unverified)",
+                    self.blocks_signature_skipped
+                )?;
+            }
+        }
         Ok(())
     }
 }
@@ -266,6 +317,31 @@ impl fmt::Display for ChannelStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn verification_status_reflects_integrity_and_failures() {
+        let base = ReaderStats::default();
+        assert_eq!(base.verification_status(), "none");
+
+        let crc_ok = ReaderStats {
+            integrity: IntegrityProfile::Crc32c,
+            ..ReaderStats::default()
+        };
+        assert_eq!(crc_ok.verification_status(), "crc_valid");
+
+        let crc_bad = ReaderStats {
+            integrity: IntegrityProfile::Crc32c,
+            blocks_crc_failed: 1,
+            ..ReaderStats::default()
+        };
+        assert_eq!(crc_bad.verification_status(), "invalid");
+
+        let signed = ReaderStats {
+            integrity: IntegrityProfile::Ed25519,
+            ..ReaderStats::default()
+        };
+        assert_eq!(signed.verification_status(), "signature_unverifiable");
+    }
 
     #[test]
     fn observe_timestamp_grows_range_in_both_directions() {

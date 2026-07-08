@@ -23,6 +23,25 @@ pub enum OsfError {
     #[error("unsupported OSF version: {0}")]
     UnsupportedVersion(String),
 
+    /// The magic header carried an integrity token whose key this build does
+    /// not understand. Header tokens are "must understand" per the OSF5
+    /// integrity profile, so an unknown key rejects the whole file. Carries
+    /// the offending key.
+    #[error("unknown header token '{0}'")]
+    UnknownHeaderToken(String),
+
+    /// The declared integrity profile failed verification: the CRC32C of the
+    /// raw metablock bytes did not match the value carried by the `crc32c`
+    /// header token. The metablock is the contract for everything that
+    /// follows, so a mismatch rejects the file.
+    #[error("metablock CRC mismatch: header token 0x{expected:08X}, computed 0x{actual:08X}")]
+    MetablockCrcMismatch {
+        /// CRC32C value declared by the `crc32c` header token.
+        expected: u32,
+        /// CRC32C actually computed over the raw metablock bytes.
+        actual: u32,
+    },
+
     /// The magic header line was longer than the configured sanity limit
     /// before a newline was seen — almost certainly not an OSF file.
     #[error("magic header line exceeded {0} bytes without terminator")]

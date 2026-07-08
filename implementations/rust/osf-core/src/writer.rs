@@ -34,6 +34,7 @@ use crate::binary_write;
 use crate::block::GpsLocation;
 use crate::data_channel::NumericValues;
 use crate::error::OsfError;
+use crate::integrity::IntegrityProfile;
 use crate::meta::SpectrumType;
 use crate::types::{ChannelType, DataType};
 use log::debug;
@@ -172,6 +173,7 @@ pub struct WriterBuilder {
     pub(crate) channels: Vec<ChannelDef>,
     pub(crate) channel_data: Vec<ChannelData>,
     pub(crate) name_to_index: HashMap<String, u16>,
+    pub(crate) integrity: IntegrityProfile,
 }
 
 impl WriterBuilder {
@@ -179,6 +181,17 @@ impl WriterBuilder {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Emit the file at integrity level `crc`: a `crc32c` magic-header token
+    /// carrying the metablock CRC, plus a per-block frame CRC32C. Default is
+    /// [`IntegrityProfile::None`] (no integrity data). Only `None` and
+    /// `Crc32c` are valid here — signing (`Ed25519`) is not implemented by
+    /// this crate's writer.
+    #[must_use]
+    pub fn with_integrity(mut self, profile: IntegrityProfile) -> Self {
+        self.integrity = profile;
+        self
     }
 
     /// Set the `creator` string (typically `"app:version"`).
@@ -315,12 +328,26 @@ impl WriterBuilder {
             return Err(OsfError::WriterEmpty);
         }
 
-        autobump_size_of_length_value(&mut self.channels, &self.channel_data);
+        let frame_crc = match self.integrity {
+            IntegrityProfile::None => false,
+            IntegrityProfile::Crc32c => true,
+            IntegrityProfile::Ed25519 => {
+                return Err(OsfError::InvalidBlock(
+                    "this writer implements integrity level crc only; signing (ed25519) is not \
+                     supported"
+                        .into(),
+                ));
+            }
+        };
+
+        autobump_size_of_length_value(&mut self.channels, &self.channel_data, frame_crc);
 
         let metablock = build_metablock_json(&self.file_info, &self.channels)?;
-        write_magic_header(&mut writer, metablock.len() as u64)?;
+        // The crc32c token carries the CRC32C of the raw metablock bytes.
+        let metablock_crc = frame_crc.then(|| crate::integrity::crc32c(&metablock));
+        write_magic_header(&mut writer, metablock.len() as u64, metablock_crc)?;
         writer.write_all(&metablock)?;
-        write_data_blocks(&mut writer, &self.channels, &self.channel_data)?;
+        write_data_blocks(&mut writer, &self.channels, &self.channel_data, frame_crc)?;
         writer.flush()?;
         Ok(())
     }
@@ -331,12 +358,14 @@ impl WriterBuilder {
 /// field are bumped up to `size_of_length_value = 4`. Numeric
 /// channels are not bumped — the block writer splits them into
 /// multiple blocks instead.
-fn autobump_size_of_length_value(channels: &mut [ChannelDef], data: &[ChannelData]) {
+fn autobump_size_of_length_value(channels: &mut [ChannelDef], data: &[ChannelData], frame_crc: bool) {
+    let crc_reserve = if frame_crc { 4 } else { 0 };
     for (i, def) in channels.iter_mut().enumerate() {
         if def.size_of_length_value == 4 {
             continue;
         }
-        let needed = match &data[i] {
+        let needed = crc_reserve
+            + match &data[i] {
             ChannelData::Variable {
                 strings, binaries, ..
             } => {
@@ -366,9 +395,18 @@ fn autobump_size_of_length_value(channels: &mut [ChannelDef], data: &[ChannelDat
     }
 }
 
-/// Write the magic-header line: `OSF5 <metablock_len>\n`.
-fn write_magic_header<W: Write>(writer: &mut W, metablock_len: u64) -> Result<(), OsfError> {
-    let line = format!("{OSF5_IDENTIFIER} {metablock_len}\n");
+/// Write the magic-header line: `OSF5 <metablock_len>[ crc32c:<HEX>]\n`.
+/// When `metablock_crc` is set, an integrity `crc32c` token (8 uppercase hex
+/// digits) is appended.
+fn write_magic_header<W: Write>(
+    writer: &mut W,
+    metablock_len: u64,
+    metablock_crc: Option<u32>,
+) -> Result<(), OsfError> {
+    let line = match metablock_crc {
+        Some(crc) => format!("{OSF5_IDENTIFIER} {metablock_len} crc32c:{crc:08X}\n"),
+        None => format!("{OSF5_IDENTIFIER} {metablock_len}\n"),
+    };
     writer.write_all(line.as_bytes())?;
     Ok(())
 }
@@ -393,6 +431,7 @@ fn write_data_blocks<W: Write>(
     writer: &mut W,
     channels: &[ChannelDef],
     channel_data: &[ChannelData],
+    frame_crc: bool,
 ) -> Result<(), OsfError> {
     for (index, def) in channels.iter().enumerate() {
         let channel = u16::try_from(index).expect("channel index ≤ u16::MAX validated earlier");
@@ -400,25 +439,33 @@ fn write_data_blocks<W: Write>(
             ChannelData::Empty => {}
             ChannelData::Equidistant { segments } => {
                 for segment in segments {
-                    write_equidistant_segment(writer, channel, def, segment)?;
+                    write_equidistant_segment(writer, channel, def, segment, frame_crc)?;
                 }
             }
             ChannelData::Timestamped {
                 timestamps_ns,
                 values,
             } => {
-                write_abs_timestamp_numeric(writer, channel, def, timestamps_ns, values)?;
+                write_abs_timestamp_numeric(writer, channel, def, timestamps_ns, values, frame_crc)?;
             }
             ChannelData::Variable {
                 timestamps_ns,
                 strings,
                 binaries,
             } => {
-                write_abs_timestamp_variable(writer, channel, def, timestamps_ns, strings, binaries)?;
+                write_abs_timestamp_variable(
+                    writer, channel, def, timestamps_ns, strings, binaries, frame_crc,
+                )?;
             }
         }
     }
     Ok(())
+}
+
+/// Maximum block payload (control byte + body) once the integrity frame CRC
+/// (4 bytes, counted in the length field) is reserved.
+fn max_block_payload_reserved(size_of_length_value: u8, frame_crc: bool) -> usize {
+    max_block_payload(size_of_length_value) - if frame_crc { 4 } else { 0 }
 }
 
 /// Maximum payload size in bytes for the channel's `size_of_length_value`.
@@ -458,23 +505,39 @@ fn write_block<W: Write>(
     channel: u16,
     size_of_length_value: u8,
     payload: &[u8],
+    frame_crc: bool,
 ) -> Result<(), OsfError> {
-    binary_write::write_u16(writer, channel)?;
-    let len = u32::try_from(payload.len()).map_err(|_| {
+    // The length field counts the payload plus, at integrity level crc, the
+    // trailing 4-byte frame CRC.
+    let on_wire = payload.len() + if frame_crc { 4 } else { 0 };
+    let len = u32::try_from(on_wire).map_err(|_| {
         OsfError::InvalidBlock(format!(
-            "channel {channel}: block payload {} bytes overflows u32 length field",
-            payload.len()
+            "channel {channel}: block length {on_wire} bytes overflows u32 length field"
         ))
     })?;
-    if size_of_length_value == 2 && payload.len() > MAX_BLOCK_PAYLOAD_U16 {
+    if size_of_length_value == 2 && on_wire > MAX_BLOCK_PAYLOAD_U16 {
         return Err(OsfError::InvalidBlock(format!(
-            "channel {channel}: block payload {} bytes exceeds u16 length field; \
-             increase size_of_length_value to 4",
-            payload.len()
+            "channel {channel}: block length {on_wire} bytes exceeds u16 length field; \
+             increase size_of_length_value to 4"
         )));
     }
+    binary_write::write_u16(writer, channel)?;
     binary_write::write_length_field(writer, size_of_length_value, len)?;
     writer.write_all(payload)?;
+    if frame_crc {
+        // Frame CRC32C over channel index + length field + payload.
+        let length_field: &[u8] = &len.to_le_bytes();
+        let length_field = match size_of_length_value {
+            2 => &length_field[..2],
+            _ => &length_field[..4],
+        };
+        let crc = crate::integrity::crc32c_of_parts(&[
+            &channel.to_le_bytes(),
+            length_field,
+            payload,
+        ]);
+        binary_write::write_u32(writer, crc)?;
+    }
     Ok(())
 }
 
@@ -487,10 +550,11 @@ fn write_equidistant_segment<W: Write>(
     channel: u16,
     def: &ChannelDef,
     segment: &EquidistantSegmentDraft,
+    frame_crc: bool,
 ) -> Result<(), OsfError> {
     let sample_size = numeric_byte_size(&def.data_type)?;
     let total = segment.values.len();
-    let max_payload = max_block_payload(def.size_of_length_value);
+    let max_payload = max_block_payload_reserved(def.size_of_length_value, frame_crc);
 
     // bcStartData multi-sample fixed overhead:
     //   1 (control) + 8 (i64 ts) + 8 (f64 rate) + 4 (u32 N) = 21
@@ -514,6 +578,7 @@ fn write_equidistant_segment<W: Write>(
         &segment.values,
         0,
         first_chunk,
+        frame_crc,
     )?;
 
     let mut written = first_chunk;
@@ -526,6 +591,7 @@ fn write_equidistant_segment<W: Write>(
             &segment.values,
             written,
             chunk,
+            frame_crc,
         )?;
         written += chunk;
     }
@@ -542,6 +608,7 @@ fn write_start_data_block<W: Write>(
     values: &NumericValues,
     start: usize,
     count: usize,
+    frame_crc: bool,
 ) -> Result<(), OsfError> {
     let multi = count != 1;
     let mut payload = Vec::with_capacity(32);
@@ -559,7 +626,7 @@ fn write_start_data_block<W: Write>(
         binary_write::write_u32(&mut payload, count as u32)?;
     }
     write_numeric_values_slice(&mut payload, values, start, count)?;
-    write_block(writer, channel, size_of_length_value, &payload)
+    write_block(writer, channel, size_of_length_value, &payload, frame_crc)
 }
 
 fn write_continued_data_block<W: Write>(
@@ -569,6 +636,7 @@ fn write_continued_data_block<W: Write>(
     values: &NumericValues,
     start: usize,
     count: usize,
+    frame_crc: bool,
 ) -> Result<(), OsfError> {
     let multi = count != 1;
     let mut payload = Vec::with_capacity(16);
@@ -584,7 +652,7 @@ fn write_continued_data_block<W: Write>(
         binary_write::write_u32(&mut payload, count as u32)?;
     }
     write_numeric_values_slice(&mut payload, values, start, count)?;
-    write_block(writer, channel, size_of_length_value, &payload)
+    write_block(writer, channel, size_of_length_value, &payload, frame_crc)
 }
 
 // -----------------------------------------------------------
@@ -597,6 +665,7 @@ fn write_abs_timestamp_numeric<W: Write>(
     def: &ChannelDef,
     timestamps_ns: &[i64],
     values: &NumericValues,
+    frame_crc: bool,
 ) -> Result<(), OsfError> {
     let sample_size = numeric_byte_size(&def.data_type)?;
     let total = timestamps_ns.len();
@@ -604,7 +673,7 @@ fn write_abs_timestamp_numeric<W: Write>(
         return Ok(());
     }
 
-    let max_payload = max_block_payload(def.size_of_length_value);
+    let max_payload = max_block_payload_reserved(def.size_of_length_value, frame_crc);
     // [control][u32 N][N × (i64 ts + value)]
     // overhead = 1 + 4 = 5; per-sample = 8 + sample_size.
     let per_sample = 8 + sample_size;
@@ -627,7 +696,7 @@ fn write_abs_timestamp_numeric<W: Write>(
             written,
             chunk,
         )?;
-        write_block(writer, channel, def.size_of_length_value, &payload)?;
+        write_block(writer, channel, def.size_of_length_value, &payload, frame_crc)?;
         written += chunk;
     }
     Ok(())
@@ -645,6 +714,7 @@ fn write_abs_timestamp_variable<W: Write>(
     timestamps_ns: &[i64],
     strings: &Option<Vec<String>>,
     binaries: &Option<Vec<Vec<u8>>>,
+    frame_crc: bool,
 ) -> Result<(), OsfError> {
     debug_assert!(strings.is_some() ^ binaries.is_some());
     let count = timestamps_ns.len();
@@ -654,11 +724,11 @@ fn write_abs_timestamp_variable<W: Write>(
 
     if let Some(ss) = strings {
         for (ts, s) in timestamps_ns.iter().zip(ss.iter()) {
-            write_variable_one_string(writer, channel, def, *ts, s)?;
+            write_variable_one_string(writer, channel, def, *ts, s, frame_crc)?;
         }
     } else if let Some(bs) = binaries {
         for (ts, b) in timestamps_ns.iter().zip(bs.iter()) {
-            write_variable_one_binary(writer, channel, def, *ts, b)?;
+            write_variable_one_binary(writer, channel, def, *ts, b, frame_crc)?;
         }
     }
     Ok(())
@@ -670,13 +740,14 @@ fn write_variable_one_string<W: Write>(
     def: &ChannelDef,
     timestamp_ns: i64,
     s: &str,
+    frame_crc: bool,
 ) -> Result<(), OsfError> {
     let payload_len = variable_payload_size(s.len());
-    check_variable_block_fits(channel, def.size_of_length_value, payload_len, s.len())?;
+    check_variable_block_fits(channel, def.size_of_length_value, payload_len, s.len(), frame_crc)?;
     let mut payload = Vec::with_capacity(payload_len);
     write_variable_header(&mut payload, timestamp_ns)?;
     payload.write_all(s.as_bytes())?;
-    write_block(writer, channel, def.size_of_length_value, &payload)
+    write_block(writer, channel, def.size_of_length_value, &payload, frame_crc)
 }
 
 fn write_variable_one_binary<W: Write>(
@@ -685,13 +756,20 @@ fn write_variable_one_binary<W: Write>(
     def: &ChannelDef,
     timestamp_ns: i64,
     bytes: &[u8],
+    frame_crc: bool,
 ) -> Result<(), OsfError> {
     let payload_len = variable_payload_size(bytes.len());
-    check_variable_block_fits(channel, def.size_of_length_value, payload_len, bytes.len())?;
+    check_variable_block_fits(
+        channel,
+        def.size_of_length_value,
+        payload_len,
+        bytes.len(),
+        frame_crc,
+    )?;
     let mut payload = Vec::with_capacity(payload_len);
     write_variable_header(&mut payload, timestamp_ns)?;
     payload.write_all(bytes)?;
-    write_block(writer, channel, def.size_of_length_value, &payload)
+    write_block(writer, channel, def.size_of_length_value, &payload, frame_crc)
 }
 
 /// Total payload bytes for a single-sample variable block in the
@@ -712,8 +790,10 @@ fn check_variable_block_fits(
     size_of_length_value: u8,
     payload_len: usize,
     sample_bytes: usize,
+    frame_crc: bool,
 ) -> Result<(), OsfError> {
-    if size_of_length_value == 2 && payload_len > MAX_BLOCK_PAYLOAD_U16 {
+    let on_wire = payload_len + if frame_crc { 4 } else { 0 };
+    if size_of_length_value == 2 && on_wire > MAX_BLOCK_PAYLOAD_U16 {
         return Err(OsfError::InvalidBlock(format!(
             "channel {channel}: variable sample {sample_bytes} bytes exceeds u16 block limit \
              (auto-bump should have caught this; raise size_of_length_value to 4)"
@@ -1741,6 +1821,57 @@ mod tests {
         };
         let err = b.add_channel(def).unwrap_err();
         assert!(matches!(err, OsfError::InvalidMetablock(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn crc_integrity_roundtrip_equidistant_and_string() {
+        use crate::integrity::IntegrityProfile;
+        let mut b = WriterBuilder::new();
+        let d = b.add_channel(dbl_channel("temp")).unwrap();
+        b.add_equidistant_segment_f64(d, 1_000, 100.0, &[1.5, 2.5, 3.5, 4.5])
+            .unwrap();
+        let s = b
+            .add_channel(ChannelDef {
+                name: "log".into(),
+                data_type: DataType::String,
+                ..Default::default()
+            })
+            .unwrap();
+        b.add_string_samples(s, &[10, 20], &["hello".to_string(), "world".to_string()])
+            .unwrap();
+
+        let mut buf = Vec::new();
+        b.with_integrity(IntegrityProfile::Crc32c)
+            .write_to(&mut buf)
+            .unwrap();
+
+        // The header must carry a crc32c token whose value is the CRC32C of
+        // the raw metablock bytes.
+        let nl = buf.iter().position(|&x| x == b'\n').unwrap();
+        let header = std::str::from_utf8(&buf[..nl]).unwrap();
+        assert!(header.contains(" crc32c:"), "header was {header:?}");
+
+        // Read back: every block's frame CRC (and the metablock CRC) must
+        // verify, the data must be intact, and the level must be reported.
+        let mgr = crate::DataManager::load_from_reader(std::io::Cursor::new(buf)).unwrap();
+        assert_eq!(mgr.stats.integrity, IntegrityProfile::Crc32c);
+        assert_eq!(mgr.stats.blocks_crc_failed, 0);
+        assert_eq!(mgr.stats.verification_status(), "crc_valid");
+
+        // Both channels' blocks carried and passed a frame CRC (0 failures
+        // above), so all samples survived the round-trip.
+        assert!(mgr.channel("temp").is_some());
+        assert!(mgr.channel("log").is_some());
+        let samples = |name: &str| {
+            mgr.stats
+                .per_channel
+                .values()
+                .find(|c| c.name == name)
+                .map(|c| c.samples_total)
+                .unwrap()
+        };
+        assert_eq!(samples("temp"), 4);
+        assert_eq!(samples("log"), 2);
     }
 
     #[test]
