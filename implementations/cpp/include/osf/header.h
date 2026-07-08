@@ -75,7 +75,7 @@ struct MagicHeader {
     IntegrityProfile integrity = IntegrityProfile::None;
     /// CRC32C of the raw metablock bytes, carried by the `crc32c` token.
     /// Empty unless `integrity` is at least `Crc32c`.
-    std::optional<std::uint32_t> metablockCrc;
+    std::optional<std::uint32_t> metablockCrc = std::nullopt;
 
     friend bool operator==(MagicHeader const& a, MagicHeader const& b) noexcept {
         return a.version == b.version && a.metablockLen == b.metablockLen &&
