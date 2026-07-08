@@ -68,6 +68,7 @@ resourcestring
   SInfoVersionOsf5    = 'Version:     OSF5';
   SInfoVersionUnknown = 'Version:     unknown';
   SInfoCreator        = 'Creator:     %s';
+  SInfoIntegrity      = 'Integrity:   %s';
   SInfoCreatedUtc     = 'Created UTC: %s';
   SInfoTag            = 'Tag:         %s';
   SInfoReason         = 'Reason:      %s';
@@ -186,6 +187,7 @@ begin
     Printf(SInfoReason, [AFiler.Metadata.Reason]);
   if AFiler.Metadata.Comment <> '' then
     Printf(SInfoComment, [AFiler.Metadata.Comment]);
+  Printf(SInfoIntegrity, [OSFIntegrityProfileName(AFiler.IntegrityProfile)]);
   Printf(SInfoChannels, [AFiler.ChannelCount]);
   if AFirstNs > 0 then
     Printf(SInfoFirstData, [FormatUtc(UnixNsToUtcDateTime(AFirstNs))]);
@@ -222,6 +224,7 @@ begin
       Root.AddPair('reason', AFiler.Metadata.Reason);
     if AFiler.Metadata.Comment <> '' then
       Root.AddPair('comment', AFiler.Metadata.Comment);
+    Root.AddPair('integrity', OSFIntegrityProfileName(AFiler.IntegrityProfile));
     Root.AddPair('channel_count', TJSONNumber.Create(AFiler.ChannelCount));
     Root.AddPair('first_data_ns', TJSONNumber.Create(AFirstNs));
     Root.AddPair('last_data_ns',  TJSONNumber.Create(ALastNs));

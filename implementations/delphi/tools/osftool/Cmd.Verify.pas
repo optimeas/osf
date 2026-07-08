@@ -29,6 +29,11 @@ type
     FWarnings: TList<string>;
     FErrors: TList<string>;
     FLastTsPerChannel: TDictionary<Word, Int64>;
+    FIntegrity: TOSFIntegrityProfile;
+    FVerifyStatus: string;
+    FCRCFailed: UInt32;
+    FSigSkipped: UInt32;
+    FUnknownSkipped: UInt32;
     procedure CheckBlock(const ABlock: TOSFDataBlock; AFiler: TOSFFile);
   protected
     // Capture filer warnings into FWarnings before falling through to
@@ -72,6 +77,11 @@ resourcestring
   SVerifyErrFileNotFound      = 'osftool verify: file not found: %s';
   SVerifyErrCannotOpen        = 'osftool verify: cannot open %s: %s';
   SVerifyErrUnknownChannelIdx = 'block %d references unknown channel index %d';
+  SVerifyErrFrameCRC = '%d block(s) failed their frame CRC (data invalid)';
+  SVerifyLineIntegrity   = '  Integrity: %s (%s)';
+  SVerifyLineCRCFailed   = '  CRC-failed blocks:  %d';
+  SVerifyLineSigSkipped  = '  Signature blocks:   %d (skipped, unverified)';
+  SVerifyLineUnknownSkip = '  Unknown-type skips: %d';
   SVerifyErrTimestampBackward =
     'channel "%s" (idx %d): bcStartData timestamp %d is earlier than previous %d';
   SVerifyVersionUnknown = 'unknown';
@@ -180,6 +190,15 @@ begin
   else
     Printf(SVerifyLineBlocks, [FBlockCount]);
   Printf(SVerifyLineChannels, [AChannelCount]);
+  if FIntegrity <> ipNone then
+  begin
+    Printf(SVerifyLineIntegrity, [OSFIntegrityProfileName(FIntegrity), FVerifyStatus]);
+    Printf(SVerifyLineCRCFailed, [FCRCFailed]);
+    if FSigSkipped > 0 then
+      Printf(SVerifyLineSigSkipped, [FSigSkipped]);
+  end;
+  if FUnknownSkipped > 0 then
+    Printf(SVerifyLineUnknownSkip, [FUnknownSkipped]);
   Printf(SVerifyLineWarnings, [FWarnings.Count]);
   for Msg in FWarnings do
     Printf('    [W] %s', [Msg]);
@@ -217,6 +236,11 @@ begin
     Root.AddPair('block_count',     TJSONNumber.Create(FBlockCount));
     Root.AddPair('truncated_count', TJSONNumber.Create(FTruncatedCount));
     Root.AddPair('channel_count',   TJSONNumber.Create(AChannelCount));
+    Root.AddPair('integrity', OSFIntegrityProfileName(FIntegrity));
+    Root.AddPair('verification_status', FVerifyStatus);
+    Root.AddPair('crc_failed_count',        TJSONNumber.Create(FCRCFailed));
+    Root.AddPair('signature_skipped_count', TJSONNumber.Create(FSigSkipped));
+    Root.AddPair('unknown_type_skipped_count', TJSONNumber.Create(FUnknownSkipped));
     WArr := TJSONArray.Create;
     Root.AddPair('warnings', WArr);
     for S in FWarnings do
@@ -279,6 +303,16 @@ begin
       CheckBlock(Block, Filer);
     if Filer.TruncationSeen then
       Inc(FTruncatedCount);
+
+    // Integrity profile results (metablock CRC was already verified during
+    // OpenForRead; a mismatch would have raised above).
+    FIntegrity := Filer.IntegrityProfile;
+    FVerifyStatus := Filer.VerificationStatus;
+    FCRCFailed := Filer.BlocksCRCFailed;
+    FSigSkipped := Filer.BlocksSignatureSkipped;
+    FUnknownSkipped := Filer.BlocksUnknownTypeSkipped;
+    if FCRCFailed > 0 then
+      FErrors.Add(Format(SVerifyErrFrameCRC, [FCRCFailed]));
 
     if FJson then
       EmitJson(FileName, Version, ChannelCount)
