@@ -20,10 +20,15 @@ uses
   Xml.omnixmldom,
   Xml.XMLDom,
   OSF.Types,
+  OSF.CRC32C,
   OSF.Channel,
   OSF.Log;
 
 type
+  // Outcome of a low-level block read: a decoded block, a skip (bytes
+  // consumed, read on), or a stop (truncation / unrecoverable).
+  TOSFBlockOutcome = (boBlock, boSkip, boStop);
+
   // File-level metadata written in the OSF meta block.
   // When writing: set fields before calling WriteHeader.
   // When reading: populated by OpenForRead after the meta block is parsed.
@@ -95,6 +100,20 @@ type
     // user opened the filer on a raw stream.
     FSourceName: string;
 
+    // Integrity profile (OSF5 integrity token). On read: parsed from the
+    // magic-header token in ReadMagicAndMeta. On write: set via
+    // IntegrityProfile before WriteHeader (None or Crc32c only).
+    FIntegrity: TOSFIntegrityProfile;
+    // CRC32C of the raw metablock bytes carried by the crc32c token
+    // (valid when FIntegrity >= ipCrc32c).
+    FMetablockCRC: UInt32;
+    // ed25519 keyid from the header token (level signed); empty otherwise.
+    FEd25519KeyId: string;
+    // Read-side integrity counters, reset in ReadMagicAndMeta.
+    FBlocksCRCFailed: UInt32;
+    FBlocksUnknownTypeSkipped: UInt32;
+    FBlocksSignatureSkipped: UInt32;
+
     // Magic header line + meta block dispatcher.
     procedure ReadMagicAndMeta;
 
@@ -121,9 +140,16 @@ type
     // Block reading - split so each helper stays under 30 lines and the
     // truncation guards are at the top of their function.
     function TryReadChannelIndex(out ChannelIndex: Word): Boolean;
-    function ReadInfoBlock(var Block: TOSFDataBlock): Boolean;
-    function ReadDataBlock(ChannelIndex: Word; var Block: TOSFDataBlock): Boolean;
-    function DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): Boolean;
+    function ReadInfoBlock(var Block: TOSFDataBlock): TOSFBlockOutcome;
+    function ReadSignatureBlock: TOSFBlockOutcome;
+    function ReadDataBlock(ChannelIndex: Word; var Block: TOSFDataBlock): TOSFBlockOutcome;
+    function DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): TOSFBlockOutcome;
+    // Integrity level crc: verify the trailing 4-byte frame CRC over the
+    // whole frame (channel index, length field, control byte, payload).
+    function VerifyFrameCRC(ChannelIndex: Word; LFS: TOSFLengthFieldSize;
+      LenField: UInt32; const Payload: TBytes): Boolean;
+    // Parse the OSF5 magic-header integrity token(s); raises on unknown key.
+    procedure ParseHeaderTokens(const Parts: TArray<string>);
     // Reads block headers, skipping any whose channel is excluded by the
     // active ChannelFilter, until a deliverable block is found.
     // Returns False on clean EOF or on a truncation that cannot be recovered.
@@ -251,6 +277,21 @@ type
     // TOSFMetaCacheBuilder) to report a partial-load condition.
     property TruncationSeen: Boolean read FTruncationSeen;
 
+    // ── Integrity profile (OSF5) ──────────────────────────────────────────
+    // On read: the level declared by the magic-header token. On write: set
+    // to ipNone (default) or ipCrc32c before WriteHeader to emit the profile.
+    property IntegrityProfile: TOSFIntegrityProfile read FIntegrity write FIntegrity;
+    // ed25519 keyid from the header token (level signed); empty otherwise.
+    property Ed25519KeyId: string read FEd25519KeyId;
+    // Read-side counters: blocks dropped by a failed frame CRC, unknown
+    // block types skipped (forward-compat), and signature blocks skipped.
+    property BlocksCRCFailed: UInt32 read FBlocksCRCFailed;
+    property BlocksUnknownTypeSkipped: UInt32 read FBlocksUnknownTypeSkipped;
+    property BlocksSignatureSkipped: UInt32 read FBlocksSignatureSkipped;
+    // Verification status vocabulary (osf5_integrity.md §1.6):
+    // 'none' | 'crc_valid' | 'invalid' | 'signature_unverifiable'.
+    function VerificationStatus: string;
+
     // Optional channel name filter for reads. When empty (the default), every
     // data block is delivered to ReadNextBlock callers - existing behaviour.
     // When populated, ReadNextBlock silently skips data blocks whose channel
@@ -275,6 +316,9 @@ resourcestring
   SOSFWriteHeaderAlreadyCalled = 'WriteHeader has already been called';
   SOSFWriteHeaderBadVersion = 'WriteHeader: unsupported FVersion';
   SOSFWriteBeforeHeader = 'WriteHeader must be called before writing data blocks';
+  SOSFWriterIntegrityOSF5Only = 'The integrity profile is an OSF5-only feature';
+  SOSFWriterSigningUnsupported = 'This writer implements integrity level crc only; signing (ed25519) is not supported';
+  SOSFBlockLengthOverflow = 'block length %d bytes (incl. frame CRC) overflows the u16 length field of channel %d; use sizeoflengthvalue=4';
 
   // AddChannel uniqueness errors.
   SOSFDuplicateChannelIndex = 'AddChannel: duplicate channel index %d';
@@ -319,6 +363,18 @@ resourcestring
   SOSFLogFileClosed = 'File closed: %s  total bytes=%d';
   SOSFLogChannelFilterSkip = 'Channel filter: skipping block for "%s" (%d bytes)';
   SOSFLogOSFZDetected = 'OSFZ container detected, decompressing on the fly: %s';
+  // Integrity profile (OSF5 level crc).
+  SOSFUnknownHeaderToken = 'unknown header token ''%s''';
+  SOSFMalformedHeaderLine = 'malformed magic header line: fields must be separated by a single space with no trailing space';
+  SOSFTokenNotAllowedOSF4 = 'header token ''%s'' is not allowed on an OSF4 identifier';
+  SOSFInvalidCrc32cToken = 'crc32c header token must be 8 uppercase hex digits: "%s"';
+  SOSFInvalidEd25519Token = 'ed25519 header keyid must be 16 lowercase hex digits: "%s"';
+  SOSFEd25519WithoutCrc = 'ed25519 header token requires a preceding crc32c token';
+  SOSFMetablockCrcMismatch = 'metablock CRC mismatch: token 0x%.8x, computed 0x%.8x';
+  SOSFLogFrameCRCMismatch = 'Frame CRC mismatch on channel %d at offset %d - skipping block';
+  SOSFLogFrameCRCTooShort = 'Block on channel %d too short to carry a frame CRC - skipping block';
+  SOSFLogUnknownBlockTypeSkip = 'Unknown block type %d on channel %d at offset %d - skipping';
+  SOSFLogSignatureBlockSkipped = 'Integrity signature block (channel 0xFFFE) skipped - not verified';
 
 implementation
 
@@ -894,6 +950,65 @@ begin
   end;
 end;
 
+procedure TOSFFile.ParseHeaderTokens(const Parts: TArray<string>);
+
+  function IsHex(const S: string; Len: Integer; Upper: Boolean): Boolean;
+  var
+    C: Char;
+  begin
+    Result := Length(S) = Len;
+    if Result then
+      for C in S do
+        if not (CharInSet(C, ['0'..'9']) or
+                (Upper and CharInSet(C, ['A'..'F'])) or
+                ((not Upper) and CharInSet(C, ['a'..'f']))) then
+          Exit(False);
+  end;
+
+var
+  I, ColonPos: Integer;
+  Token, Key, Value: string;
+  SawCrc: Boolean;
+begin
+  SawCrc := False;
+  // Parts[0] = identifier, Parts[1] = metablock length; the rest are tokens.
+  for I := 2 to High(Parts) do
+  begin
+    Token := Parts[I];
+    // An empty field means a double or trailing space — the spec requires
+    // exactly one space between fields and no trailing space (Fix 1).
+    if Token = '' then
+      raise EOSFFormatError.Create(SOSFMalformedHeaderLine);
+    // Header tokens are an OSF5-only feature.
+    if FVersion <> osvOSF5 then
+      raise EOSFFormatError.CreateFmt(SOSFTokenNotAllowedOSF4, [Token]);
+    ColonPos := Pos(':', Token);
+    if ColonPos < 2 then
+      raise EOSFFormatError.CreateFmt(SOSFUnknownHeaderToken, [Token]);
+    Key := Copy(Token, 1, ColonPos - 1);
+    Value := Copy(Token, ColonPos + 1, MaxInt);
+    if Key = 'crc32c' then
+    begin
+      if not IsHex(Value, 8, True) then
+        raise EOSFFormatError.CreateFmt(SOSFInvalidCrc32cToken, [Value]);
+      FMetablockCRC := UInt32(StrToInt64('$' + Value));
+      FIntegrity := ipCrc32c;
+      SawCrc := True;
+    end
+    else if Key = 'ed25519' then
+    begin
+      if not IsHex(Value, 16, False) then
+        raise EOSFFormatError.CreateFmt(SOSFInvalidEd25519Token, [Value]);
+      if not SawCrc then
+        raise EOSFFormatError.Create(SOSFEd25519WithoutCrc);
+      FEd25519KeyId := Value;
+      FIntegrity := ipEd25519;
+    end
+    else
+      raise EOSFFormatError.CreateFmt(SOSFUnknownHeaderToken, [Key]);
+  end;
+end;
+
 procedure TOSFFile.ReadMagicAndMeta;
 var
   Line: AnsiString;
@@ -902,6 +1017,14 @@ var
   MetaBytes: TBytes;
   FirstByte: Byte;
 begin
+  // Reset read-side integrity state on every open.
+  FIntegrity := ipNone;
+  FMetablockCRC := 0;
+  FEd25519KeyId := '';
+  FBlocksCRCFailed := 0;
+  FBlocksUnknownTypeSkipped := 0;
+  FBlocksSignatureSkipped := 0;
+
   Line := ReadAsciiLine(FStream);
   if Length(Line) = 0 then
     raise EOSFFormatError.Create(SOSFUnexpectedEOFInHeader);
@@ -918,8 +1041,19 @@ begin
   if MetaSize <= 0 then
     raise EOSFFormatError.CreateFmt(SOSFInvalidMetaBlockSize, [Parts[1]]);
 
+  // Integrity profile: parse any header tokens after the length field.
+  // Unknown tokens ("must understand") reject the file.
+  ParseHeaderTokens(Parts);
+
   SetLength(MetaBytes, MetaSize);
   FStream.ReadBuffer(MetaBytes[0], MetaSize);
+
+  // Metablock CRC (integrity level crc): verify the raw metablock bytes
+  // against the crc32c token before parsing. Mismatch rejects the file.
+  if (FIntegrity >= ipCrc32c) then
+    if CRC32C(MetaBytes[0], MetaSize) <> FMetablockCRC then
+      raise EOSFFormatError.CreateFmt(SOSFMetablockCrcMismatch,
+        [FMetablockCRC, CRC32C(MetaBytes[0], MetaSize)]);
 
   // Dispatch on the first byte: '<' = XML (OSF4), '{' = JSON (OSF5).
   FirstByte := MetaBytes[0];
@@ -1144,26 +1278,48 @@ function TOSFFile.ReadNextBlock(out Block: TOSFDataBlock): Boolean;
 var
   ChannelIndex: Word;
   StartOffset: Int64;
+  Outcome: TOSFBlockOutcome;
 begin
-  // Default() initialises managed fields (TBytes) without corrupting refcounts.
-  Block := Default (TOSFDataBlock);
+  // Loop so that a skipped block (unknown control byte, failed frame CRC, or
+  // a signature block) advances to the next block instead of ending the scan.
+  // Only a real truncation stops the reader (Fix C — audit §4.2).
+  repeat
+    // Default() initialises managed fields (TBytes) without corrupting refcounts.
+    Block := Default (TOSFDataBlock);
 
-  if not SkipExcludedBlocksUntilIncluded(ChannelIndex, StartOffset) then
-    Exit(False);
-  Block.ChannelIndex := ChannelIndex;
+    if not SkipExcludedBlocksUntilIncluded(ChannelIndex, StartOffset) then
+      Exit(False);
+    Block.ChannelIndex := ChannelIndex;
 
-  if ChannelIndex = OSF_INFO_CHANNEL_INDEX then
-    Result := ReadInfoBlock(Block)
-  else
-    Result := ReadDataBlock(ChannelIndex, Block);
+    if ChannelIndex = OSF_INFO_CHANNEL_INDEX then
+      Outcome := ReadInfoBlock(Block)
+    else if (FIntegrity <> ipNone) and (ChannelIndex = OSF_SIGNATURE_CHANNEL_INDEX) then
+      Outcome := ReadSignatureBlock
+    else
+      Outcome := ReadDataBlock(ChannelIndex, Block);
 
-  if Result and (not Block.IsInfoBlock) then
-    Logger.Write(SOSFLogBlockRead, [ChannelIndex, BlockTypeToLogString(Block.BlockType), Block.SampleCount, Length(Block.RawPayload)], llDebug, 'TOSFFile')
-  else if (not Result) and (not Block.IsInfoBlock) then
-  begin
-    FTruncationSeen := True;
-    Logger.Write(SOSFLogTruncatedBlock, [StartOffset], llWarning, 'TOSFFile');
-  end;
+    case Outcome of
+      boBlock:
+        begin
+          if not Block.IsInfoBlock then
+            Logger.Write(SOSFLogBlockRead,
+              [ChannelIndex, BlockTypeToLogString(Block.BlockType), Block.SampleCount,
+               Length(Block.RawPayload)], llDebug, 'TOSFFile');
+          Exit(True);
+        end;
+      boSkip:
+        Continue; // bytes already consumed; read the next block
+      boStop:
+        begin
+          if not Block.IsInfoBlock then
+          begin
+            FTruncationSeen := True;
+            Logger.Write(SOSFLogTruncatedBlock, [StartOffset], llWarning, 'TOSFFile');
+          end;
+          Exit(False);
+        end;
+    end;
+  until False;
 end;
 
 function TOSFFile.TryReadChannelIndex(out ChannelIndex: Word): Boolean;
@@ -1176,7 +1332,7 @@ begin
   Result := BytesRead = SizeOf(ChannelIndex);
 end;
 
-function TOSFFile.ReadInfoBlock(var Block: TOSFDataBlock): Boolean;
+function TOSFFile.ReadInfoBlock(var Block: TOSFDataBlock): TOSFBlockOutcome;
 var
   LenField: UInt32;
   Payload: TBytes;
@@ -1191,7 +1347,7 @@ begin
       FStream.ReadBuffer(Payload[0], LenField);
   except
     on EReadError do
-      Exit(False);
+      Exit(boStop);
   end;
   if LenField > 0 then
   begin
@@ -1199,21 +1355,45 @@ begin
     if Integer(TypeBits) > Ord(bcAbsTimeStampData) then
     begin
       Logger.Write(SOSFLogUnknownBlockTypeInfo, [TypeBits], llWarning, 'TOSFFile');
-      Exit(False);
+      Exit(boStop);
     end;
     Block.BlockType := TBlockContent(TypeBits);
     SetLength(Block.RawPayload, LenField - 1);
     if LenField > 1 then
       Move(Payload[1], Block.RawPayload[0], LenField - 1);
   end;
-  Result := True;
+  Result := boBlock;
 end;
 
-function TOSFFile.ReadDataBlock(ChannelIndex: Word; var Block: TOSFDataBlock): Boolean;
+function TOSFFile.ReadSignatureBlock: TOSFBlockOutcome;
+var
+  LenField: UInt32;
+  Skip: TBytes;
+begin
+  // Signature blocks (channel 0xFFFE, control byte 9) always use a u32 length
+  // field (spec clarification, analogous to the 0xFFFF info block). This reader
+  // implements level crc, not level signed, so the block is skipped via its
+  // length field and counted; a signed file therefore stays readable.
+  try
+    LenField := ReadUInt32;
+    SetLength(Skip, LenField);
+    if LenField > 0 then
+      FStream.ReadBuffer(Skip[0], LenField);
+  except
+    on EReadError do
+      Exit(boStop);
+  end;
+  Inc(FBlocksSignatureSkipped);
+  Logger.Write(SOSFLogSignatureBlockSkipped, [], llInfo, 'TOSFFile');
+  Result := boSkip;
+end;
+
+function TOSFFile.ReadDataBlock(ChannelIndex: Word; var Block: TOSFDataBlock): TOSFBlockOutcome;
 var
   Channel: TOSFChannelDef;
   LenField: UInt32;
   Payload: TBytes;
+  Offset: Int64;
 begin
   // Channel must have been declared in the meta block; otherwise we cannot
   // know the length-field width and have to stop the best-effort scan here.
@@ -1221,9 +1401,12 @@ begin
   if not Assigned(Channel) then
   begin
     Logger.Write(SOSFLogUnknownChannelInBlock, [ChannelIndex], llWarning, 'TOSFFile');
-    Exit(False);
+    Exit(boStop);
   end;
 
+  Offset := 0;
+  if Assigned(FStream) then
+    Offset := FStream.Position;
   try
     case Channel.LengthFieldSize of
       lfs2:
@@ -1239,13 +1422,64 @@ begin
     FStream.ReadBuffer(Payload[0], LenField);
   except
     on EReadError do
-      Exit(False); // truncated mid-block - best-effort stop
+      Exit(boStop); // truncated mid-block - best-effort stop
+  end;
+
+  // Frame CRC (integrity level crc): verify the trailing 4 bytes over the
+  // whole frame and strip them BEFORE the typed decode (fail-closed framing;
+  // the CRC is counted in the length field, so effective length = LEN - 4).
+  if FIntegrity <> ipNone then
+  begin
+    if LenField < 5 then
+    begin
+      Logger.Write(SOSFLogFrameCRCTooShort, [ChannelIndex], llWarning, 'TOSFFile');
+      Inc(FBlocksCRCFailed);
+      Exit(boSkip);
+    end;
+    if not VerifyFrameCRC(ChannelIndex, Channel.LengthFieldSize, LenField, Payload) then
+    begin
+      Logger.Write(SOSFLogFrameCRCMismatch, [ChannelIndex, Offset], llWarning, 'TOSFFile');
+      Inc(FBlocksCRCFailed);
+      Exit(boSkip);
+    end;
+    LenField := LenField - 4;
   end;
 
   Result := DecodeBlockPayload(Channel, Payload, LenField, Block);
 end;
 
-function TOSFFile.DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): Boolean;
+function TOSFFile.VerifyFrameCRC(ChannelIndex: Word; LFS: TOSFLengthFieldSize;
+  LenField: UInt32; const Payload: TBytes): Boolean;
+var
+  Crc: TCRC32C;
+  ChanLE: array[0..1] of Byte;
+  LenLE: array[0..3] of Byte;
+  LenBytes, ContentLen: Integer;
+  Stored: UInt32;
+begin
+  // Stored CRC = last 4 bytes of the data area, little-endian.
+  Move(Payload[LenField - 4], Stored, 4);
+  ContentLen := Integer(LenField) - 4;
+  // Frame scope: channel index (2 LE) + length field (2 or 4 LE) + content.
+  ChanLE[0] := Byte(ChannelIndex);
+  ChanLE[1] := Byte(ChannelIndex shr 8);
+  LenLE[0] := Byte(LenField);
+  LenLE[1] := Byte(LenField shr 8);
+  LenLE[2] := Byte(LenField shr 16);
+  LenLE[3] := Byte(LenField shr 24);
+  if LFS = lfs2 then
+    LenBytes := 2
+  else
+    LenBytes := 4;
+  Crc.Init;
+  Crc.Update(ChanLE[0], 2);
+  Crc.Update(LenLE[0], LenBytes);
+  if ContentLen > 0 then
+    Crc.Update(Payload[0], ContentLen);
+  Result := Crc.Final = Stored;
+end;
+
+function TOSFFile.DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): TOSFBlockOutcome;
 var
   CtrlByte: Byte;
   TypeBits: Byte;
@@ -1256,22 +1490,25 @@ var
   Pos: Int64;
   SampleRate: Double;
 begin
-  Result := False;
   if Length(Payload) < 1 then
-    Exit;
+    Exit(boStop);
 
   Pos := 0;
   if Assigned(FStream) then
     Pos := FStream.Position;
 
   // Decode the block type without going through OSFBlockTypeFromByte so we can
-  // log a warning instead of letting an unknown type byte raise.
+  // skip an unknown type byte instead of letting it raise.
   CtrlByte := Payload[0];
   TypeBits := CtrlByte and OSF_BLOCK_TYPE_MASK;
   if Integer(TypeBits) > Ord(bcAbsTimeStampData) then
   begin
-    Logger.Write(SOSFLogUnknownBlockType, [TypeBits, Pos], llWarning, 'TOSFFile');
-    Exit;
+    // Fix C: unknown control byte — skip via the length field (bytes already
+    // consumed) and continue, rather than aborting the scan as a truncation.
+    Logger.Write(SOSFLogUnknownBlockTypeSkip, [TypeBits, Block.ChannelIndex, Pos],
+      llWarning, 'TOSFFile');
+    Inc(FBlocksUnknownTypeSkipped);
+    Exit(boSkip);
   end;
   Block.BlockType := TBlockContent(TypeBits);
   Block.MultiValue := OSFBlockHasMultipleValues(CtrlByte);
@@ -1284,7 +1521,7 @@ begin
   if Block.MultiValue then
     Inc(RequiredLen, 4);
   if Integer(LenField) < RequiredLen then
-    Exit;
+    Exit(boStop);
 
   Offset := 1;
   if Block.BlockType = bcStartData then
@@ -1315,7 +1552,22 @@ begin
   end;
 
   Channel.SampleCount := Channel.SampleCount + Block.SampleCount;
-  Result := True;
+  Result := boBlock;
+end;
+
+function TOSFFile.VerificationStatus: string;
+begin
+  case FIntegrity of
+    ipCrc32c:
+      if FBlocksCRCFailed > 0 then
+        Result := 'invalid'
+      else
+        Result := 'crc_valid';
+    ipEd25519:
+      Result := 'signature_unverifiable';
+  else
+    Result := 'none';
+  end;
 end;
 
 // ── Writing: open + structural setup ─────────────────────────────────────────
@@ -1578,7 +1830,17 @@ begin
     raise EOSFException.Create(SOSFWriteHeaderBadVersion);
   end;
 
-  HeaderStr := Format('%s %d'#10, [Magic, Length(MetaBytes)]);
+  // Integrity profile is an OSF5-only feature. The writer supports level crc.
+  if (FIntegrity <> ipNone) and (FVersion <> osvOSF5) then
+    raise EOSFException.Create(SOSFWriterIntegrityOSF5Only);
+  if FIntegrity = ipEd25519 then
+    raise EOSFException.Create(SOSFWriterSigningUnsupported);
+
+  HeaderStr := Format('%s %d', [Magic, Length(MetaBytes)]);
+  if FIntegrity = ipCrc32c then
+    // crc32c token: 8 uppercase hex digits of the metablock CRC.
+    HeaderStr := HeaderStr + ' crc32c:' + IntToHex(CRC32C(MetaBytes[0], Length(MetaBytes)), 8);
+  HeaderStr := HeaderStr + #10;
   HeaderLine := TEncoding.ASCII.GetBytes(HeaderStr);
 
   FStream.WriteBuffer(HeaderLine[0], Length(HeaderLine));
@@ -1589,15 +1851,65 @@ begin
 end;
 
 procedure TOSFFile.WriteDataBlock(Channel: TOSFChannelDef; const Payload: TBytes);
+var
+  Idx: Word;
+  OnWire: UInt32;
+  Crc: TCRC32C;
+  ChanLE: array[0..1] of Byte;
+  LenLE: array[0..3] of Byte;
+  CrcLE: array[0..3] of Byte;
+  LenBytes: Integer;
+  CrcVal: UInt32;
 begin
-  WriteUInt16(Word(Channel.Index));
+  Idx := Word(Channel.Index);
+  // At integrity level crc the frame CRC (4 bytes) is appended and counted in
+  // the length field. The Delphi writer emits one block per call (no splitting
+  // at the length-field boundary), so no chunk reduction is needed.
+  if FIntegrity <> ipNone then
+    OnWire := UInt32(Length(Payload)) + 4
+  else
+    OnWire := UInt32(Length(Payload));
+
+  // Guard against a silent u16 length-field wrap-around. The writer does not
+  // split blocks, so with the frame CRC (+4) counted in the length field a
+  // large payload on an lfs2 channel could overflow — fail loudly instead.
+  if (Channel.LengthFieldSize = lfs2) and (OnWire > $FFFF) then
+    raise EOSFFormatError.CreateFmt(SOSFBlockLengthOverflow, [OnWire, Channel.Index]);
+
+  WriteUInt16(Idx);
   case Channel.LengthFieldSize of
     lfs2:
-      WriteUInt16(Word(Length(Payload)));
+      WriteUInt16(Word(OnWire));
     lfs4:
-      WriteUInt32(UInt32(Length(Payload)));
+      WriteUInt32(OnWire);
   end;
   WriteRawBytes(Payload);
+
+  if FIntegrity <> ipNone then
+  begin
+    // Frame CRC32C over channel index (2 LE) + length field (2/4 LE) + payload.
+    ChanLE[0] := Byte(Idx);
+    ChanLE[1] := Byte(Idx shr 8);
+    LenLE[0] := Byte(OnWire);
+    LenLE[1] := Byte(OnWire shr 8);
+    LenLE[2] := Byte(OnWire shr 16);
+    LenLE[3] := Byte(OnWire shr 24);
+    if Channel.LengthFieldSize = lfs2 then
+      LenBytes := 2
+    else
+      LenBytes := 4;
+    Crc.Init;
+    Crc.Update(ChanLE[0], 2);
+    Crc.Update(LenLE[0], LenBytes);
+    if Length(Payload) > 0 then
+      Crc.Update(Payload[0], Length(Payload));
+    CrcVal := Crc.Final;
+    CrcLE[0] := Byte(CrcVal);
+    CrcLE[1] := Byte(CrcVal shr 8);
+    CrcLE[2] := Byte(CrcVal shr 16);
+    CrcLE[3] := Byte(CrcVal shr 24);
+    FStream.WriteBuffer(CrcLE[0], 4);
+  end;
 end;
 
 procedure TOSFFile.WriteEquidistantBlock(ChannelIndex: Integer; const Samples: array of Double; FirstTimestampNs: Int64);

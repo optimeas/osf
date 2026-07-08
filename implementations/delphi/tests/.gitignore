@@ -1,0 +1,7 @@
+# DUnitX suite build artefacts
+*.dcu
+*.exe
+*.map
+*.rsm
+dcu32/
+dcu64/

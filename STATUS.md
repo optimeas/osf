@@ -193,6 +193,64 @@ clean compile signal after refactors.
 (`OSFViewer` only via IDE because of TeeChart); `osfmerger` compiles
 Win64 with `dcc64`. Delphi 12 / RAD Studio 23.0.
 
+### Delphi integrity profile — level `crc` (2026-07-08)
+
+Delphi implements the OSF5 integrity profile at level `crc` plus the two audit
+fixes (`AUDIT_INTEGRITY_O1.md` §4.2). New unit **`OSF.CRC32C`** (pure-Pascal
+table-based CRC-32/ISCSI; check value `0xE3069283`, byte-identical to Rust/C++;
+`CRC32CSelfTest`). In `OSF.Filer`:
+
+- **Fix A (tokenizer):** `ParseHeaderTokens` parses `crc32c` (8 upper hex,
+  strict) and `ed25519` (16 lower hex, only after `crc32c`) magic-header tokens;
+  an unknown key rejects the file (`unknown header token '<key>'`); tokens are
+  rejected on OSF4 identifiers. Profile + counters exposed via `TOSFFile`
+  properties (`IntegrityProfile`, `BlocksCRCFailed`, `BlocksSignatureSkipped`,
+  `BlocksUnknownTypeSkipped`, `VerificationStatus`).
+- **Metablock CRC** verified over the raw bytes before parse; **frame CRC**
+  verified over the whole frame and stripped before the typed decode
+  (fail-closed, effective len = LEN − 4), mismatch skips the block + counts +
+  logs and reads on.
+- **Fix C:** an unknown control byte is skipped via the length field and the
+  scan continues (own counter/log); `FTruncationSeen` only on real truncation.
+  Block reads return a tri-state (`boBlock`/`boSkip`/`boStop`); `ReadNextBlock`
+  loops.
+- **Signed coexistence:** signature blocks (channel `0xFFFE`, u32 length field,
+  control 9) are skipped + counted; `VerificationStatus` reports
+  `signature_unverifiable`.
+- **Writer:** `TOSFFile.IntegrityProfile := ipCrc32c` emits the `crc32c` token
+  (metablock CRC) and a per-block frame CRC (one block per call, no chunk
+  reduction needed). Ed25519 / OSF4-integrity rejected.
+
+**osftool:** `verify` reports the integrity status vocabulary + counters
+(exit 4 on `invalid`); `info` shows `Integrity: none|crc32c|ed25519`.
+**OSFCrcRefGen** (`demos/osfgenerator/`) writes Delphi CRC reference files into
+`examples/generated/integrity/` (`*_crc_delphi.osf`). **Cross-validated
+bidirectionally with Rust** (Rust reads Delphi files and vice versa, 0 CRC
+failures, byte-identical CRCs).
+
+**Tests — DUnitX suite** (`implementations/delphi/tests/OSFTests.dpr`, 26 tests,
+green under **dcc32 and dcc64**): `Test.OSF.CRC32C` (vectors incl. RFC 3720),
+`Test.OSF.Filer.Header` (tokenizer matrix + strict-space cases), and
+`Test.OSF.Filer.Integrity` (metablock/frame CRC good+corrupt per block type,
+Fix C control-byte-9 skip, `VerificationStatus`, write/read round-trip,
+writer-overflow boundary, and cross-validation reading the Rust + Delphi
+`integrity/*.osf` reference files). Build with the DUnitX source on the unit +
+include path and `.dcu` output routed to a writable dir:
+
+```
+set DX=C:\Program Files (x86)\Embarcadero\Studio\23.0\source\DUnitX
+dcc32 -B -Q -U"%DX%" -I"%DX%" -NU"dcu32" OSFTests.dpr   # (dcc64 / dcu64 likewise)
+OSFTests.exe   # exit 0 = all pass
+```
+
+Two spec-conformance fixes landed with RED-first tests: **Fix 1** — strict
+single-space magic-header grammar (trailing/double space now rejected, matching
+Rust); **Fix 2** — writer guard against a u16 length-field overflow when the
+frame CRC (+4) is counted (raises instead of silent wrap). Also verified via
+osftool negative cases (metablock/numeric/string byte flips, unknown token,
+control-byte-9 skip) with documented exit codes; `OSFCompileCheck` + osftool
+compile clean.
+
 ---
 
 ## Delphi CLI — osftool
@@ -782,9 +840,12 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 ## Open / known follow-ups
 
-- **DUnitX test suite** for the Delphi implementation — not started; only
-  `OSFCompileCheck.dpr` exists today. Brief F3 from the spec-revision task
-  was deferred; would be its own scaffolding effort.
+- **DUnitX test suite** for the Delphi implementation — **started
+  (2026-07-08).** `implementations/delphi/tests/OSFTests.dpr` (DUnitX console
+  runner, 26 tests, dcc32 + dcc64 green) covers `OSF.CRC32C`, the header
+  tokenizer, and the integrity read/write path. Structured for extension (one
+  `Test.OSF.*` unit per area); the older OSF library units (merger, exporters,
+  cache, …) are not yet covered — incremental follow-up.
 - **Rust** — read path complete (header + metablock + block reader +
   DataManager + transparent OSFZ); OSF5 writer landed with full
   round-trip validation.
