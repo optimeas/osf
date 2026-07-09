@@ -183,3 +183,57 @@ TEST(MagicHeader, rejects_lone_cr_without_lf) {
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error().code, osf::Error::Code::InvalidMagicHeader);
 }
+
+// ----- Integrity profile: header-token grammar -----
+
+TEST(MagicHeader, plain_osf5_has_no_integrity) {
+    auto h = parseBytes("OSF5 895\n").value();
+    EXPECT_EQ(h.integrity, osf::IntegrityProfile::None);
+    EXPECT_FALSE(h.metablockCrc.has_value());
+}
+
+TEST(MagicHeader, parses_crc32c_token) {
+    auto h = parseBytes("OSF5 84512 crc32c:9A3F01BC\n").value();
+    EXPECT_EQ(h.integrity, osf::IntegrityProfile::Crc32c);
+    ASSERT_TRUE(h.metablockCrc.has_value());
+    EXPECT_EQ(*h.metablockCrc, 0x9A3F01BCu);
+    EXPECT_EQ(h.metablockLen, 84512u);
+}
+
+TEST(MagicHeader, rejects_unknown_header_token) {
+    auto r = parseBytes("OSF5 100 sha256:ABCD\n");
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::UnknownHeaderToken);
+    EXPECT_NE(r.error().message.find("sha256"), std::string::npos);
+}
+
+TEST(MagicHeader, rejects_token_on_osf4_identifier) {
+    auto r = parseBytes("OSF4 100 crc32c:9A3F01BC\n");
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::InvalidMagicHeader);
+}
+
+TEST(MagicHeader, rejects_crc32c_lowercase_hex) {
+    auto r = parseBytes("OSF5 100 crc32c:9a3f01bc\n");
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::InvalidMagicHeader);
+}
+
+TEST(MagicHeader, rejects_trailing_space) {
+    auto r = parseBytes("OSF5 100 \n");
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::InvalidMagicHeader);
+}
+
+TEST(MagicHeader, parses_crc32c_then_ed25519) {
+    auto h = parseBytes("OSF5 84512 crc32c:9A3F01BC ed25519:0123456789abcdef\n").value();
+    EXPECT_EQ(h.integrity, osf::IntegrityProfile::Ed25519);
+    ASSERT_TRUE(h.metablockCrc.has_value());
+    EXPECT_EQ(*h.metablockCrc, 0x9A3F01BCu);
+}
+
+TEST(MagicHeader, rejects_ed25519_without_crc32c) {
+    auto r = parseBytes("OSF5 84512 ed25519:0123456789abcdef\n");
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, osf::Error::Code::InvalidMagicHeader);
+}

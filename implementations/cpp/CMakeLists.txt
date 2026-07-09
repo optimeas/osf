@@ -6,7 +6,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(osf
-    VERSION 0.1.0
+    VERSION 0.2.0
     DESCRIPTION "Open Streaming Format — C++ implementation"
     LANGUAGES CXX
 )
@@ -135,6 +135,7 @@ add_library(osf_core
     src/block.cpp
     src/blockencode.cpp
     src/compression.cpp
+    src/crc32c.cpp
     src/blockwriter.cpp
     src/datachannel.cpp
     src/durablefile.cpp

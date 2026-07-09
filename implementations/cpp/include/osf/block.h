@@ -47,6 +47,12 @@ namespace osf {
 /// yields it as a regular `Block`.
 inline constexpr std::uint16_t TRAILER_CHANNEL_INDEX = 0xFFFF;
 
+/// Reserved channel index of the file-wide integrity signature block
+/// (`bcIntegritySignature`, control byte 9) at integrity level `signed`.
+/// Not declared in the metablock; readers without level-signed support skip
+/// it via its (always u32) length field.
+inline constexpr std::uint16_t SIGNATURE_CHANNEL_INDEX = 0xFFFE;
+
 /// Length of the magic trailer string written after the info block in
 /// OSF4 files (`OSF_STREAM_END <pos>===…`). Padded to exactly 40 bytes.
 inline constexpr std::size_t MAGIC_TRAILER_LEN = 40;
@@ -178,6 +184,15 @@ struct SkipReason {
         /// 2 = `bcTimebaseRealign`) or any value the spec does not
         /// currently define. `rawByte` carries the value.
         ReservedBlockType,
+        /// The block's frame CRC (integrity profile level `crc`) did not
+        /// match the recomputed CRC32C. The block is dropped best-effort so
+        /// the rest of the file stays readable.
+        CrcFailed,
+        /// An integrity signature block (`bcIntegritySignature = 9` on the
+        /// reserved channel `0xFFFE`). This build reads level `crc` but does
+        /// not verify signatures, so the block is skipped via its length
+        /// field.
+        SignatureBlock,
     };
 
     Kind kind = Kind::ReservedBlockType;

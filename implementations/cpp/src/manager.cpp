@@ -18,6 +18,8 @@
 #include <osf/reader.h>
 #include <osf/types.h>
 
+#include "crc32c_p.h"
+
 namespace osf {
 
 // =====================================================================
@@ -578,6 +580,7 @@ struct HeaderAndMetablock {
     MetaBlock meta;
     std::uint64_t headerLineBytes = 0;
     std::uint64_t metablockBytes = 0;
+    IntegrityProfile integrity = IntegrityProfile::None;
 };
 
 Result<HeaderAndMetablock> parseHeaderAndMetablock(std::istream& in) {
@@ -610,6 +613,19 @@ Result<HeaderAndMetablock> parseHeaderAndMetablock(std::istream& in) {
         }
     }
 
+    // Metablock CRC (integrity level crc): verify the raw metablock bytes
+    // against the crc32c header token before parsing. A mismatch rejects the
+    // file — nothing after the metablock is interpretable without it.
+    if (hdr->metablockCrc.has_value()) {
+        std::uint32_t const actual = osf::detail::crc32c(body.data(), body.size());
+        if (actual != *hdr->metablockCrc) {
+            return tl::make_unexpected(Error{
+                Error::Code::MetablockCrcMismatch,
+                "metablock CRC mismatch: the crc32c header token does not match "
+                "the metablock bytes"});
+        }
+    }
+
     auto meta = (hdr->version == OsfVersion::Osf5)
         ? parseMetablockJson(body.data(), body.size())
         : parseMetablockXml(body.data(), body.size());
@@ -619,6 +635,7 @@ Result<HeaderAndMetablock> parseHeaderAndMetablock(std::istream& in) {
     out.meta = std::move(*meta);
     out.headerLineBytes = headerLineBytes;
     out.metablockBytes   = hdr->metablockLen;
+    out.integrity        = hdr->integrity;
     return out;
 }
 
@@ -640,6 +657,7 @@ Result<DataManager> buildFromStreamImpl(std::istream& stream,
     if (!hm) return tl::make_unexpected(std::move(hm).error());
 
     BlockReader reader(input, hm->meta);
+    reader.withIntegrity(hm->integrity);
     // fileSize is telemetry only (BlockReader does not use it); the
     // value is the source file size, which for OSFZ is the compressed
     // size — still the meaningful "file size" to report.
@@ -675,6 +693,14 @@ Result<DataManager> buildFromStreamImpl(std::istream& stream,
             return tl::make_unexpected(blkR.error());
         }
         Block const& blk = *blkR;
+        // Signature blocks live on the reserved channel 0xFFFE and are not
+        // declared in the metablock; the reader has already skipped and
+        // counted them (blocksSignatureSkipped). They carry no channel data,
+        // so they never map to a builder — keep a signed file readable rather
+        // than rejecting it as an unknown channel index.
+        if (blk.channelIndex == SIGNATURE_CHANNEL_INDEX) {
+            continue;
+        }
         auto it = builderByIndex.find(blk.channelIndex);
         if (it == builderByIndex.end()) {
             std::ostringstream oss;

@@ -25,6 +25,8 @@ std::string_view errorCategoryName(Error::Code code) noexcept {
         case Error::Code::ContinuedDataWithoutStart:  return "ContinuedDataWithoutStart";
         case Error::Code::RelStampWithoutAnchor:      return "RelStampWithoutAnchor";
         case Error::Code::DataTypeMismatch:           return "DataTypeMismatch";
+        case Error::Code::UnknownHeaderToken:         return "UnknownHeaderToken";
+        case Error::Code::MetablockCrcMismatch:       return "MetablockCrcMismatch";
     }
     // fallback for cast-from-int values outside the declared enumerators
     return "Unknown";

@@ -63,8 +63,18 @@ typedef enum osf_status {
     OSF_ERR_CHANNEL_MIXED_BLOCK_TYPES,
     OSF_ERR_CONTINUED_WITHOUT_START,
     OSF_ERR_RELSTAMP_WITHOUT_ANCHOR,
-    OSF_ERR_DATA_TYPE_MISMATCH
+    OSF_ERR_DATA_TYPE_MISMATCH,
+    OSF_ERR_UNKNOWN_HEADER_TOKEN,
+    OSF_ERR_METABLOCK_CRC_MISMATCH
 } osf_status;
+
+/* Integrity profile declared by the OSF5 header tokens — mirror
+   osf::IntegrityProfile. OSF_INTEGRITY_NONE for a plain file. Append-only. */
+typedef enum osf_integrity_profile {
+    OSF_INTEGRITY_NONE = 0,
+    OSF_INTEGRITY_CRC32C,
+    OSF_INTEGRITY_ED25519
+} osf_integrity_profile;
 
 /* Channel data types — mirror osf::DataType. Append-only. */
 typedef enum osf_data_type {
@@ -124,6 +134,26 @@ OSF_C_API int                    osf_manager_is_compressed(const osf_manager* m)
 OSF_C_API osf_compression_format osf_manager_compression_format(const osf_manager* m);
 OSF_C_API const char*            osf_manager_creator(const osf_manager* m);     /* "" if unset */
 OSF_C_API const char*            osf_manager_created_utc(const osf_manager* m); /* "" if unset */
+
+/* ── Integrity (OSF5 "crc" profile) ─────────────────────────────────── */
+
+/* Integrity profile the header declared. OSF_INTEGRITY_NONE if m is NULL
+   or the file carries no integrity token. */
+OSF_C_API osf_integrity_profile osf_manager_integrity(const osf_manager* m);
+
+/* Number of data blocks whose frame CRC did not verify (skipped on read).
+   0 if m is NULL, the profile is not crc32c, or every block verified. */
+OSF_C_API uint64_t osf_manager_blocks_crc_failed(const osf_manager* m);
+
+/* Number of signature blocks (reserved channel 0xFFFE) skipped on read.
+   0 if m is NULL or the file carries no signature blocks. */
+OSF_C_API uint64_t osf_manager_blocks_signature_skipped(const osf_manager* m);
+
+/* Overall verification status, mirroring osf::ReaderStats::verificationStatus:
+   "none" (no profile), "crc_valid" / "invalid" (crc32c, by whether any block
+   failed), or "signature_unverifiable" (a signed file this build cannot
+   verify). Static storage; never NULL, never freed. "none" if m is NULL. */
+OSF_C_API const char* osf_manager_verification_status(const osf_manager* m);
 
 /* ── Channel (read) — borrowed strings valid until osf_manager_free ──── */
 

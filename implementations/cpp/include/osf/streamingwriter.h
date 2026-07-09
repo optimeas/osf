@@ -46,6 +46,7 @@
 #include "osf/binarysample.h"
 #include "osf/block.h"
 #include "osf/error.h"
+#include "osf/integrity.h"
 #include "osf/types.h"
 
 #include <cstddef>
@@ -150,6 +151,12 @@ public:
     void setNamespaceSep(std::string value);
     /// Free-form file comment.
     void setComment(std::string value);
+
+    /// Enable the OSF5 integrity profile. `IntegrityProfile::Crc32c` emits a
+    /// metablock `crc32c` header token and a per-block frame CRC32C; `None`
+    /// (default) writes no integrity data. Signing (`Ed25519`) is not
+    /// supported by the writer and makes `start()` fail. Configure phase only.
+    void setIntegrity(IntegrityProfile profile);
 
     /**
      * @brief Declare a channel; returns the index used by all write
@@ -328,9 +335,16 @@ private:
     std::optional<std::string> m_namespaceSep;
     std::optional<std::string> m_comment;
 
+    // Integrity profile (configure phase); m_frameCrc is derived in start().
+    IntegrityProfile m_integrity = IntegrityProfile::None;
+    bool m_frameCrc = false;
+
     // ── Type-agnostic helpers (defined in streamingwriter.cpp) ────────
-    [[nodiscard]] Result<void> doWriteBlock(std::uint8_t const* data,
-                                              std::size_t size);
+    // Emits the encoded block in `block`, applying the frame CRC in place
+    // first when the integrity profile is active. `sov` is the channel's
+    // length-field width.
+    [[nodiscard]] Result<void> doWriteBlock(std::vector<std::uint8_t>& block,
+                                              std::uint8_t sov);
     [[nodiscard]] std::uint8_t sovFor(std::uint16_t channel) const noexcept;
     [[nodiscard]] std::optional<Error> requireStreamingState() const;
     [[nodiscard]] std::optional<Error> requireEquidistantChannel(

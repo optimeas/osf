@@ -60,8 +60,20 @@ osf_status statusFromCode(osf::Error::Code code) noexcept {
         case C::ContinuedDataWithoutStart: return OSF_ERR_CONTINUED_WITHOUT_START;
         case C::RelStampWithoutAnchor:   return OSF_ERR_RELSTAMP_WITHOUT_ANCHOR;
         case C::DataTypeMismatch:        return OSF_ERR_DATA_TYPE_MISMATCH;
+        case C::UnknownHeaderToken:      return OSF_ERR_UNKNOWN_HEADER_TOKEN;
+        case C::MetablockCrcMismatch:    return OSF_ERR_METABLOCK_CRC_MISMATCH;
     }
     return OSF_ERR_UNKNOWN;
+}
+
+osf_integrity_profile integrityToC(osf::IntegrityProfile p) noexcept {
+    using P = osf::IntegrityProfile;
+    switch (p) {
+        case P::None:    return OSF_INTEGRITY_NONE;
+        case P::Crc32c:  return OSF_INTEGRITY_CRC32C;
+        case P::Ed25519: return OSF_INTEGRITY_ED25519;
+    }
+    return OSF_INTEGRITY_NONE;
 }
 
 osf_data_type dataTypeToC(osf::DataType dt) noexcept {
@@ -207,6 +219,30 @@ const char* osf_manager_created_utc(const osf_manager* m) {
         return "";
     }
     return m->mgr.meta.fileInfo.createdUtc->c_str();
+}
+
+osf_integrity_profile osf_manager_integrity(const osf_manager* m) {
+    if (m == nullptr) {
+        return OSF_INTEGRITY_NONE;
+    }
+    return integrityToC(m->mgr.stats.integrity);
+}
+
+uint64_t osf_manager_blocks_crc_failed(const osf_manager* m) {
+    return (m == nullptr) ? 0u : m->mgr.stats.blocksCrcFailed;
+}
+
+uint64_t osf_manager_blocks_signature_skipped(const osf_manager* m) {
+    return (m == nullptr) ? 0u : m->mgr.stats.blocksSignatureSkipped;
+}
+
+const char* osf_manager_verification_status(const osf_manager* m) {
+    if (m == nullptr) {
+        return "none";
+    }
+    // verificationStatus() returns a view over a static NUL-terminated
+    // string literal, so .data() is a valid C string with static lifetime.
+    return m->mgr.stats.verificationStatus().data();
 }
 
 // ── channel ──────────────────────────────────────────────────────────

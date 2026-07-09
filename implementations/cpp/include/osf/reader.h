@@ -93,6 +93,17 @@ public:
         return *this;
     }
 
+    /// Declare the file's integrity level (from the magic-header token). When
+    /// at least `IntegrityProfile::Crc32c`, the reader verifies each block's
+    /// frame CRC — stripping it before the typed parse (fail-closed framing) —
+    /// and skips signature blocks on channel `0xFFFE`. Default is
+    /// `IntegrityProfile::None` (no CRC handling).
+    BlockReader& withIntegrity(IntegrityProfile profile) noexcept {
+        m_integrity = profile;
+        m_stats.integrity = profile;
+        return *this;
+    }
+
     /// Pull one block from the stream.
     ///
     /// Return value:
@@ -213,6 +224,7 @@ private:
     std::unordered_map<std::uint16_t, ChannelInfo> m_channels;
     bool m_finished = false;
     bool m_captureSkipped = false;
+    IntegrityProfile m_integrity = IntegrityProfile::None;
     std::chrono::steady_clock::time_point m_started;
     ReaderStats m_stats;
 };

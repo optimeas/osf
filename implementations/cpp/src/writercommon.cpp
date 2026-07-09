@@ -3,6 +3,8 @@
 
 #include "writercommon_p.h"
 
+#include "binaryio_p.h"
+#include "crc32c_p.h"
 #include "osf/types.h"
 #include "osf/version.h"
 
@@ -39,39 +41,65 @@ std::string nowUtcIso8601() {
 
 }  // namespace
 
+namespace {
+// Payload budget for a block, less the 4-byte frame CRC when the integrity
+// profile is active (the CRC is counted in the length field).
+std::size_t payloadBudget(std::uint8_t sov, bool frameCrc) noexcept {
+    std::size_t const budget = maxPayloadForSov(sov);
+    std::size_t const reserve = frameCrc ? 4u : 0u;
+    return budget > reserve ? budget - reserve : 0u;
+}
+}  // namespace
+
 std::size_t maxSamplesPerStartBlock(std::size_t valueSize,
-                                        std::uint8_t sov) noexcept {
+                                        std::uint8_t sov, bool frameCrc) noexcept {
     constexpr std::size_t OVERHEAD = 1u + 8u + 8u + 4u;
-    std::size_t const maxPayload = maxPayloadForSov(sov);
+    std::size_t const maxPayload = payloadBudget(sov, frameCrc);
     if (maxPayload <= OVERHEAD) return 1;
     std::size_t const samples = (maxPayload - OVERHEAD) / valueSize;
     return (samples == 0) ? 1u : samples;
 }
 
 std::size_t maxSamplesPerContinuedBlock(std::size_t valueSize,
-                                            std::uint8_t sov) noexcept {
+                                            std::uint8_t sov, bool frameCrc) noexcept {
     constexpr std::size_t OVERHEAD = 1u + 4u;
-    std::size_t const maxPayload = maxPayloadForSov(sov);
+    std::size_t const maxPayload = payloadBudget(sov, frameCrc);
     if (maxPayload <= OVERHEAD) return 1;
     std::size_t const samples = (maxPayload - OVERHEAD) / valueSize;
     return (samples == 0) ? 1u : samples;
 }
 
 std::size_t maxSamplesPerTimestampedBlock(std::size_t valueSize,
-                                              std::uint8_t sov) noexcept {
+                                              std::uint8_t sov, bool frameCrc) noexcept {
     constexpr std::size_t OVERHEAD = 1u + 4u;
     std::size_t const perSample = 8u + valueSize;
-    std::size_t const maxPayload = maxPayloadForSov(sov);
+    std::size_t const maxPayload = payloadBudget(sov, frameCrc);
     if (maxPayload <= OVERHEAD) return 1;
     std::size_t const samples = (maxPayload - OVERHEAD) / perSample;
     return (samples == 0) ? 1u : samples;
 }
 
-std::size_t variableSampleCapacity(std::uint8_t sov) noexcept {
-    std::size_t const maxPayload = maxPayloadForSov(sov);
+std::size_t variableSampleCapacity(std::uint8_t sov, bool frameCrc) noexcept {
+    std::size_t const maxPayload = payloadBudget(sov, frameCrc);
     return (maxPayload <= VARIABLE_BLOCK_OVERHEAD_BYTES)
                ? 0u
                : (maxPayload - VARIABLE_BLOCK_OVERHEAD_BYTES);
+}
+
+void applyFrameCrc(std::vector<std::uint8_t>& block, std::uint8_t sov) noexcept {
+    // block = [u16 channel][len field (sov)][payload]. Patch the length field
+    // to also count the CRC, then append the CRC32C over the whole frame.
+    if (sov == 2) {
+        std::uint16_t const oldLen = readLeU16(block.data() + 2);
+        writeLeU16(block.data() + 2, static_cast<std::uint16_t>(oldLen + 4u));
+    } else {
+        std::uint32_t const oldLen = readLeU32(block.data() + 2);
+        writeLeU32(block.data() + 2, oldLen + 4u);
+    }
+    std::uint32_t const crc = crc32c(block.data(), block.size());
+    std::size_t const off = block.size();
+    block.resize(off + 4u);
+    writeLeU32(block.data() + off, crc);
 }
 
 MetaBlock buildMetablock(FileInfoDraft const& fi,

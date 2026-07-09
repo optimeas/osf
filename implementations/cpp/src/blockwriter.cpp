@@ -4,6 +4,7 @@
 #include "osf/blockwriter.h"
 
 #include "blockencode_p.h"           // osf::detail::encodeStartData, encodeContinuedData
+#include "crc32c_p.h"                // osf::detail::crc32c
 #include "writercommon_p.h"          // osf::detail chunking helpers + FileInfoDraft + buildMetablock
 #include "osf/datachannel.h"       // NumericValues, numericValuesLen
 #include "osf/manager.h"            // DataManager (fromManager)
@@ -11,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <memory>
 #include <type_traits>
@@ -211,6 +213,7 @@ void BlockWriter::setTag(std::string v)           { m_fileInfo.tag           = s
 void BlockWriter::setReason(std::string v)        { m_fileInfo.reason        = std::move(v); }
 void BlockWriter::setNamespaceSep(std::string v) { m_fileInfo.namespaceSep = std::move(v); }
 void BlockWriter::setComment(std::string v)       { m_fileInfo.comment       = std::move(v); }
+void BlockWriter::setIntegrity(IntegrityProfile profile) { m_integrity = profile; }
 
 void BlockWriter::setLocation(double lat, double lon, double alt) {
     m_fileInfo.createdAtLatitude  = lat;
@@ -530,7 +533,10 @@ void BlockWriter::autobumpSizeOfLengthValue(std::vector<ChannelDef>& defs) const
 // ── writeBlockBytes ────────────────────────────────────────────────
 
 Result<void> BlockWriter::writeBlockBytes(std::ostream& out,
-        std::vector<std::uint8_t> const& buf) const {
+        std::vector<std::uint8_t>& buf, std::uint8_t sov, bool frameCrc) const {
+    if (frameCrc) {
+        osf::detail::applyFrameCrc(buf, sov);
+    }
     out.write(reinterpret_cast<char const*>(buf.data()),
               static_cast<std::streamsize>(buf.size()));
     if (!out) {
@@ -545,15 +551,15 @@ Result<void> BlockWriter::writeBlockBytes(std::ostream& out,
 Result<void> BlockWriter::emitChannel(std::ostream& out,
         std::vector<std::uint8_t>& buf,
         std::uint16_t ci, std::uint8_t sov,
-        ChannelData const& cd) const {
+        ChannelData const& cd, bool frameCrc) const {
     if (cd.kind == ChannelData::Kind::Equidistant) {
         for (auto const& seg : cd.eqSegments) {
             std::size_t const valueSize = numericValueSize(seg.values);
             std::size_t const total      = numericValuesLen(seg.values);
             std::size_t const maxFirst  =
-                osf::detail::maxSamplesPerStartBlock(valueSize, sov);
+                osf::detail::maxSamplesPerStartBlock(valueSize, sov, frameCrc);
             std::size_t const maxCont   =
-                osf::detail::maxSamplesPerContinuedBlock(valueSize, sov);
+                osf::detail::maxSamplesPerContinuedBlock(valueSize, sov, frameCrc);
             std::size_t const first = std::min(total, maxFirst);
 
             buf.clear();
@@ -562,7 +568,7 @@ Result<void> BlockWriter::emitChannel(std::ostream& out,
                     seg.values, 0, first); !e) {
                 return e;
             }
-            if (auto w = writeBlockBytes(out, buf); !w) return w;
+            if (auto w = writeBlockBytes(out, buf, sov, frameCrc); !w) return w;
 
             std::size_t written = first;
             while (written < total) {
@@ -572,7 +578,7 @@ Result<void> BlockWriter::emitChannel(std::ostream& out,
                         seg.values, written, chunk); !e) {
                     return e;
                 }
-                if (auto w = writeBlockBytes(out, buf); !w) return w;
+                if (auto w = writeBlockBytes(out, buf, sov, frameCrc); !w) return w;
                 written += chunk;
             }
         }
@@ -583,7 +589,7 @@ Result<void> BlockWriter::emitChannel(std::ostream& out,
         std::size_t const valueSize = numericValueSize(cd.tsValues);
         std::size_t const total      = cd.tsNs.size();
         std::size_t const maxPer    =
-            osf::detail::maxSamplesPerTimestampedBlock(valueSize, sov);
+            osf::detail::maxSamplesPerTimestampedBlock(valueSize, sov, frameCrc);
         std::size_t written = 0;
         while (written < total) {
             std::size_t const chunk = std::min(total - written, maxPer);
@@ -593,7 +599,7 @@ Result<void> BlockWriter::emitChannel(std::ostream& out,
                     cd.tsValues, written, chunk); !e) {
                 return e;
             }
-            if (auto w = writeBlockBytes(out, buf); !w) return w;
+            if (auto w = writeBlockBytes(out, buf, sov, frameCrc); !w) return w;
             written += chunk;
         }
         return {};
@@ -601,7 +607,7 @@ Result<void> BlockWriter::emitChannel(std::ostream& out,
 
     if (cd.kind == ChannelData::Kind::Variable) {
         // Variable: one block per sample (no chunking — spec).
-        std::size_t const capacity = osf::detail::variableSampleCapacity(sov);
+        std::size_t const capacity = osf::detail::variableSampleCapacity(sov, frameCrc);
         for (std::size_t i = 0; i < cd.tsNs.size(); ++i) {
             buf.clear();
             // strings is non-empty iff datatypeLock == String; a Binary channel never populates strings (datatype-lock enforced at accumulation).
@@ -634,7 +640,7 @@ Result<void> BlockWriter::emitChannel(std::ostream& out,
                     return e;
                 }
             }
-            if (auto w = writeBlockBytes(out, buf); !w) return w;
+            if (auto w = writeBlockBytes(out, buf, sov, frameCrc); !w) return w;
         }
         return {};
     }
@@ -651,6 +657,13 @@ Result<void> BlockWriter::writeTo(std::ostream& out) const {
             Error::Code::InvalidArgument,
             "writeTo: no channels declared"));
     }
+    if (m_integrity == IntegrityProfile::Ed25519) {
+        return tl::make_unexpected(makeError(
+            Error::Code::InvalidArgument,
+            "writeTo: this writer implements integrity level crc only; "
+            "signing (ed25519) is not supported"));
+    }
+    bool const frameCrc = (m_integrity == IntegrityProfile::Crc32c);
 
     // Local copy of defs — autobumpSizeOfLengthValue may promote Variable channels to sov=4.
     std::vector<ChannelDef> defs = m_channels;
@@ -669,7 +682,14 @@ Result<void> BlockWriter::writeTo(std::ostream& out) const {
 
     MetaBlock meta = detail::buildMetablock(fi, defs);
     std::string const json  = serializeMetablockJson(meta);
-    std::string const magic = "OSF5 " + std::to_string(json.size()) + "\n";
+    std::string magic = "OSF5 " + std::to_string(json.size());
+    if (frameCrc) {
+        std::uint32_t const crc = osf::detail::crc32c(json.data(), json.size());
+        char tok[24];
+        std::snprintf(tok, sizeof(tok), " crc32c:%08X", crc);
+        magic += tok;
+    }
+    magic += "\n";
 
     out.write(magic.data(), static_cast<std::streamsize>(magic.size()));
     out.write(json.data(),  static_cast<std::streamsize>(json.size()));
@@ -683,7 +703,7 @@ Result<void> BlockWriter::writeTo(std::ostream& out) const {
     for (std::size_t i = 0; i < m_channels.size(); ++i) {
         auto const ci  = static_cast<std::uint16_t>(i);
         std::uint8_t const sov = defs[i].sizeOfLengthValue;
-        if (auto r = emitChannel(out, buf, ci, sov, m_channelData[i]); !r) return r;
+        if (auto r = emitChannel(out, buf, ci, sov, m_channelData[i], frameCrc); !r) return r;
     }
 
     out.flush();
