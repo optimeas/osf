@@ -5,6 +5,7 @@ package com.optimeas.osf;
 import com.optimeas.osf.internal.Block;
 import com.optimeas.osf.internal.BlockChunking;
 import com.optimeas.osf.internal.BlockEncoder;
+import com.optimeas.osf.internal.Integrity;
 import com.optimeas.osf.internal.MetablockBuilder;
 
 import java.io.ByteArrayOutputStream;
@@ -116,9 +117,30 @@ public final class BlockWriter {
     private final List<Chan> channels = new ArrayList<>();
     private final Map<String, Integer> nameToIndex = new LinkedHashMap<>();
     private final Map<Integer, Double> rateByIndex = new LinkedHashMap<>();
+    private IntegrityProfile integrity = IntegrityProfile.NONE;
+    /** Whether a per-block frame CRC is emitted — derived from {@link #integrity}. */
+    private boolean frameCrc = false;
 
     /** Create an empty writer with no channels and no metadata. */
     public BlockWriter() {}
+
+    // ---------------------------------------------------------------
+    // Integrity profile (optional; default off).
+    // ---------------------------------------------------------------
+
+    /**
+     * Enable the OSF5 integrity profile. {@link IntegrityProfile#CRC32C} makes
+     * the writer emit a {@code crc32c} magic-header token with the metablock CRC
+     * and a per-block frame CRC32C (counted in each block's length field).
+     * {@link IntegrityProfile#NONE} (the default) writes a plain file;
+     * {@link IntegrityProfile#ED25519} (signing) is not supported by the writer
+     * and is rejected at {@code writeTo}.
+     *
+     * @param profile the integrity profile to write
+     */
+    public void setIntegrity(IntegrityProfile profile) {
+        this.integrity = (profile == null) ? IntegrityProfile.NONE : profile;
+    }
 
     // ---------------------------------------------------------------
     // File-level metadata.
@@ -422,6 +444,11 @@ public final class BlockWriter {
         if (channels.isEmpty()) {
             throw new OsfException("writeTo: no channels declared");
         }
+        if (integrity == IntegrityProfile.ED25519) {
+            throw new OsfException("writeTo: the ed25519 (signed) integrity profile "
+                    + "is not supported by the writer");
+        }
+        frameCrc = integrity == IntegrityProfile.CRC32C;
         metadata.putIfAbsent("created_utc", CREATED_UTC.format(Instant.now()));
 
         // Resolve each channel's effective sizeoflengthvalue (auto-bump pass).
@@ -434,7 +461,7 @@ public final class BlockWriter {
         }
 
         byte[] metablock = MetablockBuilder.buildOsf5Json(5, metadata, defs);
-        byte[] magic = ("OSF5 " + metablock.length + "\n")
+        byte[] magic = Integrity.magicLine(metablock, frameCrc)
                 .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
 
         try {
@@ -584,22 +611,27 @@ public final class BlockWriter {
         }
     }
 
+    /** Write one block, applying the frame CRC first when the profile is active. */
+    private void writeBlock(OutputStream out, byte[] block, int sov) throws IOException {
+        out.write(frameCrc ? BlockEncoder.applyFrameCrc(block, sov) : block);
+    }
+
     private void emitEquidistant(OutputStream out, Chan c, int sov) throws IOException {
         int idx = c.def.index();
         for (EqSegment seg : c.segments) {
             int valueSize = numericValueSize(seg.values);
             int total = seg.values.length();
-            int maxStart = BlockChunking.maxSamplesPerStart(valueSize, sov);
-            int maxCont = BlockChunking.maxSamplesPerContinued(valueSize, sov);
+            int maxStart = BlockChunking.maxSamplesPerStart(valueSize, sov, frameCrc);
+            int maxCont = BlockChunking.maxSamplesPerContinued(valueSize, sov, frameCrc);
 
             int first = Math.min(total, maxStart);
-            out.write(BlockEncoder.startDataBlock(idx, seg.startTimestampNs, seg.sampleRateHz,
-                    slice(seg.values, 0, first), sov));
+            writeBlock(out, BlockEncoder.startDataBlock(idx, seg.startTimestampNs, seg.sampleRateHz,
+                    slice(seg.values, 0, first), sov), sov);
             int written = first;
             while (written < total) {
                 int chunk = Math.min(total - written, maxCont);
-                out.write(BlockEncoder.continuedDataBlock(idx,
-                        slice(seg.values, written, chunk), sov));
+                writeBlock(out, BlockEncoder.continuedDataBlock(idx,
+                        slice(seg.values, written, chunk), sov), sov);
                 written += chunk;
             }
         }
@@ -610,14 +642,14 @@ public final class BlockWriter {
         long[] ts = toLongArray(c.timestamps);
         if (c.def.dataType() == DataType.GPS_LOCATION) {
             int total = c.gps.size();
-            int maxPer = BlockChunking.maxSamplesPerTimestampedGps(sov);
+            int maxPer = BlockChunking.maxSamplesPerTimestampedGps(sov, frameCrc);
             GpsLocation[] all = c.gps.toArray(new GpsLocation[0]);
             int written = 0;
             while (written < total) {
                 int chunk = Math.min(total - written, maxPer);
                 long[] tsChunk = java.util.Arrays.copyOfRange(ts, written, written + chunk);
                 GpsLocation[] vChunk = java.util.Arrays.copyOfRange(all, written, written + chunk);
-                out.write(BlockEncoder.timestampedGpsBlock(idx, tsChunk, vChunk, sov));
+                writeBlock(out, BlockEncoder.timestampedGpsBlock(idx, tsChunk, vChunk, sov), sov);
                 written += chunk;
             }
             return;
@@ -627,13 +659,13 @@ public final class BlockWriter {
             return;
         }
         int valueSize = numericValueSize(c.numericValues);
-        int maxPer = BlockChunking.maxSamplesPerTimestamped(valueSize, sov);
+        int maxPer = BlockChunking.maxSamplesPerTimestamped(valueSize, sov, frameCrc);
         int written = 0;
         while (written < total) {
             int chunk = Math.min(total - written, maxPer);
             long[] tsChunk = java.util.Arrays.copyOfRange(ts, written, written + chunk);
-            out.write(BlockEncoder.timestampedBlock(idx, tsChunk,
-                    slice(c.numericValues, written, chunk), sov));
+            writeBlock(out, BlockEncoder.timestampedBlock(idx, tsChunk,
+                    slice(c.numericValues, written, chunk), sov), sov);
             written += chunk;
         }
     }
@@ -643,13 +675,13 @@ public final class BlockWriter {
         // One block per sample (spec: variable payloads are not batched).
         if (c.def.dataType() == DataType.STRING) {
             for (int i = 0; i < c.strings.size(); i++) {
-                out.write(BlockEncoder.variableStringBlock(idx, c.timestamps.get(i),
-                        c.strings.get(i), sov));
+                writeBlock(out, BlockEncoder.variableStringBlock(idx, c.timestamps.get(i),
+                        c.strings.get(i), sov), sov);
             }
         } else {
             for (int i = 0; i < c.binaries.size(); i++) {
-                out.write(BlockEncoder.variableBinaryBlock(idx, c.timestamps.get(i),
-                        c.binaries.get(i), sov));
+                writeBlock(out, BlockEncoder.variableBinaryBlock(idx, c.timestamps.get(i),
+                        c.binaries.get(i), sov), sov);
             }
         }
     }
@@ -676,7 +708,7 @@ public final class BlockWriter {
         for (byte[] b : c.binaries) {
             max = Math.max(max, b.length);
         }
-        int needed = 1 + 8 + max; // [control][i64 ts][bytes]
+        int needed = 1 + 8 + max + (frameCrc ? BlockChunking.FRAME_CRC_RESERVE : 0);
         return (needed > MAX_PAYLOAD_U16) ? 4 : c.def.sizeOfLengthValue();
     }
 

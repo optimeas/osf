@@ -43,9 +43,22 @@ public final class BlockChunking {
 
     private BlockChunking() {}
 
+    /**
+     * Bytes reserved at the end of every block for the frame CRC32C when the
+     * integrity profile is active — the CRC is counted in the length field, so
+     * it eats into each block's payload budget.
+     */
+    public static final int FRAME_CRC_RESERVE = 4;
+
     /** Largest block payload (control + body) for the given length-field width. */
     public static int maxPayload(int sizeOfLengthValue) {
         return (sizeOfLengthValue == 2) ? MAX_PAYLOAD_U16 : MAX_PAYLOAD_U32;
+    }
+
+    /** Payload budget less the frame-CRC reserve when {@code frameCrc} is set. */
+    private static int budget(int sizeOfLengthValue, boolean frameCrc) {
+        int max = maxPayload(sizeOfLengthValue);
+        return frameCrc ? Math.max(0, max - FRAME_CRC_RESERVE) : max;
     }
 
     /**
@@ -53,22 +66,44 @@ public final class BlockChunking {
      * timestamp plus one {@code valueSize}-byte value.
      */
     public static int maxSamplesPerTimestamped(int valueSize, int sizeOfLengthValue) {
+        return maxSamplesPerTimestamped(valueSize, sizeOfLengthValue, false);
+    }
+
+    /** Frame-CRC-aware variant: reserves 4 bytes per block when {@code frameCrc}. */
+    public static int maxSamplesPerTimestamped(int valueSize, int sizeOfLengthValue,
+                                               boolean frameCrc) {
         int perSample = 8 + valueSize;
-        return Math.max(1, (maxPayload(sizeOfLengthValue) - TIMESTAMPED_OVERHEAD) / perSample);
+        return Math.max(1, (budget(sizeOfLengthValue, frameCrc) - TIMESTAMPED_OVERHEAD) / perSample);
     }
 
     /** Max samples in the opening {@code bcStartData} block of an equidistant segment. */
     public static int maxSamplesPerStart(int valueSize, int sizeOfLengthValue) {
-        return Math.max(1, (maxPayload(sizeOfLengthValue) - START_OVERHEAD) / valueSize);
+        return maxSamplesPerStart(valueSize, sizeOfLengthValue, false);
+    }
+
+    /** Frame-CRC-aware variant: reserves 4 bytes per block when {@code frameCrc}. */
+    public static int maxSamplesPerStart(int valueSize, int sizeOfLengthValue, boolean frameCrc) {
+        return Math.max(1, (budget(sizeOfLengthValue, frameCrc) - START_OVERHEAD) / valueSize);
     }
 
     /** Max samples in a {@code bcContinuedData} continuation block. */
     public static int maxSamplesPerContinued(int valueSize, int sizeOfLengthValue) {
-        return Math.max(1, (maxPayload(sizeOfLengthValue) - CONTINUED_OVERHEAD) / valueSize);
+        return maxSamplesPerContinued(valueSize, sizeOfLengthValue, false);
+    }
+
+    /** Frame-CRC-aware variant: reserves 4 bytes per block when {@code frameCrc}. */
+    public static int maxSamplesPerContinued(int valueSize, int sizeOfLengthValue,
+                                             boolean frameCrc) {
+        return Math.max(1, (budget(sizeOfLengthValue, frameCrc) - CONTINUED_OVERHEAD) / valueSize);
     }
 
     /** Max GPS samples per {@code bcAbsTimeStampData} block. */
     public static int maxSamplesPerTimestampedGps(int sizeOfLengthValue) {
         return maxSamplesPerTimestamped(GPS_VALUE_SIZE, sizeOfLengthValue);
+    }
+
+    /** Frame-CRC-aware variant: reserves 4 bytes per block when {@code frameCrc}. */
+    public static int maxSamplesPerTimestampedGps(int sizeOfLengthValue, boolean frameCrc) {
+        return maxSamplesPerTimestamped(GPS_VALUE_SIZE, sizeOfLengthValue, frameCrc);
     }
 }
