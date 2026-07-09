@@ -218,15 +218,18 @@ class BlockReaderTest {
     }
 
     @Test
-    void unsupportedChannelTypeIsSkipped() {
+    void unsupportedChannelTypeIsStillRead() {
+        // An unknown channeltype must NOT drop/skip a channel — its blocks
+        // decode by datatype + block type. Only an unsupported *datatype* skips.
         var channels = channelsByIndex(
-                channel(0, DataType.DOUBLE, ChannelType.UNSUPPORTED, 2));
-        byte[] data = frame(0, 2, CTRL_ABS_TS, new byte[]{1, 2, 3, 4});
+                channel(0, DataType.INT64, ChannelType.UNSUPPORTED, 2));
+        byte[] data = absTsInt64Single(0, 2, 1000L, 42L);
         ReaderStats st = stats();
         List<Block> blocks = BlockReader.readAll(data, OsfVersion.OSF5, channels, st);
 
         assertEquals(1, blocks.size());
-        assertInstanceOf(Block.Skipped.class, blocks.get(0));
+        assertEquals(1, st.blocksRead());
+        assertInstanceOf(Block.AbsTimestampData.class, blocks.get(0));
     }
 
     @Test

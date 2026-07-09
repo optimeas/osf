@@ -264,11 +264,12 @@ public final class BlockReader {
 
     /** Map an unsupported channel to its skip reason, or {@code null}. */
     private static Block.SkipReason unsupportedReason(ChannelDef def) {
+        // Only an unsupported *datatype* makes a block unreadable. The
+        // channeltype (data shape) never causes a block to be skipped — a
+        // scalar/vector/matrix/binary (or forward-compat unknown) channeltype
+        // still decodes by datatype + block type.
         if (def.dataType() == DataType.UNSUPPORTED) {
             return Block.SkipReason.UNSUPPORTED_DATA_TYPE;
-        }
-        if (def.channelType() == ChannelType.UNSUPPORTED) {
-            return Block.SkipReason.UNSUPPORTED_CHANNEL_TYPE;
         }
         return null;
     }

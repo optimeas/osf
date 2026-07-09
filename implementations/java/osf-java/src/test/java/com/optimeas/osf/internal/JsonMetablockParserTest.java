@@ -82,7 +82,7 @@ class JsonMetablockParserTest {
                       {
                         "index": 0,
                         "name": "Vibration",
-                        "channeltype": "equidistant",
+                        "channeltype": "scalar",
                         "datatype": "float",
                         "sizeoflengthvalue": 2,
                         "timeincrement": 100000
@@ -95,7 +95,7 @@ class JsonMetablockParserTest {
         Metablock mb = parser.parse(bytes);
 
         ChannelDef ch = mb.channels().get(0);
-        assertThat(ch.channelType()).isEqualTo(ChannelType.EQUIDISTANT);
+        assertThat(ch.channelType()).isEqualTo(ChannelType.SCALAR);
         assertThat(ch.timeIncrementNs()).isEqualTo(100_000L);
         assertThat(ch.isEquidistant()).isTrue();
     }
@@ -359,7 +359,7 @@ class JsonMetablockParserTest {
                     "channels": [
                       { "index": 0, "name": "ch0", "channeltype": "scalar",
                         "datatype": "int32", "sizeoflengthvalue": 2 },
-                      { "index": 1, "name": "ch1", "channeltype": "timestamped",
+                      { "index": 1, "name": "ch1", "channeltype": "scalar",
                         "datatype": "string", "sizeoflengthvalue": 4 }
                     ]
                   }
@@ -371,13 +371,29 @@ class JsonMetablockParserTest {
         assertThat(mb.channels().get(0).name()).isEqualTo("ch0");
         assertThat(mb.channels().get(0).dataType()).isEqualTo(DataType.INT32);
         assertThat(mb.channels().get(1).name()).isEqualTo("ch1");
-        assertThat(mb.channels().get(1).channelType()).isEqualTo(ChannelType.TIMESTAMPED);
+        assertThat(mb.channels().get(1).channelType()).isEqualTo(ChannelType.SCALAR);
         assertThat(mb.channels().get(1).sizeOfLengthValue()).isEqualTo(4);
     }
 
     // -----------------------------------------------------------------------
     // forward-compat: unknown channeltype → UNSUPPORTED, wire string in attributes
     // -----------------------------------------------------------------------
+
+    @Test
+    void specChanneltypes_parse() {
+        // scalar/vector/matrix/binary are the spec data shapes.
+        for (var e : java.util.Map.of(
+                "scalar", ChannelType.SCALAR, "vector", ChannelType.VECTOR,
+                "matrix", ChannelType.MATRIX, "binary", ChannelType.BINARY).entrySet()) {
+            byte[] bytes = utf8("""
+                    { "osf": { "format": "osf5", "version": 5, "file": {}, "channels": [
+                      { "index": 0, "name": "C", "channeltype": "%s",
+                        "datatype": "double", "sizeoflengthvalue": 2 } ] } }
+                    """.formatted(e.getKey()));
+            assertThat(parser.parse(bytes).channels().get(0).channelType())
+                    .as(e.getKey()).isEqualTo(e.getValue());
+        }
+    }
 
     @Test
     void unknownChanneltype_parsesAsUnsupportedAndPreservesWireString() {
@@ -390,8 +406,8 @@ class JsonMetablockParserTest {
                     "channels": [
                       {
                         "index": 0,
-                        "name": "VectorCh",
-                        "channeltype": "vector",
+                        "name": "FutureCh",
+                        "channeltype": "tensor",
                         "datatype": "double",
                         "sizeoflengthvalue": 2
                       }
@@ -402,8 +418,10 @@ class JsonMetablockParserTest {
 
         Metablock mb = parser.parse(bytes);
         ChannelDef ch = mb.channels().get(0);
+        // Unknown channeltype -> UNSUPPORTED, wire string preserved, but the
+        // channel is NOT dropped.
         assertThat(ch.channelType()).isEqualTo(ChannelType.UNSUPPORTED);
-        assertThat(ch.attributes()).containsEntry("channeltype", "vector");
+        assertThat(ch.attributes()).containsEntry("channeltype", "tensor");
     }
 
     // -----------------------------------------------------------------------

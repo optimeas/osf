@@ -44,16 +44,20 @@ class IntegrityReaderTest {
 
     @Test
     void readsAllFourReferenceFilesClean() throws IOException {
-        String[] files = {
-            "osf5_crc_equidistant.osf", "osf5_crc_variable.osf",
-            "osf5_equidistant_crc_delphi.osf", "osf5_variable_crc_delphi.osf"};
-        for (String f : files) {
+        // The Delphi variable file declares its binary channel with
+        // channeltype="binary" (a valid spec channeltype), so it has TWO
+        // channels — the reader must keep it, not drop it as unsupported.
+        var files = java.util.Map.of(
+            "osf5_crc_equidistant.osf", 3, "osf5_crc_variable.osf", 2,
+            "osf5_equidistant_crc_delphi.osf", 3, "osf5_variable_crc_delphi.osf", 2);
+        for (var e : files.entrySet()) {
+            String f = e.getKey();
             DataManager mgr = DataManager.loadFromFile(integrity(f));
             assertThat(mgr.stats().integrity()).as(f).isEqualTo(IntegrityProfile.CRC32C);
             assertThat(mgr.stats().blocksCrcFailed()).as(f).isZero();
             assertThat(mgr.stats().blocksSignatureSkipped()).as(f).isZero();
             assertThat(mgr.stats().verificationStatus()).as(f).isEqualTo("crc_valid");
-            assertThat(mgr.channels()).as(f).isNotEmpty();
+            assertThat(mgr.channels()).as(f).hasSize(e.getValue());
         }
     }
 

@@ -225,7 +225,9 @@ public final class BlockWriter {
                     "equidistant sampleRateHz must be a positive finite value, got " + sampleRateHz);
         }
         long timeIncrementNs = Math.max(1L, Math.round(1.0e9 / sampleRateHz));
-        ChannelDef def = new ChannelDef(channels.size(), name, type, ChannelType.EQUIDISTANT,
+        // channeltype = scalar (data shape); equidistance is carried by
+        // timeincrement + the bcStartData blocks, not by channeltype.
+        ChannelDef def = new ChannelDef(channels.size(), name, type, ChannelType.SCALAR,
                 sizeOfLengthValue, timeIncrementNs, null, Map.of());
         registerChannel(def, true);
         rateByIndex.put(def.index(), sampleRateHz);
@@ -508,11 +510,12 @@ public final class BlockWriter {
     }
 
     private static ChannelDef channelDefFrom(DataChannel dc, int index) {
-        ChannelType ct = (dc.kind() == DataChannel.Kind.EQUIDISTANT)
-                ? ChannelType.EQUIDISTANT : ChannelType.SCALAR;
+        // channeltype is the data shape — scalar for all these channels; the
+        // equidistant storage mode is reproduced by copyChannelData dispatching
+        // to startEquidistantSegment, not by this field.
         // sizeoflengthvalue is not exposed on DataChannel; start at 2 and let the
         // write-time auto-bump promote variable channels as needed.
-        return new ChannelDef(index, dc.name(), dc.dataType(), ct, 2, 0L,
+        return new ChannelDef(index, dc.name(), dc.dataType(), ChannelType.SCALAR, 2, 0L,
                 dc.physicalUnit(), Map.of());
     }
 

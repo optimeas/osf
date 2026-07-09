@@ -71,7 +71,7 @@ class XmlMetablockParserTest {
                 <?xml version="1.0"?>
                 <optimeas>
                   <channels count="1">
-                    <channel index="0" name="Vibration" channeltype="equidistant"
+                    <channel index="0" name="Vibration" channeltype="scalar"
                              datatype="float" sizeoflengthvalue="2" timeincrement="100000"/>
                   </channels>
                 </optimeas>
@@ -79,7 +79,7 @@ class XmlMetablockParserTest {
 
         Metablock mb = parser.parse(bytes);
         ChannelDef ch = mb.channels().get(0);
-        assertThat(ch.channelType()).isEqualTo(ChannelType.EQUIDISTANT);
+        assertThat(ch.channelType()).isEqualTo(ChannelType.SCALAR);
         assertThat(ch.timeIncrementNs()).isEqualTo(100_000L);
         assertThat(ch.isEquidistant()).isTrue();
     }
@@ -154,7 +154,7 @@ class XmlMetablockParserTest {
                 <?xml version="1.0"?>
                 <optimeas>
                   <channels count="1">
-                    <channel index="0" name="VectorCh" channeltype="vector"
+                    <channel index="0" name="FutureCh" channeltype="tensor"
                              datatype="double" sizeoflengthvalue="2"/>
                   </channels>
                 </optimeas>
@@ -163,7 +163,7 @@ class XmlMetablockParserTest {
         Metablock mb = parser.parse(bytes);
         ChannelDef ch = mb.channels().get(0);
         assertThat(ch.channelType()).isEqualTo(ChannelType.UNSUPPORTED);
-        assertThat(ch.attributes()).containsEntry("channeltype", "vector");
+        assertThat(ch.attributes()).containsEntry("channeltype", "tensor");
     }
 
     // -----------------------------------------------------------------------
@@ -230,7 +230,7 @@ class XmlMetablockParserTest {
                   <channels count="2">
                     <channel index="0" name="ch0" channeltype="scalar"
                              datatype="int32" sizeoflengthvalue="2"/>
-                    <channel index="1" name="ch1" channeltype="timestamped"
+                    <channel index="1" name="ch1" channeltype="scalar"
                              datatype="string" sizeoflengthvalue="4"/>
                   </channels>
                 </optimeas>
@@ -241,7 +241,7 @@ class XmlMetablockParserTest {
         assertThat(mb.channels().get(0).name()).isEqualTo("ch0");
         assertThat(mb.channels().get(0).dataType()).isEqualTo(DataType.INT32);
         assertThat(mb.channels().get(1).name()).isEqualTo("ch1");
-        assertThat(mb.channels().get(1).channelType()).isEqualTo(ChannelType.TIMESTAMPED);
+        assertThat(mb.channels().get(1).channelType()).isEqualTo(ChannelType.SCALAR);
         assertThat(mb.channels().get(1).sizeOfLengthValue()).isEqualTo(4);
     }
 

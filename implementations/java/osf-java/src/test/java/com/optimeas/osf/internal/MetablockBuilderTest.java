@@ -36,8 +36,8 @@ class MetablockBuilderTest {
     @Test
     void buildsParseableOsf5MetablockWithChannels() {
         List<ChannelDef> chans = List.of(
-                ch(0, "Sensor/Temperature", DataType.DOUBLE, ChannelType.TIMESTAMPED, 2, 0L),
-                ch(1, "Sensor/Wave", DataType.FLOAT, ChannelType.EQUIDISTANT, 2, 1_000_000L));
+                ch(0, "Sensor/Temperature", DataType.DOUBLE, ChannelType.SCALAR, 2, 0L),
+                ch(1, "Sensor/Wave", DataType.FLOAT, ChannelType.SCALAR, 2, 1_000_000L));
 
         byte[] json = MetablockBuilder.buildOsf5Json(5,
                 Map.of("creator", "osf-java/test", "tag", "default"), chans);
@@ -55,25 +55,31 @@ class MetablockBuilderTest {
     }
 
     @Test
-    void normalisesNonEquidistantChannelTypeToScalar() {
-        // TIMESTAMPED and SCALAR inputs both serialise as "scalar".
+    void writesSpecChanneltypesVerbatim() {
+        // The data-shape channeltypes scalar/vector/matrix/binary round-trip.
         List<ChannelDef> chans = List.of(
-                ch(0, "a", DataType.DOUBLE, ChannelType.TIMESTAMPED, 2, 0L),
-                ch(1, "b", DataType.INT32, ChannelType.SCALAR, 2, 0L));
+                ch(0, "s", DataType.DOUBLE, ChannelType.SCALAR, 2, 0L),
+                ch(1, "v", DataType.FLOAT, ChannelType.VECTOR, 2, 0L),
+                ch(2, "m", DataType.INT32, ChannelType.MATRIX, 2, 0L),
+                ch(3, "b", DataType.BINARY, ChannelType.BINARY, 2, 0L));
         byte[] json = MetablockBuilder.buildOsf5Json(5, Map.of(), chans);
         Metablock mb = parser.parse(json);
         assertThat(mb.channels().get(0).channelType()).isEqualTo(ChannelType.SCALAR);
-        assertThat(mb.channels().get(1).channelType()).isEqualTo(ChannelType.SCALAR);
+        assertThat(mb.channels().get(1).channelType()).isEqualTo(ChannelType.VECTOR);
+        assertThat(mb.channels().get(2).channelType()).isEqualTo(ChannelType.MATRIX);
+        assertThat(mb.channels().get(3).channelType()).isEqualTo(ChannelType.BINARY);
     }
 
     @Test
-    void preservesEquidistantChannelTypeAndTimeincrement() {
+    void timeincrementWrittenIndependentlyOfChanneltype() {
+        // A scalar channel with a timeincrement is the spec-correct equidistant
+        // representation; timeincrement is written regardless of channeltype.
         List<ChannelDef> chans = List.of(
-                ch(0, "wave", DataType.DOUBLE, ChannelType.EQUIDISTANT, 4, 2_000_000L));
+                ch(0, "wave", DataType.DOUBLE, ChannelType.SCALAR, 4, 2_000_000L));
         byte[] json = MetablockBuilder.buildOsf5Json(5, Map.of(), chans);
         Metablock mb = parser.parse(json);
         ChannelDef c0 = mb.channels().get(0);
-        assertThat(c0.channelType()).isEqualTo(ChannelType.EQUIDISTANT);
+        assertThat(c0.channelType()).isEqualTo(ChannelType.SCALAR);
         assertThat(c0.timeIncrementNs()).isEqualTo(2_000_000L);
         assertThat(c0.isEquidistant()).isTrue();
         assertThat(c0.sizeOfLengthValue()).isEqualTo(4);

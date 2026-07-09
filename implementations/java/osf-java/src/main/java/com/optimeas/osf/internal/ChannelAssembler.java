@@ -118,8 +118,9 @@ public final class ChannelAssembler {
         }
 
         private static State initialState(ChannelDef def) {
-            if (def.dataType() == DataType.UNSUPPORTED
-                    || def.channelType() == ChannelType.UNSUPPORTED) {
+            // Only an unsupported *datatype* drops a channel; the channeltype
+            // (data shape) never does.
+            if (def.dataType() == DataType.UNSUPPORTED) {
                 return State.UNSUPPORTED;
             }
             return switch (def.dataType()) {
