@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Shared conformance manifest now covers the integrity reference files.**
+  The four OSF5 integrity files under `examples/generated/integrity/` are listed
+  in `examples/reference_manifest.json` under `integrity/…` sub-path keys (with
+  an optional `integrity: "crc32c"` field), and the conformance tests of all four
+  implementations are now manifest-driven off that single file list — Java
+  (`ConformanceManifestTest`), Rust (`conformance_manifest_test.rs`), C++
+  (`test_conformance_manifest`), and Delphi (`ConformsToReferenceManifest`) —
+  each resolving the sub-path keys under `examples/generated/` and additionally
+  asserting the integrity profile plus zero frame-CRC failures for entries that
+  declare one. The previously hard-coded per-language reference-file lists were
+  removed, so the corpus has one source of truth. **No reader/writer or spec
+  changes.**
 - **OSF5 integrity profile level `crc` — Java (`osf-java`).** Reader: a strict
   must-understand magic-header tokenizer (`crc32c` / `ed25519`; a dedicated
   `OsfException.UnknownHeaderToken` on unknown keys — no NumberFormat
