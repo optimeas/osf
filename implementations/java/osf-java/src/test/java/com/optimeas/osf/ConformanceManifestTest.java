@@ -47,25 +47,27 @@ class ConformanceManifestTest {
      * directory exists but the generated sub-directory is empty the stream
      * is empty and the parameterized test reports zero invocations.
      */
-    static Stream<Path> manifestEntries() throws IOException {
+    static Stream<String> manifestKeys() throws IOException {
         // ExamplesDir.resolve() skips if corpus absent.
-        Path generated = ExamplesDir.resolve().resolve("generated");
-        Map<String, FileEntry> manifest = ReferenceManifest.load();
-        return manifest.keySet().stream()
-                .sorted()
-                .map(generated::resolve);
+        ExamplesDir.resolve();
+        return ReferenceManifest.load().keySet().stream().sorted();
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("manifestEntries")
-    void conformsToManifest(Path file) throws IOException {
+    @MethodSource("manifestKeys")
+    void conformsToManifest(String key) throws IOException {
+        // The manifest key may be a sub-path (e.g.
+        // "integrity/osf5_crc_equidistant.osf") — those files live in their own
+        // directory but are still driven by the shared manifest. Resolve the
+        // file from the key, and look the entry up by the full key (not the bare
+        // filename, which would not match a sub-path key).
+        Path file = ExamplesDir.resolve().resolve("generated").resolve(key);
         String fileName = file.getFileName().toString();
 
-        // Load manifest (cheap: already parsed, but load is stateless / re-reads).
         Map<String, FileEntry> manifest = ReferenceManifest.load();
-        FileEntry expected = manifest.get(fileName);
+        FileEntry expected = manifest.get(key);
         assertThat(expected)
-                .as("manifest entry for %s", fileName)
+                .as("manifest entry for %s", key)
                 .isNotNull();
 
         // ── Version check ────────────────────────────────────────────────────
@@ -76,11 +78,29 @@ class ConformanceManifestTest {
         // were chosen.
         int versionFromName = fileName.startsWith("osf4_") ? 4 : 5;
         assertThat(expected.version())
-                .as("manifest version for %s matches filename prefix", fileName)
+                .as("manifest version for %s matches filename prefix", key)
                 .isEqualTo(versionFromName);
 
         // ── Load ────────────────────────────────────────────────────────────
         DataManager mgr = DataManager.loadFromFile(file);
+
+        // ── Integrity profile (optional) ─────────────────────────────────────
+        // Entries that declare an integrity profile must decode with that
+        // profile detected and every block's frame CRC verified.
+        if (expected.integrity() != null) {
+            IntegrityProfile expectedProfile = switch (expected.integrity()) {
+                case "crc32c" -> IntegrityProfile.CRC32C;
+                case "ed25519" -> IntegrityProfile.ED25519;
+                default -> IntegrityProfile.NONE;
+            };
+            assertThat(mgr.stats().integrity())
+                    .as("integrity profile of %s", key)
+                    .isEqualTo(expectedProfile);
+            assertThat(mgr.stats().blocksCrcFailed())
+                    .as("frame-CRC failures in %s", key)
+                    .isZero();
+        }
+
         List<DataChannel> channels = mgr.channels();
 
         // ── Channel count ────────────────────────────────────────────────────

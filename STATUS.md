@@ -290,10 +290,22 @@ green): `MagicHeaderIntegrityTest` (tokenizer matrix), `IntegrityReaderTest`
 (4 reference files + metablock/numeric/string byte flips → `MetablockCrcMismatch`
 / `blocksCrcFailed`, signature-block skip, gzip), `WriterIntegrityTest`
 (both-writer round-trip vs plain, byte-identical crc output), plus a
-control-byte-9-profile-less skip case. `ConformanceManifestTest` is untouched
-(the `integrity/` files run as their own tests, per the brief). Frame-CRC
-byte-identity to Rust is transitive: the reader reads the two Rust reference
-files with 0 CRC failures, and the writer's output reads back clean.
+control-byte-9-profile-less skip case. Frame-CRC byte-identity to Rust is
+transitive: the reader reads the two Rust reference files with 0 CRC failures,
+and the writer's output reads back clean.
+
+The four `integrity/` reference files are now part of the shared
+`examples/reference_manifest.json` conformance contract (sub-path keys, optional
+`integrity: "crc32c"`), and the manifest-driven conformance tests of all four
+implementations — Java (`ConformanceManifestTest`), Rust
+(`conformance_manifest_test.rs`), C++ (`test_conformance_manifest`), Delphi
+(`ConformsToReferenceManifest`) — load them off that single file list and assert
+the integrity profile plus zero frame-CRC failures. Per-language hard-coded
+reference-file lists were removed. Open question surfaced by the retrofit: the
+Rust-written `integrity/osf5_crc_equidistant.osf` omits the optional metablock
+`timeincrement`, so the Delphi reader (which classifies equidistance from that
+field rather than the `bcStartData` control byte, contrary to `osf_general.md`)
+reads its channels as `timestamped` — a reader divergence, not fixed here.
 
 ---
 

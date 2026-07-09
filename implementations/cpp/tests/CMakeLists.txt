@@ -464,6 +464,28 @@ osf_set_warnings(test_manager_examples)
 gtest_discover_tests(test_manager_examples)
 
 # ---------------------------------------------------------------------------
+# test_conformance_manifest — manifest-driven cross-implementation contract.
+# Reads examples/reference_manifest.json (the shared source of truth) and
+# validates every listed file. Uses the vendored nlohmann/json (via osf::osf).
+# ---------------------------------------------------------------------------
+
+add_executable(test_conformance_manifest
+    integration/test_conformance_manifest.cpp
+)
+
+target_link_libraries(test_conformance_manifest PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_compile_definitions(test_conformance_manifest PRIVATE
+    OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+
+osf_set_warnings(test_conformance_manifest)
+
+gtest_discover_tests(test_conformance_manifest)
+
+# ---------------------------------------------------------------------------
 # test_streaming_writer_examples — cross-implementation roundtrip
 # (StreamingWriter Cat-F + Cat-G).
 # ---------------------------------------------------------------------------

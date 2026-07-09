@@ -17,11 +17,17 @@ Delphi-generated (`OSFCrcRefGen` from `implementations/delphi`):
 The Rust and Delphi implementations read each other's files with zero CRC
 failures (byte-identical CRC values in both directions).
 
+**Part of the shared conformance contract (since 2026-07-09):** these four files
+are listed in `examples/reference_manifest.json` under sub-path keys
+(`integrity/osf5_crc_equidistant.osf`, …). Every implementation the manifest
+drives (Java, Rust, C++, Delphi) now supports integrity level `crc`, so their
+manifest-driven conformance tests load these files — resolving the sub-path keys
+under `examples/generated/` — and additionally assert the reported integrity
+profile plus zero frame-CRC failures.
+
 **Why a separate directory (not directly in `examples/generated/`):** these
-files require an integrity-aware reader. Integrity-*unaware* consumers — the
-low-level example loops that glob `examples/generated/*.osf` non-recursively,
-and the shared `examples/reference_manifest.json` conformance contract — would
-fail on them (a CRC-unaware reader folds the trailing frame-CRC bytes into a
-string/binary value). They are therefore **not** listed in
-`reference_manifest.json` yet; add them there once every implementation the
-manifest drives supports level `crc`.
+files require an integrity-aware reader. The integrity-*unaware* example loops
+that glob `examples/generated/*.osf` **non-recursively** never see them (a
+CRC-unaware reader would fold the trailing frame-CRC bytes into a string/binary
+value). The manifest reaches them explicitly via their `integrity/` sub-path
+keys, so only integrity-aware conformance tests load them.
