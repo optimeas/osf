@@ -349,13 +349,18 @@ fn parse_data_type_str(s: &str) -> PyResult<DataType> {
 }
 
 fn parse_channel_type_str(s: &str) -> PyResult<ChannelType> {
+    // `channel_type` is the channel's data SHAPE per the OSF spec:
+    // scalar / vector / matrix / binary. It is NOT the storage mode —
+    // equidistant vs. timestamped is decided by how samples are written
+    // (equidistant segments vs. per-sample timestamps), not by this field.
     Ok(match s {
         "scalar" => ChannelType::Scalar,
-        "equidistant" => ChannelType::Equidistant,
-        "timestamped" => ChannelType::Timestamped,
+        "vector" => ChannelType::Vector,
+        "matrix" => ChannelType::Matrix,
+        "binary" => ChannelType::Binary,
         other => {
             return Err(PyValueError::new_err(format!(
-                "unknown channel_type {other:?}; expected scalar, equidistant, or timestamped"
+                "unknown channel_type {other:?}; expected scalar, vector, matrix, or binary"
             )));
         }
     })
