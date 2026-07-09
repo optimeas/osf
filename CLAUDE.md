@@ -354,7 +354,7 @@ full C builder is BACKLOG.
 Incremental C++ options (all BACKLOG): a full sample-by-sample C builder
 API, per-exact-type numeric C getters, an `osf_load_buffer` memory load,
 and packaging the `osf-c` DLL. The bigger roadmap is the **other-language
-tracks** (Java §21 has no code yet; C/C# are README-only).
+tracks** (Java §21 has no code yet; C is README-only).
 
 A few cosmetic StreamingWriter test-coverage residuals are parked
 in BACKLOG (`### C++ StreamingWriter polish — RESOLVED in Phase 7c`).

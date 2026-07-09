@@ -7,13 +7,9 @@ This directory contains standalone OSF reader and writer implementations in vari
 | [Delphi](delphi/) | Windows desktop, industrial measurement systems | In Progress | Full reader and writer for OSF4 and OSF5 |
 | [C](c/) | Embedded systems and desktop | Planned | Reference implementation; target for low-level and resource-constrained environments |
 | [C++](cpp/) | Industrial measurement, Qt ecosystem | Planned | High-performance desktop and server use; Qt integration |
-| [C#](csharp/) | Windows desktop, industrial automation | Planned | .NET ecosystem; Windows tooling and HMI applications |
 | [Python](python/) | Data analytics, scientific computing | In Progress | PyO3 bindings on osf-core (DECISIONS §18); PyPI distribution `osfdata`, import as `osf`; reader, writer, OSFZ all live |
 | [Java](java/) | Enterprise systems, Android | Planned | JVM ecosystem; Android mobile data logging |
 | [Rust](rust/) | Systems programming, embedded | In Progress | Foundation for Python bindings (see [DECISIONS §18](../DECISIONS.md#18-rust-as-foundation-for-python)); magic-header parser landed |
-| [MATLAB](matlab/) | Engineering analysis | Planned | Reader only; integration with MATLAB/Simulink workflows |
-| [JavaScript](javascript/) | Browser and Node.js | Planned | Web dashboards, real-time visualization, Node.js data pipelines |
-| [Swift](swift/) | iOS / macOS / iPadOS | Planned | Reader-focused; Apple ecosystem for field and analysis apps |
 
 ---
 

@@ -31,7 +31,7 @@ The first time you set up a development machine, install these tools in this ord
 
 ### 2.1 C/C++ compiler infrastructure
 
-**Windows:** Install Visual Studio Community (the free edition is fine for individual developers, open-source projects, and small teams) with the workloads "Desktop development with C++" and ".NET desktop development". The first is required for Rust's MSVC toolchain; the second is included now so we are ready for the planned C# implementation.
+**Windows:** Install Visual Studio Community (the free edition is fine for individual developers, open-source projects, and small teams) with the workload "Desktop development with C++", which is required for Rust's MSVC toolchain.
 
 **Linux:** Install `build-essential` (Debian/Ubuntu) or the equivalent group package (`Development Tools` on Fedora). This brings GCC and the necessary headers.
 

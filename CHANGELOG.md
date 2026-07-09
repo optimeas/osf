@@ -90,6 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Removed
 
+- **C#, JavaScript, MATLAB and Swift planned-implementation placeholders** (`implementations/{csharp,javascript,matlab,swift}/`) — status-only `README.md` stubs with no code. Dropped because these language tracks will not be pursued in the foreseeable future. All references removed from the documentation: `README.md`, `implementations/README.md`, `DECISIONS.md` (§4 implementation table, §7 streaming/block platform table, §15 priority order — items renumbered, §18 prose), `STATUS.md`, `CLAUDE.md`, `docs/{en,de}/implementations/index.md` + `planned.md`, and `implementations/python/BUILD.md`. The remaining planned languages (C, Java) and the C ABI (`osf-c`) consumers — including C# via P/Invoke — are unaffected.
 - MicroPython implementation placeholder (`implementations/micropython/`) — a status-only `README.md` with no code. Dropped during public-release preparation; the embedded writer-only niche it described is already covered by the planned C implementation. All references removed from `README.md`, `implementations/README.md`, `DECISIONS.md` (implementation table, streaming/block platform table, and priority order — items renumbered), `STATUS.md`, and `implementations/swift/README.md`.
 
 ### Added
