@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **OSF5 integrity profile level `crc` — Java (`osf-java`).** Reader: a strict
+  must-understand magic-header tokenizer (`crc32c` / `ed25519`; a dedicated
+  `OsfException.UnknownHeaderToken` on unknown keys — no NumberFormat
+  passthrough; OSF4 + token rejected), metablock-CRC verification before the
+  parse (`OsfException.MetablockCrcMismatch`, `java.util.zip.CRC32C`), and
+  fail-closed per-block frame-CRC32C framing (effective payload = LEN − 4; a
+  mismatch skips the block and bumps `ReaderStats.blocksCrcFailed`). Signature
+  blocks on channel `0xFFFE` are skipped and counted
+  (`blocksSignatureSkipped`) so signed files stay readable;
+  `ReaderStats.verificationStatus()` reports
+  `none`/`crc_valid`/`invalid`/`signature_unverifiable`. Writer:
+  `setIntegrity(IntegrityProfile.CRC32C)` on **both** `BlockWriter` and
+  `StreamingWriter` (default off) emits the token, metablock CRC and per-block
+  frame CRCs (chunk budgets reduced by 4). CRC32C is JDK-native (check value
+  `0xE3069283`, byte-identical to Rust/C++/Delphi). Signing (level `signed`) is
+  not implemented. **No spec changes.**
 - **OSF5 integrity profile level `crc` — C++ (`osf-cpp` + `osf-c`).** Reader:
   a strict must-understand magic-header tokenizer (`crc32c` / `ed25519`,
   `Error::Code::UnknownHeaderToken` on unknown keys, `InvalidMagicHeader` for a
