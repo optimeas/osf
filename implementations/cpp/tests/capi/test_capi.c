@@ -5,13 +5,12 @@
  * C ABI smoke test. Compiled as C99 to prove osf/capi.h is
  * C-compatible and the osf-c shared library links + works end-to-end.
  * Exercises load, channel enumeration + metadata, sample/timestamp
- * readers, a round-trip write, and the error path. Returns non-zero on
- * the first failure.
+ * readers, the integrity-profile accessors, a round-trip write, and the
+ * error path. Returns non-zero on the first failure.
  */
 
 #include <osf/capi.h>
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -109,10 +108,12 @@ int main(void) {
     CHECK(m3 == NULL, "missing file -> null handle");
     CHECK(strlen(osf_last_error_message()) > 0, "last error non-empty");
 
-    osf_manager_free(m);
-    osf_manager_free(NULL); /* no-op */
-
+    /* `name` is borrowed from `m`; print the summary before releasing m so the
+       pointer stays valid. */
     printf("test_c_api: OK (%zu channels, %zu samples on '%s')\n", count, sc,
            name);
+
+    osf_manager_free(m);
+    osf_manager_free(NULL); /* no-op */
     return 0;
 }
