@@ -43,11 +43,7 @@ The Delphi reference implementation, the Rust foundation, and the Python binding
 | [Python](implementations/python/) (`osfdata`) | Analytics, NumPy integration | ✅ Pre-release v0.1.0 on [TestPyPI](https://test.pypi.org/project/osfdata/). Built on the Rust foundation via PyO3. |
 | [C++](implementations/cpp/) | Industrial measurement, embedded + desktop | 🚧 In active development. Full OSF4/OSF5 reader (incl. OSFZ decompression), typed `DataManager`, and both OSF5 writers (streaming + block). Cross-platform CI and a C ABI wrapper are the remaining milestones. |
 | [C](implementations/c/) | Embedded + desktop | 📋 Planned. |
-| [C#](implementations/csharp/) | Windows desktop, automation | 📋 Planned. |
 | [Java](implementations/java/) | Enterprise + Android | 📋 Planned; architecture decided ([DECISIONS.md §21](DECISIONS.md)). |
-| [Swift](implementations/swift/) | iOS / macOS / iPadOS / watchOS | 📋 Planned. |
-| [MATLAB](implementations/matlab/) | Engineering analysis (reader) | 📋 Planned. |
-| [JavaScript](implementations/javascript/) | Browser + Node.js | 📋 Planned. |
 
 **Which one should I try first?** For reading and analyzing OSF data today, the Python package is the fastest path — see [Quick Start](#quick-start-python) below. For native integration, use [Rust](implementations/rust/) (the foundation for the bindings) or the [Delphi](implementations/delphi/) reference implementation.
 

@@ -1,15 +1,11 @@
 ---
 title: Weitere Sprachen (geplant)
-description: Geplante OSF-Implementierungen — C, C#, MATLAB, JavaScript/TypeScript und Swift
+description: Geplante OSF-Implementierungen — C
 sidebar_position: 7
 image: "/img/om_social_card.png"
 keywords:
   - OSF
   - C
-  - C#
-  - MATLAB
-  - JavaScript
-  - Swift
 last_update:
   date: 2026-06-04
   author: Optimeas GmbH
@@ -30,10 +26,6 @@ jede dieser Anbindungen eigenständig umsetzen.
 | Sprache | Geplanter Schwerpunkt |
 |---|---|
 | **C** | Schlanke, portable Anbindung für Embedded- und Systemnutzung. Kurzfristig steht über die C++-Implementierung bereits die C-ABI [`osf-c`](cpp.md) zur Verfügung. |
-| **C#** | .NET-Ökosystem; Desktop- und Backend-Anwendungen. Anbindung u. a. über die C-ABI denkbar. |
-| **MATLAB** | Import von OSF-Daten in MATLAB-/Simulink-Workflows zur ingenieurtechnischen Auswertung. |
-| **JavaScript / TypeScript** | Browser- und Node.js-Umgebungen; Visualisierung und Web-Tooling. |
-| **Swift** | Apple-Plattformen (macOS/iOS). |
 
 Den jeweils aktuellen Stand — und ob bereits Arbeit begonnen wurde — führt
 das Repository auf [GitHub](https://github.com/optimeas/osf). Bei Interesse

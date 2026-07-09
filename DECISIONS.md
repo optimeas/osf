@@ -62,13 +62,9 @@ osf/
 | Delphi | Windows desktop, legacy systems | ✅ | ✅ | Complete (reference) | Most complete implementation; reference for the project |
 | C | Embedded + desktop | ✅ | ✅ | Planned | Embedded: primarily Writer; Desktop: both |
 | C++ | Industrial measurement, Qt ecosystem | ✅ | ✅ | Complete (§20) | Standalone from spec (see §20); not a C port |
-| C# / .NET | Windows desktop, industrial automation | ✅ | ✅ | Planned | Relevant for Beckhoff, Siemens environments |
 | Python | Data analytics, scripting | ✅ | ✅ | Functional (§18) | PyO3 bindings over the Rust core; reader + WriterBuilder + NumPy integration; AI/ML entry point |
 | Java | Enterprise, Android | ✅ | ✅ | Planned | |
-| Swift | iOS / macOS / iPadOS / watchOS | ✅ | ✅ | Planned | Reader on Mac/iPad/iPhone; Writer for sensor data on iPhone/Watch |
 | Rust | Systems programming, embedded | ✅ | ✅ | Complete (§18) | Foundation for Python bindings (§18); reader + writer + transparent OSFZ |
-| MATLAB | Engineering analysis | ✅ | — | Planned | Reader only |
-| JavaScript/TS | Browser + Node.js | ✅ | — | Planned | Primarily Reader; web dashboards, cloud visualization |
 
 ---
 
@@ -104,7 +100,7 @@ The format version is detected automatically:
 
 | Platform | Read | Write |
 |---|---|---|
-| Embedded (C, Swift/Watch) | In-memory (all formats) | Streaming |
+| Embedded (C) | In-memory (all formats) | Streaming |
 | Desktop / Server (others) | In-memory (all formats) | Block |
 | **C++** (both worlds) | In-memory (all formats) | Streaming + Block (two writer classes) |
 
@@ -293,12 +289,8 @@ The `infos` block accepts arbitrary key-value pairs and is written unchanged if 
 2. **C** — broadest embedded reach, foundation for C++ port
 3. **Python** — largest community, direct path to AI/ML integrations
 4. **C++** — industrial and Qt ecosystem
-5. **C#** — Windows tooling ecosystem
-6. **Rust** — systems + embedded, growing community
-7. **Java** — enterprise + Android
-8. **Swift** — Apple ecosystem; field measurement and analysis apps
-9. **JavaScript/TypeScript** — web and Node.js
-10. **MATLAB** — reader only, engineering niche
+5. **Rust** — systems + embedded, growing community
+6. **Java** — enterprise + Android
 
 Integrations (Arrow, PyTorch, TensorFlow, MCP, LangChain) follow after the Python implementation is stable.
 
@@ -351,8 +343,8 @@ type handling.
 **Consequence for the priority order in §15:** Rust and Python are now
 developed together. Rust is implicitly complete once the Python bindings
 ship. The list in §15 still describes the order in which language ecosystems
-become available to end users; it no longer implies that Rust waits for C,
-C++, and C#.
+become available to end users; it no longer implies that Rust waits for C
+and C++.
 
 ## 19. macOS Wheel Matrix
 

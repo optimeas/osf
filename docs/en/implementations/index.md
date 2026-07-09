@@ -42,7 +42,7 @@ Legend: ✅ available · 🚧 in active development · 📋 planned
 | **[Python](python.md)** (`osfdata`) | ✅ | PyO3 bindings over the Rust core, NumPy integration; see [Python integration](../integrations/python.md) |
 | **[C++](cpp.md)** | ✅ | Standalone C++17 implementation — reader, both writers, C ABI; CI on Linux/macOS/Windows. Detailed developer handbook under [C++ in detail](cpp/architecture.md) |
 | **[Java](java.md)** | 📋 | Architecture decided (Java 25, Maven, JPMS); no code yet |
-| **[Other languages](planned.md)** | 📋 | C, C#, MATLAB, JavaScript/TypeScript, Swift — planned |
+| **[Other languages](planned.md)** | 📋 | C — planned |
 
 The repository on [GitHub](https://github.com/optimeas/osf) carries the most
 up-to-date status.

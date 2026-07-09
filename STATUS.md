@@ -124,7 +124,7 @@ osf/
 │   ├── rust/                        — Cargo workspace; foundation for Python (DECISIONS §18)
 │   │   └── osf-core/                — read + write + transparent OSFZ complete
 │   ├── python/                      — PyO3 bindings (PyPI: osfdata, import: osf); 7a landed
-│   └── (c, cpp, csharp, …)/         — README placeholders only
+│   └── (c, cpp, …)/                 — README placeholders only
 ├── integrations/(arrow, pytorch, tensorflow, mcp, langchain)/  — placeholders
 ├── examples/
 │   ├── motorbike.osf                — real field sample
@@ -901,7 +901,7 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
   accounts).
 - Pandas convenience layer (Session 7b): build a DataFrame from a
   `DataManager`, one column per channel, optional time alignment.
-- Other language implementations (C, C++, C#, …) will
+- Other language implementations (C, C++, …) will
   reuse the same per-package CHANGELOG + Trusted Publishing pattern.
 
 ---
@@ -945,7 +945,7 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
   notice to that repo's README. Mini follow-up session.
 - **Python bindings** — directory not yet started; will sit on `osf-core`
   via PyO3 once the Rust block reader/writer are in place.
-- **Other language implementations** (C, C++, C#, …) — README
+- **Other language implementations** (C, C++, …) — README
   placeholders only.
 - **Integrations** (Arrow, PyTorch, TensorFlow, MCP, LangChain) — README
   placeholders only.
@@ -983,7 +983,7 @@ Parallel / other tracks (the bigger roadmap now that C++ §20 is done):
   `osf-viewer` are complete and merged. The OSF5 **integrity profile level
   `crc`** is implemented (2026-07-09) — see the *Java integrity profile* section
   above.
-- **Other language placeholders** (C native, C#, …) remain
+- **Other language placeholders** (C native, …) remain
   README-only.
 
 The Phase 11 work landed on branch `phase-11-c-api` (feature commit +
