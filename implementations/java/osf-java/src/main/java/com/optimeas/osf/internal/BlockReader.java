@@ -6,6 +6,7 @@ import com.optimeas.osf.ChannelDef;
 import com.optimeas.osf.ChannelType;
 import com.optimeas.osf.DataType;
 import com.optimeas.osf.GpsLocation;
+import com.optimeas.osf.IntegrityProfile;
 import com.optimeas.osf.OsfException;
 import com.optimeas.osf.OsfVersion;
 import com.optimeas.osf.ReaderStats;
@@ -14,8 +15,10 @@ import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.CRC32C;
 
 /**
  * Best-effort decoder for the OSF binary block stream that follows the
@@ -67,8 +70,12 @@ public final class BlockReader {
 
     /** Special channel index introducing the optional OSF4 trailer block. */
     private static final int TRAILER_CHANNEL_INDEX = 0xFFFF;
+    /** Reserved file-wide channel carrying integrity signature blocks. */
+    private static final int SIGNATURE_CHANNEL_INDEX = 0xFFFE;
     /** Length of the OSF4 magic trailer string, padded to 40 bytes. */
     private static final int MAGIC_TRAILER_LEN = 40;
+
+    private static final System.Logger LOG = System.getLogger(BlockReader.class.getName());
 
     private BlockReader() {}
 
@@ -87,8 +94,37 @@ public final class BlockReader {
     public static List<Block> readAll(byte[] afterMetablock, OsfVersion version,
                                       Map<Integer, ChannelDef> channels,
                                       ReaderStats stats) {
+        return readAll(afterMetablock, version, channels, stats, IntegrityProfile.NONE);
+    }
+
+    /**
+     * Decode the whole block stream best-effort under an integrity profile.
+     *
+     * <p>When {@code integrity} is {@link IntegrityProfile#NONE} this behaves
+     * exactly like {@link #readAll(byte[], OsfVersion, Map, ReaderStats)}. Under
+     * an active profile:
+     * <ul>
+     *   <li>the last four bytes of every block's data area are a CRC32C over the
+     *       whole frame (channel index, length field, control byte, payload);
+     *       they are verified and stripped <em>before</em> the typed parse
+     *       (fail-closed framing, effective payload = {@code LEN − 4}). A
+     *       mismatch skips the block and bumps
+     *       {@link ReaderStats#blocksCrcFailed()} (best-effort, read continues);
+     *   </li>
+     *   <li>signature blocks on the reserved channel {@code 0xFFFE} (control
+     *       byte 9, u32 length) are skipped and counted
+     *       ({@link ReaderStats#blocksSignatureSkipped()}) so a signed file
+     *       stays readable.</li>
+     * </ul>
+     *
+     * @param integrity the file's declared integrity profile
+     */
+    public static List<Block> readAll(byte[] afterMetablock, OsfVersion version,
+                                      Map<Integer, ChannelDef> channels,
+                                      ReaderStats stats, IntegrityProfile integrity) {
         List<Block> out = new ArrayList<>();
         ByteBuffer buf = LittleEndian.wrap(afterMetablock);
+        boolean integrityActive = integrity != IntegrityProfile.NONE;
 
         while (buf.hasRemaining()) {
             int blockStart = buf.position();
@@ -108,6 +144,28 @@ public final class BlockReader {
                 if (channelIndex == TRAILER_CHANNEL_INDEX) {
                     consumeTrailer(buf, stats);
                     break;
+                }
+
+                // Step 2b: integrity signature block. Channel 0xFFFE is the
+                // reserved file-wide integrity channel (not declared in the
+                // metablock); it always uses a u32 length field. This crate
+                // reads level crc but does not verify signatures, so the block
+                // is skipped and counted — a signed file stays readable.
+                if (integrityActive && channelIndex == SIGNATURE_CHANNEL_INDEX) {
+                    if (buf.remaining() < 4) {
+                        stats.markTruncated();
+                        break;
+                    }
+                    long sigLen = Integer.toUnsignedLong(buf.getInt());
+                    if (buf.remaining() < sigLen) {
+                        stats.markTruncated();
+                        break;
+                    }
+                    buf.position(buf.position() + (int) sigLen);
+                    stats.incBlocksSignatureSkipped();
+                    out.add(new Block.Skipped(channelIndex,
+                            Block.SkipReason.SIGNATURE_BLOCK, sigLen));
+                    continue;
                 }
 
                 // Step 3: channel lookup. Unknown index = corruption; we cannot
@@ -167,8 +225,22 @@ public final class BlockReader {
                 byte[] payload = new byte[lengthI];
                 buf.get(payload);
 
+                // Step 6b: frame CRC (integrity level crc). The last four bytes
+                // of the data area are a CRC32C over the whole frame; verify and
+                // strip them before the typed parse (fail-closed framing — a
+                // residual "fully consumed" check after decoding is insufficient
+                // for variable-length payloads). A mismatch skips the block.
+                if (integrityActive) {
+                    if (payload.length < 5 || !verifyFrameCrc(channelIndex, sizeofLen, length, payload)) {
+                        stats.incBlocksCrcFailed();
+                        out.add(new Block.Skipped(channelIndex, Block.SkipReason.CRC_FAILED, length));
+                        continue;
+                    }
+                    payload = Arrays.copyOf(payload, payload.length - 4); // CRC verified — drop it
+                }
+
                 // Step 7: decode control byte and route.
-                Block block = decodeBlock(channelIndex, def, version, payload, length);
+                Block block = decodeBlock(channelIndex, def, version, payload, length, integrityActive);
                 out.add(block);
                 if (!(block instanceof Block.Skipped)) {
                     stats.incBlocksRead();
@@ -224,13 +296,37 @@ public final class BlockReader {
         }
     }
 
+    /**
+     * Verify the trailing 4-byte frame CRC over the whole frame: the 2-byte
+     * channel index, the length field (as it appears on disk, LE, {@code sizeofLen}
+     * bytes) and the payload up to (but excluding) the CRC. {@code payload} still
+     * includes the 4 CRC bytes; {@code length} is the on-disk length field value.
+     */
+    private static boolean verifyFrameCrc(int channelIndex, int sizeofLen, long length,
+                                          byte[] payload) {
+        int split = payload.length - 4;
+        long stored = (payload[split] & 0xFFL)
+                | ((payload[split + 1] & 0xFFL) << 8)
+                | ((payload[split + 2] & 0xFFL) << 16)
+                | ((payload[split + 3] & 0xFFL) << 24);
+        CRC32C crc = new CRC32C();
+        crc.update(channelIndex & 0xFF);
+        crc.update((channelIndex >>> 8) & 0xFF);
+        for (int i = 0; i < sizeofLen; i++) {
+            crc.update((int) ((length >>> (8 * i)) & 0xFF));
+        }
+        crc.update(payload, 0, split);
+        return crc.getValue() == stored;
+    }
+
     // ---------------------------------------------------------------
     // Block decoding. `payload` is control byte + body; a short read inside
     // throws BufferUnderflowException, caught by readAll for truncation.
     // ---------------------------------------------------------------
 
     private static Block decodeBlock(int channelIndex, ChannelDef def,
-                                     OsfVersion version, byte[] payload, long length) {
+                                     OsfVersion version, byte[] payload, long length,
+                                     boolean integrityActive) {
         int control = payload[0] & 0xFF;
         boolean multi = (control & 0x80) != 0;
         int kind = control & 0x7F;
@@ -249,17 +345,50 @@ public final class BlockReader {
                 return new Block.Skipped(channelIndex,
                         Block.SkipReason.DEPRECATED_BLOCK_TYPE, length);
             case 5:  // bcContinuedData
-                return parseContinuedData(channelIndex, def.dataType(), multi, body);
+                return checkNumericConsumed(
+                        parseContinuedData(channelIndex, def.dataType(), multi, body),
+                        channelIndex, body, integrityActive);
             case 6:  // bcStartData
-                return parseStartData(channelIndex, def.dataType(), multi, body);
+                return checkNumericConsumed(
+                        parseStartData(channelIndex, def.dataType(), multi, body),
+                        channelIndex, body, integrityActive);
             case 7:  // bcContinuedRelStampData
-                return parseContinuedRelStampData(channelIndex, def.dataType(), multi, body);
+                return checkNumericConsumed(
+                        parseContinuedRelStampData(channelIndex, def.dataType(), multi, body),
+                        channelIndex, body, integrityActive);
             case 8:  // bcAbsTimeStampData
-                return parseAbsTimestampData(channelIndex, def.dataType(), multi, version, body);
+                // Numeric / GPS AbsTs is fixed-width and must fully consume the
+                // body; string/binary AbsTs is greedy by design, so it is not
+                // subject to the full-consume diagnostic.
+                DataType dt = def.dataType();
+                Block absBlock = parseAbsTimestampData(channelIndex, dt, multi, version, body);
+                if (dt != DataType.STRING && dt != DataType.BINARY) {
+                    return checkNumericConsumed(absBlock, channelIndex, body, integrityActive);
+                }
+                return absBlock;
             default: // unknown / reserved ≥ 9
                 return new Block.Skipped(channelIndex,
                         Block.SkipReason.RESERVED_BLOCK_TYPE, length);
         }
+    }
+
+    /**
+     * Strict full-consume diagnostic for a fixed-width numeric block: after the
+     * declared samples are read the body must be empty. Trailing bytes signal a
+     * writer/sample-count mismatch. The frame CRC (when a profile is active)
+     * already guarantees the frame's integrity end-to-end, so — matching the
+     * Rust/C++ reference readers, which do not reject on this — the surplus is
+     * logged as a warning rather than dropping the block. Conformant files never
+     * trip it.
+     */
+    private static Block checkNumericConsumed(Block block, int channelIndex, ByteBuffer body,
+                                              boolean integrityActive) {
+        if (body.hasRemaining()) {
+            LOG.log(System.Logger.Level.WARNING, () -> "channel " + channelIndex
+                    + ": numeric block left " + body.remaining() + " unconsumed byte(s)"
+                    + (integrityActive ? " under an active integrity profile" : ""));
+        }
+        return block;
     }
 
     private static int readSampleCount(boolean multi, ByteBuffer body) {

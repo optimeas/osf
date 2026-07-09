@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.zip.CRC32C;
 
 /**
  * High-level read-only view of an OSF file: the file-level metadata, the typed
@@ -86,6 +87,7 @@ public final class DataManager {
             InputStream decompressed = OsfzInputStream.wrap(in, stats::setCompression);
 
             MagicHeader header = MagicHeaderParser.parse(decompressed);
+            stats.setIntegrity(header.integrity());
 
             long metaLen = header.metablockLength();
             if (metaLen > Integer.MAX_VALUE) {
@@ -94,6 +96,21 @@ public final class DataManager {
                         + " exceeds the supported maximum of " + Integer.MAX_VALUE);
             }
             byte[] metaBytes = readExactly(decompressed, (int) metaLen);
+
+            // Verify the metablock CRC32C against the crc32c header token before
+            // parsing (fail-closed): a mismatch rejects the file.
+            if (header.metablockCrc() != null) {
+                CRC32C crc = new CRC32C();
+                crc.update(metaBytes, 0, metaBytes.length);
+                if (crc.getValue() != header.metablockCrc()) {
+                    throw new OsfException.MetablockCrcMismatch(
+                            "metablock CRC mismatch: the crc32c header token does not match "
+                            + "the metablock bytes (declared "
+                            + Long.toHexString(header.metablockCrc()) + ", computed "
+                            + Long.toHexString(crc.getValue()) + ")");
+                }
+            }
+
             Metablock meta = MetablockParser.parse(header.version(), metaBytes);
 
             byte[] rest = decompressed.readAllBytes();
@@ -103,7 +120,8 @@ public final class DataManager {
                 channelsByIndex.put(def.index(), def);
             }
 
-            List<Block> blocks = BlockReader.readAll(rest, header.version(), channelsByIndex, stats);
+            List<Block> blocks = BlockReader.readAll(rest, header.version(), channelsByIndex,
+                    stats, header.integrity());
             List<DataChannel> channels = ChannelAssembler.assemble(meta.channels(), blocks);
 
             return new DataManager(header.version(), meta.metadata(), channels, stats);

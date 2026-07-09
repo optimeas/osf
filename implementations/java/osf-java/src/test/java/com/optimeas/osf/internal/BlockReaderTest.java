@@ -232,8 +232,10 @@ class BlockReaderTest {
     @Test
     void reservedAndDeprecatedControlBytesAreSkipped() {
         var channels = channelsByIndex(channel(0, DataType.INT16, 2));
+        // 0x09 = bcIntegritySignature control byte on a normal channel in a
+        // profile-less file: an unknown/reserved value (>= 9) -> Skipped.
         for (int ctrl : new int[]{CTRL_RESERVED, CTRL_TIMEBASE_REALIGN,
-                CTRL_TRUSTED_TS, CTRL_STATUS_EVENT, CTRL_MESSAGE_EVENT, 0x55}) {
+                CTRL_TRUSTED_TS, CTRL_STATUS_EVENT, CTRL_MESSAGE_EVENT, 0x09, 0x55}) {
             byte[] data = frame(0, 2, ctrl, new byte[]{0xA, 0xB});
             ReaderStats st = stats();
             List<Block> blocks = BlockReader.readAll(data, OsfVersion.OSF5, channels, st);

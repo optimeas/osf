@@ -108,6 +108,14 @@ public final class MagicHeaderParser {
     /**
      * Parses a single trimmed header line (no trailing newline/CR).
      *
+     * <p>The header grammar is
+     * <pre>{@code <identifier> SP <metablock-length> *(SP <token>) }</pre>
+     * with exactly one space between fields and no trailing space. Splitting on
+     * a single {@code ' '} therefore turns a double or trailing space into an
+     * empty field, which is rejected. Tokens are {@code key:value} and are an
+     * OSF5-only feature (declaring the integrity profile); an OSF4 identifier
+     * must not carry any. This mirrors the Rust {@code header.rs} grammar.
+     *
      * @param line         the header text
      * @param headerBytes  total bytes consumed from the stream (used for
      *                     {@link MagicHeader#headerByteLength()})
@@ -120,24 +128,119 @@ public final class MagicHeaderParser {
         }
 
         String identifier = line.substring(0, sep);
-        String rest = line.substring(sep + 1).trim();
+        String rest = line.substring(sep + 1);
 
         OsfVersion version = identifierToVersion(identifier);
 
-        if (rest.isEmpty()) {
+        // Split on a single space; a double/trailing space yields an empty field.
+        String[] fields = rest.split(" ", -1);
+
+        String lenField = fields[0];
+        if (lenField.isEmpty()) {
             throw new OsfException.MalformedFile(
                     "missing metablock length after identifier \"" + identifier + "\"");
         }
-
         long metablockLength;
         try {
-            metablockLength = Long.parseUnsignedLong(rest);
+            metablockLength = Long.parseUnsignedLong(lenField);
         } catch (NumberFormatException e) {
             throw new OsfException.MalformedFile(
-                    "metablock length is not a valid uint64: \"" + rest + "\"");
+                    "metablock length is not a valid uint64: \"" + lenField + "\"");
         }
 
-        return new MagicHeader(version, metablockLength, headerBytes);
+        IntegrityProfile integrity = IntegrityProfile.NONE;
+        Long metablockCrc = null;
+        boolean sawCrc = false;
+
+        for (int i = 1; i < fields.length; i++) {
+            String token = fields[i];
+            if (token.isEmpty()) {
+                throw new OsfException.MalformedFile(
+                        "malformed magic header: fields must be separated by a single "
+                        + "space with no trailing space");
+            }
+            // Tokens are an OSF5-only feature; OSF4 identifiers must not carry them.
+            if (version != OsfVersion.OSF5) {
+                throw new OsfException.MalformedFile(
+                        "header tokens are only allowed for OSF5; found \"" + token
+                        + "\" after an OSF4 identifier");
+            }
+            int colon = token.indexOf(':');
+            if (colon < 0) {
+                throw new OsfException.MalformedFile(
+                        "malformed header token, expected 'key:value': \"" + token + "\"");
+            }
+            String key = token.substring(0, colon);
+            String value = token.substring(colon + 1);
+            if (!isValidTokenKey(key)) {
+                throw new OsfException.MalformedFile(
+                        "malformed header token key (lowercase a-z, 0-9, '-' only): \""
+                        + key + "\"");
+            }
+            switch (key) {
+                case "crc32c" -> {
+                    metablockCrc = parseCrc32cToken(value);
+                    integrity = IntegrityProfile.CRC32C;
+                    sawCrc = true;
+                }
+                case "ed25519" -> {
+                    validateEd25519KeyId(value);
+                    if (!sawCrc) {
+                        throw new OsfException.MalformedFile(
+                                "ed25519 token is only valid after a crc32c token "
+                                + "(crc32c first)");
+                    }
+                    integrity = IntegrityProfile.ED25519;
+                }
+                default -> throw new OsfException.UnknownHeaderToken(
+                        "unknown header token '" + key + "'");
+            }
+        }
+
+        return new MagicHeader(version, metablockLength, headerBytes, integrity, metablockCrc);
+    }
+
+    /** Token key charset: lowercase a-z, digits, and '-'. */
+    private static boolean isValidTokenKey(String key) {
+        if (key.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < key.length(); i++) {
+            char c = key.charAt(i);
+            if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Parse a {@code crc32c} value: exactly 8 uppercase hex digits → u32. */
+    private static long parseCrc32cToken(String value) {
+        if (value.length() != 8 || !isHex(value, true)) {
+            throw new OsfException.MalformedFile(
+                    "crc32c token value must be 8 uppercase hex digits, got \"" + value + "\"");
+        }
+        return Long.parseLong(value, 16);
+    }
+
+    /** Validate an {@code ed25519} keyid: exactly 16 lowercase hex digits (syntactic). */
+    private static void validateEd25519KeyId(String value) {
+        if (value.length() != 16 || !isHex(value, false)) {
+            throw new OsfException.MalformedFile(
+                    "ed25519 keyid must be 16 lowercase hex digits, got \"" + value + "\"");
+        }
+    }
+
+    private static boolean isHex(String s, boolean upper) {
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            boolean digit = c >= '0' && c <= '9';
+            boolean letter = upper ? (c >= 'A' && c <= 'F') : (c >= 'a' && c <= 'f');
+            if (!digit && !letter) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static OsfVersion identifierToVersion(String identifier) {

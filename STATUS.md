@@ -253,6 +253,50 @@ compile clean.
 
 ---
 
+### Java integrity profile — level `crc` (2026-07-09)
+
+`osf-java` implements the OSF5 integrity profile at level `crc` (scope: crc
+only; no signing). CRC32C is `java.util.zip.CRC32C` (JDK-native, no dependency;
+check value `0xE3069283`, byte-identical to Rust/C++/Delphi).
+
+- **Reader.** `MagicHeaderParser` whitespace-tokenizes the header: `crc32c`
+  (8 upper hex, strict) + `ed25519` (16 lower hex, syntactic, only after
+  `crc32c`); an unknown key throws the dedicated
+  `OsfException.UnknownHeaderToken` (`unknown header token '<key>'`, no
+  NumberFormat passthrough); tokens on an OSF4 identifier are rejected.
+  `MagicHeader` carries `integrity` + `metablockCrc`. `DataManager` verifies the
+  metablock CRC over the raw bytes before parse
+  (`OsfException.MetablockCrcMismatch`). Under an active profile `BlockReader`
+  verifies + strips the 4-byte frame CRC before the typed parse (fail-closed,
+  effective payload = LEN − 4); a mismatch skips the block + bumps
+  `ReaderStats.blocksCrcFailed`. Signature blocks (channel `0xFFFE`, control 9,
+  u32 length) are skipped + counted (`blocksSignatureSkipped`); the permissive
+  `ChannelAssembler` ignores the reserved index so signed files stay readable.
+  `ReaderStats` exposes `integrity` + `verificationStatus()`
+  (`none`/`crc_valid`/`invalid`/`signature_unverifiable`). Transparent OSFZ read
+  is unchanged (a gzip-wrapped crc file decompresses then verifies).
+- **Writer.** `setIntegrity(IntegrityProfile.CRC32C)` on **both** `BlockWriter`
+  and `StreamingWriter` (default off) emits the `crc32c` token + metablock CRC
+  (shared `internal.Integrity`) and a per-block frame CRC
+  (`BlockEncoder.applyFrameCrc`); chunk budgets drop by 4. StreamingWriter
+  applies the CRC in its single per-block `writeBlock` gate, so `force()`/fsync
+  behaviour is unchanged. Ed25519 (signing) is rejected.
+- **Numeric full-consume** leftover bytes are logged via `System.Logger`
+  (softened to warning-only to match the Rust/C++ readers, which do not reject —
+  the frame CRC is the integrity gate; noted as an interpretation decision).
+
+**Tests** (JUnit 5 + AssertJ, **21 new**, module total **226**, `mvn test`
+green): `MagicHeaderIntegrityTest` (tokenizer matrix), `IntegrityReaderTest`
+(4 reference files + metablock/numeric/string byte flips → `MetablockCrcMismatch`
+/ `blocksCrcFailed`, signature-block skip, gzip), `WriterIntegrityTest`
+(both-writer round-trip vs plain, byte-identical crc output), plus a
+control-byte-9-profile-less skip case. `ConformanceManifestTest` is untouched
+(the `integrity/` files run as their own tests, per the brief). Frame-CRC
+byte-identity to Rust is transitive: the reader reads the two Rust reference
+files with 0 CRC failures, and the writer's output reads back clean.
+
+---
+
 ## Delphi CLI — osftool
 
 `implementations/delphi/tools/osftool/` — a verb-based command-line tool,
@@ -934,10 +978,11 @@ track are all **incremental / BACKLOG**, not required:
 
 Parallel / other tracks (the bigger roadmap now that C++ §20 is done):
 
-- **Java implementation** (DECISIONS §21) — no Java code exists yet; the
-  scaffolding prompt absorbing the spec rev 2026-05-24 rules
-  (version-deterministic null-terminator, uniform bit-7 optionality)
-  would be the first concrete step.
+- **Java implementation** (DECISIONS §21) — the `osf-java` core library
+  (Java 21 / JPMS, OSF4+OSF5 read, both OSF5 writers), `osf-cli` and
+  `osf-viewer` are complete and merged. The OSF5 **integrity profile level
+  `crc`** is implemented (2026-07-09) — see the *Java integrity profile* section
+  above.
 - **Other language placeholders** (C native, C#, …) remain
   README-only.
 

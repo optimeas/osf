@@ -112,6 +112,10 @@ public sealed interface Block
         DEPRECATED_BLOCK_TYPE,
         /** Reserved control byte (0, 2) or any undefined value ≥ 9; or zero-length. */
         RESERVED_BLOCK_TYPE,
+        /** Frame CRC32C did not verify under an active integrity profile. */
+        CRC_FAILED,
+        /** Integrity signature block on the reserved channel {@code 0xFFFE}. */
+        SIGNATURE_BLOCK,
     }
 
     /**

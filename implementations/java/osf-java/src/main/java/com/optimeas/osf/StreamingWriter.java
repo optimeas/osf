@@ -5,6 +5,7 @@ package com.optimeas.osf;
 import com.optimeas.osf.internal.Block;
 import com.optimeas.osf.internal.BlockChunking;
 import com.optimeas.osf.internal.BlockEncoder;
+import com.optimeas.osf.internal.Integrity;
 import com.optimeas.osf.internal.MetablockBuilder;
 
 import java.io.Closeable;
@@ -118,6 +119,9 @@ public final class StreamingWriter implements Closeable {
     private final List<Chan> channels = new ArrayList<>();
     private final Map<Integer, Double> rateByIndex = new LinkedHashMap<>();
     private Phase phase = Phase.CONFIGURE;
+    private IntegrityProfile integrity = IntegrityProfile.NONE;
+    /** Whether a per-block frame CRC is emitted — derived from {@link #integrity}. */
+    private boolean frameCrc = false;
 
     private StreamingWriter(FileChannel channel) {
         this.channel = channel;
@@ -157,6 +161,22 @@ public final class StreamingWriter implements Closeable {
     public void setMetadata(String key, String value) {
         requireConfigure("setMetadata");
         metadata.put(key, value);
+    }
+
+    /**
+     * Enable the OSF5 integrity profile (Configure phase only).
+     * {@link IntegrityProfile#CRC32C} makes the writer emit a {@code crc32c}
+     * magic-header token with the metablock CRC and, per block, a frame CRC32C
+     * that is fsync'd with the block like every other write.
+     * {@link IntegrityProfile#NONE} (the default) writes a plain file;
+     * {@link IntegrityProfile#ED25519} (signing) is not supported and is rejected
+     * when the preamble is written.
+     *
+     * @param profile the integrity profile to write
+     */
+    public void setIntegrity(IntegrityProfile profile) {
+        requireConfigure("setIntegrity");
+        this.integrity = (profile == null) ? IntegrityProfile.NONE : profile;
     }
 
     // ---------------------------------------------------------------
@@ -276,6 +296,11 @@ public final class StreamingWriter implements Closeable {
         if (channels.isEmpty()) {
             throw new OsfException("begin: no channels declared");
         }
+        if (integrity == IntegrityProfile.ED25519) {
+            throw new OsfException("begin: the ed25519 (signed) integrity profile "
+                    + "is not supported by the writer");
+        }
+        frameCrc = integrity == IntegrityProfile.CRC32C;
         metadata.putIfAbsent("created_utc", CREATED_UTC.format(Instant.now()));
 
         List<ChannelDef> defs = new ArrayList<>(channels.size());
@@ -283,7 +308,7 @@ public final class StreamingWriter implements Closeable {
             defs.add(c.def);
         }
         byte[] metablock = MetablockBuilder.buildOsf5Json(5, metadata, defs);
-        byte[] magic = ("OSF5 " + metablock.length + "\n").getBytes(StandardCharsets.US_ASCII);
+        byte[] magic = Integrity.magicLine(metablock, frameCrc).getBytes(StandardCharsets.US_ASCII);
 
         writeAll(magic);
         writeAll(metablock);
@@ -366,7 +391,7 @@ public final class StreamingWriter implements Closeable {
         beginIfNeeded();
         byte[] block = BlockEncoder.variableStringBlock(
                 channelIndex, timestampNs, value, c.def.sizeOfLengthValue());
-        writeBlock(block);
+        writeBlock(block, c.def.sizeOfLengthValue());
     }
 
     /** Write one timestamped {@code binary} sample (one block per sample). */
@@ -381,7 +406,7 @@ public final class StreamingWriter implements Closeable {
         beginIfNeeded();
         byte[] block = BlockEncoder.variableBinaryBlock(
                 channelIndex, timestampNs, value, c.def.sizeOfLengthValue());
-        writeBlock(block);
+        writeBlock(block, c.def.sizeOfLengthValue());
     }
 
     // ---------------------------------------------------------------
@@ -602,13 +627,13 @@ public final class StreamingWriter implements Closeable {
     private void maybeEmitTimestamped(Chan c) {
         int sov = c.def.sizeOfLengthValue();
         if (c.def.dataType() == DataType.GPS_LOCATION) {
-            int maxPer = BlockChunking.maxSamplesPerTimestampedGps(sov);
+            int maxPer = BlockChunking.maxSamplesPerTimestampedGps(sov, frameCrc);
             while (c.gps.size() >= maxPer) {
                 emitTimestampedGpsChunk(c, maxPer, sov);
             }
         } else {
             int valueSize = numericValueSize(c.numericValues);
-            int maxPer = BlockChunking.maxSamplesPerTimestamped(valueSize, sov);
+            int maxPer = BlockChunking.maxSamplesPerTimestamped(valueSize, sov, frameCrc);
             while (count(c.numericValues) >= maxPer) {
                 emitTimestampedNumericChunk(c, maxPer, sov);
             }
@@ -638,7 +663,7 @@ public final class StreamingWriter implements Closeable {
             ts[i] = c.timestamps.get(i);
         }
         byte[] block = BlockEncoder.timestampedBlock(idx, ts, slice(c.numericValues, 0, chunk), sov);
-        writeBlock(block);
+        writeBlock(block, sov);
         dropFront(c.timestamps, chunk);
         c.numericValues = sliceFrom(c.numericValues, chunk);
     }
@@ -653,7 +678,7 @@ public final class StreamingWriter implements Closeable {
             v[i] = c.gps.get(i);
         }
         byte[] block = BlockEncoder.timestampedGpsBlock(idx, ts, v, sov);
-        writeBlock(block);
+        writeBlock(block, sov);
         dropFront(c.timestamps, chunk);
         dropFront(c.gps, chunk);
     }
@@ -673,16 +698,16 @@ public final class StreamingWriter implements Closeable {
         int valueSize = numericValueSize(seg.values);
         int total = seg.values.length();
         int sov = c.def.sizeOfLengthValue();
-        int maxStart = BlockChunking.maxSamplesPerStart(valueSize, sov);
-        int maxCont = BlockChunking.maxSamplesPerContinued(valueSize, sov);
+        int maxStart = BlockChunking.maxSamplesPerStart(valueSize, sov, frameCrc);
+        int maxCont = BlockChunking.maxSamplesPerContinued(valueSize, sov, frameCrc);
 
         int first = Math.min(total, maxStart);
         writeBlock(BlockEncoder.startDataBlock(idx, seg.startTimestampNs, seg.sampleRateHz,
-                slice(seg.values, 0, first), sov));
+                slice(seg.values, 0, first), sov), sov);
         int written = first;
         while (written < total) {
             int chunk = Math.min(total - written, maxCont);
-            writeBlock(BlockEncoder.continuedDataBlock(idx, slice(seg.values, written, chunk), sov));
+            writeBlock(BlockEncoder.continuedDataBlock(idx, slice(seg.values, written, chunk), sov), sov);
             written += chunk;
         }
     }
@@ -742,9 +767,13 @@ public final class StreamingWriter implements Closeable {
         c.kind = Kind.EQUIDISTANT;
     }
 
-    /** Write one complete block frame, then fsync — the power-loss-safe gate. */
-    private void writeBlock(byte[] block) {
-        writeAll(block);
+    /**
+     * Write one complete block frame, then fsync — the power-loss-safe gate.
+     * When the integrity profile is active the per-block frame CRC is applied
+     * here (incrementally per frame), so it is fsync'd together with the block.
+     */
+    private void writeBlock(byte[] block, int sov) {
+        writeAll(frameCrc ? BlockEncoder.applyFrameCrc(block, sov) : block);
         forceChannel();
     }
 

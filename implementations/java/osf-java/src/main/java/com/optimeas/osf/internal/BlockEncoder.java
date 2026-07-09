@@ -7,6 +7,8 @@ import com.optimeas.osf.OsfException;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.zip.CRC32C;
 
 /**
  * Internal write-side mirror of {@link BlockReader}: encodes one complete OSF5
@@ -226,6 +228,49 @@ public final class BlockEncoder {
         }
         out.raw(payload);
         return out.toBytes();
+    }
+
+    /**
+     * Apply the integrity frame CRC to an already-encoded block frame
+     * {@code [u16 channelIndex][length][control + body]}: bump the on-disk length
+     * field by 4 so it counts the CRC, then append the CRC32C over the whole
+     * (patched) frame as four little-endian bytes. The reader verifies exactly
+     * this: CRC over channel index + length field + payload, checked against the
+     * trailing 4 bytes.
+     *
+     * @param frame             a complete block frame from one of the encoders
+     * @param sizeOfLengthValue the length-field width used to encode {@code frame}
+     * @return a new frame with the patched length and the trailing CRC
+     */
+    public static byte[] applyFrameCrc(byte[] frame, int sizeOfLengthValue) {
+        byte[] out = Arrays.copyOf(frame, frame.length + 4);
+        // Patch the length field (offset 2) to also count the 4 CRC bytes.
+        if (sizeOfLengthValue == 2) {
+            int oldLen = (out[2] & 0xFF) | ((out[3] & 0xFF) << 8);
+            int newLen = oldLen + 4;
+            if (newLen > 0xFFFF) {
+                throw new OsfException.MalformedFile(
+                        "block payload " + oldLen + " + frame CRC overflows the 2-byte "
+                        + "length field; declare sizeOfLengthValue = 4");
+            }
+            out[2] = (byte) (newLen & 0xFF);
+            out[3] = (byte) ((newLen >>> 8) & 0xFF);
+        } else {
+            long oldLen = (out[2] & 0xFFL) | ((out[3] & 0xFFL) << 8)
+                    | ((out[4] & 0xFFL) << 16) | ((out[5] & 0xFFL) << 24);
+            long newLen = oldLen + 4;
+            for (int i = 0; i < 4; i++) {
+                out[2 + i] = (byte) ((newLen >>> (8 * i)) & 0xFF);
+            }
+        }
+        CRC32C crc = new CRC32C();
+        crc.update(out, 0, frame.length); // whole patched frame (CRC bytes not yet set)
+        long value = crc.getValue();
+        int off = frame.length;
+        for (int i = 0; i < 4; i++) {
+            out[off + i] = (byte) ((value >>> (8 * i)) & 0xFF);
+        }
+        return out;
     }
 
     private static void requireFloatOrDouble(Block.Values values, String where) {
