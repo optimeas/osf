@@ -32,10 +32,12 @@ public final class ReferenceManifest {
     public static final class FileEntry {
         private final int version;
         private final List<ChannelEntry> channels;
+        private final String integrity;
 
-        FileEntry(int version, List<ChannelEntry> channels) {
+        FileEntry(int version, List<ChannelEntry> channels, String integrity) {
             this.version = version;
             this.channels = List.copyOf(channels);
+            this.integrity = integrity;
         }
 
         /** OSF format version: 4 or 5. */
@@ -43,6 +45,13 @@ public final class ReferenceManifest {
 
         /** Channel entries in index order. */
         public List<ChannelEntry> channels() { return channels; }
+
+        /**
+         * Declared integrity-profile wire token ({@code "crc32c"} /
+         * {@code "ed25519"}), or {@code null} when the file carries no integrity
+         * profile. Optional field — absent for the plain-file entries.
+         */
+        public String integrity() { return integrity; }
     }
 
     /** Per-channel entry within a file entry. */
@@ -112,6 +121,8 @@ public final class ReferenceManifest {
             String fileName = e.getKey();
             JsonNode fileNode = e.getValue();
             int version = fileNode.get("version").asInt();
+            String integrity = fileNode.hasNonNull("integrity")
+                    ? fileNode.get("integrity").asText() : null;
             List<ChannelEntry> channels = new ArrayList<>();
             for (JsonNode chNode : fileNode.get("channels")) {
                 channels.add(new ChannelEntry(
@@ -121,7 +132,7 @@ public final class ReferenceManifest {
                         chNode.get("sampleCount").asLong(),
                         chNode.get("mode").asText()));
             }
-            result.put(fileName, new FileEntry(version, channels));
+            result.put(fileName, new FileEntry(version, channels, integrity));
         });
         return Collections.unmodifiableMap(result);
     }
