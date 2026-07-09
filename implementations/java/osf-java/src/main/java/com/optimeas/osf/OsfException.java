@@ -17,4 +17,23 @@ public class OsfException extends RuntimeException {
         public MalformedFile(String message) { super(message); }
         public MalformedFile(String message, Throwable cause) { super(message, cause); }
     }
+
+    /**
+     * A magic-header token whose key is not understood (must-understand rule).
+     * Distinct from {@link MalformedFile} so callers can tell an unknown
+     * integrity/extension token apart from a structurally broken header, and so
+     * the diagnostic never surfaces as a misleading number-format error.
+     */
+    public static final class UnknownHeaderToken extends OsfException {
+        public UnknownHeaderToken(String message) { super(message); }
+    }
+
+    /**
+     * The metablock CRC32C carried by the {@code crc32c} header token does not
+     * match the raw metablock bytes — the file is rejected under an active
+     * integrity profile.
+     */
+    public static final class MetablockCrcMismatch extends OsfException {
+        public MetablockCrcMismatch(String message) { super(message); }
+    }
 }

@@ -20,6 +20,9 @@ public final class ReaderStats {
     private boolean truncationSeen = false;
     private boolean compressed = false;
     private String compressionFormat = "none";
+    private IntegrityProfile integrity = IntegrityProfile.NONE;
+    private long blocksCrcFailed = 0;
+    private long blocksSignatureSkipped = 0;
 
     /** Number of blocks the reader fully decoded into a typed {@code Block}. */
     public int blocksRead() {
@@ -67,5 +70,63 @@ public final class ReaderStats {
     public void setCompression(String format) {
         this.compressed = true;
         this.compressionFormat = format;
+    }
+
+    /**
+     * Integrity profile declared by the file's magic-header tokens
+     * ({@link IntegrityProfile#NONE} for a plain file). Set from the header at
+     * load time.
+     */
+    public IntegrityProfile integrity() {
+        return integrity;
+    }
+
+    /**
+     * Number of data blocks whose frame CRC32C did not verify (skipped on read).
+     * Always {@code 0} unless the file declared level {@code crc}.
+     */
+    public long blocksCrcFailed() {
+        return blocksCrcFailed;
+    }
+
+    /**
+     * Number of signature blocks (reserved channel {@code 0xFFFE}) skipped on
+     * read. Non-zero only for signed files read through this crc-level library.
+     */
+    public long blocksSignatureSkipped() {
+        return blocksSignatureSkipped;
+    }
+
+    /**
+     * Overall integrity verification status, per the spec 1.6 vocabulary:
+     * <ul>
+     *   <li>{@code "none"} — no integrity profile;</li>
+     *   <li>{@code "crc_valid"} — level crc, every block CRC verified;</li>
+     *   <li>{@code "invalid"} — level crc, at least one block failed its CRC;</li>
+     *   <li>{@code "signature_unverifiable"} — a signed file whose signatures
+     *       this crc-level reader cannot verify.</li>
+     * </ul>
+     */
+    public String verificationStatus() {
+        return switch (integrity) {
+            case NONE -> "none";
+            case ED25519 -> "signature_unverifiable";
+            case CRC32C -> (blocksCrcFailed > 0) ? "invalid" : "crc_valid";
+        };
+    }
+
+    /** Record the file's declared integrity profile (set from the header). */
+    public void setIntegrity(IntegrityProfile profile) {
+        this.integrity = profile;
+    }
+
+    /** Increment the failed-frame-CRC counter by one. */
+    public void incBlocksCrcFailed() {
+        blocksCrcFailed++;
+    }
+
+    /** Increment the skipped-signature-block counter by one. */
+    public void incBlocksSignatureSkipped() {
+        blocksSignatureSkipped++;
     }
 }
