@@ -74,7 +74,7 @@ TEST(BlockWriter, EquidistantDoubleRoundtripsThroughOstream) {
         osf::ChannelDef d;
         d.name = "eq";
         d.dataType = osf::DataType::Double;
-        d.channelType = osf::ChannelType::Equidistant;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         return d;
     }());
@@ -106,7 +106,7 @@ TEST(BlockWriter, AddEquidistantRejectsNonPositiveRate) {
     osf::BlockWriter w;
     auto idx = w.addChannel([] {
         osf::ChannelDef d; d.name = "eq"; d.dataType = osf::DataType::Double;
-        d.channelType = osf::ChannelType::Equidistant; d.sizeOfLengthValue = 2;
+        d.channelType = osf::ChannelType::Scalar; d.sizeOfLengthValue = 2;
         return d;
     }());
     double s = 1.0;
@@ -121,7 +121,7 @@ TEST(BlockWriter, TimestampedInt32Roundtrips) {
     osf::BlockWriter w;
     auto idx = w.addChannel([] {
         osf::ChannelDef d; d.name = "ts"; d.dataType = osf::DataType::Int32;
-        d.channelType = osf::ChannelType::Timestamped; d.sizeOfLengthValue = 2;
+        d.channelType = osf::ChannelType::Scalar; d.sizeOfLengthValue = 2;
         return d;
     }());
     ASSERT_TRUE(idx.has_value());
@@ -150,7 +150,7 @@ TEST(BlockWriter, TimestampedDoubleRoundtrips) {
     osf::BlockWriter w;
     auto idx = w.addChannel([] {
         osf::ChannelDef d; d.name = "tsd"; d.dataType = osf::DataType::Double;
-        d.channelType = osf::ChannelType::Timestamped; d.sizeOfLengthValue = 2;
+        d.channelType = osf::ChannelType::Scalar; d.sizeOfLengthValue = 2;
         return d;
     }());
     ASSERT_TRUE(idx.has_value());
@@ -178,7 +178,7 @@ TEST(BlockWriter, MixedBlockTypesRejected) {
     osf::BlockWriter w;
     auto idx = w.addChannel([] {
         osf::ChannelDef d; d.name = "eq"; d.dataType = osf::DataType::Double;
-        d.channelType = osf::ChannelType::Equidistant; d.sizeOfLengthValue = 2;
+        d.channelType = osf::ChannelType::Scalar; d.sizeOfLengthValue = 2;
         return d;
     }());
     ASSERT_TRUE(idx.has_value());
@@ -196,7 +196,7 @@ TEST(BlockWriter, TimestampedDatatypeMismatchRejected) {
     osf::BlockWriter w;
     auto idx = w.addChannel([] {
         osf::ChannelDef d; d.name = "i32"; d.dataType = osf::DataType::Int32;
-        d.channelType = osf::ChannelType::Timestamped; d.sizeOfLengthValue = 2;
+        d.channelType = osf::ChannelType::Scalar; d.sizeOfLengthValue = 2;
         return d;
     }());
     ASSERT_TRUE(idx.has_value());
@@ -231,7 +231,7 @@ TEST(BlockWriter, TimestampedBoolByteExact) {
         osf::BlockWriter w;
         auto idx = w.addChannel([] {
             osf::ChannelDef d; d.name = "b"; d.dataType = osf::DataType::Bool;
-            d.channelType = osf::ChannelType::Timestamped; d.sizeOfLengthValue = 2;
+            d.channelType = osf::ChannelType::Scalar; d.sizeOfLengthValue = 2;
             return d;
         }());
         ASSERT_TRUE(idx.has_value());
@@ -258,7 +258,7 @@ TEST(BlockWriter, TimestampedBoolByteExact) {
         osf::BlockWriter w;
         auto idx = w.addChannel([] {
             osf::ChannelDef d; d.name = "i8"; d.dataType = osf::DataType::Int8;
-            d.channelType = osf::ChannelType::Timestamped; d.sizeOfLengthValue = 2;
+            d.channelType = osf::ChannelType::Scalar; d.sizeOfLengthValue = 2;
             return d;
         }());
         ASSERT_TRUE(idx.has_value());
@@ -281,7 +281,7 @@ TEST(BlockWriter, TimestampedBoolByteExact) {
         osf::BlockWriter w;
         auto idx = w.addChannel([] {
             osf::ChannelDef d; d.name = "u8"; d.dataType = osf::DataType::UInt8;
-            d.channelType = osf::ChannelType::Timestamped; d.sizeOfLengthValue = 2;
+            d.channelType = osf::ChannelType::Scalar; d.sizeOfLengthValue = 2;
             return d;
         }());
         ASSERT_TRUE(idx.has_value());
@@ -306,7 +306,7 @@ TEST(BlockWriter, GpsRoundtrips) {
     osf::BlockWriter w;
     auto idx = w.addChannel([] {
         osf::ChannelDef d; d.name = "gps"; d.dataType = osf::DataType::GpsLocation;
-        d.channelType = osf::ChannelType::Timestamped; d.sizeOfLengthValue = 2;
+        d.channelType = osf::ChannelType::Scalar; d.sizeOfLengthValue = 2;
         return d;
     }());
     ASSERT_TRUE(idx.has_value());
@@ -483,7 +483,7 @@ TEST(BlockWriter, StringDatatypeMismatchRejected) {
     osf::BlockWriter w;
     auto idx = w.addChannel([] {
         osf::ChannelDef d; d.name = "i32"; d.dataType = osf::DataType::Int32;
-        d.channelType = osf::ChannelType::Timestamped; d.sizeOfLengthValue = 2;
+        d.channelType = osf::ChannelType::Scalar; d.sizeOfLengthValue = 2;
         return d;
     }());
     ASSERT_TRUE(idx.has_value());
@@ -508,7 +508,7 @@ static osf::DataManager makeMixedManager() {
         osf::ChannelDef d;
         d.name = "eq_dbl";
         d.dataType = osf::DataType::Double;
-        d.channelType = osf::ChannelType::Equidistant;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         d.physicalUnit = "m/s";
         return d;
@@ -523,7 +523,7 @@ static osf::DataManager makeMixedManager() {
         osf::ChannelDef d;
         d.name = "ts_i32";
         d.dataType = osf::DataType::Int32;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         return d;
     }());
@@ -652,7 +652,7 @@ TEST(BlockWriter, FromManagerPreservesMultipleEquidistantSegments) {
         osf::ChannelDef d;
         d.name = "eq_multi";
         d.dataType = osf::DataType::Double;
-        d.channelType = osf::ChannelType::Equidistant;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         return d;
     }());

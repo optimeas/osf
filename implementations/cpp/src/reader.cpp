@@ -479,13 +479,13 @@ std::optional<SkipReason> unsupportedReason(BlockReader::Iterator const&) = dele
 // (placeholder so the compiler errors loudly if someone tries to use the
 // private overload pattern from Rust — we use a simple free function below)
 
-std::optional<SkipReason> channelUnsupportedReason(ChannelType ct,
-                                                    DataType dt) noexcept {
+std::optional<SkipReason> channelUnsupportedReason(DataType dt) noexcept {
+    // Only an unsupported *datatype* makes a block unreadable. The channeltype
+    // (data shape) never causes a block to be skipped — a scalar/vector/matrix/
+    // binary (or forward-compat unknown) channeltype still decodes by datatype
+    // and block type.
     if (dt == DataType::Unsupported) {
         return SkipReason{SkipReason::Kind::UnsupportedDataType, 0};
-    }
-    if (ct == ChannelType::Unsupported) {
-        return SkipReason{SkipReason::Kind::UnsupportedChannelType, 0};
     }
     return std::nullopt;
 }
@@ -791,7 +791,7 @@ std::optional<Result<Block>> BlockReader::next() {
     std::size_t const lengthUsize = length;
 
     // Step 5: forward-compat skip — Unsupported channel.
-    if (auto reason = channelUnsupportedReason(info.channelType, info.dataType)) {
+    if (auto reason = channelUnsupportedReason(info.dataType)) {
         auto r = skipBlock(channelIndex, lengthUsize, *reason);
         if (!r) { m_finished = true; return Result<Block>{tl::make_unexpected(r.error())}; }
         return Result<Block>{std::move(*r)};

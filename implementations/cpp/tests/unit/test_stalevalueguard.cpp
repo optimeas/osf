@@ -37,7 +37,7 @@ osf::ChannelDef makeTsChannel(std::string name, osf::DataType type) {
     osf::ChannelDef d;
     d.name = std::move(name);
     d.dataType = type;
-    d.channelType = osf::ChannelType::Timestamped;
+    d.channelType = osf::ChannelType::Scalar;
     d.sizeOfLengthValue = 2;
     return d;
 }

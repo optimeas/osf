@@ -72,11 +72,14 @@ Result<DataType> parseDataType(std::string_view raw) {
 }
 
 Result<ChannelType> parseChannelType(std::string_view raw) {
-    if (raw == "scalar")      return ChannelType::Scalar;
-    if (raw == "equidistant") return ChannelType::Equidistant;
-    if (raw == "timestamped") return ChannelType::Timestamped;
-    // No removed channel-type strings in spec revision 2026-05-04.
-    // Result return type is reserved for a future revision.
+    if (raw == "scalar") return ChannelType::Scalar;
+    if (raw == "vector") return ChannelType::Vector;
+    if (raw == "matrix") return ChannelType::Matrix;
+    if (raw == "binary") return ChannelType::Binary;
+    // A channeltype outside the spec set (scalar/vector/matrix/binary) is
+    // kept as Unsupported (raw spelling preserved on Channel::channelTypeRaw).
+    // It does NOT drop the channel — readability is governed by the datatype
+    // and block types, not by channeltype.
     return ChannelType::Unsupported;
 }
 

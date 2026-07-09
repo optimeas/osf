@@ -58,15 +58,20 @@ TEST(ParseDataType, unknown_spelling_becomes_unsupported) {
 }
 
 TEST(ParseChannelType, current_spellings_parse) {
-    EXPECT_EQ(*osf::parseChannelType("scalar"),      osf::ChannelType::Scalar);
-    EXPECT_EQ(*osf::parseChannelType("equidistant"), osf::ChannelType::Equidistant);
-    EXPECT_EQ(*osf::parseChannelType("timestamped"), osf::ChannelType::Timestamped);
+    EXPECT_EQ(*osf::parseChannelType("scalar"), osf::ChannelType::Scalar);
+    EXPECT_EQ(*osf::parseChannelType("vector"), osf::ChannelType::Vector);
+    EXPECT_EQ(*osf::parseChannelType("matrix"), osf::ChannelType::Matrix);
+    EXPECT_EQ(*osf::parseChannelType("binary"), osf::ChannelType::Binary);
 }
 
 TEST(ParseChannelType, unknown_spelling_becomes_unsupported) {
-    auto r = osf::parseChannelType("vector");
-    ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(*r, osf::ChannelType::Unsupported);
+    // A channeltype outside the spec set is Unsupported (kept, not dropped).
+    // equidistant/timestamped are NOT channeltypes.
+    for (auto const* s : {"tensor", "equidistant", "timestamped"}) {
+        auto r = osf::parseChannelType(s);
+        ASSERT_TRUE(r.has_value());
+        EXPECT_EQ(*r, osf::ChannelType::Unsupported) << s;
+    }
 }
 
 TEST(ParseSpectrumType, current_spellings_parse) {

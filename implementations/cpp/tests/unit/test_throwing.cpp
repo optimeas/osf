@@ -43,7 +43,7 @@ osf::BlockWriter makeFixtureWriter() {
     osf::ChannelDef d;
     d.name = "Sensor/T";
     d.dataType = osf::DataType::Double;
-    d.channelType = osf::ChannelType::Timestamped;
+    d.channelType = osf::ChannelType::Scalar;
     auto const ci = w.addChannel(d);
     EXPECT_TRUE(ci.has_value());
     std::int64_t const ts[] = {10, 20, 30};

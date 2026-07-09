@@ -24,15 +24,15 @@ TEST(WriterCommon, BuildMetablockNormalisesNonEquidistantToScalar) {
     osf::detail::FileInfoDraft fi;
     fi.creator = "test:1";
     std::vector<osf::ChannelDef> channels{
-        ch("eq", osf::DataType::Double, osf::ChannelType::Equidistant),
-        ch("ts", osf::DataType::Int32, osf::ChannelType::Timestamped),
+        ch("eq", osf::DataType::Double, osf::ChannelType::Scalar),
+        ch("ts", osf::DataType::Int32, osf::ChannelType::Scalar),
         ch("var", osf::DataType::String, osf::ChannelType::Scalar),
     };
 
     osf::MetaBlock meta = osf::detail::buildMetablock(fi, channels);
 
     ASSERT_EQ(meta.channels.size(), 3u);
-    EXPECT_EQ(meta.channels[0].channelType, osf::ChannelType::Equidistant);
+    EXPECT_EQ(meta.channels[0].channelType, osf::ChannelType::Scalar);
     EXPECT_EQ(meta.channels[1].channelType, osf::ChannelType::Scalar);  // was Timestamped
     EXPECT_EQ(meta.channels[2].channelType, osf::ChannelType::Scalar);
     EXPECT_EQ(meta.fileInfo.version, 5u);
@@ -46,7 +46,7 @@ TEST(WriterCommon, BuildMetablockNormalisesNonEquidistantToScalar) {
 TEST(WriterCommon, BuildMetablockAppliesDecisions13Defaults) {
     osf::detail::FileInfoDraft fi;   // everything unset
     std::vector<osf::ChannelDef> channels{
-        ch("c", osf::DataType::Double, osf::ChannelType::Timestamped),
+        ch("c", osf::DataType::Double, osf::ChannelType::Scalar),
     };
 
     osf::MetaBlock meta = osf::detail::buildMetablock(fi, channels);
@@ -80,7 +80,7 @@ TEST(WriterCommon, BuildMetablockExplicitCreatorTagWin) {
     fi.creator = "my-app/2.0";
     fi.tag     = "calibration";
     std::vector<osf::ChannelDef> channels{
-        ch("c", osf::DataType::Double, osf::ChannelType::Timestamped),
+        ch("c", osf::DataType::Double, osf::ChannelType::Scalar),
     };
 
     osf::MetaBlock meta = osf::detail::buildMetablock(fi, channels);

@@ -349,7 +349,7 @@ TEST(SerializeMetablockJson, roundtrip_full_channel_with_optional_fields) {
     ch.index = 7;
     ch.name = "Pressure";
     ch.dataType = osf::DataType::Float;
-    ch.channelType = osf::ChannelType::Equidistant;
+    ch.channelType = osf::ChannelType::Vector;
     ch.sizeOfLengthValue = 4;
     ch.timeIncrementNs = 1'000'000;
     ch.physicalUnit = "bar";
@@ -368,7 +368,7 @@ TEST(SerializeMetablockJson, roundtrip_full_channel_with_optional_fields) {
     EXPECT_EQ(pch.index, 7);
     EXPECT_EQ(pch.name, "Pressure");
     EXPECT_EQ(pch.dataType, osf::DataType::Float);
-    EXPECT_EQ(pch.channelType, osf::ChannelType::Equidistant);
+    EXPECT_EQ(pch.channelType, osf::ChannelType::Vector);
     EXPECT_EQ(pch.sizeOfLengthValue, 4);
     EXPECT_EQ(pch.timeIncrementNs, 1'000'000);
     EXPECT_EQ(pch.physicalUnit, "bar");
@@ -411,7 +411,7 @@ TEST(SerializeMetablockJson, roundtrip_gpslocation_channel) {
     ch.index = 0;
     ch.name = "GPS";
     ch.dataType = osf::DataType::GpsLocation;
-    ch.channelType = osf::ChannelType::Timestamped;
+    ch.channelType = osf::ChannelType::Scalar;
     ch.sizeOfLengthValue = 2;
     m.channels.push_back(ch);
 
