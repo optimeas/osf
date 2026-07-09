@@ -92,31 +92,12 @@ fn roundtrip_all_examples_with_crc() {
     }
 }
 
-#[test]
-fn reference_crc_files_load_at_level_crc() {
-    let dir = examples_root().join("generated").join("integrity");
-    for (name, channels) in [
-        ("osf5_crc_equidistant.osf", 3usize),
-        ("osf5_crc_variable.osf", 2usize),
-        // Delphi-written files. The variable file declares its binary channel
-        // with channeltype="binary" (a valid spec channeltype); the reader must
-        // keep it, so this file has TWO channels (string + binary).
-        ("osf5_equidistant_crc_delphi.osf", 3usize),
-        ("osf5_variable_crc_delphi.osf", 2usize),
-    ] {
-        let path = dir.join(name);
-        let mgr = DataManager::load_from_file(&path)
-            .unwrap_or_else(|e| panic!("load {}: {e}", path.display()));
-        assert_eq!(
-            mgr.stats.integrity,
-            IntegrityProfile::Crc32c,
-            "{name}: integrity"
-        );
-        assert_eq!(mgr.stats.blocks_crc_failed, 0, "{name}: crc failures");
-        assert_eq!(mgr.stats.verification_status(), "crc_valid", "{name}: status");
-        assert_eq!(mgr.channels().len(), channels, "{name}: channel count");
-    }
-}
+// The integrity reference files (osf5_crc_*.osf + *_crc_delphi.osf) are
+// validated — integrity profile, zero CRC failures, channel count, per-channel
+// contents — by the manifest-driven `conformance_manifest_test.rs`, which reads
+// the shared `examples/reference_manifest.json`. This file keeps only the
+// behavioural cases (corruption, round-trip, gzip) that a per-file manifest
+// entry cannot express, so the reference-file list has a single source of truth.
 
 #[test]
 fn corrupt_metablock_byte_rejects_file() {
