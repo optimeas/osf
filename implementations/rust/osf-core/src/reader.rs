@@ -41,7 +41,7 @@ use crate::header::OsfVersion;
 use crate::integrity::IntegrityProfile;
 use crate::meta::MetaBlock;
 use crate::stats::{ChannelStats, ReaderStats};
-use crate::types::{ChannelType, DataType};
+use crate::types::DataType;
 use byteorder::{LittleEndian, ReadBytesExt};
 use log::{debug, warn};
 use std::collections::HashMap;
@@ -69,7 +69,6 @@ const MAGIC_TRAILER_LEN: usize = 40;
 /// the wire. Channel name is recorded in [`ChannelStats`] only.
 #[derive(Debug, Clone)]
 struct ChannelInfo {
-    channel_type: ChannelType,
     data_type: DataType,
     size_of_length_value: u8,
 }
@@ -130,15 +129,14 @@ impl<R: Read> BlockReader<R> {
             ..ReaderStats::default()
         };
         for chan in &meta.channels {
-            let unsupported = matches!(chan.data_type, DataType::Unsupported(_))
-                || matches!(chan.channel_type, ChannelType::Unsupported(_));
-            if unsupported {
+            // Only an unsupported *datatype* makes a channel unreadable; the
+            // channeltype (data shape) never does.
+            if matches!(chan.data_type, DataType::Unsupported(_)) {
                 stats.channels_unsupported += 1;
             }
             channels.insert(
                 chan.index,
                 ChannelInfo {
-                    channel_type: chan.channel_type.clone(),
                     data_type: chan.data_type.clone(),
                     size_of_length_value: chan.size_of_length_value,
                 },
@@ -807,11 +805,12 @@ fn abs_timestamp_range(payload: &TimestampedPayload) -> Option<(i64, i64)> {
 }
 
 fn unsupported_reason(info: &ChannelInfo) -> Option<SkipReason> {
+    // Only an unsupported *datatype* makes a block unreadable. The
+    // `channeltype` (data shape) never causes a block to be skipped — a
+    // scalar/vector/matrix/binary (or forward-compat unknown) channeltype
+    // still decodes by datatype + block type.
     if matches!(info.data_type, DataType::Unsupported(_)) {
         return Some(SkipReason::UnsupportedDataType);
-    }
-    if matches!(info.channel_type, ChannelType::Unsupported(_)) {
-        return Some(SkipReason::UnsupportedChannelType);
     }
     None
 }
@@ -1183,6 +1182,7 @@ fn invalid_block(msg: String) -> OsfError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::ChannelType;
     use crate::meta::{Channel, MetaBlock};
     use std::io::Cursor;
 

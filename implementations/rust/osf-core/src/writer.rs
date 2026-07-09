@@ -1212,8 +1212,9 @@ fn channel_def_to_json(index: u16, def: &ChannelDef) -> Value {
 fn channel_type_to_wire(ct: &ChannelType) -> &'static str {
     match ct {
         ChannelType::Scalar => "scalar",
-        ChannelType::Equidistant => "equidistant",
-        ChannelType::Timestamped => "timestamped",
+        ChannelType::Vector => "vector",
+        ChannelType::Matrix => "matrix",
+        ChannelType::Binary => "binary",
         ChannelType::Unsupported(_) => "scalar", // rejected at add_channel; defensive
     }
 }

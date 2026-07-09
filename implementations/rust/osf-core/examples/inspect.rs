@@ -163,8 +163,9 @@ fn truncate_to(s: &str, max: usize) -> String {
 fn format_channel_type(ct: &ChannelType) -> String {
     match ct {
         ChannelType::Scalar => "scalar".into(),
-        ChannelType::Equidistant => "equidistant".into(),
-        ChannelType::Timestamped => "timestamped".into(),
+        ChannelType::Vector => "vector".into(),
+        ChannelType::Matrix => "matrix".into(),
+        ChannelType::Binary => "binary".into(),
         ChannelType::Unsupported(s) => format!("?{s}"),
     }
 }

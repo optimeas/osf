@@ -27,7 +27,7 @@ use crate::header::parse_magic_header;
 use crate::meta::MetaBlock;
 use crate::reader::BlockReader;
 use crate::stats::ReaderStats;
-use crate::types::{ChannelType, DataType};
+use crate::types::DataType;
 use log::warn;
 use std::collections::HashMap;
 use std::fs::File;
@@ -243,7 +243,7 @@ where
     let mut order: Vec<u16> = Vec::with_capacity(meta.channels.len());
 
     for chan in &meta.channels {
-        let initial_state = initial_state_for(&chan.channel_type, &chan.data_type);
+        let initial_state = initial_state_for(&chan.data_type);
         builders.insert(
             chan.index,
             ChannelBuilder {
@@ -305,10 +305,12 @@ where
     Ok((channels, by_name, by_index))
 }
 
-fn initial_state_for(channel_type: &ChannelType, data_type: &DataType) -> BuilderState {
-    if matches!(channel_type, ChannelType::Unsupported(_))
-        || matches!(data_type, DataType::Unsupported(_))
-    {
+fn initial_state_for(data_type: &DataType) -> BuilderState {
+    // Only an unsupported *datatype* makes a channel unreadable. The
+    // `channeltype` (scalar/vector/matrix/binary — the data shape) is
+    // descriptive metadata and never drops a channel; its blocks decode by
+    // datatype + block type.
+    if matches!(data_type, DataType::Unsupported(_)) {
         return BuilderState::Unsupported;
     }
     match data_type {
@@ -1005,6 +1007,7 @@ mod tests {
     use super::*;
     use crate::block::Block;
     use crate::meta::{Channel as MetaChannelDef, FileInfo};
+    use crate::types::ChannelType;
 
     fn meta_with_channels(channels: Vec<MetaChannelDef>) -> MetaBlock {
         MetaBlock {
@@ -1129,19 +1132,20 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_channel_does_not_appear_in_output() {
-        let mut meta_channel = make_meta_channel(0, DataType::Double, 2);
-        meta_channel.channel_type = ChannelType::Unsupported("vector".into());
-        let meta = meta_with_channels(vec![
-            meta_channel,
-            make_meta_channel(1, DataType::Int32, 2),
-        ]);
+    fn unsupported_datatype_dropped_but_unknown_channeltype_kept() {
+        // An unknown *channeltype* must NOT drop the channel — its blocks
+        // decode by datatype + block type. Only an unknown *datatype* drops.
+        let mut ch_bad_ct = make_meta_channel(0, DataType::Double, 2);
+        ch_bad_ct.channel_type = ChannelType::Unsupported("tensor".into());
+        let ch_bad_dt = make_meta_channel(1, DataType::Unsupported("weird".into()), 2);
+        let ch_ok = make_meta_channel(2, DataType::Int32, 2);
+        let meta = meta_with_channels(vec![ch_bad_ct, ch_bad_dt, ch_ok]);
         let (channels, by_name, _) = build_channels(&meta, std::iter::empty()).unwrap();
-        // Channel 0 is dropped; channel 1 stays even with no data.
-        assert_eq!(channels.len(), 1);
-        assert_eq!(channels[0].index(), 1);
-        assert!(by_name.contains_key("ch1"));
-        assert!(!by_name.contains_key("ch0"));
+        // ch0 (unknown channeltype) kept; ch1 (unknown datatype) dropped; ch2 kept.
+        assert_eq!(channels.len(), 2);
+        assert!(by_name.contains_key("ch0"));
+        assert!(!by_name.contains_key("ch1"));
+        assert!(by_name.contains_key("ch2"));
     }
 
     #[test]
