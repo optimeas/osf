@@ -98,6 +98,11 @@ fn reference_crc_files_load_at_level_crc() {
     for (name, channels) in [
         ("osf5_crc_equidistant.osf", 3usize),
         ("osf5_crc_variable.osf", 2usize),
+        // Delphi-written files. The variable file declares its binary channel
+        // with channeltype="binary" (a valid spec channeltype); the reader must
+        // keep it, so this file has TWO channels (string + binary).
+        ("osf5_equidistant_crc_delphi.osf", 3usize),
+        ("osf5_variable_crc_delphi.osf", 2usize),
     ] {
         let path = dir.join(name);
         let mgr = DataManager::load_from_file(&path)

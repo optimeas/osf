@@ -131,11 +131,11 @@ MetaBlock buildMetablock(FileInfoDraft const& fi,
         chx.index = static_cast<std::uint16_t>(i);
         chx.name  = d.name;
         chx.dataType = d.dataType;
-        // Normalise: equidistant stays equidistant; everything else is
-        // scalar (Delphi reference convention; BACKLOG Task-7 #2).
-        chx.channelType = (d.channelType == ChannelType::Equidistant)
-                               ? ChannelType::Equidistant
-                               : ChannelType::Scalar;
+        // channeltype is the channel's data shape (scalar/vector/matrix/binary)
+        // and is written through verbatim. The equidistant-vs-timestamped
+        // storage mode is decided by which write methods the caller used, not
+        // by this field.
+        chx.channelType = d.channelType;
         chx.sizeOfLengthValue = d.sizeOfLengthValue;
         chx.timeIncrementNs = d.timeIncrementNs;
         chx.physicalUnit = d.physicalUnit;

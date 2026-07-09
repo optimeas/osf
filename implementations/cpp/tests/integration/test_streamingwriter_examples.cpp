@@ -162,13 +162,13 @@ osf::Result<void> writeVariable(
         "variable channel is neither string nor binary"});
 }
 
-// Derive the writer-side channelType from the loaded variant.
+// The writer-side channelType (data shape). All the loaded variants here are
+// scalar-shaped; the equidistant-vs-timestamped storage mode is preserved by
+// which write method the caller dispatches to (startEquidistantSegment vs
+// writeTimestamped*), not by this metadata field.
 osf::ChannelType channelTypeFrom(osf::DataChannel const& ch) {
-    if (std::holds_alternative<osf::EquidistantChannel>(ch))
-        return osf::ChannelType::Equidistant;
-    if (std::holds_alternative<osf::TimestampedChannel>(ch))
-        return osf::ChannelType::Timestamped;
-    return osf::ChannelType::Scalar;   // VariableChannel — scalar fits per metablock
+    (void) ch;
+    return osf::ChannelType::Scalar;
 }
 
 // Round-trip: load src → write all channels via StreamingWriter →
@@ -295,7 +295,7 @@ TEST_F(StreamingWriterExamples,
         osf::ChannelDef d;
         d.name = "x";
         d.dataType = osf::DataType::Double;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());

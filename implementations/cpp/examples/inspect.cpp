@@ -44,10 +44,11 @@ std::string dataTypeName(osf::DataType dt) {
 
 std::string channelTypeName(osf::ChannelType ct) {
     switch (ct) {
-        case osf::ChannelType::Scalar:      return "scalar";
-        case osf::ChannelType::Equidistant: return "equidistant";
-        case osf::ChannelType::Timestamped: return "timestamped";
-        default:                            return "?unsupported";
+        case osf::ChannelType::Scalar: return "scalar";
+        case osf::ChannelType::Vector: return "vector";
+        case osf::ChannelType::Matrix: return "matrix";
+        case osf::ChannelType::Binary: return "binary";
+        default:                       return "?unsupported";
     }
 }
 

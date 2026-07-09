@@ -210,8 +210,9 @@ struct ChannelBuilder {
 };
 
 void seedInitialState(ChannelBuilder& b) {
-    if (b.dataType == DataType::Unsupported ||
-        b.channelDef.channelType == ChannelType::Unsupported) {
+    // Only an unsupported *datatype* makes a channel unreadable; the
+    // channeltype (data shape) never drops a channel.
+    if (b.dataType == DataType::Unsupported) {
         b.state = ChannelBuilder::State::Unsupported;
         return;
     }

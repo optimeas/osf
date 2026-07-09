@@ -349,9 +349,11 @@ struct gps_location {
 <a name="channeltypes"></a>
 ### Channel types (channeltype) {#channeltypes}
 
-The `channeltype` parameter defines the **logical organization of a channel's values**. It specifies how many values are stored per data block and what structure those values have.
+The `channeltype` parameter defines the **logical organization of a channel's values** (its *data shape*). It specifies how many values are stored per data block and what structure those values have.
 
-OSF defines three basic channel types:
+> **Important:** `channeltype` is the **data shape**, not the storage/sampling mode. Whether a channel is **equidistant** or **timestamped** is derived from the **block control byte** (`bcStartData`/`bcContinuedData` ⇒ equidistant; `bcAbsTimeStampData` ⇒ per-value timestamps) together with `timeincrement` — **not** from `channeltype`. `equidistant` and `timestamped` are therefore **not** `channeltype` values and must not be written as such.
+
+OSF defines the following channel types (`scalar`, `vector`, `matrix`, `binary` — see also the field description under [Data types and structure](#data-types-and-structure) and [osf4.md](references/osf4.md)):
 
 
 #### scalar
@@ -466,6 +468,32 @@ OSF defines three basic channel types:
 
 
 
+#### binary
+
+* **Description:**
+  A channel that stores an **arbitrary binary block** per point in time (one blob per value).
+  Typical use: images, audio clips, serialized messages.
+
+* **Properties:**
+
+  * Payload-equivalent to a `scalar` channel with `datatype="binary"`; a reader treats both spellings identically.
+  * Setting the channel's `mimetype` is recommended (e.g. `image/jpeg`).
+  * The maximum block size is determined by `sizeoflengthvalue`.
+
+* **JSON example (OSF5):**
+
+  ```json
+  {
+    "index": 3,
+    "name": "Camera.Frame",
+    "channeltype": "binary",
+    "datatype": "binary",
+    "mimetype": "image/jpeg"
+  }
+  ```
+
+
+
 #### Notes on vector and matrix
 
 * **Additional parameters:** Both types require metadata about dimensions, axes, physical units, and optionally labels. These are described in detail in dedicated documents.
@@ -477,6 +505,7 @@ OSF defines three basic channel types:
 
 #### Summary
 
+* **`binary`** — An arbitrary binary block per point in time (images, audio, serialized messages); equivalent to `scalar` + `datatype="binary"`.
 * **`scalar`** — Simple channel type, one value per point in time. Ideal for continuous measurement values.
 * **`vector`** — Multiple values per block, optimized for frequency spectra and high-frequency data.
 * **`matrix`** — Multi-dimensional blocks, suited for classifications, image, and array data.

@@ -103,8 +103,9 @@ public final class MetablockBuilder {
         obj.put(F_DATATYPE, dataTypeToWire(def.dataType()));
         obj.put(F_SIZEOFLENGTHVALUE, def.sizeOfLengthValue());
 
-        // timeincrement only for equidistant channels.
-        if (def.channelType() == ChannelType.EQUIDISTANT && def.timeIncrementNs() > 0) {
+        // timeincrement is written whenever the channel has one (equidistant
+        // channels); it is independent of channeltype (the data shape).
+        if (def.timeIncrementNs() > 0) {
             obj.put(F_TIMEINCREMENT, def.timeIncrementNs());
         }
         if (def.physicalUnit() != null) {
@@ -122,12 +123,18 @@ public final class MetablockBuilder {
     }
 
     /**
-     * Normalise the channel type for the wire: only {@code equidistant} is
-     * preserved; everything else (scalar, timestamped, unsupported) becomes
-     * {@code "scalar"} per the reference convention.
+     * The channel's data-shape channeltype on the wire
+     * ({@code scalar}/{@code vector}/{@code matrix}/{@code binary}). Unknown
+     * shapes fall back to {@code "scalar"}.
      */
     private static String channelTypeToWire(ChannelType ct) {
-        return (ct == ChannelType.EQUIDISTANT) ? "equidistant" : "scalar";
+        return switch (ct) {
+            case SCALAR -> "scalar";
+            case VECTOR -> "vector";
+            case MATRIX -> "matrix";
+            case BINARY -> "binary";
+            case UNSUPPORTED -> "scalar";
+        };
     }
 
     private static String dataTypeToWire(DataType dt) {

@@ -251,13 +251,15 @@ pub fn parse_data_type(raw: &str) -> Result<DataType, OsfError> {
 pub fn parse_channel_type(raw: &str) -> Result<ChannelType, OsfError> {
     match raw {
         "scalar" => Ok(ChannelType::Scalar),
-        "equidistant" => Ok(ChannelType::Equidistant),
-        "timestamped" => Ok(ChannelType::Timestamped),
+        "vector" => Ok(ChannelType::Vector),
+        "matrix" => Ok(ChannelType::Matrix),
+        "binary" => Ok(ChannelType::Binary),
         other => {
-            warn!(
-                "channeltype {other:?} is not known to this build; \
-                 channel kept as Unsupported, block reads will fail"
-            );
+            // A channeltype outside the spec set (scalar/vector/matrix/binary)
+            // is kept verbatim for forward-compat. It does NOT drop the
+            // channel — readability is governed by the datatype and block
+            // types, not by channeltype.
+            warn!("channeltype {other:?} is not a known OSF channel type; kept verbatim");
             Ok(ChannelType::Unsupported(other.to_string()))
         }
     }
@@ -347,20 +349,21 @@ mod tests {
     #[test]
     fn parses_channel_types() {
         assert_eq!(parse_channel_type("scalar").unwrap(), ChannelType::Scalar);
-        assert_eq!(
-            parse_channel_type("equidistant").unwrap(),
-            ChannelType::Equidistant
-        );
-        assert_eq!(
-            parse_channel_type("timestamped").unwrap(),
-            ChannelType::Timestamped
-        );
+        assert_eq!(parse_channel_type("vector").unwrap(), ChannelType::Vector);
+        assert_eq!(parse_channel_type("matrix").unwrap(), ChannelType::Matrix);
+        assert_eq!(parse_channel_type("binary").unwrap(), ChannelType::Binary);
     }
 
     #[test]
     fn unknown_channel_type_becomes_unsupported() {
-        let ct = parse_channel_type("vector").unwrap();
-        assert_eq!(ct, ChannelType::Unsupported("vector".to_string()));
+        // A channeltype outside the spec set is kept verbatim (forward-compat),
+        // not dropped. `equidistant`/`timestamped` are NOT channeltypes.
+        let ct = parse_channel_type("tensor").unwrap();
+        assert_eq!(ct, ChannelType::Unsupported("tensor".to_string()));
+        assert_eq!(
+            parse_channel_type("equidistant").unwrap(),
+            ChannelType::Unsupported("equidistant".to_string())
+        );
     }
 
     #[test]

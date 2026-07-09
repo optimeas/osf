@@ -362,9 +362,10 @@ std::string dataTypeToWire(DataType dt, std::string_view rawFallback) {
 std::string channelTypeToWire(ChannelType ct,
                                  std::string_view rawFallback) {
     switch (ct) {
-        case ChannelType::Scalar:      return "scalar";
-        case ChannelType::Equidistant: return "equidistant";
-        case ChannelType::Timestamped: return "timestamped";
+        case ChannelType::Scalar: return "scalar";
+        case ChannelType::Vector: return "vector";
+        case ChannelType::Matrix: return "matrix";
+        case ChannelType::Binary: return "binary";
         case ChannelType::Unsupported:
             return std::string{rawFallback.empty() ? "scalar"
                                                     : rawFallback};

@@ -66,27 +66,36 @@ pub enum DataType {
     Unsupported(String),
 }
 
-/// Whether a channel stores values at a fixed sample rate
-/// (`equidistant`/`scalar` with a non-zero `timeincrement`) or with an
-/// explicit timestamp per sample (`timestamped`/`scalar` with
-/// `timeincrement` 0 or absent).
+/// The logical **data shape** of a channel — the OSF `channeltype`
+/// metablock attribute.
 ///
-/// The on-disk strings `scalar`, `timestamped`, and `equidistant` all
-/// occur in the wild; the parser treats `scalar` as the canonical
-/// spelling for both equidistant and timestamped channels and uses
-/// `time_increment_ns` to disambiguate.
+/// This is the channel's structure, NOT its storage mode: whether a channel
+/// is equidistant or timestamped is derived at read time from the block
+/// control byte (`bcStartData`/`bcContinuedData` ⇒ equidistant;
+/// `bcAbsTimeStampData` ⇒ per-sample timestamps) together with
+/// `time_increment_ns` — never from `channeltype`. Accordingly the wire
+/// strings `equidistant`/`timestamped` are NOT channeltypes and never appear
+/// in a conformant file.
+///
+/// The spec value set is `scalar`, `vector`, `matrix`, `binary`
+/// (`docs/de/osf_general.md` channel-field reference + "Kanaltypen";
+/// `osf4.md`). A missing `channeltype` defaults to [`ChannelType::Scalar`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub enum ChannelType {
-    /// Default channel type used by the OSFGenerator and most field
-    /// devices. The actual layout (equidistant vs. timestamped) is
-    /// derived from `time_increment_ns` on the channel definition.
+    /// One value per point in time — the most common shape. Default when the
+    /// `channeltype` attribute is absent.
     #[default]
     Scalar,
-    /// Channel with a fixed sample rate; timestamps are reconstructed
-    /// from `bcStartData` segments and the sample index.
-    Equidistant,
-    /// Channel with an absolute timestamp per sample.
-    Timestamped,
+    /// A sequence of values per block (e.g. an FFT spectrum). Full vector
+    /// payload decoding is a future feature; the channel is retained and its
+    /// blocks are read.
+    Vector,
+    /// A two-dimensional structure per timestamp (e.g. a rainflow matrix).
+    Matrix,
+    /// Arbitrary binary blocks — one blob per point in time (typically with a
+    /// `mimetype`). Payload-equivalent to a `scalar` channel of `datatype`
+    /// `binary`.
+    Binary,
     /// Forward-compatibility variant. Carries the on-disk string of a
     /// channel type the current build does not know.
     Unsupported(String),

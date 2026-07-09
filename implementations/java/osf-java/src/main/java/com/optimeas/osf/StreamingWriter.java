@@ -264,7 +264,9 @@ public final class StreamingWriter implements Closeable {
         }
         // timeincrement (ns) — carried in the metablock for equidistant channels.
         long timeIncrementNs = Math.max(1L, Math.round(1.0e9 / sampleRateHz));
-        ChannelDef def = new ChannelDef(channels.size(), name, type, ChannelType.EQUIDISTANT,
+        // channeltype = scalar (data shape); equidistance is carried by
+        // timeincrement + the bcStartData blocks, not by channeltype.
+        ChannelDef def = new ChannelDef(channels.size(), name, type, ChannelType.SCALAR,
                 sizeOfLengthValue, timeIncrementNs, physicalUnit, copyAttrs(attributes));
         channels.add(new Chan(def));
         rateByIndex.put(def.index(), sampleRateHz);

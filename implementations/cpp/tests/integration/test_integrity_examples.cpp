@@ -184,18 +184,22 @@ TEST(CppIntegrityRoundtrip, streaming_writer_crc_matches_plain) {
 // ── Cross-implementation reference files ──────────────────────────────
 
 TEST(CppIntegrityReference, reads_all_four_reference_files_clean) {
-    // Two written by the Rust writer, two by the Delphi writer.
-    char const* files[] = {
-        "osf5_crc_equidistant.osf", "osf5_crc_variable.osf",
-        "osf5_equidistant_crc_delphi.osf", "osf5_variable_crc_delphi.osf"};
-    for (char const* f : files) {
+    // Two written by the Rust writer, two by the Delphi writer. The Delphi
+    // variable file declares its binary channel with channeltype="binary" (a
+    // valid spec channeltype), so it has TWO channels — the reader must keep
+    // it, not drop it as unsupported.
+    struct Ref { char const* name; std::size_t channels; };
+    Ref files[] = {
+        {"osf5_crc_equidistant.osf", 3}, {"osf5_crc_variable.osf", 2},
+        {"osf5_equidistant_crc_delphi.osf", 3}, {"osf5_variable_crc_delphi.osf", 2}};
+    for (auto const& [f, channels] : files) {
         auto mgr = osf::DataManager::loadFromFile(crcDir() / f);
         ASSERT_TRUE(mgr.has_value()) << f << ": " << mgr.error().message;
         EXPECT_EQ(mgr->stats.integrity, osf::IntegrityProfile::Crc32c) << f;
         EXPECT_EQ(mgr->stats.blocksCrcFailed, 0u) << f;
         EXPECT_EQ(mgr->stats.blocksSignatureSkipped, 0u) << f;
         EXPECT_EQ(mgr->stats.verificationStatus(), "crc_valid") << f;
-        EXPECT_FALSE(mgr->channels().empty()) << f;
+        EXPECT_EQ(mgr->channels().size(), channels) << f;
     }
 }
 

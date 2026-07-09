@@ -271,7 +271,7 @@ TEST(BlockEncodeRoundtrip, StartDataFloat) {
     ASSERT_TRUE(r.has_value());
 
     auto meta = oneChannelMeta(osf::DataType::Float,
-                                 osf::ChannelType::Equidistant, 2);
+                                 osf::ChannelType::Scalar, 2);
     std::string s(reinterpret_cast<char const*>(out.data()), out.size());
     std::istringstream in(s);
     osf::BlockReader rdr(in, meta);
@@ -297,7 +297,7 @@ TEST(BlockEncodeRoundtrip, ContinuedDataDouble) {
     ASSERT_TRUE(r.has_value());
 
     auto meta = oneChannelMeta(osf::DataType::Double,
-                                 osf::ChannelType::Equidistant, 4);
+                                 osf::ChannelType::Scalar, 4);
     std::string s(reinterpret_cast<char const*>(out.data()), out.size());
     std::istringstream in(s);
     osf::BlockReader rdr(in, meta);
@@ -386,7 +386,7 @@ void roundtripAbsTsOne(osf::DataType dt, T value) {
     auto r = encodeAbsTimestampData<T>(out, 0, 2, &ts, &value, 1);
     ASSERT_TRUE(r.has_value()) << "encoder failed for " << static_cast<int>(dt);
 
-    auto meta = oneChannelMeta(dt, osf::ChannelType::Timestamped, 2);
+    auto meta = oneChannelMeta(dt, osf::ChannelType::Scalar, 2);
     std::string s(reinterpret_cast<char const*>(out.data()), out.size());
     std::istringstream in(s);
     osf::BlockReader rdr(in, meta);
@@ -441,7 +441,7 @@ TEST(BlockEncodeRoundtripAbsTs, MultiSampleInt32) {
     ASSERT_TRUE(r.has_value());
 
     auto meta = oneChannelMeta(osf::DataType::Int32,
-                                 osf::ChannelType::Timestamped, 2);
+                                 osf::ChannelType::Scalar, 2);
     std::string s(reinterpret_cast<char const*>(out.data()), out.size());
     std::istringstream in(s);
     osf::BlockReader rdr(in, meta);
@@ -511,7 +511,7 @@ TEST(BlockEncodeRoundtripGps, SingleAndMulti) {
         EXPECT_TRUE(r.has_value());
 
         auto meta = oneChannelMeta(osf::DataType::GpsLocation,
-                                     osf::ChannelType::Timestamped, 2);
+                                     osf::ChannelType::Scalar, 2);
         std::string s(reinterpret_cast<char const*>(out.data()), out.size());
         std::istringstream in(s);
         osf::BlockReader rdr(in, meta);
@@ -660,7 +660,7 @@ TEST(BlockEncodeRoundtripVariable, StringSingleSample) {
     ASSERT_TRUE(r.has_value());
 
     auto meta = oneChannelMeta(osf::DataType::String,
-                                 osf::ChannelType::Timestamped, 2);
+                                 osf::ChannelType::Scalar, 2);
     std::string s(reinterpret_cast<char const*>(out.data()), out.size());
     std::istringstream in(s);
     osf::BlockReader rdr(in, meta);
@@ -685,7 +685,7 @@ TEST(BlockEncodeRoundtripVariable, BinarySingleSample) {
     ASSERT_TRUE(r.has_value());
 
     auto meta = oneChannelMeta(osf::DataType::Binary,
-                                 osf::ChannelType::Timestamped, 2);
+                                 osf::ChannelType::Scalar, 2);
     std::string s(reinterpret_cast<char const*>(out.data()), out.size());
     std::istringstream in(s);
     osf::BlockReader rdr(in, meta);

@@ -350,9 +350,11 @@ struct gps_location {
 <a name="kanaltypen"></a>
 ### Kanaltypen (channeltype) {#kanaltypen}
 
-Der Parameter `channeltype` definiert die **logische Organisation der Werte** eines Kanals. Er legt fest, wie viele Werte pro Datenblock gespeichert werden und welche Struktur diese Werte haben.
+Der Parameter `channeltype` definiert die **logische Organisation der Werte** eines Kanals (seine *Datenform*). Er legt fest, wie viele Werte pro Datenblock gespeichert werden und welche Struktur diese Werte haben.
 
-OSF kennt drei grundlegende Kanaltypen:
+> **Wichtig:** `channeltype` ist die **Datenform**, nicht der Speicher-/Abtastmodus. Ob ein Kanal **äquidistant** oder **zeitgestempelt** vorliegt, ergibt sich aus dem **Steuerbyte des Datenblocks** (`bcStartData`/`bcContinuedData` ⇒ äquidistant; `bcAbsTimeStampData` ⇒ Zeitstempel pro Wert) zusammen mit `timeincrement` — **nicht** aus `channeltype`. `equidistant` und `timestamped` sind daher **keine** `channeltype`-Werte und dürfen nicht als solche geschrieben werden.
+
+OSF kennt die folgenden Kanaltypen (`scalar`, `vector`, `matrix`, `binary` — siehe auch die Feldbeschreibung unter [Datentypen und Struktur](#datentypen-und-struktur) sowie [osf4.md](references/osf4.md)):
 
 
 #### scalar
@@ -467,6 +469,32 @@ OSF kennt drei grundlegende Kanaltypen:
 
 
 
+#### binary
+
+* **Beschreibung:**
+  Ein Kanal, der pro Zeitpunkt einen **beliebigen Binärblock** speichert (ein Blob je Wert).
+  Typische Anwendung: Bilder, Audioschnipsel, serialisierte Nachrichten.
+
+* **Eigenschaften:**
+
+  * Payload-äquivalent zu einem `scalar`-Kanal mit `datatype="binary"`; ein Reader behandelt beide Schreibweisen identisch.
+  * Es wird empfohlen, den `mimetype` des Kanals zu setzen (z. B. `image/jpeg`).
+  * Die maximale Blockgröße wird durch `sizeoflengthvalue` bestimmt.
+
+* **JSON-Beispiel (OSF5):**
+
+  ```json
+  {
+    "index": 3,
+    "name": "Camera.Frame",
+    "channeltype": "binary",
+    "datatype": "binary",
+    "mimetype": "image/jpeg"
+  }
+  ```
+
+
+
 #### Hinweise zu Vector und Matrix
 
 * **Zusätzliche Parameter:** Beide Typen benötigen Metainformationen zu Dimensionen, Achsen, physikalischen Einheiten und ggf. Labels. Diese werden in eigenen Dokumenten detailliert beschrieben.
@@ -481,6 +509,7 @@ OSF kennt drei grundlegende Kanaltypen:
 * **`scalar`** – Einfacher Kanaltyp, ein Wert pro Zeitpunkt. Ideal für kontinuierliche Messgrößen.
 * **`vector`** – Mehrere Werte in einem Block, optimiert für Frequenzspektren und hochfrequente Daten.
 * **`matrix`** – Mehrdimensionale Blöcke, geeignet für Klassierungen, Bild- und Arraydaten.
+* **`binary`** – Ein beliebiger Binärblock pro Zeitpunkt (Bilder, Audio, serialisierte Nachrichten); äquivalent zu `scalar` + `datatype="binary"`.
 
 > **Hinweis:** Durch die Kombination dieser Kanaltypen deckt OSF sowohl einfache Signale als auch komplexe Datensätze ab und bleibt gleichzeitig leicht implementierbar.
 

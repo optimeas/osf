@@ -57,7 +57,7 @@ osf::ChannelDef makeDoubleEquidistantChannel(std::string name) {
     osf::ChannelDef d;
     d.name = std::move(name);
     d.dataType = osf::DataType::Double;
-    d.channelType = osf::ChannelType::Equidistant;
+    d.channelType = osf::ChannelType::Scalar;
     d.sizeOfLengthValue = 2;
     return d;
 }
@@ -411,7 +411,7 @@ TEST(StreamingWriterRoundtrip,
         osf::ChannelDef d;
         d.name = "fl";
         d.dataType = osf::DataType::Float;
-        d.channelType = osf::ChannelType::Equidistant;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -447,7 +447,7 @@ TEST(StreamingWriterByteExact,
         osf::ChannelDef d;
         d.name = "ts";
         d.dataType = osf::DataType::Int32;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -473,7 +473,7 @@ TEST(StreamingWriterByteExact,
         osf::ChannelDef d;
         d.name = "ts";
         d.dataType = osf::DataType::Double;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -502,7 +502,7 @@ TEST(StreamingWriterByteExact, timestamped_bool_one_byte_value) {
         osf::ChannelDef d;
         d.name = "ts";
         d.dataType = osf::DataType::Bool;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -527,7 +527,7 @@ TEST(StreamingWriterRoundtrip, timestamped_bool_roundtrips) {
         osf::ChannelDef d;
         d.name = "b";
         d.dataType = osf::DataType::Bool;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -558,7 +558,7 @@ TEST(StreamingWriterRoundtrip, timestamped_uint16_roundtrips) {
         osf::ChannelDef d;
         d.name = "u16";
         d.dataType = osf::DataType::UInt16;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -591,7 +591,7 @@ TEST(StreamingWriterRoundtrip,
         osf::ChannelDef d;
         d.name = "i32";
         d.dataType = osf::DataType::Int32;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -629,7 +629,7 @@ TEST(StreamingWriterRoundtrip, timestamped_uint64_roundtrips) {
         osf::ChannelDef d;
         d.name = "u64";
         d.dataType = osf::DataType::UInt64;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -661,7 +661,7 @@ TEST(StreamingWriterRoundtrip,
         osf::ChannelDef d;
         d.name = "d";
         d.dataType = osf::DataType::Double;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -698,7 +698,7 @@ TEST(StreamingWriterPreWrite,
     osf::ChannelDef d;
     d.name = "f";
     d.dataType = osf::DataType::Float;
-    d.channelType = osf::ChannelType::Timestamped;
+    d.channelType = osf::ChannelType::Scalar;
     d.sizeOfLengthValue = 2;
     ASSERT_TRUE(w.addChannel(d).has_value());
     ASSERT_TRUE(w.start().has_value());
@@ -717,7 +717,7 @@ TEST(StreamingWriterPreWrite,
     osf::ChannelDef d;
     d.name = "i";
     d.dataType = osf::DataType::Int32;
-    d.channelType = osf::ChannelType::Timestamped;
+    d.channelType = osf::ChannelType::Scalar;
     d.sizeOfLengthValue = 2;
     ASSERT_TRUE(w.addChannel(d).has_value());
     ASSERT_TRUE(w.start().has_value());
@@ -737,7 +737,7 @@ TEST(StreamingWriterRoundtrip, timestamped_gps_array_roundtrips) {
         osf::ChannelDef d;
         d.name = "gps";
         d.dataType = osf::DataType::GpsLocation;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -777,7 +777,7 @@ TEST(StreamingWriterRoundtrip, timestamped_gps_single_sample_via_scalar_form) {
         osf::ChannelDef d;
         d.name = "gps";
         d.dataType = osf::DataType::GpsLocation;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -804,7 +804,7 @@ TEST(StreamingWriterRoundtrip, timestamped_string_multiple_samples_roundtrip) {
         osf::ChannelDef d;
         d.name = "log";
         d.dataType = osf::DataType::String;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -844,7 +844,7 @@ TEST(StreamingWriterRoundtrip,
         osf::ChannelDef d;
         d.name = "img";
         d.dataType = osf::DataType::Binary;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 4;
         d.mimeType = "image/jpeg";
         ASSERT_TRUE(w.addChannel(d).has_value());
@@ -876,7 +876,7 @@ TEST(StreamingWriterChunking,
         osf::ChannelDef d;
         d.name = "s";
         d.dataType = osf::DataType::String;
-        d.channelType = osf::ChannelType::Timestamped;
+        d.channelType = osf::ChannelType::Scalar;
         d.sizeOfLengthValue = 2;
         ASSERT_TRUE(w.addChannel(d).has_value());
         ASSERT_TRUE(w.start().has_value());
@@ -898,7 +898,7 @@ TEST(StreamingWriterPreWrite,
     osf::ChannelDef d;
     d.name = "s";
     d.dataType = osf::DataType::String;
-    d.channelType = osf::ChannelType::Timestamped;
+    d.channelType = osf::ChannelType::Scalar;
     d.sizeOfLengthValue = 2;
     ASSERT_TRUE(w.addChannel(d).has_value());
     ASSERT_TRUE(w.start().has_value());
@@ -929,7 +929,7 @@ TEST(StreamingWriterPreWrite,
     osf::ChannelDef d;
     d.name = "b";
     d.dataType = osf::DataType::Binary;
-    d.channelType = osf::ChannelType::Timestamped;
+    d.channelType = osf::ChannelType::Scalar;
     d.sizeOfLengthValue = 2;
     ASSERT_TRUE(w.addChannel(d).has_value());
     ASSERT_TRUE(w.start().has_value());
