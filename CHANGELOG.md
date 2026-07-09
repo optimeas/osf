@@ -76,6 +76,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **`channeltype` modelled correctly as the channel's data shape — Rust,
+  Python, C++, Java (cross-implementation data-loss fix).** The OSF
+  `channeltype` metablock attribute is the channel's *data shape*
+  (`scalar`/`vector`/`matrix`/`binary`), not its storage mode. Rust, C++ and
+  Java (and Python via the Rust core) modelled it as
+  `{Scalar, Equidistant, Timestamped, Unsupported}` — inventing
+  `equidistant`/`timestamped` (which never appear on the wire) and **omitting
+  the real spec channeltypes** `vector`/`matrix`/`binary`, which mapped to
+  `Unsupported` and caused the whole channel to be **silently dropped** on read
+  (its blocks discarded). A binary channel declared `channeltype="binary"`
+  (e.g. the Delphi-written reference files) was therefore invisible to those
+  readers. Now: `ChannelType = {Scalar, Vector, Matrix, Binary, Unsupported}`;
+  a channel is never dropped for its channeltype (only an unsupported
+  *datatype* is); the writers emit only spec channeltypes (no more
+  `channeltype:"equidistant"`); the equidistant-vs-timestamped storage mode
+  stays derived from block control bytes + `timeincrement`. Delphi (which
+  already modelled `scalar`/`vector`/`matrix`/`binary`) is unchanged — it was
+  the reference. Spec: `docs/{de,en}/osf_general.md` "Kanaltypen" now lists
+  `binary` (aligning the chapter with its own field reference + `osf4.md`) and
+  clarifies that `equidistant`/`timestamped` are storage modes, not
+  channeltypes. RED-first tests in each language read
+  `osf5_variable_crc_delphi.osf` as **2** channels (was 1).
 - C++ writers now apply the **DECISIONS §13 file-metadata defaults** when assembling the metablock (both `StreamingWriter` and `BlockWriter` via the shared `build_metablock`): `created_utc` is always stamped automatically with the current UTC time (`YYYY-MM-DDTHH:MM:SSZ`, same format as the Rust writer), an unset `creator` falls back to `osf-cpp/<library-version>`, an unset `tag` falls back to `"default"`. Previously the C++ writers emitted files **without** `created_utc` and without the creator/tag fallbacks, violating §13 ("Set automatically by the writer") and diverging from the Rust/Delphi writers. Found during the C++ documentation pass; `reason` and the `created_at_*` triple stay omitted-when-unset as before. Two new unit tests pin the defaults and the explicit-value precedence; C++ ctest 319 → **321/321 green**.
 
 ### Changed
