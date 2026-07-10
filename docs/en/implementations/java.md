@@ -11,7 +11,7 @@ keywords:
   - JavaFX
   - crc32c
 last_update:
-  date: 2026-07-10
+  date: 2026-07-11
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -29,6 +29,22 @@ crc integrity profile. The authoritative decision sources are
 (architecture) and [§24](https://github.com/optimeas/osf/blob/main/DECISIONS.md)
 (integrity profile); the current state lives in
 [STATUS.md](https://github.com/optimeas/osf/blob/main/STATUS.md).
+:::
+
+:::tip Developer handbook
+This page is the overview. The in-depth developer documentation lives in the
+**Java in detail** sub-chapter:
+
+| Page | Content |
+|---|---|
+| [Architecture](java/architecture.md) | Layer model, modules, JPMS encapsulation, data models, conventions |
+| [Reading](java/reading.md) | `DataManager`, `DataChannel`, `BlockReader`, `ReaderStats`, transparent OSFZ |
+| [Writing](java/writing.md) | `StreamingWriter`, `BlockWriter`, `ChannelDef`, metadata defaults, integrity profile |
+| [Error handling](java/error-handling.md) | `OsfException` hierarchy, `verificationStatus()`, best-effort reader |
+| [Tools](java/tools.md) | `osf-cli` (picocli verbs) and `osf-viewer` (JavaFX) |
+| [Building & integrating](java/building.md) | Maven, Java 21, JPMS, dependencies, tests |
+| [Cookbook](java/cookbook.md) | copy-paste recipes from inspection to embedded loop |
+| [Internals](java/internals.md) | Encoder, chunking, integrity helper, parsers — for contributors |
 :::
 
 ## Target audiences
