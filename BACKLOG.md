@@ -153,6 +153,16 @@ deliberately bounded scope: full read path + a single round-trip
 
 None block current consumers; `OSF_BUILD_C_API` stays OFF by default.
 
+### CI: AddressSanitizer leg for C++ / osf-c
+
+During the crc integrity work a **pre-existing use-after-free** in the pure-C
+smoke test (`test_capi.c` read a borrowed channel name after
+`osf_manager_free`) surfaced only via **AddressSanitizer** — on the normal CI
+legs it showed up as an intermittent Windows segfault, not a clear failure. Add
+an opt-in ASan (`-fsanitize=address`) CI leg for the C++ tree and the `osf-c` C
+ABI so use-after-free / leaks are caught deterministically in CI rather than by
+chance. Low effort; pairs with the existing warnings-as-errors legs.
+
 ### C++ DurableFile hardening (post-Phase-7b)
 
 Phase-7b Task 1 (`implementations/cpp/src/durable_file.{hpp,cpp}`,

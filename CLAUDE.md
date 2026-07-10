@@ -1,21 +1,15 @@
 # Claude Code Session State
 
-Last updated: 2026-06-12 (**C++ smartCORE-style refactoring — BREAKING
-API rename**: the whole `implementations/cpp/` tree moved to camelCase
-methods/free functions + camelCase public struct fields, `m_`-prefixed
-private members, lowercase no-separator `.h` file names
-(`blockwriter.h`, `capi.h`, …) and `_p.h` internal headers, per the
-smartCORE coding style sheet. The `osf-c` C ABI surface and the
-wire-format keys (`created_utc`, `created_at_*`) are deliberately
-unchanged. cpp package version 0.0.1 → **0.1.0**; DECISIONS §20 naming
-bullets revised (supersedes the 2026-06-10 keep-snake_case decision).
-ctest baseline stays **321/321** with `OSF_BUILD_C_API=ON`. Older
-session notes below may still cite pre-rename spellings — the headers
-under `implementations/cpp/include/osf/` are ground truth. The EN mirror
-of the cpp docs subtree is now **done** (`0a0fdb3`:
-`docs/en/implementations/cpp/`, 8 pages + entry rework, against the new
-camelCase API); Docusaurus sync of the changed DE+EN handbook remains an
-open follow-up).
+Last updated: 2026-07-10 (**documentation currency pass**: public status
+surfaces corrected after the July integrity wave — `java.md` (DE+EN) and the
+implementation index/README status tables now show Java and C++ as complete;
+STATUS meta blocks consolidated (PR #11); this file refreshed. Earlier July work
+already on `main`: the OSF5 **integrity profile level `crc`** across all five
+implementations (Rust/Python/C++/Java/Delphi), the `channeltype`-as-data-shape
+fix, the shared `reference_manifest.json` conformance retrofit, and a Docusaurus
+docs sync. cpp package **0.2.0**; spec revision in effect **2026-07-07**
+(integrity). Older session notes below may cite earlier states — STATUS.md and
+the headers under `implementations/cpp/include/osf/` are ground truth.)
 
 This file is a hand-off document for the next Claude Code session. Read
 [STATUS.md](STATUS.md) and [DECISIONS.md](DECISIONS.md) for the
@@ -36,9 +30,41 @@ The repo currently advances on two independent tracks:
    cleanup, then the `TOSFLog` listener-pattern refactor that replaced
    `OSF.Progress.*`. No fixed phase plan; each brief is self-contained.
 
-A brief may also be repo-wide.
+A brief may also be repo-wide. The current repo-wide line is the **OSF5
+integrity profile** (DECISIONS §24): level `crc` has shipped across all five
+implementations (Rust/Python/C++/Java/Delphi) with a shared
+`reference_manifest.json` conformance contract; level `signed` (Ed25519) is the
+next step. Java is complete (§21); only a native **C** implementation remains
+unstarted.
 
 ## Recent sessions (since 2026-05-22)
+
+### Documentation currency pass (2026-07-10)
+
+Repo-wide doc audit (`DOC_CURRENCY_AUDIT.md`, PR #12) plus fixes: `java.md`
+(DE+EN) rewritten from "planned" to the shipped state; C++/Java status corrected
+on the implementation index + `README.md` + `implementations/README.md`; STATUS
+meta blocks consolidated (PR #11); this file refreshed. Docusaurus sync of the
+changed public pages followed.
+
+### OSF5 integrity profile + reference-manifest wave (2026-07-08 … 07-10)
+
+Level `crc` (crc32c) landed across all five implementations — Rust/Python
+(PR #3), Delphi (PR #4), C++ `osf-cpp`+`osf-c` (PR #5), Java (PR #6): metablock
+CRC + per-block frame CRC + signature-block skip, byte-identical check value
+`0xE3069283`. The shared `examples/reference_manifest.json` gained the four
+integrity files (sub-path keys) and all four conformance tests are now
+manifest-driven (PR #9). DECISIONS §24 is the ladder (`none ⊂ crc ⊂ signed`);
+level `signed` is the next step.
+
+### channeltype = data shape (2026-07-09, PR #8)
+
+Reconciled every implementation against the DE spec: `channeltype` is the
+channel's **data shape** (scalar/vector/matrix/binary), NOT a storage mode.
+Rust, Python, C++, and Java had invented `Equidistant`/`Timestamped`
+channeltypes and silently dropped vector/matrix/binary channels (data loss);
+fixed. Delphi was already correct (the reference). The planned C#/JS/MATLAB/Swift
+implementations were also dropped (PR #7).
 
 ### C++ smartCORE coding-style refactoring (2026-06-12)
 
@@ -409,7 +435,7 @@ Always remove `implementations\cpp\build` after a successful verify.
 - **Verify before push** for code-touching commits (compile / build /
   ctest must be green locally first).
 - **Co-Authored-By trailer** on every commit:
-  `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`
+  `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`
 - **Commit prefixes:** `feat(cpp|delphi|rust|python|delphi-demo):`,
   `test(...):`, `fix(...):`, `refactor(...):`,
   `docs(status|changelog|decisions|backlog|spec):`, `chore:` for
@@ -435,6 +461,14 @@ Always remove `implementations\cpp\build` after a successful verify.
   Docusaurus docs tree to one combined PDF per language under
   `docs/pdf-out/` (gitignored build artifact — the `.md` files stay
   the single source of truth). Auto-discovers languages and new files.
+- **STATUS meta stays in sync.** When you add or change a per-implementation
+  section in `STATUS.md`, in the same pass re-check the header table (tag /
+  spec revision), the "Next session priorities" block, and the "Open / known
+  follow-ups" list for contradictions and fix them — the meta blocks must
+  never lag the section you just edited.
+- **Log every finished task here.** On completing a task, add a ≥3-line entry
+  to "Recent sessions" above and update the "Last updated" line at the top of
+  this file, so this hand-off never goes stale.
 
 ## Pickup checklist for the next session
 
