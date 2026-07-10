@@ -34,16 +34,16 @@ See [`docs/en/`](docs/en/) for the full specification. German version available 
 
 ## Implementations
 
-The Delphi reference implementation, the Rust foundation, and the Python bindings are usable today; the C++ implementation is in active development. The remaining languages follow the same architecture and are planned. Status legend: ✅ usable · 🚧 in active development · 📋 planned.
+The Delphi reference implementation, the Rust foundation, the Python bindings, the C++ implementation, and the Java implementation are usable today. The remaining native C implementation follows the same architecture and is planned. Status legend: ✅ usable · 🚧 in active development · 📋 planned.
 
 | Language | Platform | Status |
 |----------|----------|--------|
 | [Delphi](implementations/delphi/) | Windows desktop, industrial | ✅ Reference implementation; full OSF4/OSF5 reader + writer. Generates the test files in [`examples/generated/`](examples/generated/). |
 | [Rust](implementations/rust/) (`osf-core`) | Systems, embedded, foundation for bindings | ✅ Read + write + OSFZ decompression; full OSF4/OSF5 support. |
 | [Python](implementations/python/) (`osfdata`) | Analytics, NumPy integration | ✅ Pre-release v0.1.0 on [TestPyPI](https://test.pypi.org/project/osfdata/). Built on the Rust foundation via PyO3. |
-| [C++](implementations/cpp/) | Industrial measurement, embedded + desktop | 🚧 In active development. Full OSF4/OSF5 reader (incl. OSFZ decompression), typed `DataManager`, and both OSF5 writers (streaming + block). Cross-platform CI and a C ABI wrapper are the remaining milestones. |
+| [C++](implementations/cpp/) | Industrial measurement, embedded + desktop | ✅ Standalone C++17 implementation. Full OSF4/OSF5 reader (incl. OSFZ decompression), typed `DataManager`, both OSF5 writers (streaming + block), the `osf-c` C ABI, and the crc integrity profile. Cross-platform CI on Linux/macOS/Windows. |
 | [C](implementations/c/) | Embedded + desktop | 📋 Planned. |
-| [Java](implementations/java/) | Enterprise + Android | 📋 Planned; architecture decided ([DECISIONS.md §21](DECISIONS.md)). |
+| [Java](implementations/java/) | Enterprise + Android | ✅ Complete — Java 21, JPMS, both OSF5 writers, transparent OSFZ, crc integrity profile; plus `osf-cli` + `osf-viewer` ([DECISIONS.md §21](DECISIONS.md)). |
 
 **Which one should I try first?** For reading and analyzing OSF data today, the Python package is the fastest path — see [Quick Start](#quick-start-python) below. For native integration, use [Rust](implementations/rust/) (the foundation for the bindings) or the [Delphi](implementations/delphi/) reference implementation.
 
