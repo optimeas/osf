@@ -12,7 +12,7 @@ keywords:
   - C++
   - Java
 last_update:
-  date: 2026-06-12
+  date: 2026-07-10
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -41,7 +41,7 @@ Legende: ✅ verfügbar · 🚧 in aktiver Entwicklung · 📋 geplant
 | **[Rust](rust.md)** (`osf-core`) | ✅ | Lesen, Schreiben und transparentes OSFZ; zugleich Fundament der Python-Anbindung |
 | **[Python](python.md)** (`osfdata`) | ✅ | PyO3-Bindings über den Rust-Kern, NumPy-Integration; siehe [Python-Integration](../integrations/python.md) |
 | **[C++](cpp.md)** | ✅ | Eigenständige C++17-Implementierung — Reader, beide Writer, C-ABI; CI auf Linux/macOS/Windows. Ausführliches Entwickler-Handbuch unter [C++ im Detail](cpp/architecture.md) |
-| **[Java](java.md)** | 📋 | Architektur entschieden (Java 25, Maven, JPMS); noch kein Code |
+| **[Java](java.md)** | ✅ | Vollständig — Java 21, JPMS-Modul, beide OSF5-Writer, transparentes OSFZ, crc-Integritätsprofil; dazu `osf-cli` und `osf-viewer` |
 | **[Weitere Sprachen](planned.md)** | 📋 | C — geplant |
 
 Den jeweils aktuellsten Stand führt das Repository auf

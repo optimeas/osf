@@ -153,6 +153,16 @@ deliberately bounded scope: full read path + a single round-trip
 
 None block current consumers; `OSF_BUILD_C_API` stays OFF by default.
 
+### CI: AddressSanitizer leg for C++ / osf-c
+
+During the crc integrity work a **pre-existing use-after-free** in the pure-C
+smoke test (`test_capi.c` read a borrowed channel name after
+`osf_manager_free`) surfaced only via **AddressSanitizer** — on the normal CI
+legs it showed up as an intermittent Windows segfault, not a clear failure. Add
+an opt-in ASan (`-fsanitize=address`) CI leg for the C++ tree and the `osf-c` C
+ABI so use-after-free / leaks are caught deterministically in CI rather than by
+chance. Low effort; pairs with the existing warnings-as-errors legs.
+
 ### C++ DurableFile hardening (post-Phase-7b)
 
 Phase-7b Task 1 (`implementations/cpp/src/durable_file.{hpp,cpp}`,
@@ -295,6 +305,16 @@ Deliver future doc changes to the public site via a PR to the Bitbucket repo
 auto-deploys.
 
 ---
+
+### Docs: refresh stale `last_update` dates + verify anchor links
+
+The doc-currency audit (2026-07-10, `DOC_CURRENCY_AUDIT.md`) found ~18 docs pages
+whose `last_update.date` predates their last content commit (touched by the CC-BY
+and channeltype passes without a date bump) — refresh each alongside its next
+content edit, not in bulk. Separately, a simple link scanner flagged 22 anchor
+links in `osf_general.md` / `osf4.md` / `osf5.md`; these use explicit `{#id}`
+headings and pass the authoritative Docusaurus build — spot-check the `{#id}`
+anchors when those pages are next edited. Both are cosmetic (P3).
 
 ## Streaming Transport
 

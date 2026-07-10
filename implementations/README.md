@@ -4,12 +4,12 @@ This directory contains standalone OSF reader and writer implementations in vari
 
 | Language | Target Platform | Status | Notes |
 |----------|----------------|--------|-------|
-| [Delphi](delphi/) | Windows desktop, industrial measurement systems | In Progress | Full reader and writer for OSF4 and OSF5 |
+| [Delphi](delphi/) | Windows desktop, industrial measurement systems | Stable | Reference implementation; full OSF4/OSF5 reader + writer, `osftool` CLI, DUnitX suite. Generates the test files in `examples/generated/` |
 | [C](c/) | Embedded systems and desktop | Planned | Reference implementation; target for low-level and resource-constrained environments |
-| [C++](cpp/) | Industrial measurement, Qt ecosystem | Planned | High-performance desktop and server use; Qt integration |
-| [Python](python/) | Data analytics, scientific computing | In Progress | PyO3 bindings on osf-core (DECISIONS §18); PyPI distribution `osfdata`, import as `osf`; reader, writer, OSFZ all live |
-| [Java](java/) | Enterprise systems, Android | Planned | JVM ecosystem; Android mobile data logging |
-| [Rust](rust/) | Systems programming, embedded | In Progress | Foundation for Python bindings (see [DECISIONS §18](../DECISIONS.md#18-rust-as-foundation-for-python)); magic-header parser landed |
+| [C++](cpp/) | Industrial measurement, embedded + desktop | Beta | Standalone C++17; full OSF4/OSF5 reader (incl. OSFZ), typed `DataManager`, both OSF5 writers, the `osf-c` C ABI, and the crc integrity profile; CI on Linux/macOS/Windows |
+| [Python](python/) | Data analytics, scientific computing | Beta | PyO3 bindings on osf-core (DECISIONS §18); PyPI distribution `osfdata`, import as `osf`; reader, writer, OSFZ, crc all live |
+| [Java](java/) | Enterprise systems, Android | Beta | Java 21, JPMS; both OSF5 writers, transparent OSFZ, crc integrity profile; `osf-cli` + `osf-viewer` ([DECISIONS §21](../DECISIONS.md)) |
+| [Rust](rust/) | Systems programming, embedded | Beta | Foundation for Python bindings (see [DECISIONS §18](../DECISIONS.md#18-rust-as-foundation-for-python)); full OSF4/OSF5 read + write + OSFZ + crc integrity profile |
 
 ---
 

@@ -995,8 +995,9 @@ Drop this in as the first message:
 
 > Lies `STATUS.md`, dann `BACKLOG.md`, dann `DECISIONS.md`. Wir machen weiter.
 
-(The `BACKLOG.md` step matters now — the HIGH-priority
-Rust-writer item lives there, not in STATUS.md proper.)
+(The `BACKLOG.md` step matters — incremental follow-ups and the
+integrity roadmap beyond the current wave live there and in
+DECISIONS §24, not in STATUS.md proper.)
 
 Older form, still works for sessions where the BACKLOG is
 already familiar:
