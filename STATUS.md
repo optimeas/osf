@@ -10,7 +10,7 @@ when deeper context is needed.
 | Working dir | `V:\github\osf` (Windows) |
 | Latest tag | **v0.10.0** (2026-05-25) |
 | Branch | `main` |
-| Spec revision in effect | **2026-05-24** |
+| Spec revision in effect | **2026-07-07** (OSF5 integrity profile; base format 2026-05-24) |
 
 **Public-release prep — done (on `main`).** All four phases are complete:
 Phase 1 (repo cleanup), Phase 2 (Docusaurus integration), Phase 3
@@ -944,21 +944,17 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
   tokenizer, and the integrity read/write path. Structured for extension (one
   `Test.OSF.*` unit per area); the older OSF library units (merger, exporters,
   cache, …) are not yet covered — incremental follow-up.
-- **Rust** — read path complete (header + metablock + block reader +
-  DataManager + transparent OSFZ); OSF5 writer landed with full
-  round-trip validation.
-- **Python** — PyO3 bindings live for read + write + OSFZ via the
-  `osfdata` distribution (import as `osf`); 13 pytest cases pass
-  locally; CI builds wheels for 5 platforms on every push (Session
-  8 Phase A). Trusted Publishing to TestPyPI configured but gated
-  off (Session 8 Phase B); pandas convenience pending (Session 7b).
-- **`optimeas/python-osf` deprecation header** — once `osfdata`
-  appears on TestPyPI, add a "deprecated in favor of osfdata"
-  notice to that repo's README. Mini follow-up session.
-- **Python bindings** — directory not yet started; will sit on `osf-core`
-  via PyO3 once the Rust block reader/writer are in place.
-- **Other language implementations** (C, C++, …) — README
-  placeholders only.
+- **Production PyPI release for `osfdata`** — the Python bindings are
+  functional and CI already publishes to **TestPyPI** (`osfdata 0.1.0`); a
+  production `pypi.org` release needs its own Trusted Publisher. Pandas
+  convenience helpers remain a separate nice-to-have. See the *Python
+  implementation* section above.
+- **`optimeas/python-osf` deprecation header** — `osfdata` is on TestPyPI, so
+  the trigger condition is met: add a "deprecated in favor of osfdata" notice to
+  that repo's README. Mini follow-up.
+- **Other language implementations** — only **C (native)** remains a README
+  placeholder. Rust, Python, C++ (§20 complete), Java, and Delphi are all
+  implemented — see their sections above.
 - **Integrations** (Arrow, PyTorch, TensorFlow, MCP, LangChain) — README
   placeholders only.
 - **`docs/*/references/osf_vector_matrix.md`** — placeholder content
@@ -966,49 +962,30 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 ---
 
-## Next session priorities (as of 2026-06-04)
+## Next session priorities (as of 2026-07-10)
 
-Current state — **the C++ §20 Implementation Order is complete (phases
-1–11).** **321/321 ctest green** locally (MSVC `/W4 /permissive-`, with
-`OSF_BUILD_C_API=ON`) and on CI across ubuntu-latest / macos-14 /
-windows-latest with warnings-as-errors + the C ABI. Phase 11 (this
-session) added the `osf-c` C ABI shared library (DECISIONS §23):
-`include/osf/c_api.h` / `src/c_api.cpp`, a C99 `extern "C"` surface over
-`DataManager` + the round-trip write, with a standalone C test and CI
-coverage. Two cross-compiler CMake fixes landed on the branch
-(`enable_language(C)`; `CMAKE_POSITION_INDEPENDENT_CODE`).
+**Integrity profile — stage `crc` (level b) is complete across all four
+active implementations** and locked down by the shared conformance contract.
+Rust, Python, C++ (`osf-cpp` + `osf-c`), Java, and Delphi all read + write OSF5
+files with `crc32c` framing (metablock CRC + per-block frame CRC, signature-block
+skip). The four integrity reference files under
+`examples/generated/integrity/` are now listed in
+`examples/reference_manifest.json` (sub-path keys, optional `integrity` field),
+so every implementation's manifest-driven conformance test loads them and
+additionally asserts the reported profile + zero frame-CRC failures — one shared
+file list, no per-language duplication. Per-implementation detail lives in the
+*integrity profile* subsections above; the `none ⊂ crc ⊂ signed` ladder and wire
+format are in [DECISIONS](DECISIONS.md) (integrity section).
 
-There is no next numbered C++ phase. Options for continuing the C++
-track are all **incremental / BACKLOG**, not required:
+**Next: stage `signed` (level c).** Level `signed` adds an Ed25519 signature
+block (control byte 9) on the reserved `0xFFFE` channel over a hash chain of the
+frame CRCs. A brief for it is on hand; the plan is to stand up a **test PKI** and
+a **Rust reference implementation** first, then fan the same design out to the
+other implementations the way stage `crc` was. No code exists for it yet.
 
-1. **Full C builder API** — sample-by-sample OSF creation from C
-   (`osf_writer_new`, `add_channel`, `add_*_samples`, `write`),
-   per-exact-type numeric getters, and an `osf_load_buffer` memory/stream
-   load entry. Deferred in the Phase-11 scope decision.
-2. **Packaging** the `osf-c` shared library (install rules, an import
-   library, a pkg-config / CMake package config) for external consumers.
-
-Parallel / other tracks (the bigger roadmap now that C++ §20 is done):
-
-- **Java implementation** (DECISIONS §21) — the `osf-java` core library
-  (Java 21 / JPMS, OSF4+OSF5 read, both OSF5 writers), `osf-cli` and
-  `osf-viewer` are complete and merged. The OSF5 **integrity profile level
-  `crc`** is implemented (2026-07-09) — see the *Java integrity profile* section
-  above.
-- **Other language placeholders** (C native, …) remain
-  README-only.
-
-The Phase 11 work landed on branch `phase-11-c-api` (feature commit +
-two cross-compiler CMake fix commits + this documentation commit),
-verified by dispatching CI on the branch
-(`gh workflow run ci.yml --ref phase-11-c-api`) until all three OS legs
-were green, then merged to `main`.
-
-Local-build note: the host's HTTPS FetchContent fails
-(`CRYPT_E_NO_REVOCATION_CHECK`), so configure with
-`-D FETCHCONTENT_SOURCE_DIR_ZLIB=…` and
-`-D FETCHCONTENT_SOURCE_DIR_GOOGLETEST=…` pointing at local
-extracts (download once via `Invoke-WebRequest`); see CLAUDE.md.
+Other continuations remain incremental / BACKLOG — notably the deferred `osf-c`
+C builder surface + packaging (see `BACKLOG.md`); a native **C** implementation
+is still README-only.
 
 ---
 
