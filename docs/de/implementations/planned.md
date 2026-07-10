@@ -7,7 +7,7 @@ keywords:
   - OSF
   - C
 last_update:
-  date: 2026-06-04
+  date: 2026-07-10
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -17,8 +17,8 @@ copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 
 # Weitere Sprachen (geplant)
 
-Neben den verfügbaren Implementierungen (Delphi, Rust, Python, C++) und der
-[geplanten Java-Implementierung](java.md) sind weitere Sprachen vorgesehen.
+Neben den verfügbaren Implementierungen (Delphi, Rust, Python, C++ und
+[Java](java.md)) sind weitere Sprachen vorgesehen.
 Für sie existieren bislang Platzhalter im Repository, aber noch kein Code.
 Da OSF ein offen dokumentiertes, bewusst einfaches Format ist, lässt sich
 jede dieser Anbindungen eigenständig umsetzen.

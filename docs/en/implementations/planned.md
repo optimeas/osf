@@ -7,7 +7,7 @@ keywords:
   - OSF
   - C
 last_update:
-  date: 2026-06-04
+  date: 2026-07-10
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -17,8 +17,8 @@ copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 
 # Other languages (planned)
 
-Besides the available implementations (Delphi, Rust, Python, C++) and the
-[planned Java implementation](java.md), further languages are envisaged. So
+Besides the available implementations (Delphi, Rust, Python, C++ and
+[Java](java.md)), further languages are envisaged. So
 far they only have placeholders in the repository, but no code yet. Because
 OSF is an openly documented, deliberately simple format, each of these
 bindings can be implemented standalone.
