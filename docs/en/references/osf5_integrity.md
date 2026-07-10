@@ -33,7 +33,7 @@ carry any part of it. The design is fully backward compatible: OSF5 files
 
 The concept and rationale behind this profile are published as a concept paper
 (Zenodo, DOI [10.5281/zenodo.21227942](https://doi.org/10.5281/zenodo.21227942),
-also in this repository under [`docs/papers/`](../../papers/)). That paper is the
+also in this repository under [`docs/papers/`](https://github.com/optimeas/osf/tree/main/docs/papers/)). That paper is the
 background; **this document is the normative reference** for implementers.
 
 The base format (magic header, JSON metablock, self-contained data blocks) is

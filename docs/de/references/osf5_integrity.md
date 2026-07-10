@@ -33,7 +33,7 @@ OSF5-Dateien *ohne* Integritätsdeklaration bleiben unverändert gültig.
 
 Konzept und Begründung des Profils sind als Konzeptpapier veröffentlicht (Zenodo,
 DOI [10.5281/zenodo.21227942](https://doi.org/10.5281/zenodo.21227942), auch in
-diesem Repository unter [`docs/papers/`](../../papers/)). Das Papier liefert den
+diesem Repository unter [`docs/papers/`](https://github.com/optimeas/osf/tree/main/docs/papers/)). Das Papier liefert den
 Hintergrund; **dieses Dokument ist die normative Referenz** für Implementierer.
 
 Das Basisformat (Magic Header, JSON-Metablock, in sich abgeschlossene
