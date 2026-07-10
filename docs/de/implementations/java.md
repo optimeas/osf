@@ -11,7 +11,7 @@ keywords:
   - JavaFX
   - crc32c
 last_update:
-  date: 2026-07-10
+  date: 2026-07-11
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -29,6 +29,22 @@ sind [DECISIONS §21](https://github.com/optimeas/osf/blob/main/DECISIONS.md)
 (Architektur) und [§24](https://github.com/optimeas/osf/blob/main/DECISIONS.md)
 (Integritätsprofil); der jeweils aktuelle Stand steht in
 [STATUS.md](https://github.com/optimeas/osf/blob/main/STATUS.md).
+:::
+
+:::tip Entwickler-Handbuch
+Diese Seite ist der Überblick. Die ausführliche Entwicklerdokumentation
+steht im Unterkapitel **Java im Detail**:
+
+| Seite | Inhalt |
+|---|---|
+| [Architektur](java/architecture.md) | Schichtenmodell, Module, JPMS-Kapselung, Datenmodelle, Konventionen |
+| [Lesen](java/reading.md) | `DataManager`, `DataChannel`, `BlockReader`, `ReaderStats`, transparentes OSFZ |
+| [Schreiben](java/writing.md) | `StreamingWriter`, `BlockWriter`, `ChannelDef`, Metadaten-Defaults, Integritätsprofil |
+| [Fehlerbehandlung](java/error-handling.md) | `OsfException`-Hierarchie, `verificationStatus()`, Best-Effort-Reader |
+| [Werkzeuge](java/tools.md) | `osf-cli` (picocli-Verben) und `osf-viewer` (JavaFX) |
+| [Bauen & Einbinden](java/building.md) | Maven, Java 21, JPMS, Abhängigkeiten, Tests |
+| [Kochbuch](java/cookbook.md) | kopierfertige Rezepte von Inspektion bis Embedded-Schleife |
+| [Interna](java/internals.md) | Encoder, Chunking, Integritäts-Helfer, Parser — für Mitwirkende |
 :::
 
 ## Zielgruppen
