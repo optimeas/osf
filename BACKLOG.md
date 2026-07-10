@@ -306,6 +306,16 @@ auto-deploys.
 
 ---
 
+### Docs: refresh stale `last_update` dates + verify anchor links
+
+The doc-currency audit (2026-07-10, `DOC_CURRENCY_AUDIT.md`) found ~18 docs pages
+whose `last_update.date` predates their last content commit (touched by the CC-BY
+and channeltype passes without a date bump) — refresh each alongside its next
+content edit, not in bulk. Separately, a simple link scanner flagged 22 anchor
+links in `osf_general.md` / `osf4.md` / `osf5.md`; these use explicit `{#id}`
+headings and pass the authoritative Docusaurus build — spot-check the `{#id}`
+anchors when those pages are next edited. Both are cosmetic (P3).
+
 ## Streaming Transport
 
 ### OSF5 Streaming Transport layer + UDP reference receivers (epic)

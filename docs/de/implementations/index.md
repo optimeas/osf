@@ -12,7 +12,7 @@ keywords:
   - C++
   - Java
 last_update:
-  date: 2026-06-12
+  date: 2026-07-10
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
