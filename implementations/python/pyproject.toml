@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "osfdata"
-version = "0.1.0"
+version = "1.0.0"
 description = "Python bindings for the Open Streaming Format (OSF) — read, write, and inspect .osf and .osfz files."
 authors = [{ name = "Optimeas GmbH" }]
 license = { text = "MIT" }
@@ -12,7 +12,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = ["numpy>=1.20"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",

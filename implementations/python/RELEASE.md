@@ -1,89 +1,79 @@
 # Releasing `osfdata`
 
-This document covers the one-time Trusted Publisher setup plus the
-recurring release process. Read it end-to-end before the first
-TestPyPI release; subsequent releases are step 3 onwards.
+`osfdata` publishes to **production PyPI** (`pip install osfdata`) from
+this repository's release workflow via Trusted Publishing (OIDC — no API
+tokens). This document covers the one-time publisher setup plus the
+recurring release process. Read it end-to-end before the first PyPI
+release; subsequent releases are the "Releasing a new version" section
+onwards.
 
 ## Trusted Publisher Setup (one-time, manual)
 
-Trusted Publishing connects this repository's release workflow to
-TestPyPI / PyPI via OIDC, eliminating the need for API tokens. This
-must be configured once per index, before the first release.
+Trusted Publishing connects this repository's release workflow to PyPI
+via OIDC, eliminating the need for API tokens. It **must be configured
+once, before the first upload** — the first tag push will otherwise fail
+at the publish step with an OIDC error.
 
-### TestPyPI
+### PyPI (production)
 
-1. Sign in to <https://test.pypi.org> with the `optiMEAS` account.
-2. Go to **Account Settings → Publishing → Add a new pending
-   publisher**.
+1. Sign in to <https://pypi.org> with the `optiMEAS` account.
+2. Go to **Account settings → Publishing → Add a new pending publisher**.
 3. Fill in:
    - **PyPI Project Name:** `osfdata`
    - **Owner:** `optimeas`
    - **Repository name:** `osf`
    - **Workflow name:** `release.yml`
-   - **Environment name:** leave empty (or use `testpypi` if added
-     to the workflow as an environment gate later)
+   - **Environment name:** leave empty (or `pypi` if you later add a
+     GitHub Environment gate to the publish job).
 4. Click **Add**.
 
-The publisher is now registered as "pending" — it activates on the
-first successful upload from the configured workflow.
+The publisher is registered as "pending" and activates on the first
+successful upload from the configured workflow — which claims the
+`osfdata` project name on production PyPI.
 
-### PyPI (production, later)
-
-Same procedure on <https://pypi.org> once `osfdata` is stable enough
-for production release. PyPI and TestPyPI accounts are separate;
-this step must be repeated on production PyPI when we're ready.
-
-## Activating the publish step
-
-`release.yml` ships with the `publish-testpypi` job guarded by
-`if: false` so the workflow can land safely while CI proves stable.
-Once both conditions below are met, activate it.
-
-**Preconditions:**
-
-1. `ci.yml` has run green on at least 2–3 successive `main` pushes.
-2. The TestPyPI Pending Publisher has been configured (above).
-
-**Activation:**
-
-In `.github/workflows/release.yml`, find the publish job and replace:
-
-```yaml
-    if: false
-```
-
-with:
-
-```yaml
-    if: startsWith(github.ref, 'refs/tags/v')
-```
-
-Commit, push. The next `v*` tag push will trigger an actual upload.
+> **TestPyPI note.** The workflow no longer publishes to TestPyPI; it
+> targets production PyPI directly. The earlier TestPyPI pre-releases
+> (`0.1.0`) served their purpose during stabilization. If you ever want a
+> dry run again, temporarily add `repository-url:
+> https://test.pypi.org/legacy/` back to the publish step and register a
+> matching pending publisher on <https://test.pypi.org>.
 
 ## Releasing a new version
 
 1. Confirm CI is green on `main`.
-2. Bump version in **both** files synchronously (the version string
+2. Bump the version in **both** files synchronously (the version strings
    must agree or maturin emits a warning):
    - `implementations/python/Cargo.toml` → `[package].version`
    - `implementations/python/pyproject.toml` → `[project].version`
-3. Update `CHANGELOG.md` if you keep one (none yet for this crate).
+   - Keep `Cargo.lock`'s `osf-python` entry in step (a local
+     `maturin build` / `cargo build` refreshes it).
+3. Move the `[Unreleased]` section of `CHANGELOG.md` into a dated
+   `[X.Y.Z]` heading and update the compare links at the bottom.
 4. Commit and push to `main`:
    ```bash
-   git add implementations/python/Cargo.toml implementations/python/pyproject.toml
-   git commit -m "release: osfdata 0.x.y"
+   git add implementations/python/Cargo.toml \
+           implementations/python/pyproject.toml \
+           implementations/python/Cargo.lock \
+           implementations/python/CHANGELOG.md
+   git commit -m "release: osfdata X.Y.Z"
    git push origin main
    ```
-5. Tag and push the tag:
+5. Tag and push the tag — **only after** the PyPI pending publisher
+   exists (first release) and CI is green:
    ```bash
-   git tag v0.x.y
-   git push origin v0.x.y
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
    ```
-6. The release workflow runs automatically: builds wheels for all
-   five (os, target) pairs, builds the sdist, publishes to
-   TestPyPI.
+   The tag trigger is repo-wide `v*`. Since the `osfdata` version is
+   decoupled from the repo CHANGELOG line, use the **package** version as
+   the tag (e.g. `v1.0.0` for `osfdata` 1.0.0). Pushing a `v*` tag whose
+   `osfdata` version already exists on PyPI is harmless — PyPI rejects the
+   duplicate and the job fails without side effects.
+6. The release workflow runs automatically: builds wheels for the four
+   `(os, target)` pairs (Linux x86_64 + aarch64, macOS arm64, Windows
+   x64), builds the sdist, and publishes to production PyPI.
 
-## Verifying a TestPyPI release
+## Verifying a release
 
 In a fresh virtual environment:
 
@@ -92,29 +82,25 @@ python -m venv .verify
 .verify/Scripts/activate           # Windows
 # source .verify/bin/activate      # Linux / macOS
 
-pip install --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ \
-            osfdata
+pip install osfdata
 
 python -c "import osf; print(osf.__version__)"
 python -c "import osf; mgr = osf.load('examples/steam_loco.osf'); print(mgr)"
 ```
 
-`--extra-index-url https://pypi.org/simple/` is required because
-TestPyPI does not host all of `osfdata`'s runtime dependencies
-(e.g. `numpy`); the extra index lets pip pull those from
-production PyPI.
+No `--extra-index-url` is needed on production PyPI: `numpy` and every
+other runtime dependency resolve from the same index.
 
 ## Yanking a bad release
 
-TestPyPI / PyPI both support "yank" — the version remains
-downloadable for users who explicitly request it but is no longer
-the default for new installs.
+PyPI supports "yank" — the version stays downloadable for users who pin
+it explicitly but is no longer selected for new installs.
 
-```bash
-# On the project page on test.pypi.org or pypi.org:
+```
+# On the osfdata project page on pypi.org:
 # Manage → Releases → Options → Yank
 ```
 
-Bumping the version and re-releasing is preferable; yank is a
-last-resort tool.
+A PyPI **version can never be re-uploaded or overwritten**, even after a
+delete. Bumping the version and re-releasing is always the right fix;
+yank is a last-resort signal, not a redo.
