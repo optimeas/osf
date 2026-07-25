@@ -11,7 +11,7 @@ keywords:
   - NumPy
   - pandas
 last_update:
-  date: 2026-05-06
+  date: 2026-07-26
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -78,18 +78,6 @@ uv pip install osfdata
 ```
 
 `uv` is a newer, much faster package manager that combines `pip` and `venv`. If you haven't used it yet: installation and documentation at [docs.astral.sh/uv](https://docs.astral.sh/uv).
-
-### From the pre-release on TestPyPI
-
-During the stabilization phase, `osfdata` is initially published on TestPyPI. To install from there:
-
-```bash
-pip install --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ \
-            osfdata
-```
-
-The second index reference is required because TestPyPI does not provide all dependencies (NumPy etc.) — pip needs to look them up on the regular PyPI.
 
 ## Import and first example
 
