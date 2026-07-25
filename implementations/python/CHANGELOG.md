@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-25
+
+First release on production PyPI — `pip install osfdata`. The distribution
+graduates from the TestPyPI pre-releases to a stable production line; the API
+surface below is considered stable under semantic versioning.
+
 ### Added
 
 - **OSF5 integrity profile, level `crc`.** `ReaderStats` exposes `integrity`
@@ -48,5 +54,6 @@ Initial release on TestPyPI.
 - This is a pre-release on TestPyPI for stabilization. Production PyPI release
   follows after sufficient field testing.
 
-[Unreleased]: https://github.com/optimeas/osf/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/optimeas/osf/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/optimeas/osf/releases/tag/v1.0.0
 [0.1.0]: https://github.com/optimeas/osf/releases/tag/v0.1.0

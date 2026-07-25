@@ -1,14 +1,15 @@
 # Release workflow for the osfdata Python package.
 #
-# Triggered by a v*-tag push (e.g. `v0.1.0`). Builds the same four-
-# platform wheel matrix plus an sdist, then publishes to TestPyPI
-# via Trusted Publishing (OIDC, no API tokens).
+# Triggered by a v*-tag push (e.g. `v1.0.0`). Builds the four-
+# platform wheel matrix plus an sdist, then publishes to production
+# PyPI via Trusted Publishing (OIDC, no API tokens).
 #
 # macOS is arm64-only by design — see DECISIONS.md §19.
 #
-# Trusted Publishing on TestPyPI is configured for project `osfdata`
-# (owner: optimeas, repo: osf, workflow: release.yml). Pushing a v*
-# tag triggers a full wheel + sdist build followed by an OIDC-
+# Trusted Publishing on PyPI must be configured for project `osfdata`
+# (owner: optimeas, repo: osf, workflow: release.yml) BEFORE the first
+# tag push — see implementations/python/RELEASE.md. Pushing a v* tag
+# then triggers a full wheel + sdist build followed by an OIDC-
 # authenticated upload — no API tokens involved.
 name: Release
 
@@ -88,8 +89,8 @@ jobs:
           path: implementations/python/dist/*.tar.gz
           if-no-files-found: error
 
-  publish-testpypi:
-    name: Publish to TestPyPI
+  publish-pypi:
+    name: Publish to PyPI
     needs: [build-wheels, build-sdist]
     runs-on: ubuntu-latest
     # Tag-only: this job runs only when a v* tag is pushed. The
@@ -106,8 +107,9 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Publish to TestPyPI
+      - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository-url: https://test.pypi.org/legacy/
+          # No repository-url → the action defaults to production PyPI
+          # (https://upload.pypi.org/legacy/).
           packages-dir: dist

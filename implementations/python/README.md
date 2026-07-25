@@ -34,7 +34,7 @@ so a single artefact covers Python 3.9 / 3.10 / 3.11 / 3.12 / 3.13.
 | Transparent OSFZ (gzip + zlib) on read                  | ✅                   |
 | Type stubs (`*.pyi`) for IDE support                    | ✅                   |
 | pandas `DataFrame` convenience                          | Pending (session 7b) |
-| CI + wheel-build matrix + PyPI publishing               | Pending (session 8)  |
+| CI + wheel-build matrix + PyPI publishing               | ✅ (`pip install osfdata`) |
 
 ## Distribution name vs. import name
 
@@ -48,13 +48,22 @@ package; `osfdata` is the Optimeas distribution.
 
 ## Installation
 
-Three installation paths, in increasing order of stability:
+### PyPI (recommended)
 
-### Development build (current state)
+```bash
+pip install osfdata
+```
 
-Build the native extension from a source checkout. Required while the
-package is not yet on PyPI / TestPyPI; also the right path for any
-local Rust-side hacking.
+The PyPI distribution name is `osfdata` (the short name `osf` is taken by
+an unrelated 2015 package); the Python import name is `osf` for brevity.
+Wheels are published with `abi3` for Python 3.9–3.13 on Linux (x86_64 +
+aarch64), macOS arm64, and Windows x64; other platforms build from the
+sdist and need a local Rust toolchain.
+
+### Development build (source checkout)
+
+Build the native extension from a source checkout — the right path for
+local Rust-side hacking or an unsupported platform.
 
 ```bash
 git clone https://github.com/optimeas/osf
@@ -80,32 +89,10 @@ pytest tests/
 Rust changes need another `maturin develop`.
 
 For a complete walkthrough of the toolchain, build process, and
-release pipeline, see [BUILD.md](BUILD.md). It explains the PyO3 +
-maturin stack from local setup through TestPyPI publishing in
-detail, intended for developers new to Python's packaging
-conventions.
-
-### TestPyPI (after first release)
-
-```bash
-pip install --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ \
-            osfdata
-```
-
-The `--extra-index-url` is required because TestPyPI does not host
-the runtime dependencies (`numpy` etc.); the extra index lets pip
-pull those from production PyPI.
-
-### PyPI (production, future)
-
-```bash
-pip install osfdata
-```
-
-Both forms install the same package. The PyPI distribution name is
-`osfdata` (the short name `osf` is taken by an unrelated 2015
-package); the Python import name is `osf` for brevity.
+release pipeline, see [BUILD.md](BUILD.md) and
+[RELEASE.md](RELEASE.md). They explain the PyO3 + maturin stack from
+local setup through the Trusted-Publishing release to PyPI, intended
+for developers new to Python's packaging conventions.
 
 ## Quick start
 
@@ -209,12 +196,12 @@ rust-numpy README; bumping one requires bumping the other.
 
 ## Next steps
 
-1. **Session 7b** — pandas `DataFrame` convenience: build a DataFrame
-   from a `DataManager` (one column per channel, optional time
-   alignment).
-2. **Session 8** — CI matrix building wheels for Linux / macOS /
-   Windows × Python 3.9–3.13, TestPyPI upload, automated release on
-   tag.
+1. **pandas `DataFrame` convenience** — build a DataFrame from a
+   `DataManager` (one column per channel, optional time alignment).
+
+CI builds the wheel matrix (Linux / macOS / Windows × Python 3.9–3.13)
+and the release workflow publishes to PyPI automatically on a `v*` tag
+(see [RELEASE.md](RELEASE.md)).
 
 ## Relationship to `python-osf`
 
