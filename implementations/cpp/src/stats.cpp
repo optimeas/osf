@@ -90,6 +90,7 @@ std::ostream& operator<<(std::ostream& os, ReaderStats const& s) {
     os << "Read:                  " << s.blocksRead                        << '\n';
     os << "Skipped (unsupp.):     " << s.blocksSkippedUnsupported         << '\n';
     os << "Skipped (deprec.):     " << s.blocksSkippedDeprecatedType     << '\n';
+    os << "Skipped (status ev.):  " << s.blocksSkippedStatusEvent        << '\n';
     os << "Skipped (reserved):    " << s.blocksSkippedReservedType       << '\n';
     os << "Skipped (zero-len):    " << s.blocksSkippedZeroLength         << '\n';
     os << "Truncated:             " << s.blocksTruncated                   << '\n';

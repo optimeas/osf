@@ -181,13 +181,25 @@ struct SkipReason {
         /// The channel's `channelType` is `ChannelType::Unsupported`.
         UnsupportedChannelType,
         /// Deprecated control byte that newer writers no longer emit
-        /// but readers must tolerate (1 = `bcTrustedTimestamp`,
-        /// 3 = `bcStatusEvent`, 4 = `bcMessageEvent`). `rawByte`
-        /// carries the value.
+        /// but readers must tolerate (1 = `bcTrustedTimestamp`).
+        /// `bcStatusEvent` (3) has its own reason (see
+        /// `Kind::StatusEventBlock`); `bcMessageEvent` (4) is decoded
+        /// rather than skipped in its specified cases (OSF-UP4,
+        /// DECISIONS §26). `rawByte` carries the value.
         DeprecatedBlockType,
+        /// A `bcStatusEvent` block (control byte 3). Skipped
+        /// deliberately: its payload is a fixed status word rather
+        /// than a value of the channel's declared `dataType`, so it
+        /// is never a sample of that channel (OSF-UP4, DECISIONS §26).
+        /// Counted separately from `Kind::DeprecatedBlockType` so an
+        /// occurrence stays visible. `rawByte` carries the value (3).
+        StatusEventBlock,
         /// Reserved control byte (0 = `bcReserved`,
-        /// 2 = `bcTimebaseRealign`) or any value the spec does not
-        /// currently define. `rawByte` carries the value.
+        /// 2 = `bcTimebaseRealign`), any value the spec does not
+        /// currently define, or one of `bcMessageEvent`'s (4) two
+        /// unspecified shapes: the multi-sample bit set, or a channel
+        /// `dataType` other than `String`/`Binary`/`ByteArray`
+        /// (OSF-UP4, DECISIONS §26). `rawByte` carries the value.
         ReservedBlockType,
         /// The block's frame CRC (integrity profile level `crc`) did not
         /// match the recomputed CRC32C. The block is dropped best-effort so
@@ -209,8 +221,9 @@ struct SkipReason {
 
     Kind kind = Kind::ReservedBlockType;
     /// Raw control-byte value (low 7 bits). Only meaningful for
-    /// `DeprecatedBlockType` / `ReservedBlockType`; zero for every other
-    /// `Kind`, including `ZeroLengthBlock` (no control byte is ever read).
+    /// `DeprecatedBlockType` / `StatusEventBlock` / `ReservedBlockType`;
+    /// zero for every other `Kind`, including `ZeroLengthBlock` (no
+    /// control byte is ever read).
     std::uint8_t rawByte = 0;
 
     friend bool operator==(SkipReason const& a, SkipReason const& b) noexcept {
@@ -265,10 +278,15 @@ struct ContinuedRelStampData {
 /// Block kept for stream-position purposes after the reader chose not
 /// to interpret it: known control byte but channel marked as
 /// `Unsupported`, block type intentionally skipped (`bcStatusEvent`,
-/// `bcMessageEvent`, `bcTrustedTimestamp`, `bcTimebaseRealign`,
-/// `bcReserved`, unknown control values), a frame whose integrity CRC did
+/// `bcTrustedTimestamp`, `bcTimebaseRealign`, `bcReserved`, unknown
+/// control values, or `bcMessageEvent` in its two unspecified cases —
+/// bit 7 set, or a channel `dataType` other than `String`/`Binary` — see
+/// `SkipReason::Kind::ReservedBlockType`), a frame whose integrity CRC did
 /// not match, an unverified integrity signature block, or a
 /// non-conforming zero-length block (`SkipReason::Kind::ZeroLengthBlock`).
+/// A `bcMessageEvent` block on a `String`/`Binary` channel with bit 7
+/// clear is instead decoded into `BlockKind::AbsTimestampData` (OSF-UP4,
+/// DECISIONS §26).
 struct Skipped {
     /// Why the reader skipped this block.
     SkipReason reason;
@@ -287,9 +305,12 @@ struct Skipped {
 /// matches the decoded control byte:
 /// - `StartData` for control byte 6.
 /// - `ContinuedData` for control byte 5.
-/// - `AbsTimestampData` for control byte 8.
+/// - `AbsTimestampData` for control byte 8, and also for control byte 4
+///   (`bcMessageEvent`) on a `String`/`Binary` channel with bit 7 clear
+///   (OSF-UP4, DECISIONS §26).
 /// - `ContinuedRelStampData` for control byte 7.
-/// - `Skipped` for everything else (deprecated, reserved, unknown).
+/// - `Skipped` for everything else (deprecated, status event, reserved,
+///   unknown, or `bcMessageEvent`'s two unspecified shapes).
 using BlockKind = std::variant<StartData, ContinuedData, AbsTimestampData,
                                ContinuedRelStampData, Skipped>;
 
@@ -317,9 +338,17 @@ enum class ControlKind {
     TrustedTimestamp,
     /// 2 — `bcTimebaseRealign`. Deprecated; readers skip.
     TimebaseRealign,
-    /// 3 — `bcStatusEvent`. Deprecated; readers skip.
+    /// 3 — `bcStatusEvent`. Deprecated; readers skip, counted under
+    /// `SkipReason::Kind::StatusEventBlock` rather than the generic
+    /// deprecated bucket (OSF-UP4, DECISIONS §26).
     StatusEvent,
-    /// 4 — `bcMessageEvent`. Deprecated; readers skip.
+    /// 4 — `bcMessageEvent`. Read-mandatory in every format version:
+    /// deployed OSF4 firmware writes `string` channels this way.
+    /// Decoded into `BlockKind::AbsTimestampData` for `String`/`Binary`
+    /// channels with bit 7 clear; its two unspecified shapes (bit 7
+    /// set, or any other channel `dataType`) are skipped and counted
+    /// under `SkipReason::Kind::ReservedBlockType` (OSF-UP4, DECISIONS
+    /// §26). Writers MUST NOT emit it.
     MessageEvent,
     /// 5 — `bcContinuedData`. Equidistant continuation block.
     ContinuedData,

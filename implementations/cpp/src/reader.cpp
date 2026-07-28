@@ -313,6 +313,66 @@ Result<TimestampedPayload> parseAbsTsStringOrBinary(
     return buildStringOrBinary(dt, std::move(raw));
 }
 
+// ---------------------------------------------------------------------
+// bcMessageEvent (control byte 4) parser (OSF-UP4, DECISIONS §26).
+// ---------------------------------------------------------------------
+
+/// Whether `bcMessageEvent` is defined for this channel's declared
+/// `dataType`. `ByteArray` is included for symmetry with
+/// `parseAbsTimestampData`'s equivalent check.
+bool messageEventDatatypeSupported(DataType dt) noexcept {
+    return dt == DataType::String || dt == DataType::Binary ||
+           dt == DataType::ByteArray;
+}
+
+/// Parse a `bcMessageEvent` body into a single time-stamped sample:
+/// `[i64 timestamp][u32 N][N bytes]`.
+///
+/// The payload is **length-prefixed and carries no trailing `0x00`**.
+/// The OSF4 null-terminator rule (`stripOsf4Terminator`) applies to
+/// `bcAbsTimeStampData` only; reusing that framing here would silently
+/// drop the last byte of every value (OSF-UP4, DECISIONS §26).
+///
+/// `dt` is passed straight to `buildStringOrBinary` rather than being
+/// pre-normalised to `String`/`Binary` here. The caller
+/// (`messageEventDatatypeSupported`) is expected to have already
+/// restricted `dt` to `String`/`Binary`/`ByteArray`; `buildStringOrBinary`
+/// otherwise falls through to the binary encoding, which would silently
+/// fabricate a wrongly-typed payload if that guard were ever missed —
+/// callers MUST check `messageEventDatatypeSupported` first.
+///
+/// String-payload UTF-8 validity handling follows this reader's existing
+/// `bcAbsTimeStampData` policy (see `buildStringOrBinary`) — never a third
+/// behaviour invented just for `bcMessageEvent`.
+///
+/// Tolerant of trailing surplus bytes: only a short read (fewer than `N`
+/// bytes available) is an error. A frame carrying *more* bytes than `N`
+/// declares has the excess silently discarded rather than rejected —
+/// deliberate, matching this reader's general best-effort stance.
+Result<TimestampedPayload> parseMessageEvent(std::uint8_t const* body,
+                                                std::size_t bodyLen,
+                                                DataType dt) {
+    PayloadCursor cur{body, bodyLen};
+    auto ts = cur.readI64();
+    if (!ts) {
+        return tl::make_unexpected(invalidBlock("MessageEvent ts: short read"));
+    }
+    auto n = cur.readU32();
+    if (!n) {
+        return tl::make_unexpected(
+            invalidBlock("MessageEvent length prefix: short read"));
+    }
+    if (cur.remaining() < *n) {
+        std::ostringstream oss;
+        oss << "MessageEvent payload truncated: " << *n
+            << " bytes declared, " << cur.remaining() << " available";
+        return tl::make_unexpected(invalidBlock(oss.str()));
+    }
+    std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>> raw;
+    raw.emplace_back(*ts, std::vector<std::uint8_t>(cur.tail(), cur.tail() + *n));
+    return buildStringOrBinary(dt, std::move(raw));
+}
+
 Result<TimestampedPayload> parseAbsTimestampData(
     std::uint8_t const* body, std::size_t bodyLen, DataType dt, bool multi,
     OsfVersion osf_version) {
@@ -619,6 +679,8 @@ void BlockReader::recordSkip(std::uint16_t channelIndex, std::uint32_t length,
             ++m_stats.blocksSkippedUnsupported; break;
         case SkipReason::Kind::DeprecatedBlockType:
             ++m_stats.blocksSkippedDeprecatedType; break;
+        case SkipReason::Kind::StatusEventBlock:
+            ++m_stats.blocksSkippedStatusEvent; break;
         case SkipReason::Kind::ReservedBlockType:
             ++m_stats.blocksSkippedReservedType; break;
         case SkipReason::Kind::CrcFailed:
@@ -860,13 +922,52 @@ std::optional<Result<Block>> BlockReader::next() {
             return Result<Block>{makeSkipped(
                 SkipReason::Kind::ReservedBlockType, cb.raw)};
         case ControlKind::TrustedTimestamp:
-        case ControlKind::StatusEvent:
-        case ControlKind::MessageEvent:
             return Result<Block>{makeSkipped(
                 SkipReason::Kind::DeprecatedBlockType, cb.raw)};
+        case ControlKind::StatusEvent:
+            // bcStatusEvent's payload is a fixed status word, never a
+            // value of the channel's declared dataType, so it can
+            // never become a sample. Counted under its own reason so
+            // an occurrence stays visible rather than folding into the
+            // generic deprecated-skip bucket (OSF-UP4, DECISIONS §26).
+            return Result<Block>{makeSkipped(
+                SkipReason::Kind::StatusEventBlock, cb.raw)};
         case ControlKind::Unknown:
             return Result<Block>{makeSkipped(
                 SkipReason::Kind::ReservedBlockType, cb.raw)};
+
+        case ControlKind::MessageEvent: {
+            // bcMessageEvent (control byte 4) is read-mandatory
+            // (OSF-UP4, DECISIONS §26): deployed OSF4 firmware writes
+            // `string` channels this way, and every reader that
+            // treated it as deprecated silently lost that channel's
+            // content. Two cases remain unspecified and are skipped
+            // (never a hard error — failing would make an otherwise
+            // readable file unopenable): bit 7 (multi-sample) set, and
+            // a channel dataType other than string/binary.
+            if (cb.multiSample || !messageEventDatatypeSupported(info.dataType)) {
+                return Result<Block>{makeSkipped(
+                    SkipReason::Kind::ReservedBlockType, cb.raw)};
+            }
+            auto r = parseMessageEvent(body, bodyLen, info.dataType);
+            if (!r) return Result<Block>{tl::make_unexpected(r.error())};
+            std::size_t const n = timestampedPayloadLen(*r);
+            auto& cs = m_stats.perChannel[channelIndex];
+            ++cs.blocksRead;
+            cs.bytesPayload += length;
+            cs.samplesTotal += n;
+            if (auto range = absTimestampRange(*r)) {
+                cs.observeTimestamp(range->first);
+                cs.observeTimestamp(range->second);
+            }
+            ++m_stats.blocksRead;
+            Block blk;
+            blk.channelIndex = channelIndex;
+            AbsTimestampData ad;
+            ad.samples = std::move(*r);
+            blk.kind = std::move(ad);
+            return Result<Block>{std::move(blk)};
+        }
 
         case ControlKind::StartData: {
             auto r = parseStartData(body, bodyLen, info.dataType,
@@ -962,6 +1063,7 @@ ReaderStats BlockReader::stats() const {
     s.elapsed = std::chrono::steady_clock::now() - m_started;
     s.blocksTotal = s.blocksRead + s.blocksSkippedUnsupported +
                      s.blocksSkippedDeprecatedType +
+                     s.blocksSkippedStatusEvent +
                      s.blocksSkippedReservedType +
                      s.blocksSkippedZeroLength +
                      s.blocksCrcFailed + s.blocksSignatureSkipped;
