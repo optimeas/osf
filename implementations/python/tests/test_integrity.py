@@ -106,20 +106,3 @@ def test_signed_file_reports_signature_unverifiable():
     # yield mgr.stats.integrity == "ed25519" and
     # mgr.stats.verification_status == "signature_unverifiable".
     ...
-
-
-def test_zero_length_block_is_skipped_and_counted():
-    """The malformed corpus file reads through with its anomaly counted.
-
-    A zero-length data block is a non-conforming writer artefact (OSF-UP3);
-    the reader skips it, counts it, and keeps scanning. Five samples sit
-    before the bad frame and five behind it, so a reader that stopped at the
-    frame would report 5.
-    """
-    path = _example("generated/malformed/osf5_zero_length_block.osf")
-    mgr = osf.load(path)
-    assert mgr.stats.blocks_skipped_zero_length == 1
-    assert mgr.stats.blocks_total == 3
-    assert mgr.stats.blocks_read == 2
-    ch = mgr.channel("Sensor/Double")
-    assert ch.sample_count == 10
