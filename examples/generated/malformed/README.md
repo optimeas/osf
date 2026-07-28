@@ -47,6 +47,13 @@ conformance test (Rust, C++, Java, Delphi) loads this file like any other
 manifest entry and checks both the channel data and the `zeroLengthBlocks`
 count.
 
+**Rule for the next anomaly kind:** every anomaly kind added to this scheme
+must have at least one corpus file declaring a *nonzero* count for it. An
+anomaly kind that only ever appears as `0` across the whole manifest is
+asserted vacuously in all five implementations' conformance tests — it proves
+nothing, because every reader trivially reports zero for a counter it never
+increments.
+
 **Provenance.** This is a *minimal synthetic reproduction*. Blocks of this shape
 were observed in real field recordings in July 2026; those recordings are
 full-size and not redistributable, so the corpus carries a handcrafted minimum

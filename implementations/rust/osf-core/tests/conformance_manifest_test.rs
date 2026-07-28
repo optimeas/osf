@@ -48,7 +48,12 @@ struct FileEntry {
 /// files. Each field is the exact count a conforming reader must report.
 #[derive(Deserialize)]
 struct Anomalies {
-    #[serde(rename = "zeroLengthBlocks", default)]
+    // No `#[serde(default)]` here, deliberately: once `anomalies` is present
+    // in an entry, `zeroLengthBlocks` is required. Defaulting would let a
+    // typo'd key silently deserialise to 0 and pass, which matters once
+    // other-language ports re-spell this key by hand without yet having a
+    // reader counter behind it.
+    #[serde(rename = "zeroLengthBlocks")]
     zero_length_blocks: u64,
 }
 
@@ -108,10 +113,15 @@ fn conforms_to_reference_manifest() {
 
         // Deliberate non-conformances (optional). A file that declares none
         // must report none — that is what keeps a well-formed corpus honest.
+        // Unlike the integrity check above (only asserted when `integrity` is
+        // declared, since a file with no integrity profile has no frame CRCs
+        // to fail), this runs unconditionally: any file at all, declared or
+        // not, can carry a zero-length block, so "not declared" must mean
+        // zero rather than "not checked".
         let want_zero_len = entry.anomalies.as_ref().map_or(0, |a| a.zero_length_blocks);
         assert_eq!(
             mgr.stats.blocks_skipped_zero_length, want_zero_len,
-            "{key}: zero-length blocks"
+            "{key}: anomalies.zeroLengthBlocks (left = reader, right = manifest)"
         );
 
         let channels = mgr.channels();
