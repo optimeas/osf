@@ -164,5 +164,12 @@
       {"index": 0, "name": "Sensor/Log",  "dataType": "string", "sampleCount": 10, "mode": "variable"},
       {"index": 1, "name": "Sensor/Blob", "dataType": "binary", "sampleCount": 10, "mode": "variable"}
     ]
+  },
+  "malformed/osf5_zero_length_block.osf": {
+    "version": 5,
+    "anomalies": { "zeroLengthBlocks": 1 },
+    "channels": [
+      {"index": 0, "name": "Sensor/Double", "dataType": "double", "sampleCount": 10, "mode": "timestamped"}
+    ]
   }
 }
