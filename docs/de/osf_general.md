@@ -311,8 +311,8 @@ Der Parameter `datatype` legt das Datenformat der Werte eines Kanals fest. Jeder
 | `uint64`  | 8             | Ganzzahl ohne Vorzeichen, Wertebereich 0 … 18 446 744 073 709 551 615                                                                                |
 | `float`   | 4             | IEEE 754 Single Precision                                                                                                                            |
 | `double`  | 8             | IEEE 754 Double Precision                                                                                                                            |
-| `string`  | variabel      | UTF-8 kodiert, Länge durch Blockgröße definiert. Auf Disk: bei OSF4 mit abschließendem Nullbyte (`0x00`), bei OSF5 ohne abschließendes Byte – siehe Hinweisblock unten für die Regeln. |
-| `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen für Bild-, Audio- oder andere Binärdaten mit MIME-Type. Die maximale Länge des Blocks wird durch das `sizeoflengthvalue`-Feld des Kanals bestimmt. Auf Disk: bei OSF4 mit abschließendem Nullbyte (`0x00`), bei OSF5 ohne abschließendes Byte – siehe Hinweisblock unten für die Regeln. |
+| `string`  | variabel      | UTF-8 kodiert, Länge durch Blockgröße definiert. Auf Disk in `bcAbsTimeStampData`: bei OSF4 mit abschließendem Nullbyte (`0x00`), bei OSF5 ohne abschließendes Byte – siehe Hinweisblock unten für die Regeln. Bei `bcMessageEvent` ist die Nutzlast stattdessen längenpräfixiert und in beiden Versionen nie nullterminiert. |
+| `binary` *(Alias: `bytearray`)* | variabel | Beliebige Bytefolgen für Bild-, Audio- oder andere Binärdaten mit MIME-Type. Die maximale Länge des Blocks wird durch das `sizeoflengthvalue`-Feld des Kanals bestimmt. Auf Disk in `bcAbsTimeStampData`: bei OSF4 mit abschließendem Nullbyte (`0x00`), bei OSF5 ohne abschließendes Byte – siehe Hinweisblock unten für die Regeln. Bei `bcMessageEvent` ist die Nutzlast stattdessen längenpräfixiert und in beiden Versionen nie nullterminiert. |
 | `gpslocation` | 24        | Struktur für GPS-Positionen (siehe unten)                                                                                                            |
 
 > **Hinweis zu Integer-Typen:** Integer-Werte (`int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) werden in OSF-Dateien typischerweise für **Zustände, Statusinformationen oder Zählerwerte** verwendet, nicht als skalierte Rohwerte einer physikalischen Größe. Aus diesem Grund kennt OSF bewusst **keine** `scale`/`offset`-Parameter zur Umrechnung in physikalische Werte – physikalische Größen werden direkt als `float` oder `double` gespeichert.
@@ -647,8 +647,8 @@ Das Steuerbyte wird als 8-Bit-Wert interpretiert. Die unteren 7 Bits definiere
 | **0**      | `bcReserved`       | Reserviert für zukünftige Nutzung. Ursprünglich *bcMetaData*, bisher nicht genutzt.        | Variabel, interne Sonderfunktionen |
 | **1**      | `bcTrustedTimestamp` | `Entfällt` Ursprünglich für konstante Werte mit „gültig bis“-Zeitstempel gedacht. Empfehlung: Stützstellen durch die Anwendung setzen. | `int64`: Absoluter Zeitstempel (ns since Epoch) |
 | **2**      | `bcTimebaseRealign` | `Entfällt`Anpassung der Zeitachse. Kann bei Bedarf durch Schreiben eines neuen Blocks mit absolutem Startzeitpunkt ersetzt werden. | `int64`: Absoluter Zeitstempel<br/>`int64`: Zeitverschiebung (ns) |
-| **3**      | `bcStatusEvent`    | `Entfällt` Diente zur Mitführung von Statusinformationen pro Kanal. Wird nicht mehr genutzt. Leser überspringen ihn und zählen ihn separat: anders als `bcMessageEvent` ist seine Nutzlast ein festes Status-Wort statt eines Werts vom kanaleigenen `datatype`, er ist also kein Sample dieses Kanals. | `int64`: Absoluter Zeitstempel<br/>`uint32`: Status-Wort |
-| **4**      | `bcMessageEvent`   | `Entfällt`, `muss gelesen werden` Wird von im Feld eingesetzten Geräten weiterhin für `string`-Kanäle in OSF4 erzeugt, wo der Typ regulär ist. Leser MÜSSEN ihn als einen zeitgestempelten Sample des kanaleigenen `datatype` dekodieren; Schreiber DÜRFEN ihn NICHT erzeugen. | `int64`: Absoluter Zeitstempel<br/>`uint32`: Nutzlastlänge N<br/>`N` Bytes Nutzlast, interpretiert gemäß dem kanaleigenen `datatype`. **Kein abschließendes `0x00`** — die Nutzlast ist längenpräfixiert, daher gilt die OSF4-Nullterminierungsregel von `bcAbsTimeStampData` **nicht**. |
+| **3**      | `bcStatusEvent`    | `Entfällt` Diente zur Mitführung von Statusinformationen pro Kanal. Wird nicht mehr genutzt. Anders als `bcMessageEvent` ist seine Nutzlast ein festes Status-Wort statt eines Werts des Kanals, er wird also nie als Kanal-Sample dekodiert. Leser MÜSSEN ihn über einen eigenen Zähler erfassen, getrennt vom allgemeinen Deprecated-Sammelzähler, damit ein Auftreten im Feld sichtbar bleibt. | `int64`: Absoluter Zeitstempel<br/>`uint32`: Status-Wort |
+| **4**      | `bcMessageEvent`   | `Entfällt`, `muss gelesen werden` Wird von im Feld eingesetzten Geräten weiterhin für `string`-Kanäle in OSF4 erzeugt — dort eine zulässige Kodierung, denn die Spezifikation schließt nur aus, dass der Typ ab OSF5 noch erzeugt wird. Kann vollständig durch `bcAbsTimeStampData` mit demselben `datatype` ersetzt werden. Leser MÜSSEN ihn als einen zeitgestempelten Sample des `datatype` des Kanals dekodieren; Schreiber DÜRFEN ihn NICHT erzeugen. **Bit 7 ist für diesen Blocktyp nicht spezifiziert und DARF NICHT interpretiert werden:** Ein Leser, der es gesetzt vorfindet, behandelt den Block als unbekannt, überspringt ihn anhand des Längenfelds, zählt ihn und liest weiter (vollständiger Blockaufbau und Randfälle unten). | `int64`: Absoluter Zeitstempel<br/>`uint32`: Nutzlastlänge N<br/>`N` Bytes Nutzlast, interpretiert gemäß dem `datatype` des Kanals — nur für `string` und `binary` definiert (siehe unten). **Kein abschließendes `0x00`** — die Nutzlast ist längenpräfixiert, daher gilt die OSF4-Nullterminierungsregel von `bcAbsTimeStampData` **nicht**. |
 | **5**      | `bcContinuedData`  | Daten mit fester Abtastrate fortsetzen. Bei gesetztem Bit 7 mehrere Werte im Block.        | `[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × Datenwerte |
 | **6**      | `bcStartData`      | Erster Datenblock mit fester Abtastrate; trägt zusätzlich die ab diesem Block gültige Abtastrate (z. B. bei Trigger). Enthält immer einen absoluten Startzeitstempel. | `int64`: Absoluter Zeitstempel<br/>`double`: Abtastrate (Hz)<br/>`[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × Datenwerte |
 | **7**      | `bcContinuedRelStampData` | `Entfällt`, `In OSF5 beim Lesen unterstützt` Ursprünglich zur Einsparung von 4 Byte pro Sample mit relativen Zeitstempeln. | `[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × (`uint32` Relativzeit + Datenwert) |
@@ -663,6 +663,7 @@ Einschränkung der Blockarten im Hinblick auf die Kanalinformation:
 | bcContinuedData        | erlaubt | nicht erlaubt |
 | bcContinuedRelStampData | nicht erlaubt | erlaubt|
 | bcAbsTimeStampData | nicht erlaubt | erlaubt|
+| bcMessageEvent | nicht erlaubt | erlaubt|
 
 <br/>
 ### Datenstruktur je Steuer-Typ
@@ -759,6 +760,29 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
 
 
 
+#### bcMessageEvent (entfällt, muss gelesen werden)
+
+- **Einsatz:**  
+  - Historische Kodierung für einen zeitgestempelten `string`- oder `binary`-Wert; kann vollständig durch `bcAbsTimeStampData` mit demselben `datatype` ersetzt werden.  
+  - Wird von im Feld eingesetzten Geräten weiterhin für `string`-Kanäle in OSF4 erzeugt — dort eine zulässige Kodierung, denn die Spezifikation schließt nur aus, dass der Typ ab OSF5 noch erzeugt wird. Leser MÜSSEN ihn in **jeder** Formatversion dekodieren, weil Dateien mit diesem Block im Feld existieren. Schreiber DÜRFEN ihn NICHT erzeugen.
+
+- **Blockaufbau:**  
+  1. `int64` – Absoluter Zeitstempel (ns since Epoch).  
+  2. `uint32` – Nutzlastlänge N (Byte).  
+  3. `N` Bytes Nutzlast, interpretiert gemäß dem `datatype` des Kanals.
+
+- **Beispiel `datatype=string`:** [int64 Zeit] [uint32 N] [N Bytes UTF-8-Nutzlast]
+
+- **Kein abschließendes `0x00`.** Die Nutzlast ist über `N` längenpräfixiert, daher gilt die OSF4-Nullterminierungsregel von `bcAbsTimeStampData` (siehe Hinweisblock zur Null-Byte-Behandlung) hier **nicht** — es gab nie ein Byte zu entfernen. Wiederverwendet wird nur die *Werteinterpretation* von `string`/`binary`-Nutzlasten aus `bcAbsTimeStampData`, nicht deren Framing.
+
+- **Geltungsbereich von `datatype`.** Nur `datatype=string` und `datatype=binary` sind für diesen Blocktyp definiert. Bei jedem anderen `datatype` MÜSSEN Leser den Block anhand seines Längenfelds überspringen und zählen — sie DÜRFEN NICHT einen Fehler auslösen oder die Datei abbrechen. Überspringen hält den Rest einer realen Aufzeichnung lesbar; ein Abbruch würde an anderer Stelle denselben Fehlertyp erneut einführen, den die [Regel zu Nullblöcken](#zero-length-data-blocks) beseitigt hat.
+
+- **`N = 0` ist zulässig** und dekodiert zu einem leeren Wert (leerer String bzw. Binärnutzlast der Länge 0) – kein Fehler. Das ist **nicht** die Anomalie der [Datenblöcke mit Länge null](#zero-length-data-blocks): dort ist das *Längenfeld* selbst `0`, und es wird nie ein Steuerbyte gelesen; hier entspricht das Längenfeld der tatsächlichen Framegröße (`1 + 8 + 4 + N` Byte), nur die Nutzlast ist zufällig leer.
+
+- **Bit 7 (Mehrwert) ist für diesen Blocktyp nicht spezifiziert.** Es wurde im Feld nie gesetzt beobachtet, und für diesen Blocktyp ist kein Multi-Sample-Layout definiert. Ein Leser, der es gesetzt vorfindet, DARF es NICHT interpretieren: Er behandelt den Block als unbekannten Typ, überspringt ihn anhand des Längenfelds, zählt ihn und liest weiter — dieselbe konservative Behandlung wie bei jeder anderen nicht erkannten Form.
+
+
+
 #### Einschränkungen
 
 - **Äquidistante Kanäle (bcStartData, bcContinuedData):**
@@ -773,7 +797,7 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
 
 - **Kompatibilität:**  
   - OSF5 kann alle OSF4-Blocktypen lesen.  
-  - Ab OSF5 werden `bcContinuedRelStampData`, `bcStatusEvent` und `bcMessageEvent` nicht mehr erzeugt. Nicht mehr erzeugt zu werden heißt nicht, nicht mehr gelesen zu werden: `bcContinuedRelStampData` und `bcMessageEvent` bleiben **in jeder Version zwingend beim Lesen zu unterstützen**, weil Dateien mit diesen Blöcken im Feld existieren.  
+  - Ab OSF5 werden `bcContinuedRelStampData`, `bcStatusEvent` und `bcMessageEvent` nicht mehr erzeugt. Nicht mehr erzeugt zu werden heißt nicht, nicht mehr gelesen zu werden: `bcContinuedRelStampData` und `bcMessageEvent` müssen Leser weiterhin **in jeder Version** unterstützen, weil Dateien mit diesen Blöcken im Feld existieren.  
   - `bcTrustedTimestamp` wird ignoriert, und ist als *deprecated* gekennzeichnet.
 
 - **Implementierung:**  

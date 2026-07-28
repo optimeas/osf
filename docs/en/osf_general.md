@@ -310,8 +310,8 @@ The `datatype` parameter defines the data format of a channel's values. Each val
 | `uint64`  | 8             | Unsigned integer, range 0 … 18 446 744 073 709 551 615                                                                                               |
 | `float`   | 4             | IEEE 754 single precision                                                                                                                            |
 | `double`  | 8             | IEEE 754 double precision                                                                                                                            |
-| `string`  | variable      | UTF-8 encoded, length defined by block size. On disk: followed by a trailing null byte (`0x00`) in OSF4, no trailing byte in OSF5 — see the note block below for the rules. |
-| `binary` *(alias: `bytearray`)* | variable | Arbitrary byte sequences for image, audio, or other binary data with a MIME type. The maximum block size is determined by the channel's `sizeoflengthvalue` field. On disk: followed by a trailing null byte (`0x00`) in OSF4, no trailing byte in OSF5 — see the note block below for the rules. |
+| `string`  | variable      | UTF-8 encoded, length defined by block size. On disk in `bcAbsTimeStampData`: followed by a trailing null byte (`0x00`) in OSF4, no trailing byte in OSF5 — see the note block below for the rules. `bcMessageEvent` payloads are length-prefixed instead and never null-terminated, in either version. |
+| `binary` *(alias: `bytearray`)* | variable | Arbitrary byte sequences for image, audio, or other binary data with a MIME type. The maximum block size is determined by the channel's `sizeoflengthvalue` field. On disk in `bcAbsTimeStampData`: followed by a trailing null byte (`0x00`) in OSF4, no trailing byte in OSF5 — see the note block below for the rules. `bcMessageEvent` payloads are length-prefixed instead and never null-terminated, in either version. |
 | `gpslocation` | 24        | Structure for GPS positions (see below)                                                                                                              |
 
 > **Note on integer types:** Integer values (`int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) are typically used in OSF files for **states, status information, or counter values**, not as scaled raw values of a physical quantity. For this reason OSF deliberately has **no** `scale`/`offset` parameters for conversion to physical values — physical quantities are stored directly as `float` or `double`.
@@ -646,8 +646,8 @@ The control byte is interpreted as an 8-bit value. The lower 7 bits define the *
 | **0**       | `bcReserved`       | Reserved for future use. Originally *bcMetaData*, never used.                              | Variable, internal special functions |
 | **1**       | `bcTrustedTimestamp` | `Deprecated` Originally intended for constant values with a "valid until" timestamp. Recommendation: have the application set sample points instead. | `int64`: absolute timestamp (ns since epoch) |
 | **2**       | `bcTimebaseRealign` | `Deprecated` Time-axis adjustment. Can be replaced if needed by writing a new block with an absolute start time. | `int64`: absolute timestamp<br/>`int64`: time shift (ns) |
-| **3**       | `bcStatusEvent`    | `Deprecated` Used to carry per-channel status information. No longer used. Readers skip it and count it separately: unlike `bcMessageEvent`, its payload is a fixed status word rather than a value of the channel's `datatype`, so it is not a sample of that channel. | `int64`: absolute timestamp<br/>`uint32`: status word |
-| **4**       | `bcMessageEvent`   | `Deprecated`, `must be read` Still emitted by deployed devices for `string` channels in OSF4, where the type is regular. Readers MUST decode it as one time-stamped sample of the channel's `datatype`; writers MUST NOT emit it. | `int64`: absolute timestamp<br/>`uint32`: payload length N<br/>`N` bytes of payload, interpreted per the channel's `datatype`. **No trailing `0x00`** — the payload is length-prefixed, so the OSF4 null-terminator rule of `bcAbsTimeStampData` does **not** apply. |
+| **3**       | `bcStatusEvent`    | `Deprecated` Used to carry per-channel status information. No longer used. Unlike `bcMessageEvent`, its payload is a fixed status word rather than a value of the channel's `datatype`, so it is never decoded as a channel sample. Readers MUST count it under a reason of its own, distinct from the generic deprecated-skip bucket, so an occurrence in the field stays visible. | `int64`: absolute timestamp<br/>`uint32`: status word |
+| **4**       | `bcMessageEvent`   | `Deprecated`, `must be read` Still emitted by deployed devices for `string` channels in OSF4 — a conforming encoding there, since the specification only stops the type from being *produced* from OSF5 onward. Can be fully replaced by `bcAbsTimeStampData` with the same `datatype`. Readers MUST decode it as one time-stamped sample of the channel's `datatype`; writers MUST NOT emit it. **Bit 7 on this block type is unspecified and MUST NOT be interpreted:** a reader encountering it treats the block as unknown, skips it via the length field, counts it, and continues (full layout and edge cases below). | `int64`: absolute timestamp<br/>`uint32`: payload length N<br/>`N` bytes of payload, interpreted per the channel's `datatype` — defined only for `string` and `binary` (see below). **No trailing `0x00`** — the payload is length-prefixed, so the OSF4 null-terminator rule of `bcAbsTimeStampData` does **not** apply. |
 | **5**       | `bcContinuedData`  | Continue equidistant data with a fixed sample rate. With bit 7 set, multiple values per block. | `[uint32 N]`: number of samples (only if bit 7 set)<br/>`N` × data values |
 | **6**       | `bcStartData`      | First data block with a fixed sample rate; additionally carries the sample rate effective from this block onward (e.g. on a trigger). Always contains an absolute start timestamp. | `int64`: absolute timestamp<br/>`double`: sample rate (Hz)<br/>`[uint32 N]`: number of samples (only if bit 7 set)<br/>`N` × data values |
 | **7**       | `bcContinuedRelStampData` | `Deprecated`, `supported on read in OSF5` Originally used to save 4 bytes per sample with relative timestamps. | `[uint32 N]`: number of samples (only if bit 7 set)<br/>`N` × (`uint32` relative time + data value) |
@@ -662,6 +662,7 @@ Block-type restrictions with respect to channel information:
 | bcContinuedData        | allowed | not allowed |
 | bcContinuedRelStampData | not allowed | allowed |
 | bcAbsTimeStampData | not allowed | allowed |
+| bcMessageEvent | not allowed | allowed |
 
 <br/>
 ### Data structure per control type
@@ -755,6 +756,29 @@ The following sections describe how values are stored for the various data types
 - **Note:**  
 - Originally introduced to save 4 bytes per sample.  
 - Removed in OSF5 in favor of a simpler implementation.
+
+
+
+#### bcMessageEvent (deprecated, read-mandatory)
+
+- **Use:**  
+  - Historical encoding for a time-stamped `string` or `binary` value; can be fully replaced by `bcAbsTimeStampData` with the same `datatype`.  
+  - Deployed device firmware still emits it for `string` channels in OSF4 — a conforming encoding there, since the specification only stops the type from being produced from OSF5 onward. Readers of **every** format version MUST decode it, because files carrying it exist in the field. Writers MUST NOT emit it.
+
+- **Block layout:**  
+  1. `int64` — absolute timestamp (ns since epoch).  
+  2. `uint32` — payload length N (bytes).  
+  3. `N` bytes of payload, interpreted per the channel's `datatype`.
+
+- **Example `datatype=string`:** [int64 Time] [uint32 N] [N bytes of UTF-8 payload]
+
+- **No trailing `0x00`.** The payload is length-prefixed by `N`, so the OSF4 null-terminator rule that governs `bcAbsTimeStampData` (see the note block on null-byte handling) does **not** apply here — there was never a byte to strip. Only the *value interpretation* of `string`/`binary` payloads is shared with `bcAbsTimeStampData`; the framing is not.
+
+- **`datatype` scope.** Only `datatype=string` and `datatype=binary` are defined over this block type. On any other `datatype`, readers MUST skip the block via its length field and count it — they MUST NOT raise an error or fail the file. Skipping keeps the rest of a real recording readable; failing would reintroduce, in a new place, the class of defect the [zero-length-block rule](#zero-length-data-blocks) closed.
+
+- **`N = 0` is legal** and decodes to an empty value (an empty string, or a zero-length binary payload) — not an error. This is **not** the [zero-length data block](#zero-length-data-blocks) anomaly: there, the block's *length field* itself is `0` and no control byte is ever read; here the length field reflects the true frame size (`1 + 8 + 4 + N` bytes) and only the payload happens to be empty.
+
+- **Bit 7 (multi-value) is unspecified for this block type.** It has never been observed set in the field, and no multi-sample layout is defined for it. A reader encountering it MUST NOT interpret it: it treats the block as an unknown type, skips it via the length field, counts it, and continues — the same conservative handling as any other unrecognized shape.
 
 
 
