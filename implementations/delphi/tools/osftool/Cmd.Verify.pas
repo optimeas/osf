@@ -34,6 +34,7 @@ type
     FCRCFailed: UInt32;
     FSigSkipped: UInt32;
     FUnknownSkipped: UInt32;
+    FZeroLengthSkipped: UInt32;
     procedure CheckBlock(const ABlock: TOSFDataBlock; AFiler: TOSFFile);
   protected
     // Capture filer warnings into FWarnings before falling through to
@@ -78,10 +79,13 @@ resourcestring
   SVerifyErrCannotOpen        = 'osftool verify: cannot open %s: %s';
   SVerifyErrUnknownChannelIdx = 'block %d references unknown channel index %d';
   SVerifyErrFrameCRC = '%d block(s) failed their frame CRC (data invalid)';
-  SVerifyLineIntegrity   = '  Integrity: %s (%s)';
-  SVerifyLineCRCFailed   = '  CRC-failed blocks:  %d';
-  SVerifyLineSigSkipped  = '  Signature blocks:   %d (skipped, unverified)';
-  SVerifyLineUnknownSkip = '  Unknown-type skips: %d';
+  SVerifyWarnZeroLength = '%d block(s) had a zero-length field and were skipped ' +
+    '(OSF-UP3: non-conforming writer artefact)';
+  SVerifyLineIntegrity     = '  Integrity: %s (%s)';
+  SVerifyLineCRCFailed     = '  CRC-failed blocks:  %d';
+  SVerifyLineSigSkipped    = '  Signature blocks:   %d (skipped, unverified)';
+  SVerifyLineUnknownSkip   = '  Unknown-type skips: %d';
+  SVerifyLineZeroLenSkip   = '  Zero-length skips:  %d';
   SVerifyErrTimestampBackward =
     'channel "%s" (idx %d): bcStartData timestamp %d is earlier than previous %d';
   SVerifyVersionUnknown = 'unknown';
@@ -197,8 +201,11 @@ begin
     if FSigSkipped > 0 then
       Printf(SVerifyLineSigSkipped, [FSigSkipped]);
   end;
-  if FUnknownSkipped > 0 then
+  if (FUnknownSkipped > 0) or (FZeroLengthSkipped > 0) then
+  begin
     Printf(SVerifyLineUnknownSkip, [FUnknownSkipped]);
+    Printf(SVerifyLineZeroLenSkip, [FZeroLengthSkipped]);
+  end;
   Printf(SVerifyLineWarnings, [FWarnings.Count]);
   for Msg in FWarnings do
     Printf('    [W] %s', [Msg]);
@@ -241,6 +248,7 @@ begin
     Root.AddPair('crc_failed_count',        TJSONNumber.Create(FCRCFailed));
     Root.AddPair('signature_skipped_count', TJSONNumber.Create(FSigSkipped));
     Root.AddPair('unknown_type_skipped_count', TJSONNumber.Create(FUnknownSkipped));
+    Root.AddPair('zero_length_skipped_count', TJSONNumber.Create(FZeroLengthSkipped));
     WArr := TJSONArray.Create;
     Root.AddPair('warnings', WArr);
     for S in FWarnings do
@@ -311,8 +319,11 @@ begin
     FCRCFailed := Filer.BlocksCRCFailed;
     FSigSkipped := Filer.BlocksSignatureSkipped;
     FUnknownSkipped := Filer.BlocksUnknownTypeSkipped;
+    FZeroLengthSkipped := Filer.BlocksZeroLengthSkipped;
     if FCRCFailed > 0 then
       FErrors.Add(Format(SVerifyErrFrameCRC, [FCRCFailed]));
+    if FZeroLengthSkipped > 0 then
+      FWarnings.Add(Format(SVerifyWarnZeroLength, [FZeroLengthSkipped]));
 
     if FJson then
       EmitJson(FileName, Version, ChannelCount)
