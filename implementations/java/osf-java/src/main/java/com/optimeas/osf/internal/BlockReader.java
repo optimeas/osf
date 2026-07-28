@@ -195,10 +195,13 @@ public final class BlockReader {
                         ? Short.toUnsignedInt(buf.getShort())
                         : Integer.toUnsignedLong(buf.getInt());
 
-                // Zero-length block: skip (reserved). bytesSkipped = 0.
+                // Zero-length block: non-conforming writer artefact (OSF-UP3).
+                // The frame is only the channel index and the length field,
+                // both already consumed - skip, count, keep scanning.
                 if (length == 0) {
                     out.add(new Block.Skipped(channelIndex,
-                            Block.SkipReason.RESERVED_BLOCK_TYPE, 0));
+                            Block.SkipReason.ZERO_LENGTH_BLOCK, 0));
+                    stats.incBlocksSkippedZeroLength();
                     continue;
                 }
 

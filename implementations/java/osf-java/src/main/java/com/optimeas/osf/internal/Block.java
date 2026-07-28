@@ -110,12 +110,20 @@ public sealed interface Block
         UNSUPPORTED_CHANNEL_TYPE,
         /** Deprecated control byte (1 trusted-ts, 3 status-event, 4 message-event). */
         DEPRECATED_BLOCK_TYPE,
-        /** Reserved control byte (0, 2) or any undefined value ≥ 9; or zero-length. */
+        /** Reserved control byte (0, 2) or any undefined value ≥ 9. */
         RESERVED_BLOCK_TYPE,
         /** Frame CRC32C did not verify under an active integrity profile. */
         CRC_FAILED,
         /** Integrity signature block on the reserved channel {@code 0xFFFE}. */
         SIGNATURE_BLOCK,
+        /**
+         * The block's length field read {@code 0}. A conforming block always
+         * carries at least its control byte, so this is a non-conforming writer
+         * artefact (OSF-UP3, DECISIONS §25). The frame is nothing but the
+         * channel index and the length field - both already consumed - so the
+         * reader counts it and keeps scanning.
+         */
+        ZERO_LENGTH_BLOCK,
     }
 
     /**

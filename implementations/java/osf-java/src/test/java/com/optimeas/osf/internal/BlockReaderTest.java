@@ -407,4 +407,38 @@ class BlockReaderTest {
         assertTrue(st.truncationSeen());
         assertEquals(1, st.blocksRead());
     }
+
+    // ---------------------------------------------------------------
+    // Zero-length block (OSF-UP3)
+    // ---------------------------------------------------------------
+
+    @Test
+    void zeroLengthBlockIsSkippedAndScanContinues() {
+        var channels = channelsByIndex(channel(0, DataType.INT64, 2));
+        // Block 1 - the non-conforming case: channel index 0, length field 0.
+        // No control byte follows; the frame is these four bytes only.
+        byte[] bad = new byte[]{0, 0, 0, 0};
+        // Block 2 - a well-formed single-sample bcAbsTimeStampData.
+        byte[] good = absTsInt64Single(0, 2, 1L, 42L);
+        byte[] data = new byte[bad.length + good.length];
+        System.arraycopy(bad, 0, data, 0, bad.length);
+        System.arraycopy(good, 0, data, bad.length, good.length);
+
+        ReaderStats st = stats();
+        List<Block> blocks = BlockReader.readAll(data, OsfVersion.OSF5, channels, st);
+
+        assertEquals(2, blocks.size());
+        var skipped = (Block.Skipped) blocks.get(0);
+        assertEquals(0, skipped.channelIndex());
+        assertEquals(Block.SkipReason.ZERO_LENGTH_BLOCK, skipped.reason());
+        assertEquals(0L, skipped.bytesSkipped());
+
+        // The scan must continue and decode the block behind the bad frame.
+        var b = (Block.AbsTimestampData) blocks.get(1);
+        assertArrayEquals(new long[]{1L}, b.timestamps());
+
+        assertEquals(1L, st.blocksSkippedZeroLength());
+        assertEquals(1, st.blocksRead());
+        assertFalse(st.truncationSeen());
+    }
 }

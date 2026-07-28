@@ -33,11 +33,14 @@ public final class ReferenceManifest {
         private final int version;
         private final List<ChannelEntry> channels;
         private final String integrity;
+        private final Map<String, Long> anomalies;
 
-        FileEntry(int version, List<ChannelEntry> channels, String integrity) {
+        FileEntry(int version, List<ChannelEntry> channels, String integrity,
+                  Map<String, Long> anomalies) {
             this.version = version;
             this.channels = List.copyOf(channels);
             this.integrity = integrity;
+            this.anomalies = Map.copyOf(anomalies);
         }
 
         /** OSF format version: 4 or 5. */
@@ -52,6 +55,13 @@ public final class ReferenceManifest {
          * profile. Optional field — absent for the plain-file entries.
          */
         public String integrity() { return integrity; }
+
+        /**
+         * Deliberate non-conformances this corpus file carries, from the
+         * optional {@code anomalies} manifest object. Empty for well-formed
+         * files, which must therefore report zero for every kind.
+         */
+        public Map<String, Long> anomalies() { return anomalies; }
     }
 
     /** Per-channel entry within a file entry. */
@@ -132,7 +142,17 @@ public final class ReferenceManifest {
                         chNode.get("sampleCount").asLong(),
                         chNode.get("mode").asText()));
             }
-            result.put(fileName, new FileEntry(version, channels, integrity));
+            // Optional "anomalies" object: deliberate non-conformances this
+            // corpus file carries. Non-defaulting lookup by design - a
+            // mis-spelled key must fail loudly rather than silently reading
+            // as absent (0 == 0 across every entry would mask the bug).
+            Map<String, Long> anomalies = new LinkedHashMap<>();
+            JsonNode anomaliesNode = fileNode.get("anomalies");
+            if (anomaliesNode != null) {
+                anomaliesNode.fields().forEachRemaining(a ->
+                        anomalies.put(a.getKey(), a.getValue().asLong()));
+            }
+            result.put(fileName, new FileEntry(version, channels, integrity, anomalies));
         });
         return Collections.unmodifiableMap(result);
     }

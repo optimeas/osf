@@ -101,6 +101,17 @@ class ConformanceManifestTest {
                     .isZero();
         }
 
+        // ── Anomalies (optional) ─────────────────────────────────────────────
+        // Deliberate non-conformances (optional). A file that declares none
+        // must report none - a well-formed file reporting a zero-length skip
+        // is itself a finding. Asserted unconditionally, unlike the integrity
+        // block above: a file with no integrity profile has no frame CRCs to
+        // fail, but any file at all can carry a zero-length block.
+        long wantZeroLength = expected.anomalies().getOrDefault("zeroLengthBlocks", 0L);
+        assertThat(mgr.stats().blocksSkippedZeroLength())
+                .as("%s: anomalies.zeroLengthBlocks", key)
+                .isEqualTo(wantZeroLength);
+
         List<DataChannel> channels = mgr.channels();
 
         // ── Channel count ────────────────────────────────────────────────────
