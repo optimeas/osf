@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **`bcMessageEvent` (control byte 4) is read-mandatory — normative spec rule +
+  read support in all five implementations (OSF-UP4).** Deployed device firmware
+  writes OSF4 `string` channels as `bcMessageEvent`, which the specification
+  permitted (it said only that the type is no longer *produced* from OSF5
+  onwards) but every reference reader skipped as deprecated. *Specification:*
+  `docs/{en,de}/osf_general.md` gains the read obligation on block-type table
+  rows 3 and 4, a dedicated `bcMessageEvent (deprecated, read-mandatory)`
+  subsection, a row in the block-type restriction table (not allowed on
+  equidistant channels, allowed on time-stamped ones), and a corrected
+  `datatype` table that scopes the OSF4 null-terminator statement to
+  `bcAbsTimeStampData`; recorded as decision **DECISIONS §26**. The same pass
+  fixes the root cause: **row 4's payload column had omitted the `uint32` length
+  prefix** the bytes on disk actually carry, so a reader built strictly from
+  that row decoded the wrong layout whether or not it also skipped the block.
+  *Implementations:* Rust, C++, Java, Python and Delphi decode the block as one
+  time-stamped sample of the channel's declared `datatype`, into their existing
+  time-stamped representation rather than a new block kind; bit 7 (multi-value,
+  unspecified for this type) and any `datatype` other than `string` / `binary`
+  are skipped-and-counted rather than guessed, and `N = 0` decodes to an empty
+  value. `bcStatusEvent` (control byte 3) keeps being skipped — its payload is a
+  fixed `uint32` status word regardless of `datatype` — but every implementation
+  gained a dedicated counter for it (`blocks_skipped_status_event` /
+  `blocksSkippedStatusEvent` / `BlocksStatusEventSkipped`), and **Java gained
+  the reserved- and deprecated-skip counters its `ReaderStats` never had at
+  all**. *Corpus:* `examples/generated/osf4_message_event_string.osf` plus
+  `…_equivalent.osf` carry the same `string` channel content in both encodings,
+  are reproducible via `cargo run --example gen_message_event_refs`, and are
+  registered in `examples/reference_manifest.json` so all four manifest-driven
+  conformance suites assert that both decode channel-for-channel identically.
+  *Tooling:* `osftool verify` reports the status-event count in both output
+  modes (`Status-event skips:` / `status_event_skipped_count`), deliberately as
+  a reported line rather than a warning. A writer audit confirms no writer in
+  this repository can emit control byte 4 and that the round trip re-emits the
+  data as `bcAbsTimeStampData` — evidence in `examples/README.md`.
 - **Zero-length data blocks — normative spec rule + uniform handling across all
   five implementations (OSF-UP3).** A data block whose per-channel length field
   reads `0` is now specified as a **non-conforming writer artefact, not an
@@ -115,6 +149,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Silent loss of every `bcMessageEvent` channel on read (OSF-UP4).** All five
+  implementations skipped control byte 4 as deprecated, so OSF4 files written by
+  deployed device firmware — which encodes `string` channels this way —
+  delivered those channels **empty, with no error, no warning and, in three of
+  the five, no statistic either**: Rust and C++ counted a generic
+  deprecated-skip, while Java's `ReaderStats` had no skip counters whatsoever
+  and Delphi dropped the block through a dispatch default arm. The affected
+  channels are device metadata, i.e. exactly what such a file is opened for. The
+  block is now decoded (see *Added* above).
+- **Delphi meta cache disagreed with the Delphi data manager (OSF-UP4).**
+  `OSF.Meta.Cache` did not count `bcMessageEvent` blocks as channel samples
+  while `OSF.Data.Manager` decoded them, so the two halves of the Delphi reader
+  reported different sample counts for the same file: `osftool info` showed zero
+  samples on a channel from which `osftool export` produced five.
+- **`osftool verify` was blind to skipped `bcStatusEvent` blocks (OSF-UP4).**
+  The filer skips them, so they never reached `verify`'s report in either output
+  mode; a file full of them looked identical to a clean one. `verify` now
+  surfaces the count.
 - **Delphi reader no longer fails a whole file on a zero-length data block
   (OSF-UP3).** `TOSFFile` raised `EOSFFormatError` on a length field of `0`,
   aborting the read, while the other four implementations skipped the frame and

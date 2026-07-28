@@ -8,6 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **`bcMessageEvent` (control byte 4) is now decoded instead of skipped
+  (OSF-UP4).** Deployed device firmware writes OSF4 `string` channels with this
+  block type, which the format permits; the reader treated it as deprecated and
+  dropped it, so those channels loaded empty with no error and no warning. It is
+  now decoded as one time-stamped sample of the channel's declared `datatype`
+  into the existing `VariableChannel` representation — no new `BlockKind`, so
+  channel assembly and statistics are unchanged. Its payload is `uint32`
+  length-prefixed and carries **no** trailing `0x00`: the OSF4 null-terminator
+  rule applies to `bcAbsTimeStampData` only. Bit 7 (multi-value) is unspecified
+  for this block type and any `datatype` other than `string` / `binary` is
+  undefined over it — both are skipped and counted rather than guessed; `N = 0`
+  decodes to an empty value. The normative rule is in
+  `docs/{en,de}/osf_general.md`, and the corpus pair
+  `examples/generated/osf4_message_event_string{,_equivalent}.osf` is asserted
+  by `test_conformance_manifest`.
+- **`ReaderStats::blocksSkippedStatusEvent` (OSF-UP4).** `bcStatusEvent`
+  (control byte 3) is still skipped — its payload is a fixed `uint32` status
+  word regardless of the channel's `datatype`, so attaching it as a sample would
+  fabricate a value of the wrong type — but it now has a counter of its own
+  instead of being folded into `blocksSkippedDeprecatedType`, so an occurrence
+  in the field is visible rather than silent. `blocksTotal` includes the new
+  counter as a term.
 - **Dedicated skip reason for zero-length data blocks (OSF-UP3).** A data block
   whose per-channel length field reads `0` is a non-conforming writer artefact —
   a conforming block always carries at least its control byte. The reader
@@ -26,11 +48,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- **`SkipReason::Kind` gained an enumerator** (`ZeroLengthBlock`). The enum is
+- **`SkipReason::Kind` gained two enumerators** (`ZeroLengthBlock` for OSF-UP3,
+  `StatusEventBlock` for OSF-UP4). The enum is
   not source-stable: C++ has no `#[non_exhaustive]` equivalent, so a consumer
   `switch`ing over `Kind` without a `default:` arm will fail to build under
   `-Werror=switch` / `/W4 C4062` against this header. The requirement is now
   stated in `include/osf/block.h`.
+- **Files carrying `bcMessageEvent` blocks now load with more channel data than
+  before.** Nothing that loaded previously loads differently, but a channel that
+  used to come back empty now comes back populated — code that treated an empty
+  such channel as "absent" will see it appear.
 
 ## [0.2.0] - 2026-07-09
 

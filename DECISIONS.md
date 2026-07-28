@@ -1251,8 +1251,14 @@ block-scanning readers — Rust, C++, Java, and Delphi (Python inherits Rust's
 classification rather than scanning independently, per §25) — all treated the
 type as deprecated and skipped it, so the entire content of those channels
 was lost — silently: no error, no warning, and no statistic that identified
-the loss as channel content loss (Rust, C++, and Java do record a generic
-deprecated-skip counter; only Delphi records nothing at all). This is a
+the loss as channel content loss. Only **Rust and C++** recorded a generic
+deprecated-skip counter (`blocks_skipped_deprecated_type` /
+`blocksSkippedDeprecatedType`); **Java's `ReaderStats` carried no reserved,
+deprecated or unsupported counter at all** — it counted decoded blocks and a
+truncation flag and nothing else — and Delphi recorded nothing either, since
+control byte 4 is below its unknown-control-byte guard and fell through the
+block dispatch's default arm. So three of the five implementations lost the
+channel with no trace whatsoever. This is a
 specification gap, not a firmware bug: the spec said only that the type is no
 longer *produced* from OSF5 onwards, so emitting it in OSF4 is conforming.
 The affected channels are device metadata — exactly what one opens such a
@@ -1319,10 +1325,11 @@ is a fixed `uint32` status word regardless of the channel's `datatype`, so
 attaching it as a channel sample would fabricate a value of the wrong type.
 It keeps being skipped as deprecated, but readers must count it under a
 reason of its own — distinct from `bcMessageEvent`'s handling and from the
-generic deprecated-skip bucket that Rust, C++, and Java currently fold it
-into (Delphi counts nothing today) — so that an occurrence in the field is
-visible rather than silent. That dedicated counter is new work for every
-implementation, not a description of the status quo.
+generic deprecated-skip bucket that Rust and C++ fold it into today (Java and
+Delphi count nothing) — so that an occurrence in the field is visible rather
+than silent. That dedicated counter is new work for every implementation, not
+a description of the status quo; in Java it also means introducing the
+reserved- and deprecated-skip counters that its `ReaderStats` never had.
 
 **`datatype=binary` is supported over this block type.** The frame layout
 (timestamp, length, payload) is type-agnostic. `bcMessageEvent` reuses
@@ -1345,6 +1352,6 @@ was written: `examples/generated/osf4_message_event_string.osf` (the device
 encoding, `bcMessageEvent`) and
 `examples/generated/osf4_message_event_string_equivalent.osf` (the same
 channel content via `bcAbsTimeStampData`). Their contract is that every
-implementation decodes both files to the same channel-for-channel result;
-implementation tasks register the pair in `examples/reference_manifest.json`
-and assert that contract.
+implementation decodes both files to the same channel-for-channel result.
+**Delivered:** the pair is registered in `examples/reference_manifest.json`
+and all four manifest-driven conformance suites assert the contract.
