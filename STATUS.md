@@ -983,6 +983,17 @@ frame CRCs. A brief for it is on hand; the plan is to stand up a **test PKI** an
 a **Rust reference implementation** first, then fan the same design out to the
 other implementations the way stage `crc` was. No code exists for it yet.
 
+**Queued ahead of that (2026-07-28): OSF-UP3 — zero-length data blocks.**
+A block whose length field reads `0` makes the **Delphi** reference raise and
+abort the read, while C++, Rust, Java and Python skip it and keep scanning.
+Nothing tests the case anywhere and the corpus has no such file, which is how
+the divergence survived. It was observed in real field data, not constructed.
+Work items and the notes already taken (the corpus file is a minimal synthetic
+reproduction; malformed examples need their own sub-directory and expectation
+schema, since `reference_manifest.json` drives every conformance suite) are in
+[BACKLOG.md](BACKLOG.md) → *Reader conformance: zero-length data blocks
+(OSF-UP3)*. Start there.
+
 Other continuations remain incremental / BACKLOG — notably the deferred `osf-c`
 C builder surface + packaging (see `BACKLOG.md`); a native **C** implementation
 is still README-only.

@@ -316,6 +316,76 @@ links in `osf_general.md` / `osf4.md` / `osf5.md`; these use explicit `{#id}`
 headings and pass the authoritative Docusaurus build — spot-check the `{#id}`
 anchors when those pages are next edited. Both are cosmetic (P3).
 
+### Reader conformance: zero-length data blocks (OSF-UP3)
+
+A data block whose per-channel length field reads `0` is handled two
+different ways across the reference family, and the spec says nothing
+about the case:
+
+| Implementation | Behaviour |
+|---|---|
+| C++ (`src/reader.cpp:779`) | skip the frame, record `ReservedBlockType`, keep scanning |
+| Rust (`osf-core/src/reader.rs:451`) | same, plus `warn!("… likely writer bug")` |
+| Python | inherits the Rust core |
+| Java (`internal/BlockReader.java:199`) | same skip, `RESERVED_BLOCK_TYPE` |
+| **Delphi (`src/OSF.Filer.pas:1420`)** | **`raise EOSFFormatError` — aborts the whole read** |
+
+Four readers treat it as a writer bug to be stepped over; the Delphi
+reference alone fails the file, which also contradicts its own stated
+rule that "Only a real truncation stops the reader" (`OSF.Filer.pas:1285`).
+Downstream that is not cosmetic: a consuming application that lets the
+exception escape its load path cannot open such a file at all, while the
+same file reads fine through the other four implementations.
+
+The divergence survived because **nothing tests it** — no implementation
+has a zero-length-block test, and the reference corpus contains no such
+file (checked 2026-07-28: `grep -i zero.length` across all test
+directories returns nothing).
+
+Proposed resolution:
+
+1. Decide and write down the rule. Recommended: a zero-length data block
+   is a non-conforming writer artefact, not a truncation — readers skip
+   the frame, count it as a skipped/reserved block, and continue. That
+   ratifies what four of five already do.
+2. Align the Delphi reference: replace the `raise` with the skip + a
+   counter so the anomaly stays visible in the statistics.
+3. Add a corpus file carrying a zero-length block plus one reader test
+   per language, so the uniformity is demonstrated rather than assumed.
+
+Open question for the writer side: **which writer emits zero-length
+blocks?** The case was observed in real field data (2026-07), not
+constructed. Tracking the producing writer down is part of the work — a
+reader-side skip keeps such files readable but does not make them
+conforming.
+
+### Notes for whoever picks this up
+
+**The corpus file is a minimal synthetic reproduction.** Observed files are
+full-size recordings and are not redistributable; the corpus gets a
+handcrafted minimum instead — one channel, one zero-length block, one valid
+block behind it, a few hundred bytes. Provenance (device, firmware, writer)
+goes in as text once known, which is what keeps the case documented rather
+than invented.
+
+**A malformed file cannot go into `examples/generated/` as-is.**
+`examples/reference_manifest.json` describes only well-formed expectations
+(channels, `sampleCount`, `mode`), and every implementation's
+manifest-driven conformance test asserts against it — dropping a broken
+file in there turns all five test suites red. Error examples need their own
+sub-directory plus an expectation schema of their own shape ("block is
+skipped, N samples readable behind it", "reader reports one skipped block")
+rather than "file contains N samples". The `examples/generated/integrity/`
+retrofit is the precedent for the mechanics: sub-path keys in the manifest
+plus an optional field; only the assertions differ, so each implementation's
+manifest test needs a branch for the malformed set.
+
+**Consumers that vendor the Delphi sources need a follow-up pass** once the
+reference changes — re-copy, and drop whatever local workaround they carry
+for this. That side is tracked by the consuming projects, not here.
+
+---
+
 ## Streaming Transport
 
 ### OSF5 Streaming Transport layer + UDP reference receivers (epic)
