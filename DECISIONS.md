@@ -1189,7 +1189,8 @@ artefact, not an error**, when its per-channel length field, read literally
 from the stream, equals `0`. Readers skip the block, count it under a
 dedicated `ZeroLengthBlock` reason, and continue scanning; writers must never
 produce one. The normative rule is specified in
-[`docs/{en,de}/osf_general.md`](docs/en/osf_general.md#zero-length-data-blocks)
+[`docs/en/osf_general.md`](docs/en/osf_general.md#zero-length-data-blocks)
+(German mirror: [`docs/de/osf_general.md`](docs/de/osf_general.md#zero-length-data-blocks))
 and applies to OSF4 and OSF5 alike.
 
 **Why this and not an abort.** Before this decision, four of the five
@@ -1221,9 +1222,9 @@ exit code 0 by default; `--strict` (already implemented in `osftool verify`)
 still escalates warnings to a non-zero exit for callers who want conformance
 enforced.
 
-**Follow-on artefacts, not yet present at this commit.** Two things remain for
-later tasks in this plan: a conformance corpus file that demonstrates the
-anomaly, and its registration in `examples/reference_manifest.json` so every
+**Follow-on artefacts required by this decision.** Two things remain for later
+tasks in this plan: a conformance corpus file that demonstrates the anomaly,
+and its registration in `examples/reference_manifest.json` so every
 implementation's conformance test exercises it. This decision requires both to
 exist before the plan closes; it does not fix their exact paths or field
 names, which belong to the tasks that create them.

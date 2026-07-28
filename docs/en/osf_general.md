@@ -579,7 +579,7 @@ The layout is designed so that each block can be interpreted independently and r
    - Corresponds to the `index` attribute in the metablock.  
 
 2. **Length field (`uint16` or `uint32`)**  
-   - Size of the following block content — control byte plus data area — in bytes.  
+   - Size of the following block content — control byte plus data area (at OSF5 integrity level `crc` including the trailing frame CRC) — in bytes.  
    - The width of the field is defined by the channel parameter `sizeoflengthvalue`.  
    - Allows blocks to be skipped or, on errors, to jump correctly to the next unit.  
 
@@ -593,6 +593,7 @@ The layout is designed so that each block can be interpreted independently and r
    - Format and size depend on the channel type (typically scalar) and the data type.
 <br/>
 
+<a name="zero-length-data-blocks"></a>
 #### Zero-length data blocks (non-conforming) {#zero-length-data-blocks}
 
 This rule applies to OSF4 and OSF5 alike — the block framing is identical in

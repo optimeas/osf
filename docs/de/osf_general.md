@@ -580,7 +580,7 @@ Der Aufbau ist so gestaltet, dass jeder Block unabhängig interpretiert werden k
    - Entspricht dem `index`-Attribut im Metablock.  
 
 2. **Längenfeld (`uint16` oder `uint32`)**  
-   - Größe des nachfolgenden Blockinhalts (Steuerbyte und Datenbereich) in Bytes.  
+   - Größe des nachfolgenden Blockinhalts (Steuerbyte und Datenbereich, auf OSF5-Integritätsstufe `crc` zusätzlich die abschließende Frame-CRC) in Bytes.  
    - Die Länge des Feldes wird durch den Kanalparameter `sizeoflengthvalue` definiert.  
    - Ermöglicht es, Blöcke zu überspringen oder bei Fehlern korrekt zur nächsten Einheit zu springen.  
 
@@ -594,6 +594,7 @@ Der Aufbau ist so gestaltet, dass jeder Block unabhängig interpretiert werden k
    - Format und Größe richten sich nach dem Kanaltyp (typischerweise scalar) und dem Datentyp.
 <br/>
 
+<a name="zero-length-data-blocks"></a>
 #### Datenblöcke mit Länge null (nicht konform) {#zero-length-data-blocks}
 
 Diese Regel gilt für OSF4 und OSF5 gleichermaßen — die Blockstruktur ist in
@@ -601,8 +602,8 @@ beiden Formatversionen identisch.
 
 Jeder Datenblock trägt mindestens sein Steuerbyte, ein wörtlich aus dem Stream
 gelesenes Längenfeld von `0` kommt in einer konformen Datei daher nie vor. Auf
-Stufe `crc` ist es nie kleiner als `5`, da die vier Bytes der Frame-CRC im
-Längenfeld mitgezählt werden (siehe
+OSF5-Integritätsstufe `crc` ist es nie kleiner als `5`, da die vier Bytes der
+Frame-CRC im Längenfeld mitgezählt werden (siehe
 [OSF5-Integritätsprofil](references/osf5_integrity.md)).
 
 - **Schreiber DÜRFEN KEINEN** Datenblock mit Längenfeld `0` schreiben.
@@ -612,12 +613,12 @@ Längenfeld mitgezählt werden (siehe
   Leser bereits konsumiert. Der Leser überspringt den Block, zählt ihn als
   übersprungenen Block mit dem Grund `ZeroLengthBlock` und liest beim nächsten
   Kanalindex weiter.
-- **Der `0`-Test hat Vorrang vor dem CRC-Längentest auf jeder
-  Integritätsstufe.** Ein Längenfeld von `0` wird immer als `ZeroLengthBlock`
-  eingeordnet, nie als CRC-Fehler. Eine Länge von `1`–`4` auf Stufe `crc` ist
-  ein defekter Block und bleibt ein CRC-Anliegen, kein Nullblock.
-- **Die Anomalie MUSS in der Leser-Statistik sichtbar sein** über einen
-  eigenen Zähler, damit eine nicht konforme Datei diagnostizierbar ist statt
+- **Der `0`-Test erfolgt vor dem CRC-Längentest auf jeder Integritätsstufe.**
+  Ein Längenfeld von `0` wird immer als `ZeroLengthBlock` eingeordnet, nie als
+  CRC-Fehler. Eine Länge von `1`–`4` auf Stufe `crc` ist ein defekter Block und
+  bleibt ein CRC-Anliegen, kein Nullblock.
+- **Die Anomalie MUSS über einen eigenen Zähler in der Leser-Statistik
+  sichtbar sein**, damit eine nicht konforme Datei diagnostizierbar ist statt
   stillschweigend hingenommen zu werden.
 
 Der Leser kommt dabei immer voran: jeder solche Block verbraucht 4 oder 6 Byte
