@@ -20,7 +20,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   subsection, a row in the block-type restriction table (not allowed on
   equidistant channels, allowed on time-stamped ones), and a corrected
   `datatype` table that scopes the OSF4 null-terminator statement to
-  `bcAbsTimeStampData`; recorded as decision **DECISIONS §26**. The same pass
+  `bcAbsTimeStampData`; recorded as decision **DECISIONS §26**. The two version
+  reference pages were aligned with it — `docs/{en,de}/references/osf5.md` said
+  the type was "dropped" and `…/osf4.md` that it was "no longer recommended in
+  new implementations", both unqualified, so a reader built from a reference
+  page alone still reproduced the defect. The same pass
   fixes the root cause: **row 4's payload column had omitted the `uint32` length
   prefix** the bytes on disk actually carry, so a reader built strictly from
   that row decoded the wrong layout whether or not it also skipped the block.

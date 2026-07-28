@@ -759,7 +759,7 @@ The following sections describe how values are stored for the various data types
 
 
 
-#### bcMessageEvent (deprecated, read-mandatory)
+#### bcMessageEvent (deprecated, read-mandatory) {#bcmessageevent}
 
 - **Use:**  
   - Historical encoding for a time-stamped `string` or `binary` value; can be fully replaced by `bcAbsTimeStampData` with the same `datatype`.  

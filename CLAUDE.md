@@ -74,7 +74,13 @@ does not skip the block.
 `bcMessageEvent (deprecated, read-mandatory)` subsection, a row in the
 block-type restriction table, a corrected `datatype` table) and recorded as
 **DECISIONS §26**; both it and OSF-UP3 carry `2026-07-28`, so the *spec revision
-in effect* does not move. All five implementations decode the block as one
+in effect* does not move. The version reference pages
+(`docs/{en,de}/references/osf{4,5}.md`) were pulled in line too — they still
+said "dropped" / "no longer recommended", so an implementer building a reader
+from one of them alone would have reproduced the defect; they now cross-link
+the normative subsection via the shared anchor `{#bcmessageevent}` (explicit
+id, because the DE heading text differs and Docusaurus matches anchors, not
+headings). All five implementations decode the block as one
 time-stamped sample of the channel's declared `datatype` into their **existing**
 time-stamped representation — no new block kind. Bit 7 and any `datatype`
 outside `string` / `binary` are skipped-and-counted, never guessed; `N = 0` is a
@@ -96,8 +102,13 @@ conforming. The open items are in `BACKLOG.md`, and the first one matters:
 (Rust/Python/Delphi fail the whole load, C++ keeps raw bytes, Java substitutes
 `U+FFFD`), with Delphi's `EEncodingError` escaping `TOSFDataManager.LoadFromStream`
 — an API documented as best-effort — and discarding every already-decoded
-channel. OSF-UP4 exists to rescue legacy-firmware string channels, so CP1252 /
-Latin-1 firmware is the plausible next field case. Also parked: the shared
+channel. That last one also reopens the cache-vs-manager split this round
+closed for counts, now for *load success*: `osftool channels` succeeds on such
+a file while `osftool export` throws. OSF-UP4 exists to rescue legacy-firmware
+string channels, so CP1252 / Latin-1 firmware is the plausible next field case.
+Also parked: a **truncated `bcMessageEvent` frame splits four ways** (Rust and
+C++ hard error, Java best-effort `truncationSeen()`, Delphi `boStop`) with no
+test anywhere and the policy recorded only in a Java javadoc; the shared
 string/binary builder falling through to `Binary` in C++/Java where Rust errors;
 Delphi's misleading `BlocksUnknownTypeSkipped` name and its two uncounted
 deprecated block types; Java's still-missing `unsupported` bucket; and the

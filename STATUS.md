@@ -994,7 +994,12 @@ The rule is now normative in `docs/{en,de}/osf_general.md` (block-type table
 rows 3 and 4, a dedicated `#### bcMessageEvent (deprecated, read-mandatory)`
 subsection, a row in the block-type restriction table, and a corrected
 `datatype` table) and recorded as
-[DECISIONS §26](DECISIONS.md#26-bcmessageevent-is-read-mandatory). Both the
+[DECISIONS §26](DECISIONS.md#26-bcmessageevent-is-read-mandatory). The two
+version reference pages were pulled in line with it in the same wave:
+`docs/{en,de}/references/osf5.md` no longer says the type is simply "dropped"
+and `…/osf4.md` no longer says merely "no longer recommended", both now
+pointing at the normative subsection — an implementer building a reader from a
+reference page alone would otherwise have reproduced the very defect. Both the
 OSF-UP3 and the OSF-UP4 spec text carry `2026-07-28`, so the header table's
 *spec revision in effect* stays at **2026-07-28** and simply gains a second
 entry.
@@ -1060,11 +1065,13 @@ Delphi DUnitX **37**, green under dcc32 *and* dcc64; Python pytest **23 passed
 / 1 skipped**.
 
 Follow-ups the round surfaced — the three-way split on invalid UTF-8 in a
-`string` payload (including a Delphi exception that escapes a best-effort API),
-the shared string/binary builder that silently falls through to `Binary` in C++
-and Java, Delphi's `BlocksUnknownTypeSkipped` naming plus its two uncounted
-deprecated block types, and the remaining evidence gaps — are recorded in
-`BACKLOG.md`. The UTF-8 one is the one to act on first: OSF-UP4 exists to
+`string` payload (including a Delphi exception that escapes a best-effort API,
+and the cache-vs-manager disagreement it reopens for *load success* after this
+round fixed it for *counts*), the untested four-way split on a **truncated**
+`bcMessageEvent` frame, the shared string/binary builder that silently falls
+through to `Binary` in C++ and Java, Delphi's `BlocksUnknownTypeSkipped` naming
+plus its two uncounted deprecated block types, and the remaining evidence gaps
+— are recorded in `BACKLOG.md`. The UTF-8 one is the one to act on first: OSF-UP4 exists to
 rescue legacy-firmware string channels, and firmware emitting CP1252/Latin-1 is
 the plausible next field case.
 
@@ -1192,9 +1199,14 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
   `string` payload splits the implementations three ways** (Rust/Python/Delphi
   fail the whole load, C++ keeps raw bytes, Java substitutes `U+FFFD`) and
   Delphi's failure escapes as an exception through an API documented as
-  best-effort, discarding every already-decoded channel — the highest-value
-  entry, because OSF-UP4 exists to rescue legacy-firmware string channels and
-  CP1252/Latin-1 firmware is the plausible next field case; the shared
+  best-effort, discarding every already-decoded channel *and* reopening the
+  cache-vs-manager disagreement this round closed for counts, now for load
+  success (`osftool channels` succeeds where `osftool export` throws) — the
+  highest-value entry, because OSF-UP4 exists to rescue legacy-firmware string
+  channels and CP1252/Latin-1 firmware is the plausible next field case; a
+  **truncated `bcMessageEvent` frame splitting four ways** (Rust and C++ hard
+  error, Java best-effort `truncationSeen()`, Delphi `boStop`) with no test in
+  any language and the policy written down only in a Java javadoc; the shared
   string/binary builder falling through to `Binary` on an unknown datatype in
   C++ and Java where Rust errors; Delphi's `BlocksUnknownTypeSkipped` naming
   plus its two still-uncounted deprecated block types (`bcTrustedTimestamp`,

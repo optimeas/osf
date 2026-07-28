@@ -158,7 +158,7 @@ Spezifisch für OSF4:
 
 - **Steuerbyte:** Alle ursprünglichen Blocktypen `0–8` werden unterstützt.  
 - **`bcContinuedRelStampData`:** Wird in OSF4 noch genutzt (ab OSF5 entfernt).  
-- **`bcStatusEvent` und `bcMessageEvent`:** Vorhanden, werden aber in neuen Implementierungen nicht mehr empfohlen.  
+- **`bcStatusEvent` und `bcMessageEvent`:** Vorhanden; Schreiber DÜRFEN sie NICHT erzeugen. `bcMessageEvent` muss dennoch **gelesen werden** — im Feld eingesetzte Geräte schreiben OSF4-`string`-Kanäle weiterhin so, ein Leser, der den Blocktyp überspringt, verliert diese Kanäle stillschweigend. Siehe [`osf_general.md`](../osf_general.md#bcmessageevent).  
 - **Metadaten:** Immer im XML-Format.
 
 ### `bcStartData` mit Abtastrate

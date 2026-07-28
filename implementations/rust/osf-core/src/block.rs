@@ -356,9 +356,17 @@ pub(crate) enum ControlKind {
     TrustedTimestamp,
     /// 2 — `bcTimebaseRealign`. Deprecated; readers skip.
     TimebaseRealign,
-    /// 3 — `bcStatusEvent`. Deprecated; readers skip.
+    /// 3 — `bcStatusEvent`. Deprecated; readers skip, counted under
+    /// [`SkipReason::StatusEventBlock`] rather than the generic
+    /// deprecated bucket (OSF-UP4, DECISIONS §26).
     StatusEvent,
-    /// 4 — `bcMessageEvent`. Deprecated; readers skip.
+    /// 4 — `bcMessageEvent`. Read-mandatory in every format version:
+    /// deployed OSF4 firmware writes `string` channels this way.
+    /// Decoded into [`BlockKind::AbsTimestampData`] for
+    /// `String`/`Binary`/`ByteArray` channels with bit 7 clear; its two
+    /// unspecified shapes (bit 7 set, or any other channel `data_type`)
+    /// are skipped and counted under [`SkipReason::ReservedBlockType`]
+    /// (OSF-UP4, DECISIONS §26). Writers MUST NOT emit it.
     MessageEvent,
     /// 5 — `bcContinuedData`. Equidistant continuation block.
     ContinuedData,

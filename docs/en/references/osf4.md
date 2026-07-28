@@ -158,7 +158,7 @@ Specific to OSF4:
 
 - **Control byte:** All original block types `0–8` are supported.  
 - **`bcContinuedRelStampData`:** Still used in OSF4 (removed from OSF5).  
-- **`bcStatusEvent` and `bcMessageEvent`:** Present, but no longer recommended in new implementations.  
+- **`bcStatusEvent` and `bcMessageEvent`:** Present; writers MUST NOT emit them. `bcMessageEvent` is nevertheless **read-mandatory** — deployed device firmware still writes OSF4 `string` channels this way, so a reader that skips it loses those channels silently. See [`osf_general.md`](../osf_general.md#bcmessageevent).  
 - **Metadata:** Always in XML format.
 
 ### `bcStartData` with sample rate

@@ -25,8 +25,12 @@
 //!   keeps working.
 //! - **Skipped payload capture is opt-in.** Default behaviour drops
 //!   the bytes without allocation; specialists who need to look at
-//!   deprecated `bcMessageEvent` blocks or unknown future types call
+//!   still-skipped types such as `bcStatusEvent` or
+//!   `bcTrustedTimestamp`, or at unknown future types, call
 //!   [`BlockReader::with_capture_skipped_payload`] to keep them.
+//!   `bcMessageEvent` is decoded rather than skipped for
+//!   `string`/`binary` channels (OSF-UP4, DECISIONS §26), so it no
+//!   longer needs this opt-in.
 //!
 //! A future zero-copy `RawBlockReader` could exist as a second layer
 //! on top of the same on-disk parsing logic if profiling demands it;
@@ -1012,7 +1016,7 @@ fn parse_abs_timestamp_string_or_binary(
             .read_u32::<LittleEndian>()
             .map_err(|e| invalid_block(format!("AbsTs string/binary N: {e}")))?;
         if raw == 0 {
-            return build_string_or_binary(dt, Vec::new());
+            return build_string_or_binary("bcAbsTimeStampData", dt, Vec::new());
         }
         (raw as usize, cur)
     } else {
@@ -1029,7 +1033,7 @@ fn parse_abs_timestamp_string_or_binary(
             .read_i64::<LittleEndian>()
             .map_err(|e| invalid_block(format!("AbsTs string/binary ts: {e}")))?;
         let payload = strip_osf4_terminator(cur, osf_version);
-        return build_string_or_binary(dt, vec![(ts, payload.to_vec())]);
+        return build_string_or_binary("bcAbsTimeStampData", dt, vec![(ts, payload.to_vec())]);
     }
 
     // N > 1: equal-length segments.
@@ -1044,7 +1048,7 @@ fn parse_abs_timestamp_string_or_binary(
             .read_i64::<LittleEndian>()
             .map_err(|e| invalid_block(format!("AbsTs string/binary ts: {e}")))?;
         let payload = strip_osf4_terminator(cur, osf_version);
-        return build_string_or_binary(dt, vec![(ts, payload.to_vec())]);
+        return build_string_or_binary("bcAbsTimeStampData", dt, vec![(ts, payload.to_vec())]);
     }
 
     let per_sample = total / n;
@@ -1075,7 +1079,7 @@ fn parse_abs_timestamp_string_or_binary(
         let payload = strip_osf4_terminator(chunk_cur, osf_version);
         samples.push((ts, payload.to_vec()));
     }
-    build_string_or_binary(dt, samples)
+    build_string_or_binary("bcAbsTimeStampData", dt, samples)
 }
 
 /// Parse a `bcMessageEvent` (control byte 4) body into a single time-stamped
@@ -1127,7 +1131,7 @@ fn parse_message_event(body: &[u8], dt: &DataType) -> Result<TimestampedPayload,
         )));
     }
     let payload = &cur[..n];
-    build_string_or_binary(dt, vec![(ts, payload.to_vec())])
+    build_string_or_binary("bcMessageEvent", dt, vec![(ts, payload.to_vec())])
 }
 
 /// Whether `bcMessageEvent` is defined for this channel's declared datatype.
@@ -1142,7 +1146,17 @@ fn message_event_datatype_supported(dt: &DataType) -> bool {
     matches!(dt, DataType::String | DataType::Binary | DataType::ByteArray)
 }
 
+/// Shared `string`/`binary` sample builder for the two block types that
+/// carry variable-length values.
+///
+/// `block_type` names the block the samples came from and is used only in
+/// diagnostics. It is a parameter rather than a hard-coded literal because
+/// this helper is shared: since OSF-UP4 it is reached from
+/// [`parse_message_event`] as well as from `bcAbsTimeStampData`, and a fixed
+/// `"AbsTs"` in the message would point a field user at the wrong block type
+/// when a legacy `bcMessageEvent` payload fails to decode.
 fn build_string_or_binary(
+    block_type: &str,
     dt: &DataType,
     samples: Vec<(i64, Vec<u8>)>,
 ) -> Result<TimestampedPayload, OsfError> {
@@ -1151,7 +1165,7 @@ fn build_string_or_binary(
             let mut decoded = Vec::with_capacity(samples.len());
             for (ts, bytes) in samples {
                 let s = String::from_utf8(bytes).map_err(|e| {
-                    invalid_block(format!("AbsTs string is not valid UTF-8: {e}"))
+                    invalid_block(format!("{block_type} string is not valid UTF-8: {e}"))
                 })?;
                 decoded.push((ts, s));
             }
@@ -1159,7 +1173,8 @@ fn build_string_or_binary(
         }
         DataType::Binary | DataType::ByteArray => Ok(TimestampedPayload::Binary(samples)),
         other => Err(invalid_block(format!(
-            "build_string_or_binary called with non-string/binary datatype {other:?}"
+            "build_string_or_binary called with non-string/binary datatype \
+             {other:?} for {block_type}"
         ))),
     }
 }

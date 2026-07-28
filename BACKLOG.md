@@ -484,6 +484,15 @@ and the five readers do three different things:
   best-effort and as *not* propagating exceptions from partial files. That is
   arguably a defect in its own right, independent of which encoding policy the
   project eventually picks: a documented best-effort loader should not throw.
+  It also **reopens the cache-versus-manager split in a second dimension.**
+  OSF-UP4 fixed that split for *counts* (the meta cache did not count
+  `bcMessageEvent` samples while the manager decoded them), but the two halves
+  still disagree on *load success*: the filer/cache path never decodes the
+  bytes to text, so `osftool channels` succeeds on a file with invalid UTF-8
+  while `osftool export` fails with `EEncodingError` out of
+  `TOSFDataManager`. Whatever encoding policy is chosen has to be applied to
+  both halves, or the same file will keep opening in one verb and failing in
+  another.
 - **C++ accepts the raw bytes** (`std::string` is a byte container; no
   validation happens).
 - **Java substitutes `U+FFFD`** — `new String(bytes, UTF_8)` replaces invalid
@@ -504,6 +513,34 @@ per-sample lossy flag)? The spec is silent, so any implementation choice today
 is unreviewed. Trigger to act: a field file with non-UTF-8 `string` payloads,
 or the Delphi exception being hit in `osftool`. The Delphi escape is worth
 fixing regardless of the encoding decision.
+
+### A truncated `bcMessageEvent` frame splits the implementations four ways, and nothing tests it
+
+A frame that declares more payload than it carries — `N` larger than the bytes
+remaining in the block — is handled differently by all four independently
+scanning readers, and there is **no test for the case in any language**:
+
+- **Rust** propagates a hard error (`MessageEvent payload truncated: …`) that
+  fails the whole load.
+- **Java** swallows it into `markTruncated()` and stops best-effort, so the
+  file loads with the blocks read so far and `truncationSeen()` set.
+- **C++** returns an error.
+- **Delphi** returns `boStop`, ending the scan.
+
+Each implementation is following its own pre-existing truncation policy, and
+that *is* the rule the round adopted — so this is not a defect in any of them.
+What is missing is that the policy is written down nowhere for this block type
+(it survives only in a Java javadoc), nothing pins it, and the resulting
+four-way split means the same malformed file yields a hard failure, a partial
+success and a silent stop depending on the reader. Distinct from the
+encoding question above: that one is about *what a valid frame's bytes mean*,
+this one about *what happens when the framing itself is wrong*.
+
+The cheap half is a test per implementation asserting each one's documented
+policy, which turns four undocumented behaviours into four pinned ones without
+changing any of them. The expensive half — agreeing a single cross-language
+policy and writing it into the spec — is a separate decision and probably
+belongs with the general truncation policy rather than with `bcMessageEvent`.
 
 ### Shared string/binary builder: Rust rejects an unknown datatype, C++ and Java fall through to `Binary`
 

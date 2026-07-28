@@ -760,7 +760,7 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
 
 
 
-#### bcMessageEvent (entfällt, muss gelesen werden)
+#### bcMessageEvent (entfällt, muss gelesen werden) {#bcmessageevent}
 
 - **Einsatz:**  
   - Historische Kodierung für einen zeitgestempelten `string`- oder `binary`-Wert; kann vollständig durch `bcAbsTimeStampData` mit demselben `datatype` ersetzt werden.  
