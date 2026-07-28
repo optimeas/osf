@@ -61,6 +61,11 @@ type
     // [u16 channel 0][length field][0x03][int64 ts][uint32 status word]
     function MakeStatusEventBlock(ALFS: TOSFLengthFieldSize;
       TimestampNs: Int64; StatusWord: UInt32): TBytes;
+    // [u16 channel 0][length field = Length(AFrameBody)][AFrameBody verbatim].
+    // AFrameBody starts at the control byte, so a caller can build a frame
+    // whose *inner* fields lie while the outer framing stays consistent.
+    function MakeRawBlock(ALFS: TOSFLengthFieldSize;
+      const AFrameBody: TBytes): TBytes;
   public
     [Test] procedure ManagerDecodesLegacyMessageEventChannel;
     [Test] procedure LegacyAndEquivalentDecodeIdentically;
@@ -68,6 +73,8 @@ type
     [Test] procedure ZeroLengthMessagePayloadDecodesToAnEmptyValue;
     [Test] procedure UnspecifiedShapesAndStatusEventsAreSkippedAndCounted;
     [Test] procedure MetaCacheAgreesWithTheDataManager;
+    [Test] procedure BinaryPayloadEndingInZeroSurvivesIntact;
+    [Test] procedure MalformedFramesStopTheScanWithoutDeliveringASample;
   end;
 
 const
@@ -179,6 +186,36 @@ begin
     WriteFrameHeader(MS, ALFS, 8 + 4, 3); // bcStatusEvent
     MS.WriteBuffer(TimestampNs, SizeOf(TimestampNs));
     MS.WriteBuffer(StatusWord, SizeOf(StatusWord));
+    Result := Copy(MS.Bytes, 0, MS.Size);
+  finally
+    MS.Free;
+  end;
+end;
+
+function TFilerMessageEventTests.MakeRawBlock(ALFS: TOSFLengthFieldSize;
+  const AFrameBody: TBytes): TBytes;
+var
+  MS: TBytesStream;
+  ChannelIndex: Word;
+  Len16: Word;
+  Len32: UInt32;
+begin
+  MS := TBytesStream.Create;
+  try
+    ChannelIndex := 0;
+    MS.WriteBuffer(ChannelIndex, SizeOf(ChannelIndex));
+    if ALFS = lfs2 then
+    begin
+      Len16 := Word(Length(AFrameBody));
+      MS.WriteBuffer(Len16, SizeOf(Len16));
+    end
+    else
+    begin
+      Len32 := Length(AFrameBody);
+      MS.WriteBuffer(Len32, SizeOf(Len32));
+    end;
+    if Length(AFrameBody) > 0 then
+      MS.WriteBuffer(AFrameBody[0], Length(AFrameBody));
     Result := Copy(MS.Bytes, 0, MS.Size);
   finally
     MS.Free;
@@ -592,6 +629,131 @@ begin
     end;
   finally
     Mgr.Free;
+  end;
+end;
+
+// datatype=binary is explicitly supported over this block type: the frame
+// layout (timestamp, length, payload) is type-agnostic, and only the
+// string/binary *value* interpretation is shared with bcAbsTimeStampData.
+// Narrowing the reader's gate to string alone would leave every other test in
+// this suite green while silently dropping every binary message-event channel
+// - the exact defect class OSF-UP4 exists to close.
+//
+// The payload deliberately ENDS IN 0x00 (the JPEG-like FF D8 FF 00 the sibling
+// implementations use), so this one case pins two things at once: that binary
+// is decoded at all, and that no terminator strip touches it. On a length-
+// prefixed payload that trailing zero is a data byte, not a sentinel - and for
+// binary it is the case where a strip does real damage, since a blob is not
+// self-describing enough for anyone to notice a byte went missing.
+procedure TFilerMessageEventTests.BinaryPayloadEndingInZeroSurvivesIntact;
+var
+  MS: TBytesStream;
+  Mgr: TOSFDataManager;
+  Ch: TOSFDataChannel;
+  Blob, Decoded: TBytes;
+  I: Integer;
+begin
+  Blob := TBytes.Create($FF, $D8, $FF, $00);
+  MS := BuildSyntheticFile(dtBinary, lfs4,
+    MakeMessageEventBlock(lfs4, 4, BASE_TIMESTAMP_NS, Blob));
+  try
+    Mgr := TOSFDataManager.Create;
+    try
+      Mgr.LoadFromStream(MS);
+      Ch := Mgr.ChannelByIndex(0);
+      Assert.IsNotNull(Ch, 'channel 0');
+      Assert.AreEqual('binary', OSFDataTypeToString(Ch.OriginalDataType),
+        'the channel is a binary channel');
+      Assert.AreEqual(1, Ch.SampleCount,
+        'binary is supported over bcMessageEvent, so the block is a sample');
+      Assert.IsTrue(Ch is TOSFTimestampedBinaryChannel,
+        'binary channels expose their blobs through TOSFTimestampedBinaryChannel');
+      Decoded := TOSFTimestampedBinaryChannel(Ch).Values[0];
+      // Both sides cast: Length() on a dynamic array is NativeInt, which is
+      // Int64 under Win64 and would otherwise not match an Integer.
+      Assert.AreEqual(Integer(Length(Blob)), Integer(Length(Decoded)),
+        'all 4 bytes survive - a terminator strip would report 3');
+      for I := 0 to High(Blob) do
+        Assert.AreEqual(Integer(Blob[I]), Integer(Decoded[I]),
+          Format('payload byte %d', [I]));
+      Assert.AreEqual(0, Integer(Decoded[High(Decoded)]),
+        'the trailing 0x00 is a data byte here, never a sentinel');
+      Assert.AreEqual(BASE_TIMESTAMP_NS, Ch.TimestampNsAt(0), 'timestamp');
+    finally
+      Mgr.Free;
+    end;
+  finally
+    MS.Free;
+  end;
+end;
+
+// The two malformed shapes, as opposed to the two unspecified ones: a frame
+// too short to hold its own 13-byte header, and a declared payload length
+// larger than the frame actually holds. Both stop the best-effort scan
+// (boStop, reported as a truncation) rather than skipping, which is the same
+// treatment the generic decode path gives a too-short prefix and matches the
+// sibling implementations' hard-error choice. Either way no sample is
+// fabricated from bytes that are not there.
+procedure TFilerMessageEventTests.MalformedFramesStopTheScanWithoutDeliveringASample;
+
+  // Drains a synthetic file and reports what came out.
+  procedure DrainExpectingNothing(const ABlocks: TBytes; const AWhat: string);
+  var
+    MS: TBytesStream;
+    F: TOSFFile;
+    Block: TOSFDataBlock;
+    Blocks: Integer;
+  begin
+    MS := BuildSyntheticFile(dtString, lfs4, ABlocks);
+    try
+      Blocks := 0;
+      F := TOSFFile.Create;
+      try
+        F.OpenForRead(MS);
+        while F.ReadNextBlock(Block) do
+          if not Block.IsInfoBlock then
+            Inc(Blocks);
+        Assert.AreEqual(0, Blocks, AWhat + ': no sample may be delivered');
+        Assert.IsTrue(F.TruncationSeen, AWhat + ': the scan stops, flagged');
+        Assert.AreEqual(UInt32(0), F.BlocksUnknownTypeSkipped,
+          AWhat + ': malformed is not the same verdict as unspecified');
+      finally
+        F.Free;
+      end;
+    finally
+      MS.Free;
+    end;
+  end;
+
+var
+  Body: TBytesStream;
+  Ts: Int64;
+  DeclaredN: UInt32;
+  Ctrl: Byte;
+  Short: TBytes;
+begin
+  // (a) LenField = 5: control byte plus four bytes, so the int64 timestamp
+  // alone does not fit, let alone the uint32 length prefix.
+  DrainExpectingNothing(
+    MakeRawBlock(lfs4, TBytes.Create(4, $01, $02, $03, $04)),
+    'frame shorter than the 13-byte header');
+
+  // (b) A well-formed 13-byte header that declares 10 payload bytes while
+  // only 2 follow.
+  Body := TBytesStream.Create;
+  try
+    Ctrl := 4;
+    Ts := BASE_TIMESTAMP_NS;
+    DeclaredN := 10;
+    Body.WriteBuffer(Ctrl, SizeOf(Ctrl));
+    Body.WriteBuffer(Ts, SizeOf(Ts));
+    Body.WriteBuffer(DeclaredN, SizeOf(DeclaredN));
+    Short := TBytes.Create($41, $42);
+    Body.WriteBuffer(Short[0], Length(Short));
+    DrainExpectingNothing(MakeRawBlock(lfs4, Copy(Body.Bytes, 0, Body.Size)),
+      'declared payload longer than the frame');
+  finally
+    Body.Free;
   end;
 end;
 

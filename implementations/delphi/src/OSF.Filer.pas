@@ -155,12 +155,16 @@ type
     function ReadInfoBlock(var Block: TOSFDataBlock): TOSFBlockOutcome;
     function ReadSignatureBlock: TOSFBlockOutcome;
     function ReadDataBlock(ChannelIndex: Word; var Block: TOSFDataBlock): TOSFBlockOutcome;
-    function DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): TOSFBlockOutcome;
+    // FrameOffset is the stream position of the block's own frame (captured
+    // in ReadDataBlock, right after the channel index), so a log line names
+    // where the block starts rather than where it ended — the same offset
+    // SOSFLogZeroLengthBlockSkip reports.
+    function DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; FrameOffset: Int64; var Block: TOSFDataBlock): TOSFBlockOutcome;
     // OSF-UP4: unwraps a bcMessageEvent (control byte 4) frame
     // [int64 timestamp][uint32 N][N bytes] into one time-stamped sample.
     // Deliberately NOT routed through the bcAbsTimeStampData path — see the
     // implementation for why sharing that framing would corrupt every value.
-    function DecodeMessageEventPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): TOSFBlockOutcome;
+    function DecodeMessageEventPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; FrameOffset: Int64; var Block: TOSFDataBlock): TOSFBlockOutcome;
     // Integrity level crc: verify the trailing 4-byte frame CRC over the
     // whole frame (channel index, length field, control byte, payload).
     function VerifyFrameCRC(ChannelIndex: Word; LFS: TOSFLengthFieldSize;
@@ -401,9 +405,9 @@ resourcestring
   // counted rather than guessed at.
   SOSFLogStatusEventSkip = 'Deprecated bcStatusEvent block on channel %d at offset %d - skipping (its payload is a status word, never a channel sample)';
   SOSFLogMessageEventMultiValue = 'bcMessageEvent block on channel %d at offset %d has the multi-value bit set - that layout is unspecified, skipping';
-  SOSFLogMessageEventDataType = 'bcMessageEvent block on channel %d declares datatype "%s" - only string and binary are defined for this block type, skipping';
+  SOSFLogMessageEventDataType = 'bcMessageEvent block on channel %d at offset %d declares datatype "%s" - only string and binary are defined for this block type, skipping';
   SOSFLogMessageEventShortFrame = 'bcMessageEvent block on channel %d at offset %d is shorter than its 13-byte frame header - stopping';
-  SOSFLogMessageEventShortPayload = 'bcMessageEvent block on channel %d declares a %d-byte payload but the frame holds only %d bytes - stopping';
+  SOSFLogMessageEventShortPayload = 'bcMessageEvent block on channel %d at offset %d declares a %d-byte payload but the frame holds only %d bytes - stopping';
   SOSFLogUnknownLengthFieldSize = 'Data block for channel %d declares an unrecognised length-field width - stopping';
   SOSFLogWritingHeader = 'Writing header: version=%s  channels=%d';
   SOSFLogWriteEquidistant = 'WriteEquidistant: channel=%d  samples=%d';
@@ -1559,7 +1563,7 @@ begin
     LenField := LenField - 4;
   end;
 
-  Result := DecodeBlockPayload(Channel, Payload, LenField, Block);
+  Result := DecodeBlockPayload(Channel, Payload, LenField, Offset, Block);
 end;
 
 function TOSFFile.VerifyFrameCRC(ChannelIndex: Word; LFS: TOSFLengthFieldSize;
@@ -1593,7 +1597,7 @@ begin
   Result := Crc.Final = Stored;
 end;
 
-function TOSFFile.DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): TOSFBlockOutcome;
+function TOSFFile.DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; FrameOffset: Int64; var Block: TOSFDataBlock): TOSFBlockOutcome;
 var
   CtrlByte: Byte;
   TypeBits: Byte;
@@ -1635,7 +1639,15 @@ begin
   // occurrence in the field is visible instead of silent.
   if Block.BlockType = bcStatusEvent then
   begin
-    Logger.Write(SOSFLogStatusEventSkip, [Block.ChannelIndex, Pos], llWarning, 'TOSFFile');
+    // llInfo, not llWarning: skipping this block is normal, conforming
+    // operation, so it must not colour the file's verdict. osftool's verify
+    // mirrors every filer warning into its warning list, which would report
+    // WARNING for a perfectly conforming OSF4 file that merely carries legacy
+    // status events. Same reasoning, and the same level, as
+    // SOSFLogSignatureBlockSkipped above. Visibility comes from the dedicated
+    // counter instead. The bcMessageEvent messages below stay at llWarning:
+    // those shapes really are anomalies.
+    Logger.Write(SOSFLogStatusEventSkip, [Block.ChannelIndex, FrameOffset], llInfo, 'TOSFFile');
     Inc(FBlocksStatusEventSkipped);
     Exit(boSkip);
   end;
@@ -1647,7 +1659,7 @@ begin
   // payload the bcAbsTimeStampData path then reads with the OSF4
   // trailing-0x00 rule, which does not apply here.
   if Block.BlockType = bcMessageEvent then
-    Exit(DecodeMessageEventPayload(Channel, Payload, LenField, Block));
+    Exit(DecodeMessageEventPayload(Channel, Payload, LenField, FrameOffset, Block));
 
   // Pre-validate the encoded prefix length so the body needs no further checks.
   // bcStartData carries 8 bytes (int64 timestamp) + 8 bytes (double SampleRate).
@@ -1721,26 +1733,22 @@ end;
 // rule closed. Surplus bytes after the N payload bytes are tolerated; only
 // "too few" is an error.
 function TOSFFile.DecodeMessageEventPayload(Channel: TOSFChannelDef;
-  const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): TOSFBlockOutcome;
+  const Payload: TBytes; LenField: UInt32; FrameOffset: Int64;
+  var Block: TOSFDataBlock): TOSFBlockOutcome;
 const
   // control byte (1) + int64 timestamp (8) + uint32 payload length (4)
   MESSAGE_EVENT_HEADER_LEN = 13;
 var
-  Offset: Int64;
   DeclaredLen: UInt32;
   Available: Int64;
 begin
-  Offset := 0;
-  if Assigned(FStream) then
-    Offset := FStream.Position;
-
   // Unspecified shape 1: bit 7 set. No multi-sample layout is defined for this
   // block type and none has ever been observed, so the block is treated like
   // any other unrecognised shape - skipped via the length field (already
   // consumed by the caller), counted, and the scan continues.
   if Block.MultiValue then
   begin
-    Logger.Write(SOSFLogMessageEventMultiValue, [Block.ChannelIndex, Offset], llWarning, 'TOSFFile');
+    Logger.Write(SOSFLogMessageEventMultiValue, [Block.ChannelIndex, FrameOffset], llWarning, 'TOSFFile');
     Inc(FBlocksUnknownTypeSkipped);
     Exit(boSkip);
   end;
@@ -1750,7 +1758,8 @@ begin
   if not OSFDataTypeIsVariableLength(Channel.DataType) then
   begin
     Logger.Write(SOSFLogMessageEventDataType,
-      [Block.ChannelIndex, OSFDataTypeToString(Channel.DataType)], llWarning, 'TOSFFile');
+      [Block.ChannelIndex, FrameOffset, OSFDataTypeToString(Channel.DataType)],
+      llWarning, 'TOSFFile');
     Inc(FBlocksUnknownTypeSkipped);
     Exit(boSkip);
   end;
@@ -1759,7 +1768,7 @@ begin
   // the same best-effort stop the generic body applies to a short prefix.
   if LenField < MESSAGE_EVENT_HEADER_LEN then
   begin
-    Logger.Write(SOSFLogMessageEventShortFrame, [Block.ChannelIndex, Offset], llWarning, 'TOSFFile');
+    Logger.Write(SOSFLogMessageEventShortFrame, [Block.ChannelIndex, FrameOffset], llWarning, 'TOSFFile');
     Exit(boStop);
   end;
 
@@ -1770,7 +1779,7 @@ begin
   if Int64(DeclaredLen) > Available then
   begin
     Logger.Write(SOSFLogMessageEventShortPayload,
-      [Block.ChannelIndex, DeclaredLen, Available], llWarning, 'TOSFFile');
+      [Block.ChannelIndex, FrameOffset, DeclaredLen, Available], llWarning, 'TOSFFile');
     Exit(boStop);
   end;
 

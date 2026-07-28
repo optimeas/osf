@@ -35,6 +35,11 @@ type
     FSigSkipped: UInt32;
     FUnknownSkipped: UInt32;
     FZeroLengthSkipped: UInt32;
+    // OSF-UP4: bcStatusEvent blocks are skipped by the filer, so they appear
+    // in neither FBlockCount nor any of the counters above. Without this
+    // field an occurrence would be completely invisible on the one surface a
+    // field user actually looks at.
+    FStatusEventSkipped: UInt32;
     procedure CheckBlock(const ABlock: TOSFDataBlock; AFiler: TOSFFile);
   protected
     // Capture filer warnings into FWarnings before falling through to
@@ -86,6 +91,11 @@ resourcestring
   SVerifyLineSigSkipped    = '  Signature blocks:   %d (skipped, unverified)';
   SVerifyLineUnknownSkip   = '  Unknown-type skips: %d';
   SVerifyLineZeroLenSkip   = '  Zero-length skips:  %d';
+  // Reported, but deliberately NOT a warning: a bcStatusEvent block is a
+  // legitimate legacy block that the specification tells readers to skip, not
+  // a non-conformance like the zero-length frame above. It is surfaced so an
+  // occurrence in the field is visible, without colouring the file's verdict.
+  SVerifyLineStatusEvtSkip = '  Status-event skips: %d';
   SVerifyErrTimestampBackward =
     'channel "%s" (idx %d): bcStartData timestamp %d is earlier than previous %d';
   SVerifyVersionUnknown = 'unknown';
@@ -201,10 +211,11 @@ begin
     if FSigSkipped > 0 then
       Printf(SVerifyLineSigSkipped, [FSigSkipped]);
   end;
-  if (FUnknownSkipped > 0) or (FZeroLengthSkipped > 0) then
+  if (FUnknownSkipped > 0) or (FZeroLengthSkipped > 0) or (FStatusEventSkipped > 0) then
   begin
     Printf(SVerifyLineUnknownSkip, [FUnknownSkipped]);
     Printf(SVerifyLineZeroLenSkip, [FZeroLengthSkipped]);
+    Printf(SVerifyLineStatusEvtSkip, [FStatusEventSkipped]);
   end;
   Printf(SVerifyLineWarnings, [FWarnings.Count]);
   for Msg in FWarnings do
@@ -249,6 +260,7 @@ begin
     Root.AddPair('signature_skipped_count', TJSONNumber.Create(FSigSkipped));
     Root.AddPair('unknown_type_skipped_count', TJSONNumber.Create(FUnknownSkipped));
     Root.AddPair('zero_length_skipped_count', TJSONNumber.Create(FZeroLengthSkipped));
+    Root.AddPair('status_event_skipped_count', TJSONNumber.Create(FStatusEventSkipped));
     WArr := TJSONArray.Create;
     Root.AddPair('warnings', WArr);
     for S in FWarnings do
@@ -320,10 +332,16 @@ begin
     FSigSkipped := Filer.BlocksSignatureSkipped;
     FUnknownSkipped := Filer.BlocksUnknownTypeSkipped;
     FZeroLengthSkipped := Filer.BlocksZeroLengthSkipped;
+    FStatusEventSkipped := Filer.BlocksStatusEventSkipped;
     if FCRCFailed > 0 then
       FErrors.Add(Format(SVerifyErrFrameCRC, [FCRCFailed]));
     if FZeroLengthSkipped > 0 then
       FWarnings.Add(Format(SVerifyWarnZeroLength, [FZeroLengthSkipped]));
+    // No warning entry for FStatusEventSkipped, by decision: a bcStatusEvent
+    // block is a legitimate legacy block the specification tells readers to
+    // skip, so its presence says nothing about the file's conformance. The
+    // zero-length counter above warns because that frame IS a writer defect.
+    // The count is reported unconditionally in both output modes instead.
 
     if FJson then
       EmitJson(FileName, Version, ChannelCount)

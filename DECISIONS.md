@@ -1281,7 +1281,15 @@ by `bcAbsTimeStampData` with the same `datatype`" — it is the same concept in
 a different, length-prefixed encoding, not a different concept. Introducing a
 separate decoded representation would force every channel assembler and
 statistics path in every implementation to learn a second shape for one
-thing, for no benefit over normalizing at the point of decode.
+thing, for no benefit over normalizing at the point of decode. Note for
+maintainers of the Delphi reader specifically: normalizing there means
+unwrapping the frame, **not** relabelling the block. Its decoded block keeps
+`BlockType = bcMessageEvent` while its `RawPayload` holds the bare value
+bytes, and that type tag is load-bearing in two dispatches (the data manager
+and the meta cache) — it is what routes the block away from the
+`bcAbsTimeStampData` path, which would both apply the OSF4 terminator strip
+and re-read the first eight payload bytes as a timestamp. Collapsing the two
+tags to "simplify" the record would silently corrupt every value.
 
 **The multi-value bit (bit 7) is not guessed.** It has never been observed
 set on this type in the field, and its layout for `bcMessageEvent` is
