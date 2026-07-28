@@ -200,6 +200,7 @@ impl<R: Read> BlockReader<R> {
             + s.blocks_skipped_unsupported
             + s.blocks_skipped_deprecated_type
             + s.blocks_skipped_reserved_type
+            + s.blocks_skipped_zero_length
             + s.blocks_crc_failed
             + s.blocks_signature_skipped;
         s.channels_with_data = s
@@ -450,8 +451,8 @@ impl<R: Read> Iterator for BlockReader<R> {
 
         if length == 0 {
             warn!(
-                "channel {channel_index} produced a zero-length block; \
-                 skipping (likely writer bug)"
+                "channel {channel_index}: zero-length block (non-conforming \
+                 writer output); block skipped"
             );
             self.record_skip(channel_index, 0, &SkipReason::ZeroLengthBlock);
             return Some(Ok(Block {
@@ -1362,6 +1363,9 @@ mod tests {
 
     #[test]
     fn zero_length_block_is_skipped_and_scan_continues() {
+        // `channel(0, DataType::Int16, 2)` sets `size_of_length_value = 2`,
+        // which is why both hand-built frames below use a 2-byte length
+        // field — changing that argument silently invalidates both.
         let meta = make_meta(vec![channel(0, DataType::Int16, 2)]);
         // Block 1 — the non-conforming case: channel index 0, length field 0.
         // No control byte follows; the frame is these four bytes only.
@@ -1402,6 +1406,11 @@ mod tests {
         assert_eq!(r.stats().blocks_skipped_zero_length, 1);
         assert_eq!(r.stats().blocks_skipped_reserved_type, 0);
         assert_eq!(r.blocks_truncated(), 0);
+        // The file has exactly two blocks: one skipped, one decoded.
+        // blocks_total must agree with both the iterator and the
+        // per-channel totals (see ReaderStats::blocks_total doc comment).
+        assert_eq!(r.stats().blocks_total, 2);
+        assert_eq!(r.stats().blocks_read, 1);
     }
 
     #[test]

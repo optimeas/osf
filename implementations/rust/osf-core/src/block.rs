@@ -77,14 +77,18 @@ pub enum BlockKind {
     },
     /// Block kept for stream-position purposes after the reader chose
     /// not to interpret it: known control byte but channel marked as
-    /// `Unsupported`, or block type intentionally skipped
-    /// (`bcStatusEvent`, `bcMessageEvent`, `bcTrustedTimestamp`,
-    /// `bcTimebaseRealign`, `bcReserved`, unknown control values).
+    /// `Unsupported`, block type intentionally skipped (`bcStatusEvent`,
+    /// `bcMessageEvent`, `bcTrustedTimestamp`, `bcTimebaseRealign`,
+    /// `bcReserved`, unknown control values), a frame whose integrity
+    /// CRC did not match, an unverified integrity signature block, or a
+    /// non-conforming zero-length block (`SkipReason::ZeroLengthBlock`).
     Skipped {
         /// Why the reader skipped this block.
         reason: SkipReason,
         /// Number of payload bytes the reader had to consume from the
-        /// stream (control byte + payload). Always ≥ 1.
+        /// stream (control byte + payload). Always ≥ 1, except for
+        /// `SkipReason::ZeroLengthBlock`, which is always 0 — that block
+        /// has no control byte and no payload to consume.
         bytes_skipped: u64,
         /// Captured payload bytes after the control byte. Default
         /// behaviour is `None` (bytes are dropped without allocation).

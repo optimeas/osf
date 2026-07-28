@@ -29,6 +29,7 @@
 //! Skipped (unsupp.):     0
 //! Skipped (deprec.):     0
 //! Skipped (reserved):    0
+//! Skipped (zero-len):    0
 //! Truncated:             0
 //!
 //! Top 10 channels by sample count:

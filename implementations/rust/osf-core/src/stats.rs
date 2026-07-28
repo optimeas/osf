@@ -21,6 +21,11 @@
 //! - **Reserved block types** (`bcReserved`, `bcTimebaseRealign`,
 //!   anything with bits 0–6 ≥ 9) are either spec-internal or genuinely
 //!   unknown.
+//! - **Zero-length blocks** (a length field that reads `0`) are always
+//!   a non-conforming writer artefact (OSF-UP3) — a conforming block
+//!   always carries at least its control byte. Kept separate from
+//!   `blocks_skipped_reserved_type` so this diagnosable writer bug is
+//!   never silently folded into a legitimate forward-compat skip.
 
 use crate::integrity::IntegrityProfile;
 use std::collections::HashMap;
