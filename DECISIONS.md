@@ -1181,3 +1181,42 @@ threats); gap-freeness across files is explicitly out of the file format's scope
 **Transformation policy.** Merge/convert/export end the device-signature domain
 by design: the result falls back to level crc and records provenance in `infos`;
 optional organization re-signing is a distinct, labelled statement.
+
+## 25. Zero-Length Data Blocks
+
+**Date:** 2026-07-28
+**Status:** Decided
+**Tracking:** OSF-UP3
+
+A data block whose per-channel length field reads `0` is a **non-conforming
+writer artefact, not an error**. Readers skip the frame, count it under a
+dedicated *zero-length block* reason, and continue scanning. Writers must never
+produce one.
+
+**Why this and not an abort.** Before this decision, four of the five reference
+readers (Rust, C++, Java, Python) already skipped and continued, while the
+Delphi reference raised `EOSFFormatError` and failed the whole file. That made
+the same file readable through four implementations and unopenable through the
+fifth — and it contradicted Delphi's own stated rule that only a real
+truncation stops the reader. The case was observed in real field data in
+July 2026, so tolerating it keeps recorded measurements accessible.
+
+**Why a dedicated reason rather than the existing reserved-block-type skip.**
+The three skipping readers classified the case as `ReservedBlockType(0)`, whose
+contract is "reserved *control byte* 0". On a zero-length block no control byte
+is ever read, so that classification asserted something untrue and merged a
+writer bug with a legitimate forward-compatibility skip. A distinct reason and
+counter make the anomaly diagnosable — `osftool verify` reports it, which is
+how the producing writer will be tracked down.
+
+**Boundary against [§8 Error Handling](#8-error-handling).** §8 governs input
+the reader cannot interpret. A zero-length block is fully interpretable — it
+carries no data — so it is reported through statistics, not through the error
+channel. `osftool verify` therefore lists it as a warning and keeps exit
+code 0; `--strict` still escalates warnings to a non-zero exit for callers who
+want conformance enforced.
+
+The rule is specified in `docs/{en,de}/osf_general.md` §*Zero-length data
+blocks*. The conformance corpus file is
+`examples/generated/malformed/osf5_zero_length_block.osf`, driven by the
+optional `anomalies` field in `examples/reference_manifest.json`.

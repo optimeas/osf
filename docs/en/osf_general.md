@@ -12,7 +12,7 @@ keywords:
   - OSF5
   - OSF
 last_update:
-  date: 2026-07-07
+  date: 2026-07-28
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -591,6 +591,28 @@ The layout is designed so that each block can be interpreted independently and r
 4. **Data area**  
    - The actual measurement values or data.  
    - Format and size depend on the channel type (typically scalar) and the data type.
+<br/>
+
+#### Zero-length data blocks (non-conforming) {#zero-length-data-blocks}
+
+Every data block carries at least its control byte, so the length field is
+never `0`. Under integrity level `crc` it is never below `5`, because the
+4-byte frame CRC is counted inside the length field.
+
+- **Writers MUST NOT emit a data block whose length field is `0`.**
+- **Readers MUST NOT treat a length field of `0` as a truncation, and MUST NOT
+  abort the read.** The frame consists solely of the channel index and the
+  length field, both of which the reader has already consumed. The reader skips
+  the block, counts it as a skipped block with the reason *zero-length block*,
+  and continues scanning at the next channel index.
+- **The anomaly MUST be visible in the reader's statistics** through a counter
+  of its own, so that a non-conforming file can be diagnosed rather than
+  silently tolerated.
+
+Scanning always makes progress: each such frame consumes 4 to 6 bytes (a
+`uint16` channel index plus a 2- or 4-byte length field), so a run of
+zero-length blocks cannot stall the reader.
+
 <br/>
 
 ### The control byte

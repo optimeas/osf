@@ -12,7 +12,7 @@ keywords:
   - OSF5
   - OSF
 last_update:
-  date: 2026-07-07
+  date: 2026-07-28
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -592,6 +592,28 @@ Der Aufbau ist so gestaltet, dass jeder Block unabhängig interpretiert werden k
 4. **Datenbereich**  
    - Die eigentlichen Messwerte oder Datenblöcke.  
    - Format und Größe richten sich nach dem Kanaltyp (typischerweise scalar) und dem Datentyp.
+<br/>
+
+#### Datenblöcke mit Länge null (nicht konform) {#zero-length-data-blocks}
+
+Jeder Datenblock trägt mindestens sein Steuerbyte, das Längenfeld ist daher nie
+`0`. Unter Integritätslevel `crc` ist es nie kleiner als `5`, da die 4 Byte
+Frame-CRC im Längenfeld mitgezählt werden.
+
+- **Writer DÜRFEN keinen Datenblock mit Längenfeld `0` schreiben.**
+- **Reader DÜRFEN ein Längenfeld von `0` NICHT als Truncation behandeln und den
+  Lesevorgang NICHT abbrechen.** Der Frame besteht ausschließlich aus Kanalindex
+  und Längenfeld, beide hat der Reader bereits konsumiert. Der Reader
+  überspringt den Block, zählt ihn als übersprungenen Block mit dem Grund
+  *zero-length block* und liest beim nächsten Kanalindex weiter.
+- **Die Anomalie MUSS in der Reader-Statistik** über einen eigenen Zähler
+  sichtbar sein, damit eine nicht konforme Datei diagnostizierbar ist statt
+  stillschweigend hingenommen zu werden.
+
+Der Scan kommt dabei immer voran: jeder solche Frame verbraucht 4 bis 6 Byte
+(ein `uint16`-Kanalindex plus ein 2 oder 4 Byte breites Längenfeld), eine Folge
+von Nullblöcken kann den Reader also nicht blockieren.
+
 <br/>
 
 ### Das Steuerbyte
