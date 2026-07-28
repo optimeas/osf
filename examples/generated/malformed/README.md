@@ -21,10 +21,12 @@ iterate *every* manifest key with no opt-in at all. So the directory keeps
 these files out of the glob-based harnesses, but the manifest reaches them
 explicitly, and every manifest-driven conformance test loads and asserts
 against them automatically. (The same is true of `integrity/`: its four files
-are manifest keys too, not an opt-in precedent in their own right.) This is
-exactly why the Delphi suite currently fails on `osf5_zero_length_block.osf` —
-it did not opt out, its reader has simply not been fixed yet (tracked
-separately; see OSF-UP3).
+are manifest keys too, not an opt-in precedent in their own right.) Adding a
+file here and a matching key in the manifest is therefore what forces every
+implementation's reader to face the anomaly: there is no per-suite
+registration step, so a corpus file cannot land in only some of the four
+conformance suites — each reader either handles the anomaly correctly or its
+own suite fails (tracked under OSF-UP3).
 
 ## `osf5_zero_length_block.osf`
 
