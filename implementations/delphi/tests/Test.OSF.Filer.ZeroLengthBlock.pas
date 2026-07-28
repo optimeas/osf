@@ -33,16 +33,15 @@ type
   public
     [Test] procedure ManagerReadsAllSamplesAcrossZeroLengthBlock;
     [Test] procedure FilerSkipsAndCountsZeroLengthBlock;
+    [Test] procedure CounterIsIndependentOfTheChannelFilter;
   end;
 
 implementation
 
 uses
   System.IOUtils,
-  OSF.Channel,
   OSF.Data.Channels,
   OSF.Data.Manager,
-  OSF.Log,
   OSF.Filer;
 
 function TFilerZeroLengthBlockTests.ExamplesDir: string;
@@ -102,6 +101,38 @@ begin
     Assert.AreEqual(2, Blocks, 'only the 2 well-formed blocks are delivered');
     Assert.AreEqual(10, Samples, 'samples across both delivered blocks');
     Assert.AreEqual(UInt32(1), F.BlocksZeroLengthSkipped, 'zero-length blocks skipped');
+    Assert.IsFalse(F.TruncationSeen,
+      'a zero-length block must not be reported as truncation');
+  finally
+    F.Free;
+  end;
+end;
+
+// The anomaly belongs to the file, not to the caller's channel selection: with
+// a ChannelFilter active the bad frame is consumed by the filter's skip path
+// instead of ReadDataBlock, and must still be logged and counted. Otherwise a
+// diagnostic run - which is exactly when a filter tends to be set - would
+// report a clean file. The filter here excludes every channel, so no block is
+// delivered at all and the counter is the only surface the anomaly reaches.
+procedure TFilerZeroLengthBlockTests.CounterIsIndependentOfTheChannelFilter;
+var
+  F: TOSFFile;
+  Block: TOSFDataBlock;
+  Blocks: Integer;
+begin
+  Assert.IsTrue(TFile.Exists(CorpusFile), 'corpus file present: ' + CorpusFile);
+  Blocks := 0;
+  F := TOSFFile.Create;
+  try
+    F.OpenForRead(CorpusFile);
+    F.ChannelFilter := ['Not/AChannelInThisFile'];
+    Assert.IsFalse(F.IsChannelIncluded(0), 'the only channel must be filtered out');
+    while F.ReadNextBlock(Block) do
+      if not Block.IsInfoBlock then
+        Inc(Blocks);
+    Assert.AreEqual(0, Blocks, 'every block is filtered out');
+    Assert.AreEqual(UInt32(1), F.BlocksZeroLengthSkipped,
+      'the zero-length block must be counted on the filtered path too');
     Assert.IsFalse(F.TruncationSeen,
       'a zero-length block must not be reported as truncation');
   finally

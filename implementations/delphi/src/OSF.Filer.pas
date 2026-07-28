@@ -176,7 +176,10 @@ type
     procedure SetChannelFilter(const Value: TArray<string>);
     procedure RebuildChannelFilterMap;
     function IsChannelExcluded(ChannelIndex: Word): Boolean;
-    procedure SkipExcludedBlock(Channel: TOSFChannelDef);
+    // Consumes one block of an excluded channel. Returns False when the scan
+    // cannot continue (unrecognised length-field width); raises EReadError on
+    // a truncation, which the caller catches.
+    function SkipExcludedBlock(Channel: TOSFChannelDef): Boolean;
   public
     constructor Create;
     destructor Destroy; override;
@@ -341,7 +344,6 @@ resourcestring
 
   // Data-block read errors.
   SOSFUnknownChannelInBlock = 'Data block references channel index %d which is not defined in the meta block';
-  SOSFUnknownLengthFieldSize = 'Data block for channel %d declares an unrecognised length-field width';
 
   // Data-block write errors.
   SOSFEquiUnknownChannel = 'WriteEquidistantBlock: unknown channel index %d';
@@ -362,6 +364,10 @@ resourcestring
   SOSFLogUnknownBlockTypeInfo = 'Unknown block type %d in info block - skipping';
   SOSFLogUnknownChannelInBlock = 'Block references unknown channel index %d - skipping';
   SOSFLogUnknownBlockType = 'Unknown block type %d at offset %d - skipping';
+  // Framing anomalies - independent of the integrity level and of the OSF
+  // version, so deliberately not filed under the integrity sub-block below.
+  SOSFLogZeroLengthBlockSkip = 'Zero-length data block on channel %d at offset %d - skipping';
+  SOSFLogUnknownLengthFieldSize = 'Data block for channel %d declares an unrecognised length-field width - stopping';
   SOSFLogWritingHeader = 'Writing header: version=%s  channels=%d';
   SOSFLogWriteEquidistant = 'WriteEquidistant: channel=%d  samples=%d';
   SOSFLogWriteTimestamped = 'WriteTimestamped: channel=%d  samples=%d';
@@ -379,7 +385,6 @@ resourcestring
   SOSFLogFrameCRCMismatch = 'Frame CRC mismatch on channel %d at offset %d - skipping block';
   SOSFLogFrameCRCTooShort = 'Block on channel %d too short to carry a frame CRC - skipping block';
   SOSFLogUnknownBlockTypeSkip = 'Unknown block type %d on channel %d at offset %d - skipping';
-  SOSFLogZeroLengthBlockSkip = 'Zero-length data block on channel %d at offset %d - skipping';
   SOSFLogSignatureBlockSkipped = 'Integrity signature block (channel 0xFFFE) skipped - not verified';
 
 implementation
@@ -728,23 +733,50 @@ begin
   Result := not Included;
 end;
 
-procedure TOSFFile.SkipExcludedBlock(Channel: TOSFChannelDef);
+function TOSFFile.SkipExcludedBlock(Channel: TOSFChannelDef): Boolean;
 var
   LenField: UInt32;
   Sink: TBytes;
+  Offset: Int64;
 begin
-  // Channel must be known here - IsChannelExcluded only returns True for
-  // indices present in the metablock, so we have a valid LengthFieldSize.
+  // Channel is always known here - IsChannelExcluded only returns True for
+  // indices present in the metablock - so its LengthFieldSize comes from the
+  // metablock, subject to the same defensive width guard as in ReadDataBlock.
+  Result := True;
+  Offset := 0;
+  if Assigned(FStream) then
+    Offset := FStream.Position;
+
+  // Unrecognised length-field width: same reasoning as in ReadDataBlock - the
+  // frame end, and with it every following frame boundary, is unknowable, so
+  // the scan cannot resync and has to stop. Returning False stops it without
+  // flagging a truncation (unlike ReadDataBlock's boStop, see there).
+  case Channel.LengthFieldSize of
+    lfs2, lfs4: ;
+  else
+    Logger.Write(SOSFLogUnknownLengthFieldSize, [Channel.Index], llWarning, 'TOSFFile');
+    Exit(False);
+  end;
+
   case Channel.LengthFieldSize of
     lfs2:
       LenField := ReadUInt16;
-    lfs4:
-      LenField := ReadUInt32;
   else
-    LenField := 0;
+    LenField := ReadUInt32;
   end;
+
+  // OSF-UP3: a zero-length block on a filtered-out channel is still an anomaly
+  // of the file, not of the filter, so it is logged and counted here exactly as
+  // in ReadDataBlock - the counter must not depend on which channels a caller
+  // happens to read. The frame is the channel index plus the length field, both
+  // already consumed, so skipping means simply continuing with the next block.
   if LenField = 0 then
-    Exit;
+  begin
+    Logger.Write(SOSFLogZeroLengthBlockSkip, [Channel.Index, Offset], llWarning, 'TOSFFile');
+    Inc(FBlocksZeroLengthSkipped);
+    Exit(True);
+  end;
+
   SetLength(Sink, LenField);
   FStream.ReadBuffer(Sink[0], LenField);
   Logger.Write(SOSFLogChannelFilterSkip, [Channel.Name, LenField], llDebug, 'TOSFFile');
@@ -1273,7 +1305,8 @@ begin
     if not Assigned(ExcludedChannel) then
       Exit(False); // excluded but unknown - no LengthFieldSize to skip with
     try
-      SkipExcludedBlock(ExcludedChannel);
+      if not SkipExcludedBlock(ExcludedChannel) then
+        Exit(False); // cannot resync - see SkipExcludedBlock
     except
       on EReadError do
         Exit(False); // truncated mid-block while skipping
@@ -1417,15 +1450,25 @@ begin
 
   // An unrecognised length-field width is a corruption / unsupported-format
   // signal, NOT a zero-length block: without the width we cannot tell where
-  // the frame ends, so the next frame boundary is unknowable and the
-  // best-effort scan has to stop here - exactly like an unknown channel index
-  // above. Checked before the length field is read so that this fault can
-  // never be absorbed by the zero-length skip path below (OSF-UP3 applies to
-  // a length field literally read as 0 from the stream).
+  // the frame ends, so no subsequent frame boundary is knowable either and the
+  // best-effort scan has to stop here - exactly like the unknown channel index
+  // above. It is checked before the length field is read so that this fault can
+  // never be absorbed by the zero-length skip path below; OSF-UP3 applies to a
+  // length field literally read as 0 from the stream, not to a width we failed
+  // to interpret.
+  //
+  // Purely defensive: TOSFLengthFieldSize is a sparse enum (lfs2 = 2, lfs4 = 4)
+  // so out-of-range ordinals are representable, but no current parse path can
+  // produce one - every assignment is a literal or goes through
+  // OSFLengthFieldSizeFromInt, which raises, and TOSFChannelDef initialises to
+  // lfs2. The message below is therefore unreachable today. Should the path
+  // ever go live, note that ReadNextBlock's boStop arm additionally sets
+  // TruncationSeen and logs SOSFLogTruncatedBlock, so the file would be
+  // reported as truncated on top of this warning.
   case Channel.LengthFieldSize of
     lfs2, lfs4: ;
   else
-    Logger.Write(SOSFUnknownLengthFieldSize, [ChannelIndex], llWarning, 'TOSFFile');
+    Logger.Write(SOSFLogUnknownLengthFieldSize, [ChannelIndex], llWarning, 'TOSFFile');
     Exit(boStop);
   end;
 
@@ -1441,9 +1484,10 @@ begin
     // only the channel index and the length field, both already consumed, so
     // the block is logged, counted and skipped; the scan continues with the
     // next block and this is NOT reported as a truncation. The Exit must come
-    // before SetLength/ReadBuffer: reading Payload[0] of an empty dynamic
-    // array raises ERangeError under {$R+}. This test also precedes the frame
-    // CRC length test below, as the spec mandates.
+    // before SetLength/ReadBuffer - the block must not be decoded or delivered
+    // at all, and reading Payload[0] of an empty dynamic array would also
+    // raise ERangeError were range checks enabled. This test precedes the
+    // frame CRC length test below, as the spec mandates.
     if LenField = 0 then
     begin
       Logger.Write(SOSFLogZeroLengthBlockSkip, [ChannelIndex, Offset], llWarning, 'TOSFFile');
