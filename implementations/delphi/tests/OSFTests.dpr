@@ -26,7 +26,8 @@ uses
   OSF.Filer              in '..\src\OSF.Filer.pas',
   Test.OSF.CRC32C          in 'Test.OSF.CRC32C.pas',
   Test.OSF.Filer.Header    in 'Test.OSF.Filer.Header.pas',
-  Test.OSF.Filer.Integrity in 'Test.OSF.Filer.Integrity.pas';
+  Test.OSF.Filer.Integrity in 'Test.OSF.Filer.Integrity.pas',
+  Test.OSF.Filer.ZeroLengthBlock in 'Test.OSF.Filer.ZeroLengthBlock.pas';
 
 var
   Runner: ITestRunner;

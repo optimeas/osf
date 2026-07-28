@@ -113,6 +113,7 @@ type
     FBlocksCRCFailed: UInt32;
     FBlocksUnknownTypeSkipped: UInt32;
     FBlocksSignatureSkipped: UInt32;
+    FBlocksZeroLengthSkipped: UInt32;
 
     // Magic header line + meta block dispatcher.
     procedure ReadMagicAndMeta;
@@ -284,10 +285,14 @@ type
     // ed25519 keyid from the header token (level signed); empty otherwise.
     property Ed25519KeyId: string read FEd25519KeyId;
     // Read-side counters: blocks dropped by a failed frame CRC, unknown
-    // block types skipped (forward-compat), and signature blocks skipped.
+    // block types skipped (forward-compat), signature blocks skipped, and
+    // zero-length blocks skipped (a non-conforming writer artefact — the
+    // frame is only the channel index and the length field, so it is
+    // consumed and skipped rather than treated as a truncation).
     property BlocksCRCFailed: UInt32 read FBlocksCRCFailed;
     property BlocksUnknownTypeSkipped: UInt32 read FBlocksUnknownTypeSkipped;
     property BlocksSignatureSkipped: UInt32 read FBlocksSignatureSkipped;
+    property BlocksZeroLengthSkipped: UInt32 read FBlocksZeroLengthSkipped;
     // Verification status vocabulary (osf5_integrity.md §1.6):
     // 'none' | 'crc_valid' | 'invalid' | 'signature_unverifiable'.
     function VerificationStatus: string;
@@ -336,7 +341,7 @@ resourcestring
 
   // Data-block read errors.
   SOSFUnknownChannelInBlock = 'Data block references channel index %d which is not defined in the meta block';
-  SOSFZeroLengthBlock = 'Zero-length data block for channel %d';
+  SOSFUnknownLengthFieldSize = 'Data block for channel %d declares an unrecognised length-field width';
 
   // Data-block write errors.
   SOSFEquiUnknownChannel = 'WriteEquidistantBlock: unknown channel index %d';
@@ -374,6 +379,7 @@ resourcestring
   SOSFLogFrameCRCMismatch = 'Frame CRC mismatch on channel %d at offset %d - skipping block';
   SOSFLogFrameCRCTooShort = 'Block on channel %d too short to carry a frame CRC - skipping block';
   SOSFLogUnknownBlockTypeSkip = 'Unknown block type %d on channel %d at offset %d - skipping';
+  SOSFLogZeroLengthBlockSkip = 'Zero-length data block on channel %d at offset %d - skipping';
   SOSFLogSignatureBlockSkipped = 'Integrity signature block (channel 0xFFFE) skipped - not verified';
 
 implementation
@@ -1024,6 +1030,7 @@ begin
   FBlocksCRCFailed := 0;
   FBlocksUnknownTypeSkipped := 0;
   FBlocksSignatureSkipped := 0;
+  FBlocksZeroLengthSkipped := 0;
 
   Line := ReadAsciiLine(FStream);
   if Length(Line) = 0 then
@@ -1407,17 +1414,42 @@ begin
   Offset := 0;
   if Assigned(FStream) then
     Offset := FStream.Position;
+
+  // An unrecognised length-field width is a corruption / unsupported-format
+  // signal, NOT a zero-length block: without the width we cannot tell where
+  // the frame ends, so the next frame boundary is unknowable and the
+  // best-effort scan has to stop here - exactly like an unknown channel index
+  // above. Checked before the length field is read so that this fault can
+  // never be absorbed by the zero-length skip path below (OSF-UP3 applies to
+  // a length field literally read as 0 from the stream).
+  case Channel.LengthFieldSize of
+    lfs2, lfs4: ;
+  else
+    Logger.Write(SOSFUnknownLengthFieldSize, [ChannelIndex], llWarning, 'TOSFFile');
+    Exit(boStop);
+  end;
+
   try
     case Channel.LengthFieldSize of
       lfs2:
         LenField := ReadUInt16;
-      lfs4:
-        LenField := ReadUInt32;
     else
-      LenField := 0;
+      LenField := ReadUInt32;
     end;
+    // OSF-UP3: a length field of 0 is a non-conforming writer artefact - a
+    // conforming block always carries at least its control byte. The frame is
+    // only the channel index and the length field, both already consumed, so
+    // the block is logged, counted and skipped; the scan continues with the
+    // next block and this is NOT reported as a truncation. The Exit must come
+    // before SetLength/ReadBuffer: reading Payload[0] of an empty dynamic
+    // array raises ERangeError under {$R+}. This test also precedes the frame
+    // CRC length test below, as the spec mandates.
     if LenField = 0 then
-      raise EOSFFormatError.CreateFmt(SOSFZeroLengthBlock, [ChannelIndex]);
+    begin
+      Logger.Write(SOSFLogZeroLengthBlockSkip, [ChannelIndex, Offset], llWarning, 'TOSFFile');
+      Inc(FBlocksZeroLengthSkipped);
+      Exit(boSkip);
+    end;
     SetLength(Payload, LenField);
     FStream.ReadBuffer(Payload[0], LenField);
   except
