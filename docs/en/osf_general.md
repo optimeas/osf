@@ -579,7 +579,7 @@ The layout is designed so that each block can be interpreted independently and r
    - Corresponds to the `index` attribute in the metablock.  
 
 2. **Length field (`uint16` or `uint32`)**  
-   - Size of the following data area in bytes.  
+   - Size of the following block content — control byte plus data area — in bytes.  
    - The width of the field is defined by the channel parameter `sizeoflengthvalue`.  
    - Allows blocks to be skipped or, on errors, to jump correctly to the next unit.  
 
@@ -595,21 +595,31 @@ The layout is designed so that each block can be interpreted independently and r
 
 #### Zero-length data blocks (non-conforming) {#zero-length-data-blocks}
 
-Every data block carries at least its control byte, so the length field is
-never `0`. Under integrity level `crc` it is never below `5`, because the
-4-byte frame CRC is counted inside the length field.
+This rule applies to OSF4 and OSF5 alike — the block framing is identical in
+both format versions.
+
+Every data block carries at least its control byte, so a length field
+literally read as `0` from the stream never occurs in a conforming file. Under
+OSF5 integrity level `crc` the length field is never below `5`, because the
+4-byte frame CRC is counted inside the length field (see
+[OSF5 Integrity Profile](references/osf5_integrity.md)).
 
 - **Writers MUST NOT emit a data block whose length field is `0`.**
-- **Readers MUST NOT treat a length field of `0` as a truncation, and MUST NOT
-  abort the read.** The frame consists solely of the channel index and the
-  length field, both of which the reader has already consumed. The reader skips
-  the block, counts it as a skipped block with the reason *zero-length block*,
-  and continues scanning at the next channel index.
+- **Readers MUST NOT treat a length field literally read as `0` as a
+  truncation, and MUST NOT abort the read.** The block consists solely of the
+  channel index and the length field, both of which the reader has already
+  consumed. The reader skips the block, counts it as a skipped block with the
+  reason `ZeroLengthBlock`, and continues scanning at the next channel index.
+- **The `0` test precedes the CRC-length test at every integrity level.** A
+  length field literally read as `0` is always classified as
+  `ZeroLengthBlock`, never as a CRC failure. A length of `1`–`4` under level
+  `crc` is a broken block and stays a CRC-level concern, not a zero-length
+  block.
 - **The anomaly MUST be visible in the reader's statistics** through a counter
   of its own, so that a non-conforming file can be diagnosed rather than
   silently tolerated.
 
-Scanning always makes progress: each such frame consumes 4 to 6 bytes (a
+Reading always makes progress: each such block consumes 4 or 6 bytes (a
 `uint16` channel index plus a 2- or 4-byte length field), so a run of
 zero-length blocks cannot stall the reader.
 

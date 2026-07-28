@@ -1184,39 +1184,46 @@ optional organization re-signing is a distinct, labelled statement.
 
 ## 25. Zero-Length Data Blocks
 
-**Date:** 2026-07-28
-**Status:** Decided
-**Tracking:** OSF-UP3
+**Decision (OSF-UP3, 2026-07-28):** A data block is a **non-conforming writer
+artefact, not an error**, when its per-channel length field, read literally
+from the stream, equals `0`. Readers skip the block, count it under a
+dedicated `ZeroLengthBlock` reason, and continue scanning; writers must never
+produce one. The normative rule is specified in
+[`docs/{en,de}/osf_general.md`](docs/en/osf_general.md#zero-length-data-blocks)
+and applies to OSF4 and OSF5 alike.
 
-A data block whose per-channel length field reads `0` is a **non-conforming
-writer artefact, not an error**. Readers skip the frame, count it under a
-dedicated *zero-length block* reason, and continue scanning. Writers must never
-produce one.
-
-**Why this and not an abort.** Before this decision, four of the five reference
-readers (Rust, C++, Java, Python) already skipped and continued, while the
-Delphi reference raised `EOSFFormatError` and failed the whole file. That made
-the same file readable through four implementations and unopenable through the
+**Why this and not an abort.** Before this decision, four of the five
+reference implementations already tolerated the case: Rust, C++, and Java each
+implement their own block-scanning loop and skip-and-continue; Python does not
+scan independently — its bindings sit on the Rust core via PyO3, so it
+inherits Rust's classification rather than deriving its own. Only the Delphi
+reference raised `EOSFFormatError` and failed the whole file. That made the
+same file readable through four implementations and unopenable through the
 fifth — and it contradicted Delphi's own stated rule that only a real
 truncation stops the reader. The case was observed in real field data in
 July 2026, so tolerating it keeps recorded measurements accessible.
 
 **Why a dedicated reason rather than the existing reserved-block-type skip.**
-The three skipping readers classified the case as `ReservedBlockType(0)`, whose
-contract is "reserved *control byte* 0". On a zero-length block no control byte
-is ever read, so that classification asserted something untrue and merged a
-writer bug with a legitimate forward-compatibility skip. A distinct reason and
-counter make the anomaly diagnosable — `osftool verify` reports it, which is
-how the producing writer will be tracked down.
+The three readers with independent scanning logic (Rust, C++, Java — Python's
+classification follows Rust's, per above) classified the case as
+`ReservedBlockType(0)`, whose contract is "reserved *control byte* 0". On a
+zero-length block no control byte is ever read, so that classification
+asserted something untrue and merged a writer bug with a legitimate
+forward-compatibility skip. A distinct reason and counter make the anomaly
+diagnosable — verification tooling such as `osftool verify` is expected to
+surface it, which is how the producing writer will be tracked down.
 
 **Boundary against [§8 Error Handling](#8-error-handling).** §8 governs input
 the reader cannot interpret. A zero-length block is fully interpretable — it
 carries no data — so it is reported through statistics, not through the error
-channel. `osftool verify` therefore lists it as a warning and keeps exit
-code 0; `--strict` still escalates warnings to a non-zero exit for callers who
-want conformance enforced.
+channel. Verification tooling is expected to list it as a warning and keep
+exit code 0 by default; `--strict` (already implemented in `osftool verify`)
+still escalates warnings to a non-zero exit for callers who want conformance
+enforced.
 
-The rule is specified in `docs/{en,de}/osf_general.md` §*Zero-length data
-blocks*. The conformance corpus file is
-`examples/generated/malformed/osf5_zero_length_block.osf`, driven by the
-optional `anomalies` field in `examples/reference_manifest.json`.
+**Follow-on artefacts, not yet present at this commit.** Two things remain for
+later tasks in this plan: a conformance corpus file that demonstrates the
+anomaly, and its registration in `examples/reference_manifest.json` so every
+implementation's conformance test exercises it. This decision requires both to
+exist before the plan closes; it does not fix their exact paths or field
+names, which belong to the tasks that create them.
