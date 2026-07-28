@@ -13,6 +13,20 @@
       {"index": 0, "name": "Sensor/Position", "dataType": "gpslocation", "sampleCount": 100, "mode": "timestamped"}
     ]
   },
+  "osf4_message_event_string.osf": {
+    "version": 4,
+    "channels": [
+      {"index": 0, "name": "Demo.Counter", "dataType": "uint32", "sampleCount": 5, "mode": "timestamped"},
+      {"index": 1, "name": "Demo.Message", "dataType": "string", "sampleCount": 5, "mode": "variable"}
+    ]
+  },
+  "osf4_message_event_string_equivalent.osf": {
+    "version": 4,
+    "channels": [
+      {"index": 0, "name": "Demo.Counter", "dataType": "uint32", "sampleCount": 5, "mode": "timestamped"},
+      {"index": 1, "name": "Demo.Message", "dataType": "string", "sampleCount": 5, "mode": "variable"}
+    ]
+  },
   "osf4_mixed.osf": {
     "version": 4,
     "channels": [
