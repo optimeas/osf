@@ -316,73 +316,140 @@ links in `osf_general.md` / `osf4.md` / `osf5.md`; these use explicit `{#id}`
 headings and pass the authoritative Docusaurus build — spot-check the `{#id}`
 anchors when those pages are next edited. Both are cosmetic (P3).
 
-### Reader conformance: zero-length data blocks (OSF-UP3)
+### Zero-length data blocks — find the producing writer (OSF-UP3)
 
-A data block whose per-channel length field reads `0` is handled two
-different ways across the reference family, and the spec says nothing
-about the case:
+**The reader side is closed.** A data block whose per-channel length field
+reads `0` is a non-conforming writer artefact, not a truncation: the rule is
+normative in `docs/{en,de}/osf_general.md` (*Zero-length data blocks*) and
+recorded as [DECISIONS §25](DECISIONS.md#25-zero-length-data-blocks). All five
+implementations now skip the frame, count it under a dedicated reason
+(`ZeroLengthBlock` / `ZERO_LENGTH_BLOCK`) and keep scanning. Delphi, which used
+to raise `EOSFFormatError` and fail the whole file, logs, counts
+(`BlocksZeroLengthSkipped`) and continues — on the normal read path and on the
+channel-filter path alike. The behaviour is held by the shared conformance
+contract, not by convention: `examples/generated/malformed/osf5_zero_length_block.osf`
+is a manifest key carrying `"anomalies": {"zeroLengthBlocks": 1}`, and all four
+manifest-driven suites (Rust, C++, Java, Delphi) assert the count with no
+per-suite registration step.
 
-| Implementation | Behaviour |
-|---|---|
-| C++ (`src/reader.cpp:779`) | skip the frame, record `ReservedBlockType`, keep scanning |
-| Rust (`osf-core/src/reader.rs:451`) | same, plus `warn!("… likely writer bug")` |
-| Python | inherits the Rust core |
-| Java (`internal/BlockReader.java:199`) | same skip, `RESERVED_BLOCK_TYPE` |
-| **Delphi (`src/OSF.Filer.pas:1420`)** | **`raise EOSFFormatError` — aborts the whole read** |
+**What remains is the producer.** All seven writer classes in this repository
+were audited on 2026-07-28 and cleared — none of them can emit a zero-length
+frame. The per-writer evidence table, the two mechanisms the guarantee rests on
+(buffer-derived length in Rust/Python/Java/Delphi, arithmetic length in C++),
+the three risk shapes checked, and the two coverage gaps the audit itself leaves
+open (the GPS encoder path is exercised by no test in either new audit suite;
+Python's pass-through claim rests on reading `python/src/writer.rs`, with
+nothing executable behind it) are all in
+[`examples/generated/malformed/README.md`](examples/generated/malformed/README.md).
+That narrows the suspect list to code *outside* this repository: the om kernel,
+smartCORE and its `osfwriter` plugin, or device firmware. The blocks were
+observed in real field recordings in July 2026; those recordings are full-size
+and not redistributable, which is why the corpus carries a handcrafted minimum
+instead.
 
-Four readers treat it as a writer bug to be stepped over; the Delphi
-reference alone fails the file, which also contradicts its own stated
-rule that "Only a real truncation stops the reader" (`OSF.Filer.pas:1285`).
-Downstream that is not cosmetic: a consuming application that lets the
-exception escape its load path cannot open such a file at all, while the
-same file reads fine through the other four implementations.
+**The instrument is `osftool verify`.** It reports a `Zero-length skips:` count
+in the plain output and `zero_length_skipped_count` under `--json`, and raises a
+warning naming OSF-UP3. Plain `verify` keeps exit code 0; `--strict` escalates
+to 4. Two gotchas a corpus hunt will hit, both verified during this work:
 
-The divergence survived because **nothing tests it** — no implementation
-has a zero-length-block test, and the reference corpus contains no such
-file (checked 2026-07-28: `grep -i zero.length` across all test
-directories returns nothing).
+- `verify --json` writes a **stream of concatenated JSON values** (log events,
+  then a multi-line pretty-printed report) — not one document, and not NDJSON.
+  `json.load()` and `ConvertFrom-Json` both fail on the whole stream; use a
+  concatenated-value-aware parser (Python's `json.JSONDecoder().raw_decode` in a
+  loop over the remaining text).
+- `verify --json` does **not** emit `creator` / `created_utc` — exactly the two
+  fields that correlate a file with a recording device and a firmware version.
+  `osftool info` does emit `creator`, so a hunt has to run both commands and
+  join the results on filename.
 
-Proposed resolution:
+**Trigger to act:** a field file carrying the anomaly, together with the device
+that recorded it and its firmware version. With those, record the provenance in
+the corpus README and take the fix to the producing project. Without them there
+is nothing further to do in this repository.
 
-1. Decide and write down the rule. Recommended: a zero-length data block
-   is a non-conforming writer artefact, not a truncation — readers skip
-   the frame, count it as a skipped/reserved block, and continue. That
-   ratifies what four of five already do.
-2. Align the Delphi reference: replace the `raise` with the skip + a
-   counter so the anomaly stays visible in the statistics.
-3. Add a corpus file carrying a zero-length block plus one reader test
-   per language, so the uniformity is demonstrated rather than assumed.
+**Consumers that vendor the Delphi sources** should re-copy and drop whatever
+local workaround they carry for the old abort behaviour. That side is tracked by
+the consuming projects, not here.
 
-Open question for the writer side: **which writer emits zero-length
-blocks?** The case was observed in real field data (2026-07), not
-constructed. Tracking the producing writer down is part of the work — a
-reader-side skip keeps such files readable but does not make them
-conforming.
+### Conformance manifest — the anomaly contract is stricter in some suites than in others
 
-### Notes for whoever picks this up
+The optional `anomalies` field added for OSF-UP3 is asserted by all four
+manifest-driven conformance suites, but they do not agree on how strictly they
+police the manifest itself. Three gaps, all surfaced while building the
+contract:
 
-**The corpus file is a minimal synthetic reproduction.** Observed files are
-full-size recordings and are not redistributable; the corpus gets a
-handcrafted minimum instead — one channel, one zero-length block, one valid
-block behind it, a few hundred bytes. Provenance (device, firmware, writer)
-goes in as text once known, which is what keeps the case documented rather
-than invented.
+- **An unknown extra key inside `anomalies` is silently ignored by Rust and
+  C++**; Java and Delphi reject it. A typo'd key sitting next to a correct one
+  (`{"zeroLengthBlocks": 1, "zeroLenghtBlocks": 3}`) therefore passes in two of
+  four suites, and the misspelled expectation is checked by nobody.
+- **A kind becomes legal the moment it joins the known-kinds set** (Delphi,
+  Java) — nothing forces a matching assertion, so a kind could be declared in
+  the manifest and compared by no suite. This is the other half of the rule the
+  corpus README already carries (every kind needs at least one corpus file with
+  a *nonzero* count, or its assertion is vacuous).
+- **Delphi does not assert the manifest `version` field**; Rust, C++ and Java
+  all check it against the `osf4_` / `osf5_` filename prefix. Given that a
+  Delphi reader divergence in equidistance detection is already known (see the
+  Java integrity section in `STATUS.md`), this is the asymmetry most likely to
+  be hiding something.
 
-**A malformed file cannot go into `examples/generated/` as-is.**
-`examples/reference_manifest.json` describes only well-formed expectations
-(channels, `sampleCount`, `mode`), and every implementation's
-manifest-driven conformance test asserts against it — dropping a broken
-file in there turns all five test suites red. Error examples need their own
-sub-directory plus an expectation schema of their own shape ("block is
-skipped, N samples readable behind it", "reader reports one skipped block")
-rather than "file contains N samples". The `examples/generated/integrity/`
-retrofit is the precedent for the mechanics: sub-path keys in the manifest
-plus an optional field; only the assertions differ, so each implementation's
-manifest test needs a branch for the malformed set.
+None of these is a defect in a shipped reader — they are holes in the test
+contract that would let the *next* anomaly kind land half-checked. Cheap to
+close; best done the next time the manifest schema is touched.
 
-**Consumers that vendor the Delphi sources need a follow-up pass** once the
-reference changes — re-copy, and drop whatever local workaround they carry
-for this. That side is tracked by the consuming projects, not here.
+### Writer divergence: an empty equidistant segment emits a block in Rust/Python/Java
+
+Found by the OSF-UP3 writer audit. Rust (`writer.rs:1356`), Python (the same
+call through the binding), and both Java writers (`BlockWriter.java:352`,
+`StreamingWriter.java:487`) accept a start-of-segment call carrying no samples
+and then emit the `bcStartData` opener unconditionally — a well-formed 21-byte
+block carrying zero samples, the only place in the codebase where a block is
+emitted for no data. C++ rejects the call at the writer entry point
+(`streamingwriter.cpp:584`, `blockwriter.cpp:276`) and Delphi exits early
+(`OSF.Filer.pas:2006`), so neither can produce it. The Rust manager-copy path
+additionally does not skip zero-sample segments (`writer.rs:1048`) where C++
+(`blockwriter.cpp:763`) and Java (`BlockWriter.java:529`) do, so a Rust round
+trip of a manager holding such a segment reproduces it.
+
+All readers handle it cleanly: the surrounding sample data survives and the
+zero-length counter stays 0 — the block is 21 bytes, not zero-length, so it is
+unrelated to OSF-UP3 beyond having been found by the same audit. This is a
+conformance divergence rather than a defect, but it means the same
+`DataManager` written by Rust and by C++ is not byte-identical, and it will
+surface the moment anyone byte-compares the two writers' output. Resolving it
+means picking one behaviour (reject, or emit) and writing it into the spec;
+until then it is an undocumented per-implementation choice.
+
+### Reader counters are not reachable from every high-level API
+
+The per-reason block counters are the diagnostic surface for anomalies such as
+OSF-UP3, but two implementations do not expose them where callers actually
+work:
+
+- **Delphi** — `TOSFDataManager` exposes *no* reader counters at all.
+  `BlocksCRCFailed`, `BlocksUnknownTypeSkipped`, `BlocksSignatureSkipped` and
+  `BlocksZeroLengthSkipped` are reachable only from the low-level `TOSFFile`,
+  so an application built on the manager API cannot tell that blocks were
+  dropped. C++ and Java read the count off their high-level manager in their own
+  conformance tests; Delphi's has to go through the filer to do the same.
+- **Python (`osfdata`)** — the binding surfaces only a subset of `osf-core`'s
+  `ReaderStats`: `blocks_skipped_unsupported`, `blocks_skipped_deprecated_type`
+  and `blocks_skipped_reserved_type` are absent (`blocks_skipped_zero_length`
+  was added for OSF-UP3).
+
+Both are additive, mechanical changes.
+
+### `osftool verify` — cap the mirrored per-block warnings
+
+`verify` mirrors *every* per-block `llWarning` from the filer into its warnings
+list, so a file with N zero-length blocks yields N+1 warnings: the summary line
+plus N per-block lines, repeated across the headline count, the `[W]` list and
+the JSON `warnings` array. The mechanism predates OSF-UP3 and is shared with the
+CRC-failure and unknown-type warnings; a zero-length block is simply the first
+anomaly likely to occur hundreds of times in a single file, which is what made
+it visible. Suggested during review: cap the mirrored lines (the first N, e.g.
+10) and append a `… N further warnings suppressed` line. Presentation only —
+the counters and the exit code are already summary-based.
 
 ---
 

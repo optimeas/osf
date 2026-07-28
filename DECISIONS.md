@@ -1222,9 +1222,11 @@ exit code 0 by default; `--strict` (already implemented in `osftool verify`)
 still escalates warnings to a non-zero exit for callers who want conformance
 enforced.
 
-**Follow-on artefacts required by this decision.** Two things remain for later
-tasks in this plan: a conformance corpus file that demonstrates the anomaly,
-and its registration in `examples/reference_manifest.json` so every
-implementation's conformance test exercises it. This decision requires both to
-exist before the plan closes; it does not fix their exact paths or field
-names, which belong to the tasks that create them.
+**Follow-on artefacts required by this decision — both delivered (2026-07-28).**
+The decision required a conformance corpus file demonstrating the anomaly and
+its registration in `examples/reference_manifest.json`, so that every
+implementation's conformance test exercises it. They landed as
+`examples/generated/malformed/osf5_zero_length_block.osf` (hand-assembled from
+two writer outputs — no writer in this repository can emit the frame) and a new
+optional manifest field `"anomalies": { "zeroLengthBlocks": N }`, asserted by all
+four manifest-driven conformance suites.
