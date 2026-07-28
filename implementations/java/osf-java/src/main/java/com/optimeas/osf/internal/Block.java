@@ -108,9 +108,29 @@ public sealed interface Block
         UNSUPPORTED_DATA_TYPE,
         /** Channel's channel type is {@code UNSUPPORTED}. */
         UNSUPPORTED_CHANNEL_TYPE,
-        /** Deprecated control byte (1 trusted-ts, 3 status-event, 4 message-event). */
+        /**
+         * Deprecated control byte that newer writers no longer emit but readers
+         * must tolerate (1 = {@code bcTrustedTimestamp}). {@code bcStatusEvent}
+         * (3) has its own reason (see {@link #STATUS_EVENT_BLOCK}); {@code
+         * bcMessageEvent} (4) is decoded rather than skipped in its specified
+         * cases (OSF-UP4, DECISIONS §26).
+         */
         DEPRECATED_BLOCK_TYPE,
-        /** Reserved control byte (0, 2) or any undefined value ≥ 9. */
+        /**
+         * A {@code bcStatusEvent} block (control byte 3). Skipped deliberately:
+         * its payload is a fixed status word rather than a value of the
+         * channel's declared datatype, so it is never a sample of that channel
+         * (OSF-UP4, DECISIONS §26). Counted separately from
+         * {@link #DEPRECATED_BLOCK_TYPE} so an occurrence stays visible.
+         */
+        STATUS_EVENT_BLOCK,
+        /**
+         * Reserved control byte (0 = {@code bcReserved}, 2 = {@code
+         * bcTimebaseRealign}), any value ≥ 9 the spec does not currently
+         * define, or one of {@code bcMessageEvent}'s (4) two unspecified
+         * shapes: the multi-sample bit set, or a channel {@code dataType}
+         * other than {@code STRING}/{@code BINARY} (OSF-UP4, DECISIONS §26).
+         */
         RESERVED_BLOCK_TYPE,
         /** Frame CRC32C did not verify under an active integrity profile. */
         CRC_FAILED,

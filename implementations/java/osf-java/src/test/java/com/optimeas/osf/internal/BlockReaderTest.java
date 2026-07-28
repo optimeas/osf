@@ -249,6 +249,134 @@ class BlockReaderTest {
     }
 
     // ---------------------------------------------------------------
+    // bcMessageEvent (control byte 4) — OSF-UP4, DECISIONS §26.
+    // ---------------------------------------------------------------
+
+    @Test
+    void messageEventBit7SetIsSkippedAsReservedAndScanContinues() {
+        // Bit 7 (multi-sample) on bcMessageEvent is unspecified — never
+        // observed in the field. A reader that finds it set must treat the
+        // block as unknown: skip via the length field, count, continue
+        // (OSF-UP4, DECISIONS §26). Body content is irrelevant — the block
+        // is skipped via its length field without being parsed.
+        byte[] badBody = buf().i64(999L).u32(0).raw(new byte[]{(byte) 0xAA}).toBytes();
+        byte[] badBlock = frame(0, 2, CTRL_MESSAGE_EVENT | MULTI_BIT, badBody);
+        // A second, well-formed block must still be reachable afterwards.
+        byte[] goodBlock = absTsInt64Single(1, 2, 1000L, 42L);
+        var channels = channelsByIndex(
+                channel(0, DataType.STRING, 2), channel(1, DataType.INT64, 2));
+        byte[] data = buf().raw(badBlock).raw(goodBlock).toBytes();
+
+        ReaderStats st = stats();
+        List<Block> blocks = BlockReader.readAll(data, OsfVersion.OSF4, channels, st);
+
+        assertEquals(2, blocks.size());
+        var skipped = (Block.Skipped) blocks.get(0);
+        assertEquals(0, skipped.channelIndex());
+        assertEquals(Block.SkipReason.RESERVED_BLOCK_TYPE, skipped.reason());
+
+        var b = (Block.AbsTimestampData) blocks.get(1);
+        assertEquals(1, b.channelIndex());
+        assertArrayEquals(new long[]{1000L}, b.timestamps());
+
+        assertEquals(1, st.blocksRead());
+    }
+
+    @Test
+    void messageEventBinaryDatatypeDecodesWithoutTerminatorStrip() {
+        // datatype=binary is supported over bcMessageEvent; the frame layout
+        // (timestamp, length, payload) is type-agnostic. The payload here
+        // deliberately ends with 0x00 — if the reader wrongly reused
+        // bcAbsTimeStampData's OSF4 terminator strip, the last byte would be
+        // dropped. All four bytes must survive because the length prefix,
+        // not a terminator convention, governs (OSF-UP4, DECISIONS §26).
+        var channels = channelsByIndex(channel(0, DataType.BINARY, 2));
+        byte[] payload = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x00};
+        byte[] body = buf().i64(123L).u32(payload.length).raw(payload).toBytes();
+        byte[] data = frame(0, 2, CTRL_MESSAGE_EVENT, body);
+
+        ReaderStats st = stats();
+        List<Block> blocks = BlockReader.readAll(data, OsfVersion.OSF4, channels, st);
+
+        assertEquals(1, blocks.size());
+        var b = (Block.AbsTimestampData) blocks.get(0);
+        assertArrayEquals(new long[]{123L}, b.timestamps());
+        var vals = (Block.BinaryValues) b.values();
+        assertArrayEquals(payload, vals.values()[0]);
+        assertEquals(1, st.blocksRead());
+    }
+
+    @Test
+    void messageEventNZeroDecodesToEmptyValue() {
+        // N = 0 is legal for bcMessageEvent and decodes to an empty value —
+        // not an error, and NOT the zero-length-block anomaly (§25): the
+        // block's own length field reflects the true frame size, only the
+        // payload itself is empty (OSF-UP4, DECISIONS §26).
+        var channels = channelsByIndex(channel(0, DataType.STRING, 2));
+        byte[] body = buf().i64(7L).u32(0).toBytes();
+        byte[] data = frame(0, 2, CTRL_MESSAGE_EVENT, body);
+
+        ReaderStats st = stats();
+        List<Block> blocks = BlockReader.readAll(data, OsfVersion.OSF4, channels, st);
+
+        assertEquals(1, blocks.size());
+        var b = (Block.AbsTimestampData) blocks.get(0);
+        assertArrayEquals(new long[]{7L}, b.timestamps());
+        var vals = (Block.StringValues) b.values();
+        assertArrayEquals(new String[]{""}, vals.values());
+        assertEquals(1, st.blocksRead());
+        assertEquals(0, st.blocksSkippedZeroLength());
+    }
+
+    @Test
+    void messageEventUnsupportedDatatypeIsSkippedNotAnErrorAndScanContinues() {
+        // Only string/binary are defined over bcMessageEvent. A channel of
+        // any other datatype must be skipped and counted, never raised as
+        // an error — raising would make an otherwise-readable file
+        // unopenable, reintroducing the class of defect the
+        // zero-length-block rule (§25) closed (OSF-UP4, DECISIONS §26).
+        var channels = channelsByIndex(
+                channel(0, DataType.INT32, 2), channel(1, DataType.INT64, 2));
+        byte[] badBody = buf().i64(1L).u32(0).toBytes();
+        byte[] badBlock = frame(0, 2, CTRL_MESSAGE_EVENT, badBody);
+        byte[] goodBlock = absTsInt64Single(1, 2, 2000L, 42L);
+        byte[] data = buf().raw(badBlock).raw(goodBlock).toBytes();
+
+        ReaderStats st = stats();
+        List<Block> blocks = BlockReader.readAll(data, OsfVersion.OSF4, channels, st);
+
+        assertEquals(2, blocks.size());
+        var skipped = (Block.Skipped) blocks.get(0);
+        assertEquals(0, skipped.channelIndex());
+        assertEquals(Block.SkipReason.RESERVED_BLOCK_TYPE, skipped.reason());
+
+        var b = (Block.AbsTimestampData) blocks.get(1);
+        assertEquals(1, b.channelIndex());
+        assertTrue(b instanceof Block.AbsTimestampData, "scan must continue to the next block");
+
+        assertEquals(1, st.blocksRead());
+    }
+
+    @Test
+    void statusEventControlByteRoutesToItsOwnSkipReasonAndCounter() {
+        // bcStatusEvent (control byte 3): payload is a fixed status word,
+        // never a value of the channel's declared datatype, so it must be
+        // skipped but counted separately from the generic deprecated
+        // bucket (OSF-UP4, DECISIONS §26).
+        var channels = channelsByIndex(channel(0, DataType.INT16, 2));
+        byte[] data = frame(0, 2, CTRL_STATUS_EVENT, new byte[]{0xA, 0xB});
+
+        ReaderStats st = stats();
+        List<Block> blocks = BlockReader.readAll(data, OsfVersion.OSF5, channels, st);
+
+        assertEquals(1, blocks.size());
+        var skipped = (Block.Skipped) blocks.get(0);
+        assertEquals(Block.SkipReason.STATUS_EVENT_BLOCK, skipped.reason());
+        assertEquals(1L, st.blocksSkippedStatusEvent());
+        assertEquals(0, st.blocksRead());
+    }
+
+    // ---------------------------------------------------------------
     // Truncation / framing edge cases
     // ---------------------------------------------------------------
 

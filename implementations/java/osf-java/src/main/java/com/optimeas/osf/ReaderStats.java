@@ -24,6 +24,7 @@ public final class ReaderStats {
     private long blocksCrcFailed = 0;
     private long blocksSignatureSkipped = 0;
     private long blocksSkippedZeroLength = 0;
+    private long blocksSkippedStatusEvent = 0;
 
     /** Number of blocks the reader fully decoded into a typed {@code Block}. */
     public int blocksRead() {
@@ -143,5 +144,21 @@ public final class ReaderStats {
     /** Increment the skipped-zero-length-block counter by one. */
     public void incBlocksSkippedZeroLength() {
         blocksSkippedZeroLength++;
+    }
+
+    /**
+     * Number of {@code bcStatusEvent} blocks (control byte 3) skipped on read.
+     * Counted separately from the generic deprecated-skip bucket (OSF-UP4,
+     * DECISIONS §26): its payload is a fixed status word rather than a value
+     * of the channel's declared datatype, so it can never become a sample —
+     * this counter keeps an occurrence visible in the field.
+     */
+    public long blocksSkippedStatusEvent() {
+        return blocksSkippedStatusEvent;
+    }
+
+    /** Increment the skipped-status-event-block counter by one. */
+    public void incBlocksSkippedStatusEvent() {
+        blocksSkippedStatusEvent++;
     }
 }
