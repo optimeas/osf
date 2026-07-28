@@ -276,6 +276,13 @@ impl PyStats {
         self.inner.blocks_signature_skipped
     }
 
+    /// Blocks skipped because their length field read `0` — a non-conforming
+    /// writer artefact (OSF-UP3).
+    #[getter]
+    fn blocks_skipped_zero_length(&self) -> u64 {
+        self.inner.blocks_skipped_zero_length
+    }
+
     /// Overall verification status: `"none"`, `"crc_valid"`, `"invalid"`,
     /// or `"signature_unverifiable"`.
     #[getter]

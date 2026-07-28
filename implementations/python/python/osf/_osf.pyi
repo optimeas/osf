@@ -103,6 +103,9 @@ class ReaderStats:
     """Blocks dropped because their frame CRC did not match."""
     blocks_signature_skipped: int
     """Signature blocks skipped (this reader does not verify signatures)."""
+    blocks_skipped_zero_length: int
+    """Blocks skipped because their length field read ``0`` — a
+    non-conforming writer artefact (OSF-UP3)."""
     verification_status: str
     """``"none"``, ``"crc_valid"``, ``"invalid"``, or
     ``"signature_unverifiable"``."""
