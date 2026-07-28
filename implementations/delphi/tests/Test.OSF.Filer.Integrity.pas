@@ -402,29 +402,40 @@ end;
 // examples/reference_manifest.json — the single source of truth for the
 // expected decoded contents of every reference file — and asserts that the
 // Delphi reader decodes each listed file to match: channel count, and per
-// channel index/name/dataType/sampleCount/mode. For entries that declare an
-// integrity profile the low-level filer is additionally opened to confirm the
-// profile is reported and no frame CRC fails.
+// channel index/name/dataType/sampleCount/mode. The low-level filer is
+// opened for EVERY entry (not only integrity entries) to assert the
+// optional `anomalies` counts; the integrity-profile assertions stay
+// conditional on the `integrity` field, since only integrity entries carry
+// frame CRCs to check.
 //
 // Manifest keys may be sub-paths (e.g. integrity/osf5_crc_equidistant.osf);
 // they resolve under examples/generated/. Keeping the file list only in the
 // manifest is what makes it a genuine cross-language contract shared with the
 // Java/Rust/C++ conformance tests — no per-language file-list duplication.
 procedure TFilerIntegrityTests.ConformsToReferenceManifest;
+const
+  // Anomaly kinds this test recognizes. An unrecognized key in a manifest
+  // entry's `anomalies` object (e.g. a typo) must fail loudly rather than
+  // being silently absorbed as "no anomaly declared" — see the
+  // non-defaulting-lookup note below. Grows by one entry per newly
+  // introduced anomaly kind (mirrors Java's KNOWN_ANOMALY_KINDS).
+  KnownAnomalyKinds: array[0..0] of string = ('zeroLengthBlocks');
 var
   GeneratedDir, Key, Path, Mode: string;
   ManifestText: string;
   RootVal: TJSONValue;
-  RootObj, FileObj, ChObj: TJSONObject;
-  FilePair: TJSONPair;
+  RootObj, FileObj, ChObj, AnomaliesObj: TJSONObject;
+  FilePair, AnomalyPair: TJSONPair;
   ChannelsArr: TJSONArray;
   ChVal: TJSONValue;
-  IntegrityVal: TJSONValue;
+  IntegrityVal, AnomaliesVal, ZeroLengthVal: TJSONValue;
   Mgr: TOSFDataManager;
   Ch: TOSFDataChannel;
-  Idx, ExpectedSampleCount: Integer;
+  Idx, ExpectedSampleCount, ExpectedZeroLength: Integer;
   F: TOSFFile;
   Block: TOSFDataBlock;
+  AnomalyKind: string;
+  KnownKind: Boolean;
 begin
   GeneratedDir := TPath.Combine(ExamplesDir, 'generated');
   ManifestText := TFile.ReadAllText(
@@ -478,21 +489,60 @@ begin
         Mgr.Free;
       end;
 
-      // Integrity profile (optional) — the filer is the surface that exposes
-      // the profile + frame-CRC counters.
-      IntegrityVal := FileObj.GetValue('integrity');
-      if IntegrityVal <> nil then
-      begin
-        Assert.AreEqual('crc32c', IntegrityVal.Value, Key + ': only crc32c handled');
-        F := TOSFFile.Create;
-        try
-          F.OpenForRead(Path);
-          while F.ReadNextBlock(Block) do ;  // drain so CRC counters populate
+      // The filer is the surface that exposes both the anomaly counters and
+      // the integrity/frame-CRC counters, so it is opened once per entry and
+      // drained here regardless of whether the entry declares `integrity`.
+      F := TOSFFile.Create;
+      try
+        F.OpenForRead(Path);
+        while F.ReadNextBlock(Block) do ;  // drain so counters populate
+
+        // Anomalies (optional) — deliberate non-conformances this corpus file
+        // carries. Asserted unconditionally, unlike the integrity block
+        // below: a file with no integrity profile has no frame CRCs to fail,
+        // but any file at all can carry a zero-length block. A well-formed
+        // file reporting a zero-length skip is itself a finding.
+        ExpectedZeroLength := 0;
+        AnomaliesVal := FileObj.GetValue('anomalies');
+        if AnomaliesVal <> nil then
+        begin
+          AnomaliesObj := AnomaliesVal as TJSONObject;
+          // Non-defaulting lookup: reject any key not in KnownAnomalyKinds
+          // before even looking at zeroLengthBlocks, so a mis-spelled key
+          // (e.g. "zerolengthBlocks") cannot be silently absorbed as "no
+          // anomaly declared", which would make this assertion vacuous.
+          for AnomalyPair in AnomaliesObj do
+          begin
+            AnomalyKind := AnomalyPair.JsonString.Value;
+            KnownKind := False;
+            for var K in KnownAnomalyKinds do
+              if K = AnomalyKind then
+              begin
+                KnownKind := True;
+                Break;
+              end;
+            Assert.IsTrue(KnownKind, Key + ': unknown anomaly kind "' + AnomalyKind +
+              '" (known kinds: zeroLengthBlocks)');
+          end;
+          ZeroLengthVal := AnomaliesObj.GetValue('zeroLengthBlocks');
+          Assert.IsNotNull(ZeroLengthVal, Key + ': anomalies.zeroLengthBlocks missing');
+          ExpectedZeroLength := (ZeroLengthVal as TJSONNumber).AsInt;
+        end;
+        Assert.AreEqual(ExpectedZeroLength, Integer(F.BlocksZeroLengthSkipped),
+          Key + ': anomalies.zeroLengthBlocks');
+
+        // Integrity profile (optional) — only entries that declare an
+        // integrity profile have frame CRCs to check; a file with none is
+        // not itself an anomaly, so this assertion stays conditional.
+        IntegrityVal := FileObj.GetValue('integrity');
+        if IntegrityVal <> nil then
+        begin
+          Assert.AreEqual('crc32c', IntegrityVal.Value, Key + ': only crc32c handled');
           Assert.AreEqual(Ord(ipCrc32c), Ord(F.IntegrityProfile), Key + ': integrity');
           Assert.AreEqual(UInt32(0), F.BlocksCRCFailed, Key + ': crc failures');
-        finally
-          F.Free;
         end;
+      finally
+        F.Free;
       end;
     end;
   finally
