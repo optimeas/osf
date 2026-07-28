@@ -197,7 +197,7 @@ public final class BlockReader {
 
                 // Zero-length block: non-conforming writer artefact (OSF-UP3).
                 // The frame is only the channel index and the length field,
-                // both already consumed - skip, count, keep scanning.
+                // both already consumed — skip, count, keep scanning.
                 if (length == 0) {
                     out.add(new Block.Skipped(channelIndex,
                             Block.SkipReason.ZERO_LENGTH_BLOCK, 0));

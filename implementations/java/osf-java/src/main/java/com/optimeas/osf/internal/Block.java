@@ -120,7 +120,7 @@ public sealed interface Block
          * The block's length field read {@code 0}. A conforming block always
          * carries at least its control byte, so this is a non-conforming writer
          * artefact (OSF-UP3, DECISIONS §25). The frame is nothing but the
-         * channel index and the length field - both already consumed - so the
+         * channel index and the length field — both already consumed — so the
          * reader counts it and keeps scanning.
          */
         ZERO_LENGTH_BLOCK,

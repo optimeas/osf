@@ -133,7 +133,7 @@ public final class ReaderStats {
 
     /**
      * Number of data blocks skipped because their length field read {@code 0}
-     * - a non-conforming writer artefact (OSF-UP3). A conforming block always
+     * — a non-conforming writer artefact (OSF-UP3). A conforming block always
      * carries at least its control byte.
      */
     public long blocksSkippedZeroLength() {

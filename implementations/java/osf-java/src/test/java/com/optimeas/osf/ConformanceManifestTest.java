@@ -103,7 +103,7 @@ class ConformanceManifestTest {
 
         // ── Anomalies (optional) ─────────────────────────────────────────────
         // Deliberate non-conformances (optional). A file that declares none
-        // must report none - a well-formed file reporting a zero-length skip
+        // must report none — a well-formed file reporting a zero-length skip
         // is itself a finding. Asserted unconditionally, unlike the integrity
         // block above: a file with no integrity profile has no frame CRCs to
         // fail, but any file at all can carry a zero-length block.
