@@ -14,10 +14,18 @@
 //! - **Unsupported channels** (forward-compat skips — `Unsupported`
 //!   data types or channel types) usually mean the file uses a
 //!   future-spec datatype this build does not know yet.
-//! - **Deprecated block types** (`bcTrustedTimestamp`,
-//!   `bcStatusEvent`, `bcMessageEvent`) appear in older field files
-//!   such as `examples/motorbike.osf` and tell you the file predates
-//!   spec rev 2026-05-04.
+//! - **Deprecated block types** (`bcTrustedTimestamp`) appear in older
+//!   field files such as `examples/motorbike.osf` and tell you the file
+//!   predates spec rev 2026-05-04.
+//! - **`bcStatusEvent` blocks** are counted on their own
+//!   (`blocks_skipped_status_event`), separate from the generic
+//!   deprecated-skip bucket: its payload is a fixed status word, never a
+//!   sample of the channel's declared datatype (OSF-UP4, DECISIONS §26).
+//! - **`bcMessageEvent` blocks** are decoded — not skipped — whenever the
+//!   channel's datatype is string/binary and bit 7 is clear; they land in
+//!   `blocks_read` like any other decoded block. The two unspecified
+//!   cases (bit 7 set, or a non-string/binary datatype) fall under
+//!   `blocks_skipped_reserved_type` instead (OSF-UP4, DECISIONS §26).
 //! - **Reserved block types** (`bcReserved`, `bcTimebaseRealign`,
 //!   anything with bits 0–6 ≥ 9) are either spec-internal or genuinely
 //!   unknown.
@@ -72,9 +80,18 @@ pub struct ReaderStats {
     /// `Unsupported`.
     pub blocks_skipped_unsupported: u64,
     /// Blocks skipped because the control byte identified a deprecated
-    /// block type (`bcTrustedTimestamp`, `bcStatusEvent`,
-    /// `bcMessageEvent`).
+    /// block type (`bcTrustedTimestamp`). `bcStatusEvent` has its own
+    /// counter ([`Self::blocks_skipped_status_event`]); `bcMessageEvent`
+    /// is decoded rather than skipped in its specified cases (OSF-UP4,
+    /// DECISIONS §26).
     pub blocks_skipped_deprecated_type: u64,
+    /// Blocks skipped because the control byte was `bcStatusEvent`
+    /// (control byte 3). Counted separately from
+    /// [`Self::blocks_skipped_deprecated_type`] so an occurrence stays
+    /// visible in the field (OSF-UP4, DECISIONS §26): its payload is a
+    /// fixed status word rather than a value of the channel's declared
+    /// datatype, so it can never become a sample.
+    pub blocks_skipped_status_event: u64,
     /// Blocks skipped because the control byte identified a reserved
     /// block type (`bcReserved`, `bcTimebaseRealign`, or any value ≥
     /// 9 that the spec does not currently define).
@@ -279,6 +296,11 @@ impl fmt::Display for ReaderStats {
             f,
             "Skipped (deprec.):     {}",
             self.blocks_skipped_deprecated_type
+        )?;
+        writeln!(
+            f,
+            "Skipped (status ev.):  {}",
+            self.blocks_skipped_status_event
         )?;
         writeln!(
             f,

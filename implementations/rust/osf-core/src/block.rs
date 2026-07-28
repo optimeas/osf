@@ -78,10 +78,15 @@ pub enum BlockKind {
     /// Block kept for stream-position purposes after the reader chose
     /// not to interpret it: known control byte but channel marked as
     /// `Unsupported`, block type intentionally skipped (`bcStatusEvent`,
-    /// `bcMessageEvent`, `bcTrustedTimestamp`, `bcTimebaseRealign`,
-    /// `bcReserved`, unknown control values), a frame whose integrity
-    /// CRC did not match, an unverified integrity signature block, or a
+    /// `bcTrustedTimestamp`, `bcTimebaseRealign`, `bcReserved`, unknown
+    /// control values, or `bcMessageEvent` in its two unspecified cases —
+    /// bit 7 set, or a channel `datatype` other than string/binary — see
+    /// `SkipReason::ReservedBlockType`), a frame whose integrity CRC did
+    /// not match, an unverified integrity signature block, or a
     /// non-conforming zero-length block (`SkipReason::ZeroLengthBlock`).
+    /// A `bcMessageEvent` block on a string/binary channel with bit 7
+    /// clear is instead decoded into `BlockKind::AbsTimestampData`
+    /// (OSF-UP4, DECISIONS §26).
     Skipped {
         /// Why the reader skipped this block.
         reason: SkipReason,
@@ -114,9 +119,16 @@ pub enum SkipReason {
     UnsupportedChannelType,
     /// Deprecated control byte that newer writers no longer emit but
     /// readers must tolerate. The inner `u8` is the raw control-byte
-    /// value (1 = `bcTrustedTimestamp`, 3 = `bcStatusEvent`,
-    /// 4 = `bcMessageEvent`).
+    /// value (1 = `bcTrustedTimestamp`). `bcStatusEvent` (3) and
+    /// `bcMessageEvent` (4) each have their own reason — see
+    /// [`Self::StatusEventBlock`] and [`BlockKind::AbsTimestampData`]
+    /// respectively (OSF-UP4, DECISIONS §26).
     DeprecatedBlockType(u8),
+    /// A `bcStatusEvent` block (control byte 3). Skipped deliberately: its
+    /// payload is a fixed status word rather than a value of the channel's
+    /// declared datatype, so it is not a sample of that channel (OSF-UP4,
+    /// DECISIONS §26). Counted separately so an occurrence stays visible.
+    StatusEventBlock,
     /// Reserved control byte (0 = `bcReserved`, 2 = `bcTimebaseRealign`)
     /// or any value above 8 the spec does not currently define.
     ReservedBlockType(u8),

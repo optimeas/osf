@@ -64,21 +64,14 @@
 //! evidence that a committed file is actually wrong would justify
 //! replacing it, and that never happened while writing this generator.
 //!
-//! ## Why `Demo.Message` is not asserted for the message-event file
+//! ## `Demo.Message` decoding (OSF-UP4 reader support landed)
 //!
-//! Every reader in this crate currently routes control byte 4 to
-//! `SkipReason::DeprecatedBlockType` (OSF-UP4 is a normative-spec-only
-//! change so far; the reader change is a later task). So as of this
-//! generator, `osf4_message_event_string.osf` decodes `Demo.Message` to
-//! zero samples — correctly, given today's reader — while
-//! `osf4_message_event_string_equivalent.osf` already decodes it in full.
-//! The self-verification below therefore checks `Demo.Counter` (works in
-//! both files today) and the exact block-accounting stats (which capture
-//! the skip behaviour precisely) for the message-event file, and checks
-//! both channels in full for the equivalent file. Once a later task adds
-//! `bcMessageEvent` parsing, that task's own reader test is the place to
-//! assert `Demo.Message` content for the message-event file — duplicating
-//! that assertion here, before the parser exists, would only ever fail.
+//! The reader now decodes `bcMessageEvent` (control byte 4) into the same
+//! `bcAbsTimeStampData` representation, so both files decode `Demo.Message`
+//! in full and identically — see `tests/message_event_test.rs` for the
+//! dedicated reader-level coverage (all five samples, the terminator guard,
+//! and the exact block-accounting counters). The self-verification below
+//! checks both channels in full for both files.
 //!
 //! Run with `cargo run --example gen_message_event_refs`.
 
@@ -347,9 +340,8 @@ fn assert_counter_channel(mgr: &DataManager, file_label: &str) {
 }
 
 /// Assert `Demo.Message` decodes to the five expected `(timestamp, text)`
-/// pairs. Only valid for the equivalent file, where every block already
-/// parses today - see the module doc comment for why the message-event
-/// file is not asserted here.
+/// pairs. Valid for both files now that the reader decodes `bcMessageEvent`
+/// (control byte 4) into the same representation as `bcAbsTimeStampData`.
 fn assert_message_channel(mgr: &DataManager, file_label: &str) {
     let ch = mgr
         .channel("Demo.Message")
@@ -378,38 +370,29 @@ fn assert_message_channel(mgr: &DataManager, file_label: &str) {
 fn verify_message_event_file(path: &Path) {
     let mgr = DataManager::load_from_file(path).expect("message-event file loads");
     assert_counter_channel(&mgr, "message-event file");
+    assert_message_channel(&mgr, "message-event file");
 
-    // Demo.Message cannot be asserted here yet: today's reader routes
-    // every bcMessageEvent block (control byte 4) to
-    // SkipReason::DeprecatedBlockType, so the channel decodes to zero
-    // samples. That is correct current behaviour, not a bug in this
-    // file or this generator - see the module doc comment. What *can*
-    // be pinned down today is the exact block accounting: 10 blocks
-    // total (5 counter + 5 message), 5 read, 5 skipped as deprecated,
-    // nothing else skipped or truncated.
+    // Now that the reader decodes bcMessageEvent (control byte 4) into the
+    // same representation as bcAbsTimeStampData, all 10 blocks (5 counter +
+    // 5 message) are read; nothing is skipped as deprecated or otherwise
+    // (OSF-UP4, DECISIONS §26).
     let stats = &mgr.stats;
     assert_eq!(stats.blocks_total, 10, "expected 5 counter + 5 message blocks");
-    assert_eq!(stats.blocks_read, 5, "expected only the 5 counter blocks read");
+    assert_eq!(stats.blocks_read, 10, "expected all 10 blocks read");
     assert_eq!(
-        stats.blocks_skipped_deprecated_type, 5,
-        "expected all 5 bcMessageEvent blocks skipped as deprecated"
+        stats.blocks_skipped_deprecated_type, 0,
+        "bcMessageEvent blocks must no longer be counted as deprecated skips"
     );
+    assert_eq!(stats.blocks_skipped_status_event, 0);
     assert_eq!(stats.blocks_skipped_unsupported, 0);
     assert_eq!(stats.blocks_skipped_reserved_type, 0);
     assert_eq!(stats.blocks_skipped_zero_length, 0);
     assert_eq!(stats.blocks_truncated, 0);
 
-    let ch = mgr.channel("Demo.Message").expect("Demo.Message declared");
-    let Channel::Variable(vc) = ch else {
-        panic!("Demo.Message unexpectedly not a variable channel");
-    };
-    assert_eq!(
-        vc.timestamps_ns().len(),
-        0,
-        "Demo.Message should decode to 0 samples until bcMessageEvent parsing lands"
+    println!(
+        "verified: {} (Demo.Counter + Demo.Message)",
+        path.display()
     );
-
-    println!("verified: {} (Demo.Counter + block accounting)", path.display());
 }
 
 fn verify_equivalent_file(path: &Path) {
