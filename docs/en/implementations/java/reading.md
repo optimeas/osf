@@ -226,9 +226,14 @@ still worth knowing, because it explains the telemetry in `ReaderStats`:
 - **Best-effort truncation:** a short or garbled trailing block stops
   the read silently — everything decoded before it is kept, and
   `stats().truncationSeen()` is set. It never throws on truncation.
-- **Skipped blocks stay visible:** deprecated or reserved control bytes,
-  and blocks of `UNSUPPORTED`-typed channels, are discarded by length
-  without parsing and counted in `ReaderStats`.
+- **Skipped blocks stay visible — via `ReaderStats` only:** deprecated
+  (`blocksSkippedDeprecatedType()`) or reserved (`blocksSkippedReservedType()`)
+  control bytes, and `bcStatusEvent` blocks (`blocksSkippedStatusEvent()`),
+  are discarded by length without parsing and counted. `ReaderStats` is the
+  *only* place such an occurrence is observable: `com.optimeas.osf.internal`
+  is not exported, so the underlying `Block.Skipped` values never reach
+  application code. Blocks of `UNSUPPORTED`-typed channels are discarded the
+  same way but are **not yet** counted by any `ReaderStats` field.
 - **OSF4 trailer:** the optional `0xFFFF` info block plus its 40-byte
   trailer is consumed silently.
 - **Integrity:** under an active `crc` profile every block carries a
@@ -263,6 +268,10 @@ After every load, via `mgr.stats()`:
 | `integrity()` | integrity profile declared by the header (`NONE` / `CRC32C` / `ED25519`) |
 | `blocksCrcFailed()` | data blocks whose frame CRC32C did not verify (skipped) |
 | `blocksSignatureSkipped()` | skipped signature blocks (reserved channel `0xFFFE`) |
+| `blocksSkippedZeroLength()` | blocks skipped because their length field read `0` |
+| `blocksSkippedStatusEvent()` | skipped `bcStatusEvent` blocks (control byte 3) |
+| `blocksSkippedReservedType()` | skipped reserved-control-byte blocks (0, 2, ≥9), plus `bcMessageEvent`'s two unspecified shapes |
+| `blocksSkippedDeprecatedType()` | skipped deprecated-control-byte blocks (`bcTrustedTimestamp`, control byte 1) |
 | `verificationStatus()` | summarising verification status (see below) |
 
 `verificationStatus()` condenses the integrity finding into one string:

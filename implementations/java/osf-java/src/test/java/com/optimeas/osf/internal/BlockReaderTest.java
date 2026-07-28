@@ -280,6 +280,7 @@ class BlockReaderTest {
         assertArrayEquals(new long[]{1000L}, b.timestamps());
 
         assertEquals(1, st.blocksRead());
+        assertEquals(1L, st.blocksSkippedReservedType());
     }
 
     @Test
@@ -352,9 +353,10 @@ class BlockReaderTest {
 
         var b = (Block.AbsTimestampData) blocks.get(1);
         assertEquals(1, b.channelIndex());
-        assertTrue(b instanceof Block.AbsTimestampData, "scan must continue to the next block");
+        assertArrayEquals(new long[]{2000L}, b.timestamps(), "scan must continue to the next block");
 
         assertEquals(1, st.blocksRead());
+        assertEquals(1L, st.blocksSkippedReservedType());
     }
 
     @Test
@@ -373,6 +375,25 @@ class BlockReaderTest {
         var skipped = (Block.Skipped) blocks.get(0);
         assertEquals(Block.SkipReason.STATUS_EVENT_BLOCK, skipped.reason());
         assertEquals(1L, st.blocksSkippedStatusEvent());
+        assertEquals(0, st.blocksRead());
+    }
+
+    @Test
+    void trustedTimestampControlByteRoutesToItsOwnSkipReasonAndCounter() {
+        // bcTrustedTimestamp (control byte 1): deprecated, still tolerated
+        // on read. Added alongside the status-event and reserved-type
+        // counters so the whole skip-reason family stays coherent and
+        // visible via ReaderStats (OSF-UP4, DECISIONS §26).
+        var channels = channelsByIndex(channel(0, DataType.INT16, 2));
+        byte[] data = frame(0, 2, CTRL_TRUSTED_TS, new byte[]{0xA, 0xB});
+
+        ReaderStats st = stats();
+        List<Block> blocks = BlockReader.readAll(data, OsfVersion.OSF5, channels, st);
+
+        assertEquals(1, blocks.size());
+        var skipped = (Block.Skipped) blocks.get(0);
+        assertEquals(Block.SkipReason.DEPRECATED_BLOCK_TYPE, skipped.reason());
+        assertEquals(1L, st.blocksSkippedDeprecatedType());
         assertEquals(0, st.blocksRead());
     }
 

@@ -25,6 +25,8 @@ public final class ReaderStats {
     private long blocksSignatureSkipped = 0;
     private long blocksSkippedZeroLength = 0;
     private long blocksSkippedStatusEvent = 0;
+    private long blocksSkippedReservedType = 0;
+    private long blocksSkippedDeprecatedType = 0;
 
     /** Number of blocks the reader fully decoded into a typed {@code Block}. */
     public int blocksRead() {
@@ -160,5 +162,49 @@ public final class ReaderStats {
     /** Increment the skipped-status-event-block counter by one. */
     public void incBlocksSkippedStatusEvent() {
         blocksSkippedStatusEvent++;
+    }
+
+    /**
+     * Number of blocks skipped because the control byte identified a reserved
+     * block type (0 = {@code bcReserved}, 2 = {@code bcTimebaseRealign}, or
+     * any value ≥ 9 the spec does not currently define), or because a
+     * {@code bcMessageEvent} block hit one of its two unspecified shapes: the
+     * multi-sample bit set, or a channel {@code dataType} other than
+     * {@code STRING}/{@code BINARY} (OSF-UP4, DECISIONS §26). §26 requires
+     * this occurrence to be counted, not silently dropped — before this
+     * counter existed, it was invisible to every Java consumer: {@code
+     * ChannelAssembler} discards {@code Block.Skipped}, and {@code
+     * com.optimeas.osf.internal} is not exported from the JPMS module, so
+     * {@code ReaderStats} is the only surface a reserved-type skip can ever
+     * reach.
+     */
+    public long blocksSkippedReservedType() {
+        return blocksSkippedReservedType;
+    }
+
+    /** Increment the skipped-reserved-type-block counter by one. */
+    public void incBlocksSkippedReservedType() {
+        blocksSkippedReservedType++;
+    }
+
+    /**
+     * Number of blocks skipped because the control byte identified a
+     * deprecated block type that newer writers no longer emit but readers
+     * must tolerate (1 = {@code bcTrustedTimestamp}). {@code bcStatusEvent}
+     * (3) has its own counter ({@link #blocksSkippedStatusEvent()});
+     * {@code bcMessageEvent} (4) is decoded rather than skipped in its
+     * specified cases (OSF-UP4, DECISIONS §26). Added alongside {@link
+     * #blocksSkippedReservedType()} for the same visibility reason and to
+     * keep the skip-reason counter set coherent — a bare deprecated-skip
+     * bucket without its two siblings would leave one third of the
+     * previously-uncounted family still invisible.
+     */
+    public long blocksSkippedDeprecatedType() {
+        return blocksSkippedDeprecatedType;
+    }
+
+    /** Increment the skipped-deprecated-type-block counter by one. */
+    public void incBlocksSkippedDeprecatedType() {
+        blocksSkippedDeprecatedType++;
     }
 }

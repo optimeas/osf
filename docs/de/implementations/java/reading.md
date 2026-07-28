@@ -230,10 +230,15 @@ Telemetrie in `ReaderStats` erklärt:
   beendet das Lesen still — alles davor Dekodierte bleibt erhalten,
   `stats().truncationSeen()` wird gesetzt. Es wird nie auf Trunkierung
   geworfen.
-- **Übersprungene Blöcke bleiben sichtbar:** Deprecated bzw.
-  reservierte Control-Bytes und Blöcke `UNSUPPORTED`-typisierter Kanäle
-  werden ohne Parsen anhand ihrer Länge verworfen und in `ReaderStats`
-  gezählt.
+- **Übersprungene Blöcke bleiben sichtbar — nur über `ReaderStats`:**
+  Deprecated (`blocksSkippedDeprecatedType()`) bzw. reservierte
+  (`blocksSkippedReservedType()`) Control-Bytes sowie `bcStatusEvent`-Blöcke
+  (`blocksSkippedStatusEvent()`) werden ohne Parsen anhand ihrer Länge
+  verworfen und gezählt. `ReaderStats` ist die *einzige* Stelle, an der so
+  ein Vorkommnis beobachtbar ist: `com.optimeas.osf.internal` ist nicht
+  exportiert, die zugrundeliegenden `Block.Skipped`-Werte erreichen den
+  Anwendungscode also nie. Blöcke `UNSUPPORTED`-typisierter Kanäle werden
+  ebenso verworfen, aber **noch nicht** von einem `ReaderStats`-Feld gezählt.
 - **OSF4-Trailer:** Der optionale `0xFFFF`-Infoblock samt
   40-Byte-Trailer wird stillschweigend konsumiert.
 - **Integrität:** Bei aktivem `crc`-Profil trägt jeder Block eine
@@ -271,6 +276,10 @@ Nach jedem Ladevorgang über `mgr.stats()`:
 | `integrity()` | vom Header deklariertes Integritätsprofil (`NONE` / `CRC32C` / `ED25519`) |
 | `blocksCrcFailed()` | Datenblöcke, deren Frame-CRC32C nicht verifizierte (übersprungen) |
 | `blocksSignatureSkipped()` | übersprungene Signaturblöcke (reservierter Kanal `0xFFFE`) |
+| `blocksSkippedZeroLength()` | Blöcke, die wegen Längenfeld `0` übersprungen wurden |
+| `blocksSkippedStatusEvent()` | übersprungene `bcStatusEvent`-Blöcke (Control-Byte 3) |
+| `blocksSkippedReservedType()` | übersprungene Blöcke mit reserviertem Control-Byte (0, 2, ≥9) sowie `bcMessageEvent`s zwei unspezifizierte Ausprägungen |
+| `blocksSkippedDeprecatedType()` | übersprungene Blöcke mit deprecated Control-Byte (`bcTrustedTimestamp`, Control-Byte 1) |
 | `verificationStatus()` | zusammenfassender Prüfstatus (siehe unten) |
 
 `verificationStatus()` fasst den Integritätsbefund zu einem String

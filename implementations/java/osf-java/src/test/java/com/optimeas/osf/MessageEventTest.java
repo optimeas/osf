@@ -117,9 +117,16 @@ class MessageEventTest {
     }
 
     /**
-     * Block-count invariants. {@code Java has no blocksTotal aggregate}
+     * Block-count invariants. Java has no {@code blocksTotal} aggregate
      * (pre-existing asymmetry vs. the Rust/C++ references — stays as-is), so
      * this asserts {@code blocksRead} directly instead of a recomputed sum.
+     *
+     * <p>Also pins the skip-reason counters at zero for this clean file —
+     * the assertion the Rust/C++ references have (they assert {@code
+     * blocks_skipped_deprecated_type == 0} / {@code
+     * blocksSkippedDeprecatedType == 0u}) that this port had omitted until
+     * {@code blocksSkippedReservedType}/{@code blocksSkippedDeprecatedType}
+     * existed to assert against.
      */
     @Test
     void messageEventCountsAsReadNotSkipped() {
@@ -130,6 +137,15 @@ class MessageEventTest {
                 .as("all 10 blocks (5 counter + 5 message) must be read")
                 .isEqualTo(10);
         assertThat(stats.truncationSeen()).isFalse();
+        assertThat(stats.blocksSkippedStatusEvent())
+                .as("bcMessageEvent blocks must not be counted as status events")
+                .isZero();
+        assertThat(stats.blocksSkippedReservedType())
+                .as("bcMessageEvent blocks must no longer be counted as reserved skips")
+                .isZero();
+        assertThat(stats.blocksSkippedDeprecatedType())
+                .as("bcMessageEvent blocks must no longer be counted as deprecated skips")
+                .isZero();
     }
 
     /**

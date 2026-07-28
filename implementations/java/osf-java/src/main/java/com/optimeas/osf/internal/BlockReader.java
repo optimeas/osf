@@ -263,14 +263,19 @@ public final class BlockReader {
                 Block block = decodeBlock(channelIndex, def, version, payload, length, integrityActive);
                 out.add(block);
                 if (block instanceof Block.Skipped sk) {
-                    // bcStatusEvent's payload is a fixed status word, never a
-                    // value of the channel's declared datatype, so it can
-                    // never become a sample. Counted under its own reason so
-                    // an occurrence stays visible rather than folding into
-                    // the generic deprecated-skip bucket (OSF-UP4, DECISIONS
+                    // Every skip reason decodeBlock can produce (status
+                    // event, reserved, deprecated) must bump its own
+                    // ReaderStats counter — §26 requires an occurrence to
+                    // stay visible, and ReaderStats is the ONLY surface a
+                    // consumer can observe it on: ChannelAssembler discards
+                    // Block.Skipped, and com.optimeas.osf.internal is not
+                    // exported from the JPMS module (OSF-UP4, DECISIONS
                     // §26).
-                    if (sk.reason() == Block.SkipReason.STATUS_EVENT_BLOCK) {
-                        stats.incBlocksSkippedStatusEvent();
+                    switch (sk.reason()) {
+                        case STATUS_EVENT_BLOCK -> stats.incBlocksSkippedStatusEvent();
+                        case RESERVED_BLOCK_TYPE -> stats.incBlocksSkippedReservedType();
+                        case DEPRECATED_BLOCK_TYPE -> stats.incBlocksSkippedDeprecatedType();
+                        default -> { /* other reasons are counted at their own skip site */ }
                     }
                 } else {
                     stats.incBlocksRead();
@@ -600,17 +605,24 @@ public final class BlockReader {
      * Whether {@code bcMessageEvent} is defined for this channel's declared
      * {@code dataType}: {@code STRING} or {@code BINARY} only.
      *
-     * <p>The Rust and C++ references also carry a defensive {@code ByteArray}
-     * branch here, "for symmetry" with their {@code
-     * parseAbsTimestampData}/{@code parseAbsTsStringOrBinary} equivalent
-     * check, because their metablock parsers normalise the {@code
-     * "bytearray"} wire alias to {@code Binary} only when a channel is
-     * actually read, so a theoretical path could still see the pre-alias
-     * spelling. That branch has no equivalent here: this port's {@link
-     * DataType#fromWireName} performs the {@code "bytearray"} → {@link
-     * DataType#BINARY} normalisation once, at metablock-parse time, before a
-     * {@link ChannelDef} exists at all — there is no {@code DataType}
-     * constant for the pre-alias spelling to defend against.
+     * <p>The Rust and C++ references carry an additional, explicitly
+     * defensive {@code ByteArray} branch in their equivalent check, because
+     * their {@code DataType} enums have a distinct {@code ByteArray}
+     * constant (for symmetry with their {@code parseAbsTimestampData}
+     * equivalent check). Both references say that branch is unreachable in
+     * their own builds: both metablock parsers already normalise the
+     * {@code "bytearray"} wire alias to {@code Binary} before a channel
+     * definition exists, so the branch exists only for symmetry, not
+     * because a {@code ByteArray}-typed channel can actually reach it.
+     *
+     * <p>Java has no equivalent branch to carry, and for a simpler reason
+     * than a normalisation-timing difference: there is no separate
+     * {@code DataType} constant for the pre-alias spelling in the first
+     * place. This port's {@link DataType#fromWireName} resolves the
+     * {@code "bytearray"} wire alias straight to {@link DataType#BINARY},
+     * so {@code BINARY} is the only value that can ever reach this method
+     * for either on-wire spelling — there is nothing left to defend
+     * against.
      */
     private static boolean messageEventDatatypeSupported(DataType dt) {
         return dt == DataType.STRING || dt == DataType.BINARY;
@@ -654,6 +666,21 @@ public final class BlockReader {
      * best-effort stance (mirrors {@code checkNumericConsumed} being skipped
      * for string/binary {@code bcAbsTimeStampData} at the {@code case 8} call
      * site above).
+     *
+     * <p><b>Short-frame behaviour is untested and language-specific — do not
+     * copy it across ports.</b> When {@code N} exceeds the bytes actually
+     * available, this method throws {@link OsfException.MalformedFile}, which
+     * {@link #readAll} catches and turns into {@link ReaderStats#markTruncated()}
+     * plus a best-effort stop, per this reader's own existing truncation
+     * policy (the same policy every other short-read path in this class
+     * follows — see the class doc's "Best-effort truncation" section). This
+     * is a deliberate continuation of Java's own convention, not a decision
+     * specific to {@code bcMessageEvent}. It differs materially from the
+     * Rust reference, which propagates a hard {@code Err} for the same
+     * condition rather than stopping best-effort; neither behaviour is
+     * pinned by a test in any of the three implementations that have this
+     * path today. A Python or Delphi port should follow its own existing
+     * truncation policy here too, not either of these two by default.
      */
     private static Block parseMessageEvent(int channelIndex, DataType dt, ByteBuffer body) {
         if (!messageEventDatatypeSupported(dt)) {
