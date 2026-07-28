@@ -283,6 +283,35 @@ impl PyStats {
         self.inner.blocks_skipped_zero_length
     }
 
+    /// Blocks skipped because the control byte identified a deprecated
+    /// block type (`bcTrustedTimestamp`). `bcStatusEvent` has its own
+    /// counter (`blocks_skipped_status_event`); `bcMessageEvent` is decoded
+    /// rather than skipped in its specified cases (OSF-UP4).
+    #[getter]
+    fn blocks_skipped_deprecated_type(&self) -> u64 {
+        self.inner.blocks_skipped_deprecated_type
+    }
+
+    /// Blocks skipped because the control byte was `bcStatusEvent` (control
+    /// byte 3). Counted separately from `blocks_skipped_deprecated_type` so
+    /// an occurrence stays visible in the field (OSF-UP4): its payload is a
+    /// fixed status word rather than a value of the channel's declared
+    /// datatype, so it can never become a sample.
+    #[getter]
+    fn blocks_skipped_status_event(&self) -> u64 {
+        self.inner.blocks_skipped_status_event
+    }
+
+    /// Blocks skipped because the control byte identified a reserved block
+    /// type (`bcReserved`, `bcTimebaseRealign`, or any value the spec does
+    /// not currently define), or one of `bcMessageEvent`'s two unspecified
+    /// shapes: the multi-sample bit set, or a channel datatype other than
+    /// string/binary (OSF-UP4).
+    #[getter]
+    fn blocks_skipped_reserved_type(&self) -> u64 {
+        self.inner.blocks_skipped_reserved_type
+    }
+
     /// Overall verification status: `"none"`, `"crc_valid"`, `"invalid"`,
     /// or `"signature_unverifiable"`.
     #[getter]

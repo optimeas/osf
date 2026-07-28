@@ -213,6 +213,54 @@ def test_zero_length_block_is_skipped_and_counted():
     assert ch.sample_count == 10
 
 
+def test_message_event_channel_decodes():
+    """OSF4 bcMessageEvent (control byte 4) string channels decode like any
+    other string channel, per DECISIONS §26 (OSF-UP4). Deployed firmware
+    writes ``Demo.Message`` this way; every prior reader skipped it silently.
+    """
+    mgr = osf.load(_example("generated/osf4_message_event_string.osf"))
+    ch = mgr.channel("Demo.Message")
+    assert ch is not None
+    values = ch.samples()
+    assert values == [
+        "OSF-DEMO-0001",
+        "no signal",
+        "",
+        "Grüße aus Säckingen ✓",
+        "A" * 300,
+    ]
+
+    # Terminator guard: the OSF4 trailing-0x00 stripping rule applies only to
+    # bcAbsTimeStampData; bcMessageEvent's payload is length-prefixed. A
+    # reader that (wrongly) stripped a trailing byte here would still
+    # produce *something* for four of the five samples, so only checking the
+    # last character (not just non-emptiness) catches that class of bug.
+    assert values[0][-1] == "1"
+    assert values[3][-1] == "✓"  # "✓"
+    assert len(values[4]) == 300
+    assert values[2] == ""
+
+    assert mgr.stats.blocks_read == 10
+    assert mgr.stats.blocks_skipped_status_event == 0
+
+
+def test_message_event_matches_the_modern_encoding():
+    """The same content written as byte 4 (deprecated, OSF4) and byte 8
+    (current) must decode to identical values, even though the two corpus
+    files order their blocks differently.
+    """
+    legacy = osf.load(_example("generated/osf4_message_event_string.osf"))
+    modern = osf.load(_example("generated/osf4_message_event_string_equivalent.osf"))
+
+    legacy_ch = legacy.channel("Demo.Message")
+    modern_ch = modern.channel("Demo.Message")
+    assert legacy_ch is not None
+    assert modern_ch is not None
+
+    assert legacy_ch.samples() == modern_ch.samples()
+    np.testing.assert_array_equal(legacy_ch.timestamps_ns(), modern_ch.timestamps_ns())
+
+
 def test_repr_strings_are_descriptive():
     mgr = osf.load(_example("steam_loco.osf"))
     ch = mgr.channel("GPS.PosFixMode")

@@ -106,6 +106,24 @@ class ReaderStats:
     blocks_skipped_zero_length: int
     """Blocks skipped because their length field read ``0`` — a
     non-conforming writer artefact (OSF-UP3)."""
+    blocks_skipped_deprecated_type: int
+    """Blocks skipped because the control byte identified a deprecated
+    block type (``bcTrustedTimestamp``). ``bcStatusEvent`` has its own
+    counter (:attr:`blocks_skipped_status_event`); ``bcMessageEvent`` is
+    decoded rather than skipped in its specified cases (OSF-UP4)."""
+    blocks_skipped_status_event: int
+    """Blocks skipped because the control byte was ``bcStatusEvent``
+    (control byte 3). Counted separately from
+    :attr:`blocks_skipped_deprecated_type` so an occurrence stays visible
+    in the field (OSF-UP4): its payload is a fixed status word rather than
+    a value of the channel's declared datatype, so it can never become a
+    sample."""
+    blocks_skipped_reserved_type: int
+    """Blocks skipped because the control byte identified a reserved block
+    type (``bcReserved``, ``bcTimebaseRealign``, or any value the spec does
+    not currently define), or one of ``bcMessageEvent``'s two unspecified
+    shapes: the multi-sample bit set, or a channel datatype other than
+    string/binary (OSF-UP4)."""
     verification_status: str
     """``"none"``, ``"crc_valid"``, ``"invalid"``, or
     ``"signature_unverifiable"``."""
