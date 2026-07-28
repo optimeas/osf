@@ -97,7 +97,11 @@ pub enum BlockKind {
 }
 
 /// Reason why a block ended up as [`BlockKind::Skipped`].
+///
+/// Marked `#[non_exhaustive]`: readers must tolerate future skip reasons, so
+/// downstream `match` arms need a catch-all.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum SkipReason {
     /// The channel's `data_type` is [`crate::DataType::Unsupported`] —
     /// either a future-spec spelling or one not implemented yet.
@@ -120,6 +124,12 @@ pub enum SkipReason {
     /// reserved channel `0xFFFE`). This crate reads level `crc` but does not
     /// verify signatures, so the block is skipped via its length field.
     SignatureBlock,
+    /// The block's length field read `0`. A conforming block always carries at
+    /// least its control byte, so this is a non-conforming writer artefact
+    /// (OSF-UP3, DECISIONS §25). The frame is nothing but the channel index and
+    /// the length field — both already consumed — so the reader counts it and
+    /// keeps scanning.
+    ZeroLengthBlock,
 }
 
 /// Equidistant numeric payload: a single typed vector for the channel's

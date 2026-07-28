@@ -453,15 +453,11 @@ impl<R: Read> Iterator for BlockReader<R> {
                 "channel {channel_index} produced a zero-length block; \
                  skipping (likely writer bug)"
             );
-            self.record_skip(
-                channel_index,
-                0,
-                &SkipReason::ReservedBlockType(0),
-            );
+            self.record_skip(channel_index, 0, &SkipReason::ZeroLengthBlock);
             return Some(Ok(Block {
                 channel_index,
                 kind: BlockKind::Skipped {
-                    reason: SkipReason::ReservedBlockType(0),
+                    reason: SkipReason::ZeroLengthBlock,
                     bytes_skipped: 0,
                     payload: None,
                 },
@@ -765,6 +761,9 @@ impl<R: Read> BlockReader<R> {
             }
             SkipReason::SignatureBlock => {
                 self.stats.blocks_signature_skipped += 1;
+            }
+            SkipReason::ZeroLengthBlock => {
+                self.stats.blocks_skipped_zero_length += 1;
             }
         }
         let entry = self.stats.per_channel.entry(channel_index).or_default();
@@ -1359,6 +1358,50 @@ mod tests {
         let mut r = BlockReader::new(Cursor::new(bytes), &meta);
         assert!(r.next().is_none());
         assert_eq!(r.blocks_truncated(), 1);
+    }
+
+    #[test]
+    fn zero_length_block_is_skipped_and_scan_continues() {
+        let meta = make_meta(vec![channel(0, DataType::Int16, 2)]);
+        // Block 1 — the non-conforming case: channel index 0, length field 0.
+        // No control byte follows; the frame is these four bytes only.
+        let mut bytes = vec![0u8, 0, 0, 0];
+        // Block 2 — a well-formed single-sample bcAbsTimeStampData (control
+        // byte 8, bit 7 clear => N = 1): 1 + 8 + 2 = 11 payload bytes.
+        bytes.extend_from_slice(&[0, 0, 11, 0]);
+        bytes.push(8);
+        bytes.extend_from_slice(&1i64.to_le_bytes());
+        bytes.extend_from_slice(&42i16.to_le_bytes());
+
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+
+        let first = r.next().expect("a block").expect("no error");
+        assert_eq!(first.channel_index, 0);
+        assert!(
+            matches!(
+                first.kind,
+                BlockKind::Skipped {
+                    reason: SkipReason::ZeroLengthBlock,
+                    bytes_skipped: 0,
+                    ..
+                }
+            ),
+            "got {:?}",
+            first.kind
+        );
+
+        // The scan must continue and decode the block behind the bad frame.
+        let second = r.next().expect("a second block").expect("no error");
+        assert!(
+            matches!(second.kind, BlockKind::AbsTimestampData { .. }),
+            "got {:?}",
+            second.kind
+        );
+
+        assert!(r.next().is_none());
+        assert_eq!(r.stats().blocks_skipped_zero_length, 1);
+        assert_eq!(r.stats().blocks_skipped_reserved_type, 0);
+        assert_eq!(r.blocks_truncated(), 0);
     }
 
     #[test]
