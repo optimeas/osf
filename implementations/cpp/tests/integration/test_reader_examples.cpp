@@ -188,10 +188,20 @@ TEST_F(ReaderExamplesTest, motorbike_osf_reads_clean) {
     }
     EXPECT_GT(blocks, 0u);
     auto stats = r.stats();
-    EXPECT_EQ(stats.blocksRead + stats.blocksSkippedUnsupported +
-                  stats.blocksSkippedDeprecatedType +
-                  stats.blocksSkippedReservedType,
-              stats.blocksTotal);
+    // Cross-check blocksTotal against an independent per-channel roll-up
+    // rather than a hand-maintained sum of skip-reason counters — the
+    // latter drifts every time a new SkipReason::Kind is added (this is
+    // the same bug class fixed in BlockReader::stats() for OSF-UP3: two
+    // integrity-related terms and blocksSkippedZeroLength were all missing
+    // here before). `ChannelStats::blocksRead` / `blocksSkipped` are
+    // incremented for every block regardless of which skip reason applies,
+    // so this sum can never silently omit a future counter the way the old
+    // hand-summed comparison did.
+    std::uint64_t perChannelTotal = 0;
+    for (auto const& [_, cs] : stats.perChannel) {
+        perChannelTotal += cs.blocksRead + cs.blocksSkipped;
+    }
+    EXPECT_EQ(perChannelTotal, stats.blocksTotal);
 }
 
 TEST_F(ReaderExamplesTest, steam_loco_osf_reads_clean) {

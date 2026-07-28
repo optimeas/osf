@@ -243,6 +243,9 @@ TEST(BlockReader, unknown_high_control_byte_routes_to_reserved_skip_reason) {
 }
 
 TEST(BlockReader, zero_length_block_is_skipped_and_scan_continues) {
+    // `makeChannel(0, DataType::Int16, 2)` sets sizeOfLengthValue = 2, which
+    // is why both hand-built frames below use a 2-byte length field —
+    // changing that argument silently invalidates both.
     auto meta = makeMeta({makeChannel(0, osf::DataType::Int16, 2)});
     std::vector<std::uint8_t> bytes;
     // Block 1 — the non-conforming case: channel index 0, length field 0.
@@ -262,6 +265,7 @@ TEST(BlockReader, zero_length_block_is_skipped_and_scan_continues) {
 
     auto firstR = r.next();
     ASSERT_TRUE(firstR && firstR->has_value());
+    EXPECT_EQ((*firstR)->channelIndex, 0u);
     auto const& sk = std::get<osf::Skipped>((*firstR)->kind);
     EXPECT_EQ(sk.reason.kind, osf::SkipReason::Kind::ZeroLengthBlock);
     EXPECT_EQ(sk.bytesSkipped, 0u);
