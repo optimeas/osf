@@ -423,9 +423,15 @@ until then it is an undocumented per-implementation choice.
 ### Reader counters are not reachable from every high-level API
 
 The per-reason block counters are the diagnostic surface for anomalies such as
-OSF-UP3, but two implementations do not expose them where callers actually
-work:
+OSF-UP3, but three surfaces do not expose them where callers actually work:
 
+- **`osf-c` (the C ABI)** — `include/osf/capi.h` has
+  `osf_manager_blocks_crc_failed` and `osf_manager_blocks_signature_skipped`
+  but **no zero-length getter**. This is the one that matters most for the
+  OSF-UP3 hunt: smartCORE and the om kernel integrate through C/C++, not
+  through the Delphi manager or the Python bindings, so a C consumer currently
+  cannot see the anomaly at all. A one-function, purely additive follow-up
+  (`osf_manager_blocks_skipped_zero_length`, mirroring the two that exist).
 - **Delphi** — `TOSFDataManager` exposes *no* reader counters at all.
   `BlocksCRCFailed`, `BlocksUnknownTypeSkipped`, `BlocksSignatureSkipped` and
   `BlocksZeroLengthSkipped` are reachable only from the low-level `TOSFFile`,

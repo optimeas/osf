@@ -603,9 +603,10 @@ implemented. **139 → 147 lib tests + `tests/integrity_test.rs` (6)**.
 
 **Suite total (measured 2026-07-28): `cargo test` = 178 passed, 2 ignored** —
 the two `#[ignore]`-gated performance smokes above. Added by OSF-UP3:
-`ReaderStats.blocks_skipped_zero_length` + `SkipReason::ZeroLengthBlock` (which
-also had to be folded into the `blocks_total` aggregation — it was silently
-undercounting), the `examples/gen_malformed_refs.rs` corpus generator, and
+`ReaderStats.blocks_skipped_zero_length` + `SkipReason::ZeroLengthBlock` (the
+`blocks_total` aggregation had to gain the new counter as a term; it omitted it
+for three commits mid-branch — see `17771ee`), the
+`examples/gen_malformed_refs.rs` corpus generator, and
 `tests/writer_zero_length_audit_test.rs` (7 tests). See the *Zero-length data
 blocks* section below.
 
@@ -909,8 +910,8 @@ legitimate forward-compatibility skip:
 
 | Implementation | Reason / counter | Note |
 |---|---|---|
-| Rust | `SkipReason::ZeroLengthBlock`, `ReaderStats.blocks_skipped_zero_length` | `SkipReason` is now `#[non_exhaustive]` (API-visible change); the new counter also had to be folded into the `blocks_total` aggregation, which was silently undercounting |
-| C++ | `SkipReason::ZeroLengthBlock`, `ReaderStats::blocksSkippedZeroLength` | same `blocksTotal` aggregation fix |
+| Rust | `SkipReason::ZeroLengthBlock`, `ReaderStats.blocks_skipped_zero_length` | `SkipReason` is now `#[non_exhaustive]` (API-visible change); the `blocks_total` aggregation had to gain the new counter as a term — it briefly omitted it mid-branch (`0d8c48a`…`17771ee`), which is what `17771ee` calls a regression. `main` never undercounted: the frame was previously counted as `ReservedBlockType`, already a term of the sum |
+| C++ | `SkipReason::ZeroLengthBlock`, `ReaderStats::blocksSkippedZeroLength` | `blocksTotal` gained the new counter as a term in the same commit, for the same reason — likewise never wrong on `main`. The `osf-c` C ABI has **no** zero-length getter yet (BACKLOG) |
 | Java | `ZERO_LENGTH_BLOCK`, `ReaderStats.blocksSkippedZeroLength()` | |
 | Python | `stats.blocks_skipped_zero_length` | inherited from the Rust core |
 | **Delphi** | `TOSFFile.BlocksZeroLengthSkipped` | **behaviour fixed** — it used to `raise EOSFFormatError` and abort the whole file, making a recording unopenable in Delphi that read fine everywhere else |
@@ -946,9 +947,11 @@ Rust `cargo test` **178 passed / 2 ignored**; Java **244**; C++ ctest
 **346/346**; Delphi DUnitX **29**; Python pytest **19 passed / 1 skipped**.
 
 Follow-ups the round surfaced — manifest-contract strictness gaps, the empty
-equidistant-segment writer divergence, reader counters missing from Delphi's
-`TOSFDataManager` and from the Python binding, and the N+1 warning mirroring in
-`osftool verify` — are recorded in `BACKLOG.md`.
+equidistant-segment writer divergence, the missing counter accessors (`osf-c`
+has no zero-length getter, `TOSFDataManager` no counters at all, the Python
+binding only a subset), and the N+1 warning mirroring in `osftool verify` — are
+recorded in `BACKLOG.md`. The `osf-c` gap is the one to close first if the
+writer hunt runs through a C/C++ integration.
 
 ---
 
@@ -1062,8 +1065,11 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
   contract strictness gaps (Rust/C++ ignore unknown `anomalies` keys; Delphi
   does not assert `version`), the empty-equidistant-segment writer divergence
   (Rust/Python/Java emit a 21-byte zero-sample block, C++/Delphi refuse),
-  reader counters unreachable from `TOSFDataManager` and partially missing from
-  the Python binding, and the N+1 warning mirroring in `osftool verify`.
+  reader counters missing from the surfaces callers use — **no zero-length
+  getter in the `osf-c` C ABI** (the surface smartCORE and the om kernel
+  integrate through, so the one that matters for the hunt), none at all on
+  `TOSFDataManager`, and only a subset in the Python binding — and the N+1
+  warning mirroring in `osftool verify`.
 - **Production PyPI release for `osfdata`** — the Python bindings are
   functional and CI already publishes to **TestPyPI** (`osfdata 0.1.0`); a
   production `pypi.org` release needs its own Trusted Publisher. Pandas

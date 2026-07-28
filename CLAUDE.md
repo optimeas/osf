@@ -52,7 +52,7 @@ this round Rust, C++, Java and Python skipped such a frame and kept scanning
 while **Delphi raised `EOSFFormatError` and aborted the whole file**, so a real
 field recording was unopenable in Delphi and fine everywhere else. Nothing
 tested the case and the corpus had no such file. Delivered on branch
-`worktree-osf-up3-zero-length-blocks` (26 implementation commits + this
+`worktree-osf-up3-zero-length-blocks` (23 implementation commits + this
 bookkeeping pass): the rule is normative in `docs/{en,de}/osf_general.md`
 (*Zero-length data blocks*, DE+EN, identical anchors) and recorded as
 **DECISIONS §25** — so the *spec revision in effect* moves to **2026-07-28**.
@@ -502,7 +502,7 @@ Always remove `implementations\cpp\build` after a successful verify.
 - **Verify before push** for code-touching commits (compile / build /
   ctest must be green locally first).
 - **Co-Authored-By trailer** on every commit:
-  `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`
+  `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
 - **Commit prefixes:** `feat(cpp|delphi|rust|python|delphi-demo):`,
   `test(...):`, `fix(...):`, `refactor(...):`,
   `docs(status|changelog|decisions|backlog|spec):`, `chore:` for
