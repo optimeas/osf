@@ -10,5 +10,6 @@ involved.
 - **Dr. Patrick Langfeld** — Co-founder of optiMEAS; Tooling & Workflows (optiMEAS)
 - **Matthias Klein** — CRA/Integrity Initiative; Technical Support; Software Development (optiMEAS)
 - **Oleh Halushchak** — Lead Java Developer, optiCloud
+- **Steffen Hornig** ([@Sth79](https://github.com/Sth79)) — Application Development & Testing (optiMEAS)
 
 New contributors are welcome — add yourself in the same format.
