@@ -4,6 +4,34 @@ All notable changes to the C++ implementation of OSF will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Dedicated skip reason for zero-length data blocks (OSF-UP3).** A data block
+  whose per-channel length field reads `0` is a non-conforming writer artefact —
+  a conforming block always carries at least its control byte. The reader
+  already skipped the frame and kept scanning, but recorded it as
+  `SkipReason::ReservedBlockType(0)`, which asserted something untrue: on such a
+  frame no control byte is ever read. It is now `SkipReason::ZeroLengthBlock`
+  with its own counter `ReaderStats::blocksSkippedZeroLength`, so the anomaly is
+  diagnosable instead of being folded into a legitimate forward-compatibility
+  skip. `ReaderStats::blocksTotal` sums the per-reason counters and includes the
+  new one, so the total keeps matching the number of frames seen. Behaviour on
+  the wire is unchanged (skip and continue). The normative rule is in
+  `docs/{en,de}/osf_general.md`; the conformance corpus file
+  `examples/generated/malformed/osf5_zero_length_block.osf` is asserted by
+  `test_conformance_manifest` through the manifest's new optional `anomalies`
+  field.
+
+### Changed
+
+- **`SkipReason::Kind` gained an enumerator** (`ZeroLengthBlock`). The enum is
+  not source-stable: C++ has no `#[non_exhaustive]` equivalent, so a consumer
+  `switch`ing over `Kind` without a `default:` arm will fail to build under
+  `-Werror=switch` / `/W4 C4062` against this header. The requirement is now
+  stated in `include/osf/block.h`.
+
 ## [0.2.0] - 2026-07-09
 
 ### Added

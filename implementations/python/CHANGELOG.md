@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`ReaderStats.blocks_skipped_zero_length`** — the number of data blocks
+  skipped because their length field read `0`, a non-conforming writer artefact
+  (OSF-UP3). A conforming block always carries at least its control byte; the
+  reader skips such a frame and keeps scanning, and the count makes the anomaly
+  visible instead of folding it into a legitimate forward-compatibility skip.
+  Inherited from the `osf-core` reader; type stubs updated. Reading behaviour is
+  unchanged — no file that loaded before loads differently now.
+
 ## [1.0.0] - 2026-07-25
 
 First release on production PyPI — `pip install osfdata`. The distribution
