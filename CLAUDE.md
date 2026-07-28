@@ -456,30 +456,47 @@ in BACKLOG (`### C++ StreamingWriter polish — RESOLVED in Phase 7c`).
 
 CMake `FetchContent` over HTTPS fails on this Windows host with
 `CRYPT_E_NO_REVOCATION_CHECK`. Workaround — download with PowerShell
-`Invoke-WebRequest` (uses the Windows cert store), extract once, and
-point CMake at the local copy:
+`Invoke-WebRequest` (uses the Windows cert store), extract once into a
+**persistent** directory, and point CMake at the local copy:
 
 ```powershell
+$deps = "V:\external\osf-cpp-deps"
+New-Item -ItemType Directory -Force $deps | Out-Null
+$cmake = "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+
 Invoke-WebRequest -Uri "https://github.com/google/googletest/archive/refs/tags/v1.15.2.tar.gz" `
   -OutFile "$env:TEMP\googletest-v1.15.2.tar.gz" -UseBasicParsing
-Push-Location $env:TEMP; New-Item -ItemType Directory -Force gtest-extract | Out-Null
-Set-Location gtest-extract
-& "<cmake.exe>" -E tar xzf "$env:TEMP\googletest-v1.15.2.tar.gz"; Pop-Location
+Push-Location $deps; & $cmake -E tar xzf "$env:TEMP\googletest-v1.15.2.tar.gz"; Pop-Location
 
 # Transparent OSFZ read uses zlib. FetchContent dep: zlib 1.3.2.
 Invoke-WebRequest -Uri "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz" `
   -OutFile "$env:TEMP\zlib-1.3.2.tar.gz" -UseBasicParsing
-New-Item -ItemType Directory -Force "$env:TEMP\zlib-extract" | Out-Null
-Push-Location "$env:TEMP\zlib-extract"; & "<cmake.exe>" -E tar xzf "$env:TEMP\zlib-1.3.2.tar.gz"; Pop-Location
+Push-Location $deps; & $cmake -E tar xzf "$env:TEMP\zlib-1.3.2.tar.gz"; Pop-Location
 
 cmake -B implementations\cpp\build -S implementations\cpp `
-  -D FETCHCONTENT_SOURCE_DIR_GOOGLETEST="$env:TEMP\gtest-extract\googletest-1.15.2" `
-  -D FETCHCONTENT_SOURCE_DIR_ZLIB="$env:TEMP\zlib-extract\zlib-1.3.2"
+  -D FETCHCONTENT_SOURCE_DIR_GOOGLETEST="$deps\googletest-1.15.2" `
+  -D FETCHCONTENT_SOURCE_DIR_ZLIB="$deps\zlib-1.3.2"
 ```
 
-The cached extracts are reused across runs and survive reboots — no
-need to redownload unless `googletest` / `zlib` is bumped. (zlib's
-published SHA256 `bb329a0a…d16` is pinned in CMake; or build with
+**Do not keep the extracts under `%TEMP%`.** They used to live there, and
+Windows disk cleanup / Storage Sense empties that tree — it deletes the
+*files* but leaves the *directory skeletons* behind. A hollow cache then
+configures without complaint and fails at generate time with
+`Target "test_error" links to: GTest::gtest_main but the target was not
+found`, which points nowhere near the real cause. `V:\external\` is not
+swept, so the extracts survive there.
+
+**Check usability, not existence.** `Test-Path` on the directory returns
+`True` for a hollowed cache. Verify the root `CMakeLists.txt` instead:
+
+```powershell
+Test-Path "$deps\googletest-1.15.2\CMakeLists.txt"   # must be True
+Test-Path "$deps\zlib-1.3.2\CMakeLists.txt"          # must be True
+```
+
+Once extracted the copies are reused indefinitely — no need to redownload
+unless `googletest` / `zlib` is bumped. (zlib's published SHA256
+`bb329a0a…d16` is pinned in CMake; or build with
 `-D OSF_USE_SYSTEM_ZLIB=ON` to use a system zlib instead.)
 
 ### C++ build flow (Windows)
@@ -489,10 +506,14 @@ published SHA256 `bb329a0a…d16` is pinned in CMake; or build with
 
 ```powershell
 cmake -B implementations\cpp\build -S implementations\cpp `
-  [-D FETCHCONTENT_SOURCE_DIR_GOOGLETEST=... -D FETCHCONTENT_SOURCE_DIR_ZLIB=...]
-cmake --build implementations\cpp\build --config Debug
+  -D FETCHCONTENT_SOURCE_DIR_GOOGLETEST="V:\external\osf-cpp-deps\googletest-1.15.2" `
+  -D FETCHCONTENT_SOURCE_DIR_ZLIB="V:\external\osf-cpp-deps\zlib-1.3.2"
+cmake --build implementations\cpp\build --config Debug --parallel 1
 ctest --test-dir implementations\cpp\build -C Debug --output-on-failure
 ```
+
+Use `--parallel 1`: at default parallelism MSBuild intermittently fails with
+`C1041` ("multiple CL.EXE write to the same .PDB file"), unrelated to the code.
 
 Always remove `implementations\cpp\build` after a successful verify.
 
