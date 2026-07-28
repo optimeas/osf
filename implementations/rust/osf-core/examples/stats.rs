@@ -28,6 +28,7 @@
 //! Read:                  15234
 //! Skipped (unsupp.):     0
 //! Skipped (deprec.):     0
+//! Skipped (status ev.):  0
 //! Skipped (reserved):    0
 //! Skipped (zero-len):    0
 //! Truncated:             0

@@ -129,8 +129,11 @@ pub enum SkipReason {
     /// declared datatype, so it is not a sample of that channel (OSF-UP4,
     /// DECISIONS §26). Counted separately so an occurrence stays visible.
     StatusEventBlock,
-    /// Reserved control byte (0 = `bcReserved`, 2 = `bcTimebaseRealign`)
-    /// or any value above 8 the spec does not currently define.
+    /// Reserved control byte (0 = `bcReserved`, 2 = `bcTimebaseRealign`),
+    /// any value above 8 the spec does not currently define, or one of
+    /// `bcMessageEvent`'s (4) two unspecified shapes: the multi-sample bit
+    /// set, or a channel `datatype` other than string/binary (OSF-UP4,
+    /// DECISIONS §26).
     ReservedBlockType(u8),
     /// The block's frame CRC (integrity profile level `crc`) did not match
     /// the recomputed CRC32C. The block is dropped best-effort so the rest

@@ -28,7 +28,9 @@
 //!   `blocks_skipped_reserved_type` instead (OSF-UP4, DECISIONS §26).
 //! - **Reserved block types** (`bcReserved`, `bcTimebaseRealign`,
 //!   anything with bits 0–6 ≥ 9) are either spec-internal or genuinely
-//!   unknown.
+//!   unknown — this bucket also holds `bcMessageEvent`'s two unspecified
+//!   shapes (bit 7 set, or a non-string/binary datatype), per the bullet
+//!   above.
 //! - **Zero-length blocks** (a length field that reads `0`) are always
 //!   a non-conforming writer artefact (OSF-UP3) — a conforming block
 //!   always carries at least its control byte. Kept separate from
@@ -94,7 +96,10 @@ pub struct ReaderStats {
     pub blocks_skipped_status_event: u64,
     /// Blocks skipped because the control byte identified a reserved
     /// block type (`bcReserved`, `bcTimebaseRealign`, or any value ≥
-    /// 9 that the spec does not currently define).
+    /// 9 that the spec does not currently define), or one of
+    /// `bcMessageEvent`'s (4) two unspecified shapes: the multi-sample bit
+    /// set, or a channel `datatype` other than string/binary (OSF-UP4,
+    /// DECISIONS §26).
     pub blocks_skipped_reserved_type: u64,
     /// Blocks skipped because their length field read `0` — a non-conforming
     /// writer artefact (OSF-UP3). A conforming block always carries at least

@@ -1085,6 +1085,33 @@ fn parse_abs_timestamp_string_or_binary(
 /// null-terminator rule applies to `bcAbsTimeStampData` only, so
 /// `strip_osf4_terminator` must NOT be called here — doing so silently drops the
 /// last byte of every value (OSF-UP4, DECISIONS §26).
+///
+/// `dt` is passed straight to [`build_string_or_binary`] rather than being
+/// pre-normalised to `String`/`Binary` here. The caller
+/// ([`message_event_datatype_supported`]) is expected to have already
+/// restricted `dt` to `String`/`Binary`/`ByteArray`, but if that guard is
+/// ever missed (e.g. a porter adding a new call site, or a future refactor),
+/// `build_string_or_binary`'s `other => Err(...)` arm turns the mistake into
+/// a loud error instead of silently fabricating a wrongly-typed `Binary`
+/// sample — exactly the failure mode §26 forbids for `bcStatusEvent`.
+///
+/// Payload-validity handling for `string` follows this crate's existing
+/// `bcAbsTimeStampData` policy: invalid UTF-8 is a hard error that aborts
+/// the whole file (see [`build_string_or_binary`]), not a per-sample
+/// skip or a lossy replacement. Byte-oriented implementations (C++, Delphi)
+/// do not enforce UTF-8 and will decode a CP1252/Latin-1 payload that this
+/// crate refuses — a genuine cross-implementation divergence, tracked as a
+/// follow-up rather than changed here since it affects `bcAbsTimeStampData`
+/// equally. A port must match its own language's existing
+/// `bcAbsTimeStampData` UTF-8 policy for this path too, never invent a
+/// third behaviour just for `bcMessageEvent`.
+///
+/// Tolerant of trailing surplus bytes: only `cur.len() < n` (too few bytes)
+/// is an error. A frame carrying *more* bytes than `N` declares has the
+/// excess silently discarded rather than rejected — deliberate, matching
+/// this reader's general best-effort stance, but worth stating explicitly
+/// since conforming files never do this and a port might otherwise guess
+/// either "reject" or "ignore".
 fn parse_message_event(body: &[u8], dt: &DataType) -> Result<TimestampedPayload, OsfError> {
     let mut cur = body;
     let ts = cur
@@ -1100,18 +1127,17 @@ fn parse_message_event(body: &[u8], dt: &DataType) -> Result<TimestampedPayload,
         )));
     }
     let payload = &cur[..n];
-    // Only `string` and `binary` are defined over this block type. The caller has
-    // already checked that — a channel of any other datatype is SKIPPED and
-    // counted there, never turned into a hard error.
-    let normalised = if matches!(dt, DataType::String) {
-        &DataType::String
-    } else {
-        &DataType::Binary
-    };
-    build_string_or_binary(normalised, vec![(ts, payload.to_vec())])
+    build_string_or_binary(dt, vec![(ts, payload.to_vec())])
 }
 
 /// Whether `bcMessageEvent` is defined for this channel's declared datatype.
+///
+/// `ByteArray` is included for symmetry with
+/// [`parse_abs_timestamp_data`]'s equivalent check, but the reader normalises
+/// `bytearray` to `Binary` in the metablock parser, so this branch is
+/// theoretically unreachable in this crate — defensive only. A port whose
+/// metablock parser does not normalise `bytearray` the same way needs this
+/// branch to be load-bearing, not defensive.
 fn message_event_datatype_supported(dt: &DataType) -> bool {
     matches!(dt, DataType::String | DataType::Binary | DataType::ByteArray)
 }
@@ -1606,6 +1632,10 @@ mod tests {
         }
         assert_eq!(r.stats().blocks_skipped_status_event, 1);
         assert_eq!(r.stats().blocks_skipped_deprecated_type, 0);
+        // blocks_total is a recomputed sum in BlockReader::stats(); this
+        // pins that blocks_skipped_status_event is actually a term in it.
+        // Deleting the term from that sum must fail this assertion.
+        assert_eq!(r.stats().blocks_total, 1);
     }
 
     #[test]
