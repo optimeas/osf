@@ -7,6 +7,7 @@ interface
 
 uses
   System.SysUtils,
+  System.JSON,
   OSF.Types,
   DUnitX.TestFramework;
 
@@ -25,6 +26,12 @@ type
     // Writes a single binary sample of DataSize bytes to an lfs2 (u16) binary
     // channel with the crc profile active; returns the raised message or ''.
     function TryWriteBinarySample(DataSize: Integer): string;
+    // Resolves the expected anomalies.zeroLengthBlocks count for one manifest
+    // entry (0 when the entry omits `anomalies`). Asserts loudly — naming Key
+    // and the offending field — on an unrecognized anomaly kind, a
+    // non-object `anomalies` value, a missing zeroLengthBlocks key, or a
+    // non-integer zeroLengthBlocks value.
+    function ExpectedZeroLengthBlocks(const Key: string; FileObj: TJSONObject): Integer;
   public
     [Test] procedure WriteReadRoundtripPreservesData;
     [Test] procedure HeaderCarriesCrc32cToken;
@@ -50,7 +57,6 @@ implementation
 uses
   System.Classes,
   System.IOUtils,
-  System.JSON,
   OSF.CRC32C,
   OSF.Channel,
   OSF.Data.Channels,
@@ -398,6 +404,62 @@ begin
   Assert.AreNotEqual('', TryWriteBinarySample(MAX_LFS2_CRC_SAMPLE + 1));
 end;
 
+// Resolves the expected anomalies.zeroLengthBlocks count for one manifest
+// entry (0 when the entry omits `anomalies`). Asserted unconditionally by
+// the caller — a well-formed file reporting a zero-length skip is itself a
+// finding — unlike the integrity block below it, since a file with no
+// integrity profile simply has no frame CRCs to check.
+function TFilerIntegrityTests.ExpectedZeroLengthBlocks(const Key: string;
+  FileObj: TJSONObject): Integer;
+const
+  // Anomaly kinds this test recognizes, as a typed constant so the failure
+  // message below can be derived from it (string.Join) rather than
+  // hand-typed separately — adding a second kind is then a single edit here,
+  // not three coordinated ones (mirrors Java's KNOWN_ANOMALY_KINDS).
+  KnownAnomalyKinds: TArray<string> = ['zeroLengthBlocks'];
+var
+  AnomaliesVal, ZeroLengthVal: TJSONValue;
+  AnomaliesObj: TJSONObject;
+  AnomalyPair: TJSONPair;
+  AnomalyKind: string;
+  KnownKind: Boolean;
+  IntVal: Integer;
+begin
+  Result := 0;
+  AnomaliesVal := FileObj.GetValue('anomalies');
+  if AnomaliesVal = nil then
+    Exit;
+
+  Assert.IsTrue(AnomaliesVal is TJSONObject, Key + ': anomalies must be a JSON object');
+  AnomaliesObj := AnomaliesVal as TJSONObject;
+
+  // Non-defaulting lookup: reject any key not in KnownAnomalyKinds before
+  // even looking at zeroLengthBlocks, so a mis-spelled key (e.g.
+  // "zerolengthBlocks") cannot be silently absorbed as "no anomaly
+  // declared", which would make the caller's assertion vacuous.
+  for AnomalyPair in AnomaliesObj do
+  begin
+    AnomalyKind := AnomalyPair.JsonString.Value;
+    KnownKind := False;
+    for var K in KnownAnomalyKinds do
+      if K = AnomalyKind then
+      begin
+        KnownKind := True;
+        Break;
+      end;
+    Assert.IsTrue(KnownKind, Key + ': unknown anomaly kind "' + AnomalyKind +
+      '" (known kinds: ' + string.Join(', ', KnownAnomalyKinds) + ')');
+  end;
+
+  ZeroLengthVal := AnomaliesObj.GetValue('zeroLengthBlocks');
+  Assert.IsNotNull(ZeroLengthVal, Key + ': anomalies.zeroLengthBlocks missing');
+  Assert.IsTrue(ZeroLengthVal is TJSONNumber,
+    Key + ': anomalies.zeroLengthBlocks must be a number, got "' + ZeroLengthVal.Value + '"');
+  Assert.IsTrue(TryStrToInt(ZeroLengthVal.Value, IntVal),
+    Key + ': anomalies.zeroLengthBlocks has a non-integer value: "' + ZeroLengthVal.Value + '"');
+  Result := IntVal;
+end;
+
 // Manifest-driven cross-implementation conformance test. Reads the shared
 // examples/reference_manifest.json — the single source of truth for the
 // expected decoded contents of every reference file — and asserts that the
@@ -413,29 +475,20 @@ end;
 // manifest is what makes it a genuine cross-language contract shared with the
 // Java/Rust/C++ conformance tests — no per-language file-list duplication.
 procedure TFilerIntegrityTests.ConformsToReferenceManifest;
-const
-  // Anomaly kinds this test recognizes. An unrecognized key in a manifest
-  // entry's `anomalies` object (e.g. a typo) must fail loudly rather than
-  // being silently absorbed as "no anomaly declared" — see the
-  // non-defaulting-lookup note below. Grows by one entry per newly
-  // introduced anomaly kind (mirrors Java's KNOWN_ANOMALY_KINDS).
-  KnownAnomalyKinds: array[0..0] of string = ('zeroLengthBlocks');
 var
   GeneratedDir, Key, Path, Mode: string;
   ManifestText: string;
   RootVal: TJSONValue;
-  RootObj, FileObj, ChObj, AnomaliesObj: TJSONObject;
-  FilePair, AnomalyPair: TJSONPair;
+  RootObj, FileObj, ChObj: TJSONObject;
+  FilePair: TJSONPair;
   ChannelsArr: TJSONArray;
   ChVal: TJSONValue;
-  IntegrityVal, AnomaliesVal, ZeroLengthVal: TJSONValue;
+  IntegrityVal: TJSONValue;
   Mgr: TOSFDataManager;
   Ch: TOSFDataChannel;
-  Idx, ExpectedSampleCount, ExpectedZeroLength: Integer;
+  Idx, ExpectedSampleCount: Integer;
   F: TOSFFile;
   Block: TOSFDataBlock;
-  AnomalyKind: string;
-  KnownKind: Boolean;
 begin
   GeneratedDir := TPath.Combine(ExamplesDir, 'generated');
   ManifestText := TFile.ReadAllText(
@@ -497,39 +550,8 @@ begin
         F.OpenForRead(Path);
         while F.ReadNextBlock(Block) do ;  // drain so counters populate
 
-        // Anomalies (optional) — deliberate non-conformances this corpus file
-        // carries. Asserted unconditionally, unlike the integrity block
-        // below: a file with no integrity profile has no frame CRCs to fail,
-        // but any file at all can carry a zero-length block. A well-formed
-        // file reporting a zero-length skip is itself a finding.
-        ExpectedZeroLength := 0;
-        AnomaliesVal := FileObj.GetValue('anomalies');
-        if AnomaliesVal <> nil then
-        begin
-          AnomaliesObj := AnomaliesVal as TJSONObject;
-          // Non-defaulting lookup: reject any key not in KnownAnomalyKinds
-          // before even looking at zeroLengthBlocks, so a mis-spelled key
-          // (e.g. "zerolengthBlocks") cannot be silently absorbed as "no
-          // anomaly declared", which would make this assertion vacuous.
-          for AnomalyPair in AnomaliesObj do
-          begin
-            AnomalyKind := AnomalyPair.JsonString.Value;
-            KnownKind := False;
-            for var K in KnownAnomalyKinds do
-              if K = AnomalyKind then
-              begin
-                KnownKind := True;
-                Break;
-              end;
-            Assert.IsTrue(KnownKind, Key + ': unknown anomaly kind "' + AnomalyKind +
-              '" (known kinds: zeroLengthBlocks)');
-          end;
-          ZeroLengthVal := AnomaliesObj.GetValue('zeroLengthBlocks');
-          Assert.IsNotNull(ZeroLengthVal, Key + ': anomalies.zeroLengthBlocks missing');
-          ExpectedZeroLength := (ZeroLengthVal as TJSONNumber).AsInt;
-        end;
-        Assert.AreEqual(ExpectedZeroLength, Integer(F.BlocksZeroLengthSkipped),
-          Key + ': anomalies.zeroLengthBlocks');
+        Assert.AreEqual(ExpectedZeroLengthBlocks(Key, FileObj),
+          Integer(F.BlocksZeroLengthSkipped), Key + ': anomalies.zeroLengthBlocks');
 
         // Integrity profile (optional) — only entries that declare an
         // integrity profile have frame CRCs to check; a file with none is
