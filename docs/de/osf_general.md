@@ -639,15 +639,16 @@ Das Steuerbyte wird als 8-Bit-Wert interpretiert. Die unteren 7 Bits definiere
 
 <br/>
 
-#### Übersicht der Blocktypen
+<a name="overview-of-block-types"></a>
+#### Übersicht der Blocktypen {#overview-of-block-types}
 
 | Wert (0–8) | Enum                | Bedeutung                                                                                  | Datenblock-Inhalt |
 |------------|--------------------|-------------------------------------------------------------------------------------------|-------------------|
 | **0**      | `bcReserved`       | Reserviert für zukünftige Nutzung. Ursprünglich *bcMetaData*, bisher nicht genutzt.        | Variabel, interne Sonderfunktionen |
 | **1**      | `bcTrustedTimestamp` | `Entfällt` Ursprünglich für konstante Werte mit „gültig bis“-Zeitstempel gedacht. Empfehlung: Stützstellen durch die Anwendung setzen. | `int64`: Absoluter Zeitstempel (ns since Epoch) |
 | **2**      | `bcTimebaseRealign` | `Entfällt`Anpassung der Zeitachse. Kann bei Bedarf durch Schreiben eines neuen Blocks mit absolutem Startzeitpunkt ersetzt werden. | `int64`: Absoluter Zeitstempel<br/>`int64`: Zeitverschiebung (ns) |
-| **3**      | `bcStatusEvent`    | `Entfällt` Diente zur Mitführung von Statusinformationen pro Kanal. Wird nicht mehr genutzt. | `int64`: Absoluter Zeitstempel<br/>`uint32`: Status-Wort |
-| **4**      | `bcMessageEvent`   | `Entfällt` Kann vollständig durch `bcAbsTimeStampData` mit `datatype=string` ersetzt werden. | `int64`: Absoluter Zeitstempel<br/>`string`: Text |
+| **3**      | `bcStatusEvent`    | `Entfällt` Diente zur Mitführung von Statusinformationen pro Kanal. Wird nicht mehr genutzt. Leser überspringen ihn und zählen ihn separat: anders als `bcMessageEvent` ist seine Nutzlast ein festes Status-Wort statt eines Werts vom kanaleigenen `datatype`, er ist also kein Sample dieses Kanals. | `int64`: Absoluter Zeitstempel<br/>`uint32`: Status-Wort |
+| **4**      | `bcMessageEvent`   | `Entfällt`, `muss gelesen werden` Wird von im Feld eingesetzten Geräten weiterhin für `string`-Kanäle in OSF4 erzeugt, wo der Typ regulär ist. Leser MÜSSEN ihn als einen zeitgestempelten Sample des kanaleigenen `datatype` dekodieren; Schreiber DÜRFEN ihn NICHT erzeugen. | `int64`: Absoluter Zeitstempel<br/>`uint32`: Nutzlastlänge N<br/>`N` Bytes Nutzlast, interpretiert gemäß dem kanaleigenen `datatype`. **Kein abschließendes `0x00`** — die Nutzlast ist längenpräfixiert, daher gilt die OSF4-Nullterminierungsregel von `bcAbsTimeStampData` **nicht**. |
 | **5**      | `bcContinuedData`  | Daten mit fester Abtastrate fortsetzen. Bei gesetztem Bit 7 mehrere Werte im Block.        | `[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × Datenwerte |
 | **6**      | `bcStartData`      | Erster Datenblock mit fester Abtastrate; trägt zusätzlich die ab diesem Block gültige Abtastrate (z. B. bei Trigger). Enthält immer einen absoluten Startzeitstempel. | `int64`: Absoluter Zeitstempel<br/>`double`: Abtastrate (Hz)<br/>`[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × Datenwerte |
 | **7**      | `bcContinuedRelStampData` | `Entfällt`, `In OSF5 beim Lesen unterstützt` Ursprünglich zur Einsparung von 4 Byte pro Sample mit relativen Zeitstempeln. | `[uint32 N]`: Anzahl der Samples (nur wenn Bit 7 gesetzt)<br/>`N` × (`uint32` Relativzeit + Datenwert) |
@@ -772,7 +773,7 @@ Die folgenden Abschnitte beschreiben, wie Werte für verschiedene Datentypen ges
 
 - **Kompatibilität:**  
   - OSF5 kann alle OSF4-Blocktypen lesen.  
-  - Ab OSF5 werden `bcContinuedRelStampData`, `bcStatusEvent` und `bcMessageEvent` nicht mehr erzeugt.  
+  - Ab OSF5 werden `bcContinuedRelStampData`, `bcStatusEvent` und `bcMessageEvent` nicht mehr erzeugt. Nicht mehr erzeugt zu werden heißt nicht, nicht mehr gelesen zu werden: `bcContinuedRelStampData` und `bcMessageEvent` bleiben **in jeder Version zwingend beim Lesen zu unterstützen**, weil Dateien mit diesen Blöcken im Feld existieren.  
   - `bcTrustedTimestamp` wird ignoriert, und ist als *deprecated* gekennzeichnet.
 
 - **Implementierung:**  

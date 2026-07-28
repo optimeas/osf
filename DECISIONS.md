@@ -1230,3 +1230,77 @@ implementation's conformance test exercises it. They landed as
 two writer outputs — no writer in this repository can emit the frame) and a new
 optional manifest field `"anomalies": { "zeroLengthBlocks": N }`, asserted by all
 four manifest-driven conformance suites.
+
+## 26. bcMessageEvent Is Read-Mandatory (OSF-UP4)
+
+**Decision (OSF-UP4, 2026-07-28):** Control byte 4 (`bcMessageEvent`) MUST be
+decoded by readers, in **every format version**, as one time-stamped sample of
+the channel's declared `datatype`. Writers MUST NOT emit it. The normative
+rule is specified in
+[`docs/en/osf_general.md`](docs/en/osf_general.md#overview-of-block-types)
+(German mirror:
+[`docs/de/osf_general.md`](docs/de/osf_general.md#overview-of-block-types)),
+in the block-type table and the accompanying "Important points" section.
+
+**Why.** Deployed device firmware writes `string` channels in OSF4 as
+`bcMessageEvent`, where the type is regular. Every reference reader treated it
+as deprecated and skipped it, so the entire content of those channels was
+lost — silently: no error, no warning, no statistic. This is a specification
+gap, not a firmware bug: the spec said only that the type is no longer
+*produced* from OSF5 onwards, so emitting it in OSF4 is conforming. The
+affected channels are device metadata — exactly what one opens such a file
+for.
+
+**Why the spec carried the gap unnoticed.** The block-type table marked
+`bcContinuedRelStampData` (byte 7) as `supported on read` but carried no such
+marker for `bcMessageEvent` (byte 4). More seriously, row 4's payload
+description omitted the `uint32` length prefix that the bytes on disk
+actually carry — it described the payload as a bare `string`. A reader built
+strictly from that row would decode the wrong layout regardless of whether it
+also skipped the block.
+
+**The payload is length-prefixed, so the OSF4 null-terminator rule does not
+apply.** That rule (§16 / the null-byte note in `osf_general.md`) governs
+`bcAbsTimeStampData` only: a writer appends a trailing `0x00`, a reader strips
+the last byte unconditionally. `bcMessageEvent` carries an explicit `uint32`
+length instead, and never a trailing `0x00`. A reader that reuses
+`bcAbsTimeStampData`'s variable-length path for `bcMessageEvent` inherits the
+terminator strip and silently loses the last byte of every value.
+
+**Decoded into the existing time-stamped representation, not a new block
+kind.** The spec itself already says `bcMessageEvent` "can be fully replaced
+by `bcAbsTimeStampData` with `datatype=string`" — it is the same concept in a
+different, length-prefixed encoding, not a different concept. Introducing a
+separate decoded representation would force every channel assembler and
+statistics path in every implementation to learn a second shape for one
+thing, for no benefit over normalizing at the point of decode.
+
+**The multi-value bit (bit 7) is not guessed.** It has never been observed
+set on this type in the field, and its layout for `bcMessageEvent` is
+unspecified. A reader encountering it MUST treat the block as an unknown
+type: skip it via the length field, count it, and continue — the same
+conservative handling as any other unrecognized shape, never a guessed
+multi-sample decode.
+
+**`bcStatusEvent` (byte 3) is deliberately treated differently.** Its payload
+is a fixed `uint32` status word regardless of the channel's `datatype`, so
+attaching it as a channel sample would fabricate a value of the wrong type.
+It keeps being skipped as deprecated — but under its own counter rather than
+folded into `bcMessageEvent`'s handling or a generic deprecated bucket, so an
+occurrence in the field stays visible instead of silent.
+
+**`datatype=binary` is supported over this block type.** The frame layout
+(timestamp, length, payload) is type-agnostic, and every reader already has a
+variable-length decode path for `bcAbsTimeStampData` that this reuses;
+excluding `binary` would be an arbitrary carve-out with no basis in the wire
+format.
+
+**Follow-on artefact required by this decision — delivered ahead of it
+(2026-07-28).** A conformance corpus pair was generated before this decision
+was written: `examples/generated/osf4_message_event_string.osf` (the device
+encoding, `bcMessageEvent`) and
+`examples/generated/osf4_message_event_string_equivalent.osf` (the same
+channel content via `bcAbsTimeStampData`). Their contract is that every
+implementation decodes both files to the same channel-for-channel result;
+implementation tasks register the pair in `examples/reference_manifest.json`
+and assert that contract.

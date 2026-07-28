@@ -638,15 +638,16 @@ The control byte is interpreted as an 8-bit value. The lower 7 bits define the *
 
 <br/>
 
-#### Overview of block types
+<a name="overview-of-block-types"></a>
+#### Overview of block types {#overview-of-block-types}
 
 | Value (0–8) | Enum                | Meaning                                                                                  | Data block content |
 |-------------|--------------------|-------------------------------------------------------------------------------------------|--------------------|
 | **0**       | `bcReserved`       | Reserved for future use. Originally *bcMetaData*, never used.                              | Variable, internal special functions |
 | **1**       | `bcTrustedTimestamp` | `Deprecated` Originally intended for constant values with a "valid until" timestamp. Recommendation: have the application set sample points instead. | `int64`: absolute timestamp (ns since epoch) |
 | **2**       | `bcTimebaseRealign` | `Deprecated` Time-axis adjustment. Can be replaced if needed by writing a new block with an absolute start time. | `int64`: absolute timestamp<br/>`int64`: time shift (ns) |
-| **3**       | `bcStatusEvent`    | `Deprecated` Used to carry per-channel status information. No longer used. | `int64`: absolute timestamp<br/>`uint32`: status word |
-| **4**       | `bcMessageEvent`   | `Deprecated` Can be fully replaced by `bcAbsTimeStampData` with `datatype=string`. | `int64`: absolute timestamp<br/>`string`: text |
+| **3**       | `bcStatusEvent`    | `Deprecated` Used to carry per-channel status information. No longer used. Readers skip it and count it separately: unlike `bcMessageEvent`, its payload is a fixed status word rather than a value of the channel's `datatype`, so it is not a sample of that channel. | `int64`: absolute timestamp<br/>`uint32`: status word |
+| **4**       | `bcMessageEvent`   | `Deprecated`, `must be read` Still emitted by deployed devices for `string` channels in OSF4, where the type is regular. Readers MUST decode it as one time-stamped sample of the channel's `datatype`; writers MUST NOT emit it. | `int64`: absolute timestamp<br/>`uint32`: payload length N<br/>`N` bytes of payload, interpreted per the channel's `datatype`. **No trailing `0x00`** — the payload is length-prefixed, so the OSF4 null-terminator rule of `bcAbsTimeStampData` does **not** apply. |
 | **5**       | `bcContinuedData`  | Continue equidistant data with a fixed sample rate. With bit 7 set, multiple values per block. | `[uint32 N]`: number of samples (only if bit 7 set)<br/>`N` × data values |
 | **6**       | `bcStartData`      | First data block with a fixed sample rate; additionally carries the sample rate effective from this block onward (e.g. on a trigger). Always contains an absolute start timestamp. | `int64`: absolute timestamp<br/>`double`: sample rate (Hz)<br/>`[uint32 N]`: number of samples (only if bit 7 set)<br/>`N` × data values |
 | **7**       | `bcContinuedRelStampData` | `Deprecated`, `supported on read in OSF5` Originally used to save 4 bytes per sample with relative timestamps. | `[uint32 N]`: number of samples (only if bit 7 set)<br/>`N` × (`uint32` relative time + data value) |
@@ -771,7 +772,7 @@ The following sections describe how values are stored for the various data types
 
 - **Compatibility:**  
   - OSF5 can read all OSF4 block types.  
-  - From OSF5 onwards, `bcContinuedRelStampData`, `bcStatusEvent`, and `bcMessageEvent` are no longer produced.  
+  - From OSF5 onwards, `bcContinuedRelStampData`, `bcStatusEvent`, and `bcMessageEvent` are no longer produced. Not being produced does not mean not being read: `bcContinuedRelStampData` and `bcMessageEvent` remain **read-mandatory in every version**, because files carrying them exist in the field.  
   - `bcTrustedTimestamp` is ignored and is marked as *deprecated*.
 
 - **Implementation:**  
