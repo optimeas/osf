@@ -67,6 +67,7 @@ type
     [Test] procedure FilerSurfacesTimestampAndPayloadOfMessageEventBlocks;
     [Test] procedure ZeroLengthMessagePayloadDecodesToAnEmptyValue;
     [Test] procedure UnspecifiedShapesAndStatusEventsAreSkippedAndCounted;
+    [Test] procedure MetaCacheAgreesWithTheDataManager;
   end;
 
 const
@@ -86,6 +87,7 @@ uses
   OSF.Channel,
   OSF.Data.Channels,
   OSF.Data.Manager,
+  OSF.Meta.Cache,
   OSF.Filer;
 
 function TFilerMessageEventTests.ExamplesDir: string;
@@ -504,6 +506,92 @@ begin
     end;
   finally
     MS.Free;
+  end;
+end;
+
+// The meta cache is a third surface onto the same file - osftool's info,
+// channels and cache commands are served from it - and it has its own block
+// dispatch. If that dispatch does not know bcMessageEvent, the tool
+// contradicts itself: export decodes five Demo.Message samples while
+// cache-backed info reports zero, and a saved sidecar makes the wrong answer
+// persist across runs. The contract is therefore an equality: whatever the
+// cache records must equal what TOSFDataManager reports for the same file.
+//
+// Built with BuildFromFile, which scans the OSF file and returns the cache in
+// memory - it neither reads nor writes a .json sidecar (that is EnsureCache's
+// job), so no stale sidecar from an earlier run can be mistaken for a pass.
+//
+// Both sides are also pinned against the absolute expectation, so the test
+// still fails if cache and manager ever agree on the same wrong answer.
+procedure TFilerMessageEventTests.MetaCacheAgreesWithTheDataManager;
+var
+  Builder: TOSFMetaCacheBuilder;
+  Cache: TOSFMetaCache;
+  Mgr: TOSFDataManager;
+  MsgChan, CntChan: TOSFDataChannel;
+  CachedMsg, CachedCnt: TOSFCacheChannel;
+  LastTs: Int64;
+begin
+  Assert.IsTrue(TFile.Exists(LegacyFile), 'corpus file present: ' + LegacyFile);
+  LastTs := BASE_TIMESTAMP_NS + (MESSAGE_SAMPLE_COUNT - 1) * TIMESTAMP_STEP_NS;
+
+  Mgr := TOSFDataManager.Create;
+  try
+    Mgr.LoadFromFile(LegacyFile);
+    MsgChan := Mgr.ChannelByName('Demo.Message');
+    CntChan := Mgr.ChannelByName('Demo.Counter');
+    Assert.IsNotNull(MsgChan, 'Demo.Message decoded by the manager');
+    Assert.IsNotNull(CntChan, 'Demo.Counter decoded by the manager');
+
+    Builder := TOSFMetaCacheBuilder.Create;
+    try
+      Cache := Builder.BuildFromFile(LegacyFile);
+      try
+        Assert.IsTrue(Cache.HasChannel('Demo.Message'),
+          'Demo.Message present in the cache');
+        CachedMsg := Cache.ChannelByName('Demo.Message');
+
+        Assert.AreEqual(Int64(MESSAGE_SAMPLE_COUNT), CachedMsg.SampleCount,
+          'the cache must count bcMessageEvent blocks as samples');
+        Assert.AreEqual(Int64(MsgChan.SampleCount), CachedMsg.SampleCount,
+          'cache and data manager must report the same sample count');
+        Assert.AreEqual(BASE_TIMESTAMP_NS, CachedMsg.FirstTimestampNs,
+          'cached first timestamp');
+        Assert.AreEqual(MsgChan.StartTimestampNs, CachedMsg.FirstTimestampNs,
+          'cache and data manager must report the same first timestamp');
+        Assert.AreEqual(LastTs, CachedMsg.LastTimestampNs,
+          'cached last timestamp');
+        Assert.AreEqual(MsgChan.EndTimestampNs, CachedMsg.LastTimestampNs,
+          'cache and data manager must report the same last timestamp');
+
+        // The untouched channel of the same file, as a control: the arm added
+        // for bcMessageEvent must not have disturbed the bcAbsTimeStampData
+        // accounting next to it.
+        Assert.IsTrue(Cache.HasChannel('Demo.Counter'),
+          'Demo.Counter present in the cache');
+        CachedCnt := Cache.ChannelByName('Demo.Counter');
+        Assert.AreEqual(Int64(CntChan.SampleCount), CachedCnt.SampleCount,
+          'Demo.Counter sample count must still agree');
+        Assert.AreEqual(CntChan.StartTimestampNs, CachedCnt.FirstTimestampNs,
+          'Demo.Counter first timestamp must still agree');
+        Assert.AreEqual(CntChan.EndTimestampNs, CachedCnt.LastTimestampNs,
+          'Demo.Counter last timestamp must still agree');
+
+        // The file-wide range is derived from the per-channel ranges, so it
+        // would silently shrink if a channel contributed nothing.
+        Assert.AreEqual(BASE_TIMESTAMP_NS, Cache.FirstTimestampNs,
+          'file-wide first timestamp');
+        Assert.AreEqual(LastTs, Cache.LastTimestampNs,
+          'file-wide last timestamp');
+        Assert.IsFalse(Cache.Truncated, 'the corpus file is complete');
+      finally
+        Cache.Free;
+      end;
+    finally
+      Builder.Free;
+    end;
+  finally
+    Mgr.Free;
   end;
 end;
 

@@ -569,6 +569,29 @@ begin
         UpdateRange(Stats, Last);
         Stats.SampleCount := Stats.SampleCount + ABlock.SampleCount;
       end;
+    bcMessageEvent:
+      begin
+        // OSF-UP4 / DECISIONS §26. Deployed device firmware writes OSF4 string
+        // channels this way, so these blocks are real channel content and must
+        // be counted here too - otherwise the sidecar (and with it every
+        // cache-backed consumer) would report zero samples for a channel the
+        // data manager decodes in full, and a stale sidecar would keep saying
+        // so across runs. The contract this arm exists to hold is: what the
+        // cache records equals what TOSFDataManager reports for the same file.
+        //
+        // No frame parsing here. TOSFFile.DecodeMessageEventPayload has
+        // already unwrapped the length-prefixed frame before the block
+        // reaches ReadNextBlock's caller, so the sample's absolute timestamp
+        // is in StartTimestampNs and SampleCount is 1 - one sample, one
+        // timestamp, hence a single UpdateRange call.
+        //
+        // The shapes the specification leaves unspecified (bit 7 set, a
+        // datatype other than string/binary) never arrive here at all: the
+        // filer skips them, so this dispatch automatically agrees with the
+        // manager rather than with the raw block stream.
+        UpdateRange(Stats, ABlock.StartTimestampNs);
+        Stats.SampleCount := Stats.SampleCount + ABlock.SampleCount;
+      end;
   end;
 
   AStatsMap.AddOrSetValue(Integer(ABlock.ChannelIndex), Stats);
