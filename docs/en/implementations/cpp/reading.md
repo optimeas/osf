@@ -220,8 +220,11 @@ Key properties:
 - **Skips stay visible:** deprecated/reserved control bytes and blocks
   of `Unsupported`-declared channels come through as
   `BlockKind::Skipped` with a `SkipReason`. The payload bytes are
-  discarded without allocation by default; to look inside (e.g. into old
-  `bcMessageEvent` blocks): `reader.withCaptureSkippedPayload(true)`.
+  discarded without allocation by default; to look inside (e.g. into
+  `bcStatusEvent` or `bcTrustedTimestamp` blocks, which are still
+  skipped): `reader.withCaptureSkippedPayload(true)`. `bcMessageEvent`
+  is decoded rather than skipped for `string`/`binary` channels, so it
+  no longer needs this opt-in.
 - **OSF4 trailer:** the optional `0xFFFF` info block + 40-byte trailer
   is consumed silently; `reader.trailerSeen()` reports it.
 - The `BlockReader` does **not** decompress itself — for OSFZ you put a

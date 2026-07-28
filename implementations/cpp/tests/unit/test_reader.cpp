@@ -313,6 +313,31 @@ TEST(BlockReader, message_event_binary_datatype_decodes_without_terminator_strip
     EXPECT_EQ(r.stats().blocksRead, 1u);
 }
 
+TEST(BlockReader, message_event_n_zero_decodes_to_empty_value) {
+    // N = 0 is legal for bcMessageEvent and decodes to an empty value —
+    // not an error, and NOT the zero-length-block anomaly (§25): the
+    // block's own length field reflects the true frame size
+    // (1 + 8 + 4 + 0), only the payload itself is empty (OSF-UP4,
+    // DECISIONS §26).
+    auto meta = makeMetaV4({makeChannel(0, osf::DataType::String, 2)});
+    // control(1) + ts(8) + N(4) + payload(0) = 13
+    std::vector<std::uint8_t> bytes = {0, 0, 13, 0, 0x04u};
+    putI64(bytes, 7);
+    putU32(bytes, 0);
+    ByteStream s(std::move(bytes));
+    osf::BlockReader r(s.get(), meta);
+    auto blkR = r.next();
+    ASSERT_TRUE(blkR && blkR->has_value());
+    auto const& ad = std::get<osf::AbsTimestampData>((*blkR)->kind);
+    auto const& v =
+        std::get<std::vector<std::pair<std::int64_t, std::string>>>(ad.samples);
+    ASSERT_EQ(v.size(), 1u);
+    EXPECT_EQ(v[0].first, 7);
+    EXPECT_EQ(v[0].second, "");
+    EXPECT_EQ(r.stats().blocksRead, 1u);
+    EXPECT_EQ(r.stats().blocksSkippedZeroLength, 0u);
+}
+
 TEST(BlockReader, message_event_unsupported_datatype_is_skipped_not_an_error) {
     // Only string/binary are defined over bcMessageEvent. A channel of
     // any other datatype must be skipped and counted, never raised as

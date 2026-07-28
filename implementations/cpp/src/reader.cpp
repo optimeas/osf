@@ -318,8 +318,13 @@ Result<TimestampedPayload> parseAbsTsStringOrBinary(
 // ---------------------------------------------------------------------
 
 /// Whether `bcMessageEvent` is defined for this channel's declared
-/// `dataType`. `ByteArray` is included for symmetry with
-/// `parseAbsTimestampData`'s equivalent check.
+/// `dataType`: `String` or `Binary` only. `ByteArray` is included for
+/// symmetry with `parseAbsTimestampData`'s equivalent check, but this
+/// reader's metablock parser normalises `bytearray` to `Binary` on read
+/// (see `src/types.cpp`), so this branch is unreachable in this build —
+/// defensive only. A port whose metablock parser does not normalise
+/// `bytearray` the same way needs this branch to be load-bearing, not
+/// defensive.
 bool messageEventDatatypeSupported(DataType dt) noexcept {
     return dt == DataType::String || dt == DataType::Binary ||
            dt == DataType::ByteArray;
@@ -333,13 +338,18 @@ bool messageEventDatatypeSupported(DataType dt) noexcept {
 /// `bcAbsTimeStampData` only; reusing that framing here would silently
 /// drop the last byte of every value (OSF-UP4, DECISIONS §26).
 ///
-/// `dt` is passed straight to `buildStringOrBinary` rather than being
-/// pre-normalised to `String`/`Binary` here. The caller
-/// (`messageEventDatatypeSupported`) is expected to have already
-/// restricted `dt` to `String`/`Binary`/`ByteArray`; `buildStringOrBinary`
-/// otherwise falls through to the binary encoding, which would silently
-/// fabricate a wrongly-typed payload if that guard were ever missed —
-/// callers MUST check `messageEventDatatypeSupported` first.
+/// Rejects any `dt` outside `String`/`Binary`/`ByteArray` itself, via
+/// `messageEventDatatypeSupported`, rather than trusting the caller to
+/// have already filtered it. `buildStringOrBinary` has no error arm for
+/// non-`String` types — everything else falls through to the binary
+/// encoding — so without this guard a forgotten check at a future call
+/// site would silently fabricate a wrongly-typed sample instead of
+/// failing loudly, exactly what §26 forbids for `bcStatusEvent`. The
+/// dispatch-level check in `BlockReader::next` (which produces the
+/// *skip* behaviour §26 requires) stays in place; this is the backstop.
+/// `ByteArray` is normalised to `Binary` before the call, mirroring
+/// `parseAbsTimestampData`'s call-site normalisation for the same
+/// reason: one convention for the rule in this file.
 ///
 /// String-payload UTF-8 validity handling follows this reader's existing
 /// `bcAbsTimeStampData` policy (see `buildStringOrBinary`) — never a third
@@ -352,6 +362,10 @@ bool messageEventDatatypeSupported(DataType dt) noexcept {
 Result<TimestampedPayload> parseMessageEvent(std::uint8_t const* body,
                                                 std::size_t bodyLen,
                                                 DataType dt) {
+    if (!messageEventDatatypeSupported(dt)) {
+        return tl::make_unexpected(invalidBlock(
+            "bcMessageEvent is defined for string and binary channels only"));
+    }
     PayloadCursor cur{body, bodyLen};
     auto ts = cur.readI64();
     if (!ts) {
@@ -370,7 +384,8 @@ Result<TimestampedPayload> parseMessageEvent(std::uint8_t const* body,
     }
     std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>> raw;
     raw.emplace_back(*ts, std::vector<std::uint8_t>(cur.tail(), cur.tail() + *n));
-    return buildStringOrBinary(dt, std::move(raw));
+    DataType const normalized = (dt == DataType::ByteArray) ? DataType::Binary : dt;
+    return buildStringOrBinary(normalized, std::move(raw));
 }
 
 Result<TimestampedPayload> parseAbsTimestampData(

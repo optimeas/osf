@@ -229,8 +229,10 @@ Wichtige Eigenschaften:
   Blöcke `Unsupported`-deklarierter Kanäle kommen als
   `BlockKind::Skipped` mit `SkipReason` durch. Die Payload-Bytes
   werden standardmäßig ohne Allokation verworfen; wer hineinschauen
-  will (z. B. in alte `bcMessageEvent`-Blöcke):
-  `reader.withCaptureSkippedPayload(true)`.
+  will (z. B. in `bcStatusEvent`- oder `bcTrustedTimestamp`-Blöcke, die
+  weiterhin übersprungen werden): `reader.withCaptureSkippedPayload(true)`.
+  `bcMessageEvent` wird für `string`/`binary`-Kanäle dekodiert statt
+  übersprungen und braucht dieses Opt-in daher nicht mehr.
 - **OSF4-Trailer:** Der optionale `0xFFFF`-Infoblock + 40-Byte-Trailer
   wird stillschweigend konsumiert; `reader.trailerSeen()` meldet ihn.
 - Der `BlockReader` dekomprimiert **nicht** selbst — bei OSFZ legt man

@@ -280,13 +280,14 @@ struct ContinuedRelStampData {
 /// `Unsupported`, block type intentionally skipped (`bcStatusEvent`,
 /// `bcTrustedTimestamp`, `bcTimebaseRealign`, `bcReserved`, unknown
 /// control values, or `bcMessageEvent` in its two unspecified cases —
-/// bit 7 set, or a channel `dataType` other than `String`/`Binary` — see
+/// bit 7 set, or a channel `dataType` other than
+/// `String`/`Binary`/`ByteArray` — see
 /// `SkipReason::Kind::ReservedBlockType`), a frame whose integrity CRC did
 /// not match, an unverified integrity signature block, or a
 /// non-conforming zero-length block (`SkipReason::Kind::ZeroLengthBlock`).
-/// A `bcMessageEvent` block on a `String`/`Binary` channel with bit 7
-/// clear is instead decoded into `BlockKind::AbsTimestampData` (OSF-UP4,
-/// DECISIONS §26).
+/// A `bcMessageEvent` block on a `String`/`Binary`/`ByteArray` channel with
+/// bit 7 clear is instead decoded into `BlockKind::AbsTimestampData`
+/// (OSF-UP4, DECISIONS §26).
 struct Skipped {
     /// Why the reader skipped this block.
     SkipReason reason;
@@ -306,8 +307,8 @@ struct Skipped {
 /// - `StartData` for control byte 6.
 /// - `ContinuedData` for control byte 5.
 /// - `AbsTimestampData` for control byte 8, and also for control byte 4
-///   (`bcMessageEvent`) on a `String`/`Binary` channel with bit 7 clear
-///   (OSF-UP4, DECISIONS §26).
+///   (`bcMessageEvent`) on a `String`/`Binary`/`ByteArray` channel with bit
+///   7 clear (OSF-UP4, DECISIONS §26).
 /// - `ContinuedRelStampData` for control byte 7.
 /// - `Skipped` for everything else (deprecated, status event, reserved,
 ///   unknown, or `bcMessageEvent`'s two unspecified shapes).
@@ -344,11 +345,11 @@ enum class ControlKind {
     StatusEvent,
     /// 4 — `bcMessageEvent`. Read-mandatory in every format version:
     /// deployed OSF4 firmware writes `string` channels this way.
-    /// Decoded into `BlockKind::AbsTimestampData` for `String`/`Binary`
-    /// channels with bit 7 clear; its two unspecified shapes (bit 7
-    /// set, or any other channel `dataType`) are skipped and counted
-    /// under `SkipReason::Kind::ReservedBlockType` (OSF-UP4, DECISIONS
-    /// §26). Writers MUST NOT emit it.
+    /// Decoded into `BlockKind::AbsTimestampData` for
+    /// `String`/`Binary`/`ByteArray` channels with bit 7 clear; its two
+    /// unspecified shapes (bit 7 set, or any other channel `dataType`)
+    /// are skipped and counted under `SkipReason::Kind::ReservedBlockType`
+    /// (OSF-UP4, DECISIONS §26). Writers MUST NOT emit it.
     MessageEvent,
     /// 5 — `bcContinuedData`. Equidistant continuation block.
     ContinuedData,

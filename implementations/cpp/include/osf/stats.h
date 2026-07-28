@@ -26,9 +26,10 @@
 ///   channel's declared `dataType` (OSF-UP4, DECISIONS §26).
 /// - **Reserved block types** (`bcReserved`, `bcTimebaseRealign`,
 ///   anything with bits 0–6 ≥ 9, or one of `bcMessageEvent`'s two
-///   unspecified shapes — bit 7 set, or a non-`String`/`Binary`
-///   `dataType`) are either spec-internal, genuinely unknown, or an
-///   unspecified `bcMessageEvent` shape (OSF-UP4, DECISIONS §26).
+///   unspecified shapes — bit 7 set, or a `dataType` other than
+///   `String`/`Binary`/`ByteArray`) are either spec-internal, genuinely
+///   unknown, or an unspecified `bcMessageEvent` shape (OSF-UP4,
+///   DECISIONS §26).
 /// - **Zero-length blocks** (a length field that reads `0`) are always
 ///   a non-conforming writer artefact (OSF-UP3) — a conforming block
 ///   always carries at least its control byte. Kept separate from
@@ -148,7 +149,7 @@ struct ReaderStats {
     /// the spec does not currently define), or because a
     /// `bcMessageEvent` block hit one of its two unspecified shapes:
     /// the multi-sample bit set, or a channel `dataType` other than
-    /// `String`/`Binary` (OSF-UP4, DECISIONS §26).
+    /// `String`/`Binary`/`ByteArray` (OSF-UP4, DECISIONS §26).
     std::uint64_t blocksSkippedReservedType = 0;
     /// Blocks skipped because their length field read `0` — a non-conforming
     /// writer artefact (OSF-UP3). A conforming block always carries at least
