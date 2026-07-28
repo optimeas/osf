@@ -242,6 +242,51 @@ TEST(BlockReader, unknown_high_control_byte_routes_to_reserved_skip_reason) {
     EXPECT_EQ(sk.reason.rawByte, 0x55);
 }
 
+TEST(BlockReader, zero_length_block_is_skipped_and_scan_continues) {
+    // `makeChannel(0, DataType::Int16, 2)` sets sizeOfLengthValue = 2, which
+    // is why both hand-built frames below use a 2-byte length field —
+    // changing that argument silently invalidates both.
+    auto meta = makeMeta({makeChannel(0, osf::DataType::Int16, 2)});
+    std::vector<std::uint8_t> bytes;
+    // Block 1 — the non-conforming case: channel index 0, length field 0.
+    // No control byte follows; the frame is these four bytes only.
+    putU16(bytes, 0);
+    putU16(bytes, 0);
+    // Block 2 — a well-formed single-sample bcAbsTimeStampData (control byte 8,
+    // bit 7 clear => N = 1): 1 + 8 + 2 = 11 payload bytes.
+    putU16(bytes, 0);
+    putU16(bytes, 11);
+    bytes.push_back(8);
+    putI64(bytes, 1);
+    putI16(bytes, 42);
+
+    ByteStream s(std::move(bytes));
+    osf::BlockReader r(s.get(), meta);
+
+    auto firstR = r.next();
+    ASSERT_TRUE(firstR && firstR->has_value());
+    EXPECT_EQ((*firstR)->channelIndex, 0u);
+    auto const& sk = std::get<osf::Skipped>((*firstR)->kind);
+    EXPECT_EQ(sk.reason.kind, osf::SkipReason::Kind::ZeroLengthBlock);
+    EXPECT_EQ(sk.bytesSkipped, 0u);
+
+    // The scan must continue and decode the block behind the bad frame.
+    auto secondR = r.next();
+    ASSERT_TRUE(secondR && secondR->has_value());
+    EXPECT_TRUE(std::holds_alternative<osf::AbsTimestampData>((*secondR)->kind));
+
+    EXPECT_FALSE(r.next().has_value());
+    EXPECT_EQ(r.stats().blocksSkippedZeroLength, 1u);
+    EXPECT_EQ(r.stats().blocksSkippedReservedType, 0u);
+    EXPECT_EQ(r.blocksTruncated(), 0u);
+
+    // The file has exactly two blocks: one skipped, one decoded.
+    // blocksTotal must agree with both the iterator and the per-channel
+    // totals (see ReaderStats::blocksTotal doc comment).
+    EXPECT_EQ(r.stats().blocksTotal, 2u);
+    EXPECT_EQ(r.stats().blocksRead, 1u);
+}
+
 // ---------------------------------------------------------------------
 // Typed parsers — happy-path coverage
 // ---------------------------------------------------------------------

@@ -168,6 +168,11 @@ using RelTimestampedPayload = std::variant<
 
 /// Why a block ended up as `BlockKind::Skipped`.
 struct SkipReason {
+    /// Not source-stable: a future release may add an enumerator (as
+    /// `ZeroLengthBlock` was added for OSF-UP3). C++ has no `#[non_exhaustive]`
+    /// equivalent, so any consumer `switch`ing over `Kind` — especially under
+    /// `-Werror=switch` / `/W4 C4062` — MUST include a `default:` arm or it
+    /// will fail to build against a newer header.
     enum class Kind {
         /// The channel's `dataType` is `DataType::Unsupported` —
         /// either a future-spec spelling or one this build does not
@@ -193,11 +198,19 @@ struct SkipReason {
         /// not verify signatures, so the block is skipped via its length
         /// field.
         SignatureBlock,
+        /// The block's length field read `0`. A conforming block always
+        /// carries at least its control byte, so this is a non-conforming
+        /// writer artefact (OSF-UP3, DECISIONS §25). The frame is nothing but
+        /// the channel index and the length field — both already consumed —
+        /// so the reader counts it and keeps scanning. `rawByte` is zero and
+        /// carries no meaning here.
+        ZeroLengthBlock,
     };
 
     Kind kind = Kind::ReservedBlockType;
     /// Raw control-byte value (low 7 bits). Only meaningful for
-    /// `DeprecatedBlockType` / `ReservedBlockType`; zero otherwise.
+    /// `DeprecatedBlockType` / `ReservedBlockType`; zero for every other
+    /// `Kind`, including `ZeroLengthBlock` (no control byte is ever read).
     std::uint8_t rawByte = 0;
 
     friend bool operator==(SkipReason const& a, SkipReason const& b) noexcept {
@@ -250,13 +263,19 @@ struct ContinuedRelStampData {
 };
 
 /// Block kept for stream-position purposes after the reader chose not
-/// to interpret it: known control byte but channel marked
-/// `Unsupported`, or block type intentionally skipped.
+/// to interpret it: known control byte but channel marked as
+/// `Unsupported`, block type intentionally skipped (`bcStatusEvent`,
+/// `bcMessageEvent`, `bcTrustedTimestamp`, `bcTimebaseRealign`,
+/// `bcReserved`, unknown control values), a frame whose integrity CRC did
+/// not match, an unverified integrity signature block, or a
+/// non-conforming zero-length block (`SkipReason::Kind::ZeroLengthBlock`).
 struct Skipped {
     /// Why the reader skipped this block.
     SkipReason reason;
     /// Number of payload bytes the reader had to consume from the
-    /// stream (control byte + payload). Always ≥ 0.
+    /// stream (control byte + payload). Always ≥ 1, except for
+    /// `SkipReason::Kind::ZeroLengthBlock`, which is always 0 — that block
+    /// has no control byte and no payload to consume.
     std::uint64_t bytesSkipped = 0;
     /// Captured payload bytes after the control byte. Default is
     /// `std::nullopt` (bytes are dropped without allocation). Opt in

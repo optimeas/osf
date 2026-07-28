@@ -1,15 +1,18 @@
 # Claude Code Session State
 
-Last updated: 2026-07-10 (**documentation currency pass**: public status
-surfaces corrected after the July integrity wave — `java.md` (DE+EN) and the
-implementation index/README status tables now show Java and C++ as complete;
-STATUS meta blocks consolidated (PR #11); this file refreshed. Earlier July work
-already on `main`: the OSF5 **integrity profile level `crc`** across all five
-implementations (Rust/Python/C++/Java/Delphi), the `channeltype`-as-data-shape
-fix, the shared `reference_manifest.json` conformance retrofit, and a Docusaurus
-docs sync. cpp package **0.2.0**; spec revision in effect **2026-07-07**
-(integrity). Older session notes below may cite earlier states — STATUS.md and
-the headers under `implementations/cpp/include/osf/` are ground truth.)
+Last updated: 2026-07-28 (**OSF-UP3 — zero-length data blocks**: a normative
+spec rule + DECISIONS §25, a dedicated skip reason and counter in all five
+implementations, the **Delphi reader fixed** (it used to abort the whole file),
+a malformed corpus file behind a new optional `anomalies` manifest field, and
+`osftool verify` reporting the count. Spec revision in effect is now
+**2026-07-28**. Suite totals: Rust 178/2 ignored, Java 244, C++ ctest 346,
+Delphi DUnitX 29, Python 19/1 skipped. Earlier July work already on `main`: the
+documentation currency pass (2026-07-10), the OSF5 **integrity profile level
+`crc`** across all five implementations, the `channeltype`-as-data-shape fix,
+the shared `reference_manifest.json` conformance retrofit, and a Docusaurus docs
+sync. cpp package **0.2.0**. Older session notes below may cite earlier states —
+STATUS.md and the headers under `implementations/cpp/include/osf/` are ground
+truth.)
 
 This file is a hand-off document for the next Claude Code session. Read
 [STATUS.md](STATUS.md) and [DECISIONS.md](DECISIONS.md) for the
@@ -34,10 +37,58 @@ A brief may also be repo-wide. The current repo-wide line is the **OSF5
 integrity profile** (DECISIONS §24): level `crc` has shipped across all five
 implementations (Rust/Python/C++/Java/Delphi) with a shared
 `reference_manifest.json` conformance contract; level `signed` (Ed25519) is the
-next step. Java is complete (§21); only a native **C** implementation remains
-unstarted.
+next step. The most recent repo-wide brief, **OSF-UP3** (zero-length data
+blocks, DECISIONS §25), is closed on the reader side — only the hunt for the
+producing writer remains, and that lives outside this repository. Java is
+complete (§21); only a native **C** implementation remains unstarted.
 
 ## Recent sessions (since 2026-05-22)
+
+### OSF-UP3 — zero-length data blocks (2026-07-28)
+
+A data block whose per-channel length field reads `0` is a non-conforming writer
+artefact — a conforming block always carries at least its control byte. Before
+this round Rust, C++, Java and Python skipped such a frame and kept scanning
+while **Delphi raised `EOSFFormatError` and aborted the whole file**, so a real
+field recording was unopenable in Delphi and fine everywhere else. Nothing
+tested the case and the corpus had no such file. Delivered on branch
+`worktree-osf-up3-zero-length-blocks` (23 implementation commits + this
+bookkeeping pass): the rule is normative in `docs/{en,de}/osf_general.md`
+(*Zero-length data blocks*, DE+EN, identical anchors) and recorded as
+**DECISIONS §25** — so the *spec revision in effect* moves to **2026-07-28**.
+A pre-existing spec bug went with it: the "Basic structure" list said the length
+field spans "the following data area" when it actually spans control byte +
+payload (+ frame CRC at integrity level `crc`).
+
+All five implementations now classify the case under a dedicated reason
+(`ZeroLengthBlock` / `ZERO_LENGTH_BLOCK`) with its own counter rather than
+misfiling it as a reserved-control-byte skip — no control byte is ever read on
+such a frame, so the old label asserted something untrue. Rust and C++ both had
+a `blocks_total` aggregation that silently undercounted until the new counter
+joined it; Rust's `SkipReason` became `#[non_exhaustive]` (API-visible). Delphi
+logs, counts (`BlocksZeroLengthSkipped` — local naming, so a grep for the shared
+`blocksSkippedZeroLength` finds nothing there) and skips, on the normal read
+path and the channel-filter path, with the unrecognised length-field-width
+fall-through split into its own guard. The contract is
+`examples/generated/malformed/osf5_zero_length_block.osf`, hand-assembled from
+two writer outputs and registered in `examples/reference_manifest.json` under a
+new optional `"anomalies": {"zeroLengthBlocks": N}` field that all four
+manifest-driven conformance suites assert. `osftool verify` prints
+`Zero-length skips:` (`zero_length_skipped_count` in `--json`) and warns naming
+OSF-UP3; exit stays 0, `--strict` gives 4.
+
+**What is left is the producer.** All seven writer classes here were audited and
+cleared — the evidence table is in `examples/generated/malformed/README.md` — so
+the suspect list is the om kernel, smartCORE `osfwriter`, or device firmware.
+That hunt needs a field file plus its device and firmware version; `BACKLOG.md`
+carries the entry conditions and two gotchas worth knowing before starting:
+`osftool verify --json` emits **concatenated JSON values** (neither one document
+nor NDJSON — `json.load()` and `ConvertFrom-Json` both fail; use `raw_decode` in
+a loop), and it omits `creator` / `created_utc`, so a hunt must also run
+`osftool info` and join on filename. Suite totals measured this round: Rust 178
+passed / 2 ignored, Java **244** (`mvn -f implementations/java/pom.xml -pl
+:osf-java test` — the selector must be group-qualified), C++ ctest 346, Delphi
+DUnitX 29, Python 19 passed / 1 skipped.
 
 ### Documentation currency pass (2026-07-10)
 
@@ -276,6 +327,22 @@ cd tools\osftool
 & "C:\Program Files (x86)\Embarcadero\Studio\23.0\bin64\dcc64.exe" -B -Q OsfTool.dpr
 ```
 
+DUnitX suite (29 tests as of 2026-07-28) — the form that actually works:
+
+```powershell
+cd implementations\delphi\tests
+$DX = "C:\Program Files (x86)\Embarcadero\Studio\23.0\source\DUnitX"
+New-Item -ItemType Directory -Force dcu32 | Out-Null       # -NU does not create it
+& "C:\Program Files (x86)\Embarcadero\Studio\23.0\bin\dcc32.exe" `
+    -B -Q -U"..\src;$DX" -I"$DX" -NU"dcu32" OSFTests.dpr
+.\OSFTests.exe   # exit 0 = all pass
+```
+
+`-U` **replaces** the unit search path, so `..\src` is mandatory — without it the
+build dies with `F2613 Unit 'OSF.Data.Channels' nicht gefunden`, because
+`Test.OSF.Filer.Integrity.pas` uses `OSF.Data.Channels` / `OSF.Data.Manager`
+without them being listed in the `.dpr`.
+
 Always remove the `*.dcu` / `*.exe` / `Win64\` build artefacts after
 a verify; they are gitignored but clutter `git status`.
 
@@ -435,7 +502,7 @@ Always remove `implementations\cpp\build` after a successful verify.
 - **Verify before push** for code-touching commits (compile / build /
   ctest must be green locally first).
 - **Co-Authored-By trailer** on every commit:
-  `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`
+  `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
 - **Commit prefixes:** `feat(cpp|delphi|rust|python|delphi-demo):`,
   `test(...):`, `fix(...):`, `refactor(...):`,
   `docs(status|changelog|decisions|backlog|spec):`, `chore:` for

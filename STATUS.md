@@ -10,7 +10,7 @@ when deeper context is needed.
 | Working dir | `V:\github\osf` (Windows) |
 | Latest tag | **v0.10.0** (2026-05-25) |
 | Branch | `main` |
-| Spec revision in effect | **2026-07-07** (OSF5 integrity profile; base format 2026-05-24) |
+| Spec revision in effect | **2026-07-28** (zero-length data blocks, OSF-UP3; OSF5 integrity profile 2026-07-07; base format 2026-05-24) |
 
 **Public-release prep — done (on `main`).** All four phases are complete:
 Phase 1 (repo cleanup), Phase 2 (Docusaurus integration), Phase 3
@@ -149,7 +149,7 @@ osf/
 | `OSF.Types` | `TOSFDataType` (only current types — pair/triple/candata/gpsdata are gone), `TOSFVersion`, `TOSFGpsLocation`, `TBlockContent`, helpers (`OSFDataTypeFromString`, `OSFNowAsUnixNs`, …) |
 | `OSF.Log` | Central logging + progress dispatcher. `TOSFLogLevel = (llDebug, llInfo, llUser, llWarning, llError)` (verbosity-ascending; default listener filter is `llUser`). `TOSFLogEvent` carries `(Msg, Level, Sender)`. `TLoggerListener` class with four event slots (`OnAddLogMessage`, `OnStartProgress`, `OnDoProgress`, `OnEndProgress`) plus a per-listener `MinLevel`. `TOSFLog` class with `RegisterListener`/`UnregisterListener`, `Write` (two overloads), `ProgressStart`/`DoProgress`/`EndProgress`, and `IsLevelActive(Level)`; threadsafe via `TCriticalSection`, listener iteration over a snapshot so a listener can register / unregister another listener from inside its own callback. Process-wide singleton exposed as the global `Logger: TOSFLog` (init / final inside the unit). |
 | `OSF.Channel` | `TOSFChannelDef` — has `SampleRate: Double`; no longer has `Scale`, `Offset`, `PhysicalUnit1..3`, `PhysicalDimension1..3` |
-| `OSF.Filer` | `TOSFFile` — streaming reader/writer for OSF4 and OSF5. `WriteEquidistantBlock(...)` requires `Channel.SampleRate > 0` and a non-zero `FirstTimestampNs` to start a new segment. `WriteTimestampedSample/Block/Doubles` for timestamped channels. Version-deterministic `0x00` handling for `string`/`binary` in `bcAbsTimeStampData` per spec rev 2026-05-24: writer appends and reader strips for OSF4, both leave the payload verbatim for OSF5. Variable-length `WriteTimestampedBlock` calls with N>1 are auto-split into N single-sample blocks (the historical multi-sample per-sample-uint32-length-prefix layout was removed). Adds an optional read-side `ChannelFilter: TArray<string>` (skips blocks of channels not in the list — info blocks always pass through). Transparent **OSFZ (gzip) decompression**: `OpenForRead` peeks the `1F 8B` magic and wraps the stream in `TZDecompressionStream`. OSF4 XML metablock is parsed via **OmniXML** (`GetDOMVendor(sOmniXmlVendor)`) so reads no longer need MSXML installed. |
+| `OSF.Filer` | `TOSFFile` — streaming reader/writer for OSF4 and OSF5. `WriteEquidistantBlock(...)` requires `Channel.SampleRate > 0` and a non-zero `FirstTimestampNs` to start a new segment. `WriteTimestampedSample/Block/Doubles` for timestamped channels. Version-deterministic `0x00` handling for `string`/`binary` in `bcAbsTimeStampData` per spec rev 2026-05-24: writer appends and reader strips for OSF4, both leave the payload verbatim for OSF5. Variable-length `WriteTimestampedBlock` calls with N>1 are auto-split into N single-sample blocks (the historical multi-sample per-sample-uint32-length-prefix layout was removed). Adds an optional read-side `ChannelFilter: TArray<string>` (skips blocks of channels not in the list — info blocks always pass through). A data block whose length field reads `0` is logged, counted (`BlocksZeroLengthSkipped`) and skipped — on the normal read path and on the channel-filter path alike — instead of raising and aborting the whole file (OSF-UP3, [DECISIONS §25](DECISIONS.md#25-zero-length-data-blocks)); an unrecognised length-field width is a separate guard that stops the scan, so a corrupt width is not misreported as a writer artefact. Transparent **OSFZ (gzip) decompression**: `OpenForRead` peeks the `1F 8B` magic and wraps the stream in `TZDecompressionStream`. OSF4 XML metablock is parsed via **OmniXML** (`GetDOMVendor(sOmniXmlVendor)`) so reads no longer need MSXML installed. |
 | `OSF.Data.Channels` | Typed in-memory channels. **`TOSFEquidistantDataChannel.Segments: TList<TOSFChannelSegment>`** maps the flat `Values` list onto absolute time — every `bcStartData` opens a new segment with `(StartTimestampNs, StartIndex, SampleCount)`. |
 | `OSF.Data.Manager` | `TOSFDataManager.LoadFromFile/Stream` — high-level read; populates typed channels. Pass-through `ChannelFilter: TArray<string>` forwarded to the internal `TOSFFile`; excluded channels get no `TOSFDataChannel` at all. |
 | `OSF.Export` | `TOSFExporter` abstract base (`ExcludeEmptyChannels`, `AbsoluteTimestamps`) |
@@ -228,20 +228,30 @@ table-based CRC-32/ISCSI; check value `0xE3069283`, byte-identical to Rust/C++;
 bidirectionally with Rust** (Rust reads Delphi files and vice versa, 0 CRC
 failures, byte-identical CRCs).
 
-**Tests — DUnitX suite** (`implementations/delphi/tests/OSFTests.dpr`, 26 tests,
-green under **dcc32 and dcc64**): `Test.OSF.CRC32C` (vectors incl. RFC 3720),
-`Test.OSF.Filer.Header` (tokenizer matrix + strict-space cases), and
+**Tests — DUnitX suite** (`implementations/delphi/tests/OSFTests.dpr`, **29
+tests**, green under **dcc32 and dcc64**): `Test.OSF.CRC32C` (vectors incl.
+RFC 3720), `Test.OSF.Filer.Header` (tokenizer matrix + strict-space cases),
 `Test.OSF.Filer.Integrity` (metablock/frame CRC good+corrupt per block type,
 Fix C control-byte-9 skip, `VerificationStatus`, write/read round-trip,
-writer-overflow boundary, and cross-validation reading the Rust + Delphi
-`integrity/*.osf` reference files). Build with the DUnitX source on the unit +
-include path and `.dcu` output routed to a writable dir:
+writer-overflow boundary, cross-validation reading the Rust + Delphi
+`integrity/*.osf` reference files, and the manifest anomaly counts), and
+`Test.OSF.Filer.ZeroLengthBlock` (3 tests — OSF-UP3: skip + count on the normal
+read path and on the channel-filter path). Build with the DUnitX source **and
+`..\src`** on the unit path, the DUnitX source on the include path, and `.dcu`
+output routed to a writable dir that must exist:
 
+```powershell
+# from implementations\delphi\tests
+$DX = "C:\Program Files (x86)\Embarcadero\Studio\23.0\source\DUnitX"
+New-Item -ItemType Directory -Force dcu32 | Out-Null
+dcc32 -B -Q -U"..\src;$DX" -I"$DX" -NU"dcu32" OSFTests.dpr   # (dcc64 / dcu64 likewise)
+.\OSFTests.exe   # exit 0 = all pass
 ```
-set DX=C:\Program Files (x86)\Embarcadero\Studio\23.0\source\DUnitX
-dcc32 -B -Q -U"%DX%" -I"%DX%" -NU"dcu32" OSFTests.dpr   # (dcc64 / dcu64 likewise)
-OSFTests.exe   # exit 0 = all pass
-```
+
+`-U` **replaces** the unit search path, so `..\src` is mandatory: the test units
+use `OSF.Data.Channels` / `OSF.Data.Manager` without listing them in the `.dpr`,
+and omitting it fails with `F2613 Unit 'OSF.Data.Channels' nicht gefunden`. The
+`-NU` directory is not created by the compiler — create it first.
 
 Two spec-conformance fixes landed with RED-first tests: **Fix 1** — strict
 single-space magic-header grammar (trailing/double space now rejected, matching
@@ -285,14 +295,31 @@ check value `0xE3069283`, byte-identical to Rust/C++/Delphi).
   (softened to warning-only to match the Rust/C++ readers, which do not reject —
   the frame CRC is the integrity gate; noted as an interpretation decision).
 
-**Tests** (JUnit 5 + AssertJ, **21 new**, module total **226**, `mvn test`
-green): `MagicHeaderIntegrityTest` (tokenizer matrix), `IntegrityReaderTest`
+**Tests** (JUnit 5 + AssertJ, **21 new**, module total **226** at the time of
+this round, `mvn test` green): `MagicHeaderIntegrityTest` (tokenizer matrix),
+`IntegrityReaderTest`
 (4 reference files + metablock/numeric/string byte flips → `MetablockCrcMismatch`
 / `blocksCrcFailed`, signature-block skip, gzip), `WriterIntegrityTest`
 (both-writer round-trip vs plain, byte-identical crc output), plus a
 control-byte-9-profile-less skip case. Frame-CRC byte-identity to Rust is
 transitive: the reader reads the two Rust reference files with 0 CRC failures,
 and the writer's output reads back clean.
+
+**Current module total: 244** (measured 2026-07-28, after the channeltype,
+manifest and OSF-UP3 rounds). The `226` above is the figure of its own round and
+was never refreshed as the suite grew — it had drifted to 232 before OSF-UP3
+added 12. Run it with
+
+```powershell
+mvn -f implementations/java/pom.xml -pl :osf-java test
+```
+
+The module selector must be **group-qualified** (`:osf-java`): a bare
+`-pl osf-java` is taken as a relative path and fails with *Could not find the
+selected project in the reactor*.
+
+Reader statistics gained `ReaderStats.blocksSkippedZeroLength()` for OSF-UP3 —
+see the *Zero-length data blocks* section below.
 
 The four `integrity/` reference files are now part of the shared
 `examples/reference_manifest.json` conformance contract (sub-path keys, optional
@@ -330,7 +357,7 @@ Nine verbs, dispatched by `TOsfToolDispatcher`:
 | `cache` | `build` / `rebuild` / `clean` / `status` of `.json` sidecars under a root dir |
 | `config` | `show` / `set` / `reset` settings; `install-path` / `uninstall-path` add/remove the exe dir from the user PATH (HKCU registry on Windows, shell-snippet print on POSIX) |
 | `convert` | OSF4 ↔ OSF5 round-trip via `TOSFMerger` |
-| `verify` | Block-level integrity check (channel-index coverage, timestamp monotonicity, truncation) |
+| `verify` | Block-level integrity check (channel-index coverage, timestamp monotonicity, truncation) plus the read-side counters: CRC-failed, signature, unknown-type and **`Zero-length skips`** (`zero_length_skipped_count` under `--json`). A nonzero zero-length count raises a warning naming OSF-UP3; warnings keep exit 0, `--strict` escalates to 4 |
 
 Shared infrastructure: `IOsfCommand` + `TBaseCommand` (argument parsing,
 stdout/stderr split, global `--json` / `--quiet` / `--verbose`).
@@ -376,7 +403,7 @@ future Python bindings (PyO3 wrapper at `implementations/python/`).
 | `meta` | `MetaBlock { file_info, channels, infos }`, `FileInfo`, `Channel`, `Info`, `SpectrumType`; validation helpers `parse_data_type` / `parse_channel_type` shared by both parsers |
 | `meta_json` | `parse_metablock_json(&[u8])` — OSF5 JSON parser via `serde_json::Value` (manual field picking; no derive, for forward-compat) |
 | `meta_xml` | `parse_metablock_xml(&[u8])` — OSF4 XML parser via `quick-xml` event reader; tolerates CP1252 bytes in real field files via `String::from_utf8_lossy` |
-| `block` | `Block { channel_index, kind }`, `BlockKind` (StartData / ContinuedData / AbsTimestampData / ContinuedRelStampData / Skipped), `NumericPayload` / `TimestampedPayload` / `RelTimestampedPayload`, `GpsLocation`, `SkipReason`, control-byte decoder |
+| `block` | `Block { channel_index, kind }`, `BlockKind` (StartData / ContinuedData / AbsTimestampData / ContinuedRelStampData / Skipped), `NumericPayload` / `TimestampedPayload` / `RelTimestampedPayload`, `GpsLocation`, `SkipReason` (now `#[non_exhaustive]`, incl. `ZeroLengthBlock`), control-byte decoder |
 | `reader` | `BlockReader<R: Read>` — Iterator over `Result<Block, OsfError>`. Builder `with_capture_skipped_payload(bool)` (default off, no allocation) and `with_file_size(u64)`. Best-effort on truncation, hard error on unknown channel index, silent consume of optional `0xFFFF` info block plus 40-byte magic trailer |
 | `stats` | `ReaderStats` with file/section sizes, elapsed, channels and per-reason block counters, plus `per_channel: HashMap<u16, ChannelStats>` (segments, samples_total, time_range_ns); `Display` impls for both |
 | `data_channel` | `Channel` enum (`Equidistant` / `Timestamped` / `Variable`), per-variant typed structs, `Segment`, `ChannelMeta`, `NumericValues`; `samples_with_time()` iterators yielding `Sample<NumericValueRef<'_>>` / `Sample<VariableValueRef<'_>>`; `as_doubles_flat` etc. helpers |
@@ -574,6 +601,15 @@ files: `examples/generated/integrity/osf5_crc_{equidistant,variable}.osf` (Rust
 `cargo run --example gen_crc_refs`). Signing (level `signed`) is not
 implemented. **139 → 147 lib tests + `tests/integrity_test.rs` (6)**.
 
+**Suite total (measured 2026-07-28): `cargo test` = 178 passed, 2 ignored** —
+the two `#[ignore]`-gated performance smokes above. Added by OSF-UP3:
+`ReaderStats.blocks_skipped_zero_length` + `SkipReason::ZeroLengthBlock` (the
+`blocks_total` aggregation had to gain the new counter as a term; it omitted it
+for three commits mid-branch — see `17771ee`), the
+`examples/gen_malformed_refs.rs` corpus generator, and
+`tests/writer_zero_length_audit_test.rs` (7 tests). See the *Zero-length data
+blocks* section below.
+
 **Next steps:** Python bindings via PyO3 + maturin (Session 7a
 landed; pandas convenience in 7b; CI + wheel matrix in 8).
 
@@ -653,6 +689,12 @@ integrity="crc32c")`. Type stubs updated; `tests/test_integrity.py` (5 run +
 1 skipped — no signed reference file yet). Verified locally via `maturin
 develop` (18 passed, 1 skipped).
 
+**OSF-UP3 (2026-07-28).** `ReaderStats` gained `blocks_skipped_zero_length`
+(getter + type stub), inherited from the Rust core; `tests/test_basic.py` covers
+the malformed corpus file. Suite now **19 passed, 1 skipped**. The binding still
+surfaces only a subset of `osf-core`'s counters — see BACKLOG, *Reader counters
+are not reachable from every high-level API*.
+
 **Pending:** pandas `DataFrame` convenience (Session 7b).
 
 ---
@@ -701,7 +743,8 @@ byte-identical to Rust/Delphi). Signing (level `signed`) is out of scope.
   numeric / string byte flips, unknown token, OSF4+token, signature block —
   and a gzip-wrapped crc file). Byte-level cross-validation with Rust is
   transitive: the CRC primitive matches and the C++ reader reads the Rust
-  reference files with zero failures. **345/345 ctest green.**
+  reference files with zero failures. **345/345 ctest green** at that round
+  (**346/346** today — OSF-UP3 added one).
 
 **Library targets:**
 
@@ -721,7 +764,7 @@ byte-identical to Rust/Delphi). Signing (level `signed`) is out of scope.
 | `include/osf/types.h` | Core OSF type enumerations (spec rev 2026-05-04): `DataType` (Bool / Int8..Int64 / UInt8..UInt64 / Float / Double / String / Binary / ByteArray / GpsLocation / Unsupported), `ChannelType` (Scalar / Equidistant / Timestamped / Unsupported), `SpectrumType` (Amplitude / RealImag / AmpPhaseRad / AmpPhaseDeg); plus `parseDataType` / `parseChannelType` (Result-returning) and `parseSpectrumType` (noexcept) |
 | `include/osf/metablock.h` | OSF metablock data model: `FileInfo`, `Channel`, `Info`, `MetaBlock` structs; `parseMetablockJson` (OSF5) and `parseMetablockXml` (OSF4), each in two overloads (`std::uint8_t const*` + size; `std::string_view`) — both populate the same `MetaBlock` data model |
 | `include/osf/block.h` | OSF block model: `Block` struct, `BlockKind` as `std::variant<StartData, ContinuedData, AbsTimestampData, ContinuedRelStampData, Skipped>`, payload sum types, `GpsLocation`, `SkipReason`, `ControlByte` / `ControlKind`, `decodeControlByte`. Constants `TRAILER_CHANNEL_INDEX = 0xFFFF` and `MAGIC_TRAILER_LEN = 40`. |
-| `include/osf/stats.h` | Reader telemetry: `ReaderStats` (byte/block counters, channel counters, `elapsed`, `trailerSeen`, `compressed`, `compressionFormat`, `perChannel`) and `ChannelStats` (name, blocks/skipped/samples/bytes/segments, `timeRangeNs`). `formatBytes`, `formatDuration`, `compressionFormatName`. `operator<<` overloads format the structs. |
+| `include/osf/stats.h` | Reader telemetry: `ReaderStats` (byte/block counters incl. `blocksSkippedZeroLength`, channel counters, `elapsed`, `trailerSeen`, `compressed`, `compressionFormat`, `perChannel`) and `ChannelStats` (name, blocks/skipped/samples/bytes/segments, `timeRangeNs`). `formatBytes`, `formatDuration`, `compressionFormatName`. `operator<<` overloads format the structs. |
 | `include/osf/reader.h` | Block-stream reader: `BlockReader` class — fluent setters `withCaptureSkippedPayload(bool)` and `withFileSize(u64)`; primitive `next()`; range-based-for support; `stats()`, `blocksTruncated()`, `trailerSeen()`, `fileSizeBytes()`. Best-effort on truncation, hard error on unknown channel index, forward-compat `Skipped` records. |
 | `include/osf/datachannel.h` | Typed in-memory channel model: `DataChannel` as `std::variant<EquidistantChannel, TimestampedChannel, VariableChannel>`. `EquidistantChannel` + `TimestampedChannel` + `VariableChannel`; `Segment` (fields: `startTimestampNs`, `sampleRateHz`, `startIndex`, `sampleCount`); `ChannelMeta`; `NumericValues` variant; flat-access helpers (`asDoublesFlat`, …, `asGpsFlat`); common free-function accessors (`channelIndex`, `channelName`, `channelSampleCount`, …). |
 | `include/osf/manager.h` | High-level reader: `DataManager` class — static `loadFromFile(path)` and `loadFromStream(istream&)`; `channel(name)` and `channelByIndex(u16)` lookups; `channels()`; `meta` + `stats` fields. **Transparent OSFZ decompression** wraps the input before the magic-header parse. |
@@ -793,8 +836,9 @@ ctest --test-dir build
   runs ctest. FetchContent fetches googletest + zlib over HTTPS on
   the runners (no local-extract workaround needed there).
 - Local (MSVC, Visual Studio 18, with `OSF_BUILD_C_API=ON`): `ctest`
-  reports **345/345 passed** (321 before the integrity-profile `crc`
-  work added on 2026-07-09; 319 before the two DECISIONS-§13
+  reports **346/346 passed** (measured 2026-07-28 — 345 before the OSF-UP3
+  zero-length-block test added on 2026-07-28; 321 before the integrity-profile
+  `crc` work added on 2026-07-09; 319 before the two DECISIONS-§13
   metadata-defaults tests added 2026-06-12) with 0 warnings under
   `/W4 /permissive-`. zlib 1.3.2 comes via FetchContent with the
   local-extract workaround (`FETCHCONTENT_SOURCE_DIR_ZLIB`) for the
@@ -843,6 +887,71 @@ also caught and fixed a strict-aliasing UB in the `BlockWriter`
 The C ABI shared-library wrapper (Phase 11, DECISIONS §23) is done — Windows DLL / ActiveX/OCX and future language bindings can use `osf/capi.h` with `-D OSF_BUILD_C_API=ON`.
 
 CI integration (Phase 10) is done — `ci.yml` covers `implementations/cpp/**` and runs a Linux/macOS/Windows job matrix with `-D OSF_WARNINGS_AS_ERRORS=ON`.
+
+---
+
+## Zero-length data blocks — OSF-UP3 (2026-07-28)
+
+A data block whose per-channel length field reads `0` is a **non-conforming
+writer artefact, not an error** — a conforming block always carries at least its
+control byte. The rule is now normative in `docs/{en,de}/osf_general.md`
+(*Zero-length data blocks*, DE + EN with identical anchors) and recorded as
+[DECISIONS §25](DECISIONS.md#25-zero-length-data-blocks). It is a spec change in
+its own right, which is why the header table's *spec revision in effect* moves to
+**2026-07-28**. A pre-existing spec bug was fixed in the same pass: the "Basic
+structure" list said the length field spans "the following data area", when it
+actually spans control byte + payload (+ the frame CRC at integrity level `crc`).
+
+**Readers.** All five implementations now classify the case under a dedicated
+reason with its own counter, instead of misfiling it as a reserved-control-byte
+skip — on a zero-length block no control byte is ever read, so the old
+classification asserted something untrue and merged a writer bug with a
+legitimate forward-compatibility skip:
+
+| Implementation | Reason / counter | Note |
+|---|---|---|
+| Rust | `SkipReason::ZeroLengthBlock`, `ReaderStats.blocks_skipped_zero_length` | `SkipReason` is now `#[non_exhaustive]` (API-visible change); the `blocks_total` aggregation had to gain the new counter as a term — it briefly omitted it mid-branch (`0d8c48a`…`17771ee`), which is what `17771ee` calls a regression. `main` never undercounted: the frame was previously counted as `ReservedBlockType`, already a term of the sum |
+| C++ | `SkipReason::ZeroLengthBlock`, `ReaderStats::blocksSkippedZeroLength` | `blocksTotal` gained the new counter as a term in the same commit, for the same reason — likewise never wrong on `main`. The `osf-c` C ABI has **no** zero-length getter yet (BACKLOG) |
+| Java | `ZERO_LENGTH_BLOCK`, `ReaderStats.blocksSkippedZeroLength()` | |
+| Python | `stats.blocks_skipped_zero_length` | inherited from the Rust core |
+| **Delphi** | `TOSFFile.BlocksZeroLengthSkipped` | **behaviour fixed** — it used to `raise EOSFFormatError` and abort the whole file, making a recording unopenable in Delphi that read fine everywhere else |
+
+Delphi's counter deliberately keeps the local `Blocks…Skipped` naming of its
+siblings, so it reads `BlocksZeroLengthSkipped` where the other four use
+`blocksSkippedZeroLength` / `blocks_skipped_zero_length` — a cross-language grep
+for the shared name finds nothing in Delphi. The Delphi fix covers the normal
+read path *and* the channel-filter path, and the unrecognised
+length-field-width fall-through (which also produced `LenField = 0`) was split
+out into its own guard, so a corrupt width is no longer misreported as a writer
+artefact.
+
+**Corpus + contract.** `examples/generated/malformed/osf5_zero_length_block.osf`
+— hand-assembled from two writer outputs, since no writer in this repository can
+emit the frame — is registered in `examples/reference_manifest.json` through a
+new optional `"anomalies": { "zeroLengthBlocks": N }` field, and all four
+manifest-driven conformance suites assert it. `osftool verify` reports the count
+in both output modes (`Zero-length skips:` / `zero_length_skipped_count`) and
+raises a warning naming OSF-UP3; plain `verify` keeps exit 0, `--strict`
+escalates to 4.
+
+**Writer audit.** All seven writer classes in this repository were audited and
+cleared — none can emit a zero-length frame. The per-writer evidence table, the
+two different mechanisms the guarantee rests on, the three risk shapes checked,
+and the audit's own two coverage gaps live in
+`examples/generated/malformed/README.md`. The remaining hunt is outside this
+repository (om kernel, smartCORE `osfwriter`, device firmware) — see BACKLOG,
+*Zero-length data blocks — find the producing writer (OSF-UP3)*.
+
+**Suite totals after the round**, all measured on the work machine 2026-07-28:
+Rust `cargo test` **178 passed / 2 ignored**; Java **244**; C++ ctest
+**346/346**; Delphi DUnitX **29**; Python pytest **19 passed / 1 skipped**.
+
+Follow-ups the round surfaced — manifest-contract strictness gaps, the empty
+equidistant-segment writer divergence, the missing counter accessors (`osf-c`
+has no zero-length getter, `TOSFDataManager` no counters at all, the Python
+binding only a subset), and the N+1 warning mirroring in `osftool verify` — are
+recorded in `BACKLOG.md`. The `osf-c` gap is the one to close first if the
+writer hunt runs through a C/C++ integration.
 
 ---
 
@@ -940,10 +1049,27 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 - **DUnitX test suite** for the Delphi implementation — **started
   (2026-07-08).** `implementations/delphi/tests/OSFTests.dpr` (DUnitX console
-  runner, 26 tests, dcc32 + dcc64 green) covers `OSF.CRC32C`, the header
-  tokenizer, and the integrity read/write path. Structured for extension (one
-  `Test.OSF.*` unit per area); the older OSF library units (merger, exporters,
-  cache, …) are not yet covered — incremental follow-up.
+  runner, **29 tests**, dcc32 + dcc64 green) covers `OSF.CRC32C`, the header
+  tokenizer, the integrity read/write path, and the OSF-UP3 zero-length-block
+  skip. Structured for extension (one `Test.OSF.*` unit per area); the older OSF
+  library units (merger, exporters, cache, …) are not yet covered — incremental
+  follow-up.
+- **OSF-UP3 writer origin** — the reader side is closed across all five
+  implementations and held by the manifest contract, and the seven writers in
+  this repository are audited and cleared, so the producer of the zero-length
+  blocks seen in July 2026 field data is elsewhere (om kernel, smartCORE
+  `osfwriter`, device firmware). `osftool verify` is the instrument. Details +
+  the two `--json` gotchas: `BACKLOG.md`, *Zero-length data blocks — find the
+  producing writer (OSF-UP3)*.
+- **Follow-ups surfaced by OSF-UP3**, all in `BACKLOG.md`: manifest anomaly
+  contract strictness gaps (Rust/C++ ignore unknown `anomalies` keys; Delphi
+  does not assert `version`), the empty-equidistant-segment writer divergence
+  (Rust/Python/Java emit a 21-byte zero-sample block, C++/Delphi refuse),
+  reader counters missing from the surfaces callers use — **no zero-length
+  getter in the `osf-c` C ABI** (the surface smartCORE and the om kernel
+  integrate through, so the one that matters for the hunt), none at all on
+  `TOSFDataManager`, and only a subset in the Python binding — and the N+1
+  warning mirroring in `osftool verify`.
 - **Production PyPI release for `osfdata`** — the Python bindings are
   functional and CI already publishes to **TestPyPI** (`osfdata 0.1.0`); a
   production `pypi.org` release needs its own Trusted Publisher. Pandas
@@ -962,9 +1088,9 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 ---
 
-## Next session priorities (as of 2026-07-10)
+## Next session priorities (as of 2026-07-28)
 
-**Integrity profile — stage `crc` (level b) is complete across all four
+**Integrity profile — stage `crc` (level b) is complete across all five
 active implementations** and locked down by the shared conformance contract.
 Rust, Python, C++ (`osf-cpp` + `osf-c`), Java, and Delphi all read + write OSF5
 files with `crc32c` framing (metablock CRC + per-block frame CRC, signature-block
@@ -977,22 +1103,25 @@ file list, no per-language duplication. Per-implementation detail lives in the
 *integrity profile* subsections above; the `none ⊂ crc ⊂ signed` ladder and wire
 format are in [DECISIONS](DECISIONS.md) (integrity section).
 
+**OSF-UP3 — zero-length data blocks — is closed on the reader side
+(2026-07-28).** The rule is normative in `docs/{en,de}/osf_general.md` and in
+[DECISIONS §25](DECISIONS.md#25-zero-length-data-blocks); all five
+implementations skip + count the frame under a dedicated reason, Delphi no
+longer aborts the file, the malformed corpus file is a manifest key with an
+`anomalies` count that all four conformance suites assert, and `osftool verify`
+surfaces it. See *Zero-length data blocks — OSF-UP3* above. **The open remainder
+is the writer origin:** the seven writers in this repository are audited and
+cleared, so the producer is outside it (om kernel, smartCORE `osfwriter`, device
+firmware). That is a corpus hunt with `osftool verify`, not a coding task, and
+it waits on a field file plus its device and firmware version —
+[BACKLOG.md](BACKLOG.md) → *Zero-length data blocks — find the producing writer
+(OSF-UP3)* has the entry conditions and the two `--json` gotchas.
+
 **Next: stage `signed` (level c).** Level `signed` adds an Ed25519 signature
 block (control byte 9) on the reserved `0xFFFE` channel over a hash chain of the
 frame CRCs. A brief for it is on hand; the plan is to stand up a **test PKI** and
 a **Rust reference implementation** first, then fan the same design out to the
 other implementations the way stage `crc` was. No code exists for it yet.
-
-**Queued ahead of that (2026-07-28): OSF-UP3 — zero-length data blocks.**
-A block whose length field reads `0` makes the **Delphi** reference raise and
-abort the read, while C++, Rust, Java and Python skip it and keep scanning.
-Nothing tests the case anywhere and the corpus has no such file, which is how
-the divergence survived. It was observed in real field data, not constructed.
-Work items and the notes already taken (the corpus file is a minimal synthetic
-reproduction; malformed examples need their own sub-directory and expectation
-schema, since `reference_manifest.json` drives every conformance suite) are in
-[BACKLOG.md](BACKLOG.md) → *Reader conformance: zero-length data blocks
-(OSF-UP3)*. Start there.
 
 Other continuations remain incremental / BACKLOG — notably the deferred `osf-c`
 C builder surface + packaging (see `BACKLOG.md`); a native **C** implementation

@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Zero-length data blocks — normative spec rule + uniform handling across all
+  five implementations (OSF-UP3).** A data block whose per-channel length field
+  reads `0` is now specified as a **non-conforming writer artefact, not an
+  error** — a conforming block always carries at least its control byte.
+  *Specification:* a new "Zero-length data blocks" section in
+  `docs/{en,de}/osf_general.md` (DE + EN, identical anchors) plus decision record
+  **DECISIONS §25**; the same pass corrects a pre-existing spec bug in the
+  "Basic structure" list, which described the length field as spanning "the
+  following data area" when it actually spans control byte + payload (+ the
+  frame CRC at integrity level `crc`). *Implementations:* Rust, C++, Java,
+  Python and Delphi classify the case under a dedicated skip reason
+  (`ZeroLengthBlock` / `ZERO_LENGTH_BLOCK`) with its own statistics counter
+  (`blocks_skipped_zero_length` / `blocksSkippedZeroLength` /
+  `BlocksZeroLengthSkipped`) instead of misfiling it as a reserved-control-byte
+  skip — no control byte is ever read on such a frame. Rust's `SkipReason` is
+  now `#[non_exhaustive]` (API-visible: downstream `match` arms need a
+  catch-all), and the `blocks_total` / `blocksTotal` aggregations in Rust and
+  C++, which had silently omitted the new counter, were fixed. *Corpus:* a new
+  `examples/generated/malformed/` directory with
+  `osf5_zero_length_block.osf` (hand-assembled — no writer in this repository
+  can emit the frame) plus a README carrying the writer-audit evidence, listed
+  in `examples/reference_manifest.json` through a new **optional `anomalies`
+  field** (`{"zeroLengthBlocks": N}`); all four manifest-driven conformance
+  suites assert the count. *Tooling:* `osftool verify` reports the count in both
+  output modes (`Zero-length skips:` / `zero_length_skipped_count`) and raises a
+  warning naming OSF-UP3 — plain `verify` keeps exit 0, `--strict` escalates
+  to 4.
 - **Shared conformance manifest now covers the integrity reference files.**
   The four OSF5 integrity files under `examples/generated/integrity/` are listed
   in `examples/reference_manifest.json` under `integrity/…` sub-path keys (with
@@ -88,6 +115,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Delphi reader no longer fails a whole file on a zero-length data block
+  (OSF-UP3).** `TOSFFile` raised `EOSFFormatError` on a length field of `0`,
+  aborting the read, while the other four implementations skipped the frame and
+  kept scanning — so a real field recording was unopenable through the Delphi
+  reference and readable everywhere else, contradicting Delphi's own rule that
+  only a real truncation stops the reader. It now logs, counts
+  (`TOSFFile.BlocksZeroLengthSkipped`) and skips, on the normal read path and on
+  the channel-filter path alike. The unrecognised length-field-width
+  fall-through, which also produced `LenField = 0`, was split out into its own
+  guard, so a corrupt width stops the scan explicitly instead of being
+  misreported as a writer artefact.
 - **`channeltype` modelled correctly as the channel's data shape — Rust,
   Python, C++, Java (cross-implementation data-loss fix).** The OSF
   `channeltype` metablock attribute is the channel's *data shape*

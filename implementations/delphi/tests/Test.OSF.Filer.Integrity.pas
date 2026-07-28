@@ -7,6 +7,7 @@ interface
 
 uses
   System.SysUtils,
+  System.JSON,
   OSF.Types,
   DUnitX.TestFramework;
 
@@ -25,6 +26,12 @@ type
     // Writes a single binary sample of DataSize bytes to an lfs2 (u16) binary
     // channel with the crc profile active; returns the raised message or ''.
     function TryWriteBinarySample(DataSize: Integer): string;
+    // Resolves the expected anomalies.zeroLengthBlocks count for one manifest
+    // entry (0 when the entry omits `anomalies`). Asserts loudly — naming Key
+    // and the offending field — on an unrecognized anomaly kind, a
+    // non-object `anomalies` value, a missing zeroLengthBlocks key, or a
+    // non-integer zeroLengthBlocks value.
+    function ExpectedZeroLengthBlocks(const Key: string; FileObj: TJSONObject): Integer;
   public
     [Test] procedure WriteReadRoundtripPreservesData;
     [Test] procedure HeaderCarriesCrc32cToken;
@@ -50,7 +57,6 @@ implementation
 uses
   System.Classes,
   System.IOUtils,
-  System.JSON,
   OSF.CRC32C,
   OSF.Channel,
   OSF.Data.Channels,
@@ -398,13 +404,71 @@ begin
   Assert.AreNotEqual('', TryWriteBinarySample(MAX_LFS2_CRC_SAMPLE + 1));
 end;
 
+// Resolves the expected anomalies.zeroLengthBlocks count for one manifest
+// entry (0 when the entry omits `anomalies`). Asserted unconditionally by
+// the caller — a well-formed file reporting a zero-length skip is itself a
+// finding — unlike the integrity block below it, since a file with no
+// integrity profile simply has no frame CRCs to check.
+function TFilerIntegrityTests.ExpectedZeroLengthBlocks(const Key: string;
+  FileObj: TJSONObject): Integer;
+const
+  // Anomaly kinds this test recognizes, as a typed constant so the failure
+  // message below can be derived from it (string.Join) rather than
+  // hand-typed separately — adding a second kind is then a single edit here,
+  // not three coordinated ones (mirrors Java's KNOWN_ANOMALY_KINDS).
+  KnownAnomalyKinds: TArray<string> = ['zeroLengthBlocks'];
+var
+  AnomaliesVal, ZeroLengthVal: TJSONValue;
+  AnomaliesObj: TJSONObject;
+  AnomalyPair: TJSONPair;
+  AnomalyKind: string;
+  KnownKind: Boolean;
+  IntVal: Integer;
+begin
+  Result := 0;
+  AnomaliesVal := FileObj.GetValue('anomalies');
+  if AnomaliesVal = nil then
+    Exit;
+
+  Assert.IsTrue(AnomaliesVal is TJSONObject, Key + ': anomalies must be a JSON object');
+  AnomaliesObj := AnomaliesVal as TJSONObject;
+
+  // Non-defaulting lookup: reject any key not in KnownAnomalyKinds before
+  // even looking at zeroLengthBlocks, so a mis-spelled key (e.g.
+  // "zerolengthBlocks") cannot be silently absorbed as "no anomaly
+  // declared", which would make the caller's assertion vacuous.
+  for AnomalyPair in AnomaliesObj do
+  begin
+    AnomalyKind := AnomalyPair.JsonString.Value;
+    KnownKind := False;
+    for var K in KnownAnomalyKinds do
+      if K = AnomalyKind then
+      begin
+        KnownKind := True;
+        Break;
+      end;
+    Assert.IsTrue(KnownKind, Key + ': unknown anomaly kind "' + AnomalyKind +
+      '" (known kinds: ' + string.Join(', ', KnownAnomalyKinds) + ')');
+  end;
+
+  ZeroLengthVal := AnomaliesObj.GetValue('zeroLengthBlocks');
+  Assert.IsNotNull(ZeroLengthVal, Key + ': anomalies.zeroLengthBlocks missing');
+  Assert.IsTrue(ZeroLengthVal is TJSONNumber,
+    Key + ': anomalies.zeroLengthBlocks must be a number, got "' + ZeroLengthVal.Value + '"');
+  Assert.IsTrue(TryStrToInt(ZeroLengthVal.Value, IntVal),
+    Key + ': anomalies.zeroLengthBlocks has a non-integer value: "' + ZeroLengthVal.Value + '"');
+  Result := IntVal;
+end;
+
 // Manifest-driven cross-implementation conformance test. Reads the shared
 // examples/reference_manifest.json — the single source of truth for the
 // expected decoded contents of every reference file — and asserts that the
 // Delphi reader decodes each listed file to match: channel count, and per
-// channel index/name/dataType/sampleCount/mode. For entries that declare an
-// integrity profile the low-level filer is additionally opened to confirm the
-// profile is reported and no frame CRC fails.
+// channel index/name/dataType/sampleCount/mode. The low-level filer is
+// opened for EVERY entry (not only integrity entries) to assert the
+// optional `anomalies` counts; the integrity-profile assertions stay
+// conditional on the `integrity` field, since only integrity entries carry
+// frame CRCs to check.
 //
 // Manifest keys may be sub-paths (e.g. integrity/osf5_crc_equidistant.osf);
 // they resolve under examples/generated/. Keeping the file list only in the
@@ -478,21 +542,29 @@ begin
         Mgr.Free;
       end;
 
-      // Integrity profile (optional) — the filer is the surface that exposes
-      // the profile + frame-CRC counters.
-      IntegrityVal := FileObj.GetValue('integrity');
-      if IntegrityVal <> nil then
-      begin
-        Assert.AreEqual('crc32c', IntegrityVal.Value, Key + ': only crc32c handled');
-        F := TOSFFile.Create;
-        try
-          F.OpenForRead(Path);
-          while F.ReadNextBlock(Block) do ;  // drain so CRC counters populate
+      // The filer is the surface that exposes both the anomaly counters and
+      // the integrity/frame-CRC counters, so it is opened once per entry and
+      // drained here regardless of whether the entry declares `integrity`.
+      F := TOSFFile.Create;
+      try
+        F.OpenForRead(Path);
+        while F.ReadNextBlock(Block) do ;  // drain so counters populate
+
+        Assert.AreEqual(ExpectedZeroLengthBlocks(Key, FileObj),
+          Integer(F.BlocksZeroLengthSkipped), Key + ': anomalies.zeroLengthBlocks');
+
+        // Integrity profile (optional) — only entries that declare an
+        // integrity profile have frame CRCs to check; a file with none is
+        // not itself an anomaly, so this assertion stays conditional.
+        IntegrityVal := FileObj.GetValue('integrity');
+        if IntegrityVal <> nil then
+        begin
+          Assert.AreEqual('crc32c', IntegrityVal.Value, Key + ': only crc32c handled');
           Assert.AreEqual(Ord(ipCrc32c), Ord(F.IntegrityProfile), Key + ': integrity');
           Assert.AreEqual(UInt32(0), F.BlocksCRCFailed, Key + ': crc failures');
-        finally
-          F.Free;
         end;
+      finally
+        F.Free;
       end;
     end;
   finally

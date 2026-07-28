@@ -7,7 +7,13 @@
 //! truth for the expected decoded contents of every reference file — and asserts
 //! that `DataManager` decodes each listed file to match: version (via the
 //! filename prefix), channel count, and per-channel index/name/datatype/
-//! sample-count/mode, plus the integrity profile for entries that declare one.
+//! sample-count/mode, plus the integrity profile for entries that declare one,
+//! plus the deliberate-anomaly counts (currently `zeroLengthBlocks`) declared
+//! under the optional `anomalies` field. The anomaly assertion runs on every
+//! entry, not only those with `anomalies` present: absent means the file is
+//! well-formed and must report a zero count, present means the stated count is
+//! exact — so a well-formed file that unexpectedly reports a skip is itself a
+//! finding, not a silently-ignored corner case.
 //!
 //! Manifest keys may be sub-paths (e.g. `integrity/osf5_crc_equidistant.osf`);
 //! they resolve under `examples/generated/`. Keeping this list in the manifest
@@ -33,7 +39,22 @@ struct FileEntry {
     version: u32,
     #[serde(default)]
     integrity: Option<String>,
+    #[serde(default)]
+    anomalies: Option<Anomalies>,
     channels: Vec<ChannelEntry>,
+}
+
+/// Deliberate non-conformances a corpus file carries. Absent for well-formed
+/// files. Each field is the exact count a conforming reader must report.
+#[derive(Deserialize)]
+struct Anomalies {
+    // No `#[serde(default)]` here, deliberately: once `anomalies` is present
+    // in an entry, `zeroLengthBlocks` is required. Defaulting would let a
+    // typo'd key silently deserialise to 0 and pass, which matters once
+    // other-language ports re-spell this key by hand without yet having a
+    // reader counter behind it.
+    #[serde(rename = "zeroLengthBlocks")]
+    zero_length_blocks: u64,
 }
 
 #[derive(Deserialize)]
@@ -89,6 +110,19 @@ fn conforms_to_reference_manifest() {
             assert_eq!(mgr.stats.integrity, integrity_of(token), "{key}: integrity");
             assert_eq!(mgr.stats.blocks_crc_failed, 0, "{key}: crc failures");
         }
+
+        // Deliberate non-conformances (optional). A file that declares none
+        // must report none — that is what keeps a well-formed corpus honest.
+        // Unlike the integrity check above (only asserted when `integrity` is
+        // declared, since a file with no integrity profile has no frame CRCs
+        // to fail), this runs unconditionally: any file at all, declared or
+        // not, can carry a zero-length block, so "not declared" must mean
+        // zero rather than "not checked".
+        let want_zero_len = entry.anomalies.as_ref().map_or(0, |a| a.zero_length_blocks);
+        assert_eq!(
+            mgr.stats.blocks_skipped_zero_length, want_zero_len,
+            "{key}: anomalies.zeroLengthBlocks (left = reader, right = manifest)"
+        );
 
         let channels = mgr.channels();
         assert_eq!(channels.len(), entry.channels.len(), "{key}: channel count");

@@ -625,6 +625,8 @@ void BlockReader::recordSkip(std::uint16_t channelIndex, std::uint32_t length,
             ++m_stats.blocksCrcFailed; break;
         case SkipReason::Kind::SignatureBlock:
             ++m_stats.blocksSignatureSkipped; break;
+        case SkipReason::Kind::ZeroLengthBlock:
+            ++m_stats.blocksSkippedZeroLength; break;
     }
     auto& cs = m_stats.perChannel[channelIndex];
     ++cs.blocksSkipped;
@@ -777,7 +779,7 @@ std::optional<Result<Block>> BlockReader::next() {
     m_stats.dataSectionSizeBytes += info.sizeOfLengthValue;
 
     if (length == 0) {
-        SkipReason const reason{SkipReason::Kind::ReservedBlockType, 0};
+        SkipReason const reason{SkipReason::Kind::ZeroLengthBlock, 0};
         recordSkip(channelIndex, 0, reason);
         Block blk;
         blk.channelIndex = channelIndex;
@@ -961,6 +963,7 @@ ReaderStats BlockReader::stats() const {
     s.blocksTotal = s.blocksRead + s.blocksSkippedUnsupported +
                      s.blocksSkippedDeprecatedType +
                      s.blocksSkippedReservedType +
+                     s.blocksSkippedZeroLength +
                      s.blocksCrcFailed + s.blocksSignatureSkipped;
     s.channelsWithData = 0;
     for (auto const& [_, cs] : s.perChannel) {

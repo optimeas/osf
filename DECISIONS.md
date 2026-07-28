@@ -1181,3 +1181,52 @@ threats); gap-freeness across files is explicitly out of the file format's scope
 **Transformation policy.** Merge/convert/export end the device-signature domain
 by design: the result falls back to level crc and records provenance in `infos`;
 optional organization re-signing is a distinct, labelled statement.
+
+## 25. Zero-Length Data Blocks
+
+**Decision (OSF-UP3, 2026-07-28):** A data block is a **non-conforming writer
+artefact, not an error**, when its per-channel length field, read literally
+from the stream, equals `0`. Readers skip the block, count it under a
+dedicated `ZeroLengthBlock` reason, and continue scanning; writers must never
+produce one. The normative rule is specified in
+[`docs/en/osf_general.md`](docs/en/osf_general.md#zero-length-data-blocks)
+(German mirror: [`docs/de/osf_general.md`](docs/de/osf_general.md#zero-length-data-blocks))
+and applies to OSF4 and OSF5 alike.
+
+**Why this and not an abort.** Before this decision, four of the five
+reference implementations already tolerated the case: Rust, C++, and Java each
+implement their own block-scanning loop and skip-and-continue; Python does not
+scan independently — its bindings sit on the Rust core via PyO3, so it
+inherits Rust's classification rather than deriving its own. Only the Delphi
+reference raised `EOSFFormatError` and failed the whole file. That made the
+same file readable through four implementations and unopenable through the
+fifth — and it contradicted Delphi's own stated rule that only a real
+truncation stops the reader. The case was observed in real field data in
+July 2026, so tolerating it keeps recorded measurements accessible.
+
+**Why a dedicated reason rather than the existing reserved-block-type skip.**
+The three readers with independent scanning logic (Rust, C++, Java — Python's
+classification follows Rust's, per above) classified the case as
+`ReservedBlockType(0)`, whose contract is "reserved *control byte* 0". On a
+zero-length block no control byte is ever read, so that classification
+asserted something untrue and merged a writer bug with a legitimate
+forward-compatibility skip. A distinct reason and counter make the anomaly
+diagnosable — verification tooling such as `osftool verify` is expected to
+surface it, which is how the producing writer will be tracked down.
+
+**Boundary against [§8 Error Handling](#8-error-handling).** §8 governs input
+the reader cannot interpret. A zero-length block is fully interpretable — it
+carries no data — so it is reported through statistics, not through the error
+channel. Verification tooling is expected to list it as a warning and keep
+exit code 0 by default; `--strict` (already implemented in `osftool verify`)
+still escalates warnings to a non-zero exit for callers who want conformance
+enforced.
+
+**Follow-on artefacts required by this decision — both delivered (2026-07-28).**
+The decision required a conformance corpus file demonstrating the anomaly and
+its registration in `examples/reference_manifest.json`, so that every
+implementation's conformance test exercises it. They landed as
+`examples/generated/malformed/osf5_zero_length_block.osf` (hand-assembled from
+two writer outputs — no writer in this repository can emit the frame) and a new
+optional manifest field `"anomalies": { "zeroLengthBlocks": N }`, asserted by all
+four manifest-driven conformance suites.

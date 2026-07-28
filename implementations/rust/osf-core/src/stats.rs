@@ -21,6 +21,11 @@
 //! - **Reserved block types** (`bcReserved`, `bcTimebaseRealign`,
 //!   anything with bits 0–6 ≥ 9) are either spec-internal or genuinely
 //!   unknown.
+//! - **Zero-length blocks** (a length field that reads `0`) are always
+//!   a non-conforming writer artefact (OSF-UP3) — a conforming block
+//!   always carries at least its control byte. Kept separate from
+//!   `blocks_skipped_reserved_type` so this diagnosable writer bug is
+//!   never silently folded into a legitimate forward-compat skip.
 
 use crate::integrity::IntegrityProfile;
 use std::collections::HashMap;
@@ -74,6 +79,10 @@ pub struct ReaderStats {
     /// block type (`bcReserved`, `bcTimebaseRealign`, or any value ≥
     /// 9 that the spec does not currently define).
     pub blocks_skipped_reserved_type: u64,
+    /// Blocks skipped because their length field read `0` — a non-conforming
+    /// writer artefact (OSF-UP3). A conforming block always carries at least
+    /// its control byte.
+    pub blocks_skipped_zero_length: u64,
     /// Number of blocks the reader could not finish before the stream
     /// ended. Capped at 1 by construction (no useful block can follow
     /// a partial one).
@@ -275,6 +284,11 @@ impl fmt::Display for ReaderStats {
             f,
             "Skipped (reserved):    {}",
             self.blocks_skipped_reserved_type
+        )?;
+        writeln!(
+            f,
+            "Skipped (zero-len):    {}",
+            self.blocks_skipped_zero_length
         )?;
         writeln!(f, "Truncated:             {}", self.blocks_truncated)?;
         if self.trailer_seen {

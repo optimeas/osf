@@ -23,6 +23,7 @@ public final class ReaderStats {
     private IntegrityProfile integrity = IntegrityProfile.NONE;
     private long blocksCrcFailed = 0;
     private long blocksSignatureSkipped = 0;
+    private long blocksSkippedZeroLength = 0;
 
     /** Number of blocks the reader fully decoded into a typed {@code Block}. */
     public int blocksRead() {
@@ -128,5 +129,19 @@ public final class ReaderStats {
     /** Increment the skipped-signature-block counter by one. */
     public void incBlocksSignatureSkipped() {
         blocksSignatureSkipped++;
+    }
+
+    /**
+     * Number of data blocks skipped because their length field read {@code 0}
+     * — a non-conforming writer artefact (OSF-UP3). A conforming block always
+     * carries at least its control byte.
+     */
+    public long blocksSkippedZeroLength() {
+        return blocksSkippedZeroLength;
+    }
+
+    /** Increment the skipped-zero-length-block counter by one. */
+    public void incBlocksSkippedZeroLength() {
+        blocksSkippedZeroLength++;
     }
 }

@@ -26,10 +26,21 @@ variant.
 | `osf4_mixed.osf` / `osf5_mixed.osf` | Several channel types in one file |
 | — / `osf5_mixed_extended.osf` | Extended mixed-channel OSF5 file |
 
-17 files in total (8 OSF4 + 9 OSF5). A correct reader must parse all of
-them without error. These files are the cross-implementation read
-fixtures; the OSF4/OSF5 pairing also exercises the version-deterministic
-rules (e.g. the `string`/`binary` null-terminator handling).
+17 files in total (8 OSF4 + 9 OSF5) directly under `generated/`. A correct
+reader must parse all of them without error. These files are the
+cross-implementation read fixtures; the OSF4/OSF5 pairing also exercises
+the version-deterministic rules (e.g. the `string`/`binary` null-terminator
+handling).
+
+Two sub-directories extend this set beyond the flat file list above. Both
+are reached only through `examples/reference_manifest.json` — the
+directory-scanning harnesses that glob `generated/*.osf` **non-recursively**
+never see them:
+
+| Directory | Contents |
+|---|---|
+| `integrity/` | OSF5 files at integrity profile level `crc`; a CRC-unaware reader would misparse them. See `generated/integrity/README.md`. |
+| `malformed/` | Deliberately **non-conforming** OSF files (e.g. a zero-length data block). These do *not* fall under "a correct reader must parse all of them without error" above — the opposite: a correct reader must detect and skip the anomaly while still recovering the surrounding valid data. See `generated/malformed/README.md`. |
 
 ## Field samples — real recordings
 

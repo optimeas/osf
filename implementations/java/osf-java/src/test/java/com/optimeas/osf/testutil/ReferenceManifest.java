@@ -9,9 +9,11 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Parses {@code examples/reference_manifest.json} into an in-memory map of
@@ -33,11 +35,14 @@ public final class ReferenceManifest {
         private final int version;
         private final List<ChannelEntry> channels;
         private final String integrity;
+        private final Map<String, Long> anomalies;
 
-        FileEntry(int version, List<ChannelEntry> channels, String integrity) {
+        FileEntry(int version, List<ChannelEntry> channels, String integrity,
+                  Map<String, Long> anomalies) {
             this.version = version;
             this.channels = List.copyOf(channels);
             this.integrity = integrity;
+            this.anomalies = Map.copyOf(anomalies);
         }
 
         /** OSF format version: 4 or 5. */
@@ -52,6 +57,14 @@ public final class ReferenceManifest {
          * profile. Optional field — absent for the plain-file entries.
          */
         public String integrity() { return integrity; }
+
+        /**
+         * Deliberate non-conformances this corpus file carries, from the
+         * optional {@code anomalies} manifest object. Empty for well-formed
+         * files, which must therefore report zero for every kind. Unmodifiable
+         * ({@link Map#copyOf}).
+         */
+        public Map<String, Long> anomalies() { return anomalies; }
     }
 
     /** Per-channel entry within a file entry. */
@@ -93,6 +106,14 @@ public final class ReferenceManifest {
         public String mode() { return mode; }
     }
 
+    /**
+     * Anomaly kinds this manifest reader recognizes. An unrecognized key in a
+     * manifest entry's {@code anomalies} object — e.g. a typo — throws rather
+     * than being silently absorbed; see the non-defaulting-lookup note in
+     * {@link #load()}. Grows by one entry per newly introduced anomaly kind.
+     */
+    private static final Set<String> KNOWN_ANOMALY_KINDS = Set.of("zeroLengthBlocks");
+
     private ReferenceManifest() {}
 
     /**
@@ -132,7 +153,35 @@ public final class ReferenceManifest {
                         chNode.get("sampleCount").asLong(),
                         chNode.get("mode").asText()));
             }
-            result.put(fileName, new FileEntry(version, channels, integrity));
+            // Optional "anomalies" object: deliberate non-conformances this
+            // corpus file carries. Non-defaulting lookup by design — every key
+            // present must be a recognized anomaly kind with an integer value,
+            // or loading throws. Without this, a mis-spelled key (or a
+            // non-integer value, which Jackson's lenient asLong() would
+            // otherwise silently coerce to 0) would be absorbed as "no
+            // anomaly declared" and the conformance test's assertion would
+            // read the map's default rather than the manifest's actual claim
+            // — masking the very corpus mistake this hardening exists to catch.
+            Map<String, Long> anomalies = new HashMap<>();
+            JsonNode anomaliesNode = fileNode.get("anomalies");
+            if (anomaliesNode != null) {
+                anomaliesNode.fields().forEachRemaining(a -> {
+                    String kind = a.getKey();
+                    JsonNode valueNode = a.getValue();
+                    if (!KNOWN_ANOMALY_KINDS.contains(kind)) {
+                        throw new IllegalStateException(
+                                "manifest entry \"" + fileName + "\": unknown anomaly kind \""
+                                        + kind + "\" (known kinds: " + KNOWN_ANOMALY_KINDS + ")");
+                    }
+                    if (!valueNode.canConvertToLong()) {
+                        throw new IllegalStateException(
+                                "manifest entry \"" + fileName + "\": anomaly \"" + kind
+                                        + "\" has a non-integer value: " + valueNode);
+                    }
+                    anomalies.put(kind, valueNode.asLong());
+                });
+            }
+            result.put(fileName, new FileEntry(version, channels, integrity, anomalies));
         });
         return Collections.unmodifiableMap(result);
     }

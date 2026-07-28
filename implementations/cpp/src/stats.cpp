@@ -91,6 +91,7 @@ std::ostream& operator<<(std::ostream& os, ReaderStats const& s) {
     os << "Skipped (unsupp.):     " << s.blocksSkippedUnsupported         << '\n';
     os << "Skipped (deprec.):     " << s.blocksSkippedDeprecatedType     << '\n';
     os << "Skipped (reserved):    " << s.blocksSkippedReservedType       << '\n';
+    os << "Skipped (zero-len):    " << s.blocksSkippedZeroLength         << '\n';
     os << "Truncated:             " << s.blocksTruncated                   << '\n';
     if (s.trailerSeen) {
         os << "Trailer block:         present\n";

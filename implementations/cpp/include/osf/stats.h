@@ -21,6 +21,11 @@
 /// - **Reserved block types** (`bcReserved`, `bcTimebaseRealign`,
 ///   anything with bits 0–6 ≥ 9) are either spec-internal or
 ///   genuinely unknown.
+/// - **Zero-length blocks** (a length field that reads `0`) are always
+///   a non-conforming writer artefact (OSF-UP3) — a conforming block
+///   always carries at least its control byte. Kept separate from
+///   `blocksSkippedReservedType` so this diagnosable writer bug is
+///   never silently folded into a legitimate forward-compat skip.
 
 #pragma once
 
@@ -123,6 +128,10 @@ struct ReaderStats {
     /// Blocks skipped because the control byte identified a reserved
     /// block type.
     std::uint64_t blocksSkippedReservedType = 0;
+    /// Blocks skipped because their length field read `0` — a non-conforming
+    /// writer artefact (OSF-UP3). A conforming block always carries at least
+    /// its control byte.
+    std::uint64_t blocksSkippedZeroLength = 0;
     /// Number of blocks the reader could not finish before the stream
     /// ended. Capped at 1 by construction.
     std::uint64_t blocksTruncated = 0;

@@ -12,7 +12,7 @@ keywords:
   - OSF5
   - OSF
 last_update:
-  date: 2026-07-07
+  date: 2026-07-28
   author: Optimeas GmbH
 license: CC-BY-4.0
 copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
@@ -580,7 +580,7 @@ Der Aufbau ist so gestaltet, dass jeder Block unabhängig interpretiert werden k
    - Entspricht dem `index`-Attribut im Metablock.  
 
 2. **Längenfeld (`uint16` oder `uint32`)**  
-   - Größe des nachfolgenden Datenbereichs in Bytes.  
+   - Größe des nachfolgenden Blockinhalts (Steuerbyte und Datenbereich, auf OSF5-Integritätsstufe `crc` zusätzlich die abschließende Frame-CRC) in Bytes.  
    - Die Länge des Feldes wird durch den Kanalparameter `sizeoflengthvalue` definiert.  
    - Ermöglicht es, Blöcke zu überspringen oder bei Fehlern korrekt zur nächsten Einheit zu springen.  
 
@@ -592,6 +592,39 @@ Der Aufbau ist so gestaltet, dass jeder Block unabhängig interpretiert werden k
 4. **Datenbereich**  
    - Die eigentlichen Messwerte oder Datenblöcke.  
    - Format und Größe richten sich nach dem Kanaltyp (typischerweise scalar) und dem Datentyp.
+<br/>
+
+<a name="zero-length-data-blocks"></a>
+#### Datenblöcke mit Länge null (nicht konform) {#zero-length-data-blocks}
+
+Diese Regel gilt für OSF4 und OSF5 gleichermaßen — die Blockstruktur ist in
+beiden Formatversionen identisch.
+
+Jeder Datenblock trägt mindestens sein Steuerbyte, ein wörtlich aus dem Stream
+gelesenes Längenfeld von `0` kommt in einer konformen Datei daher nie vor. Auf
+OSF5-Integritätsstufe `crc` ist es nie kleiner als `5`, da die vier Bytes der
+Frame-CRC im Längenfeld mitgezählt werden (siehe
+[OSF5-Integritätsprofil](references/osf5_integrity.md)).
+
+- **Schreiber DÜRFEN KEINEN** Datenblock mit Längenfeld `0` schreiben.
+- **Leser DÜRFEN ein wörtlich als `0` gelesenes Längenfeld NICHT als
+  abgeschnittene Datei behandeln und den Lesevorgang NICHT abbrechen.** Der
+  Block besteht ausschließlich aus Kanalindex und Längenfeld, beide hat der
+  Leser bereits konsumiert. Der Leser überspringt den Block, zählt ihn als
+  übersprungenen Block mit dem Grund `ZeroLengthBlock` und liest beim nächsten
+  Kanalindex weiter.
+- **Der `0`-Test erfolgt vor dem CRC-Längentest auf jeder Integritätsstufe.**
+  Ein Längenfeld von `0` wird immer als `ZeroLengthBlock` eingeordnet, nie als
+  CRC-Fehler. Eine Länge von `1`–`4` auf Stufe `crc` ist ein defekter Block und
+  bleibt ein CRC-Anliegen, kein Nullblock.
+- **Die Anomalie MUSS über einen eigenen Zähler in der Leser-Statistik
+  sichtbar sein**, damit eine nicht konforme Datei diagnostizierbar ist statt
+  stillschweigend hingenommen zu werden.
+
+Der Leser kommt dabei immer voran: jeder solche Block verbraucht 4 oder 6 Byte
+(ein `uint16`-Kanalindex plus ein 2 oder 4 Byte breites Längenfeld), eine Folge
+von Nullblöcken kann ihn also nicht blockieren.
+
 <br/>
 
 ### Das Steuerbyte

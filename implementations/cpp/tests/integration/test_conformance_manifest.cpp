@@ -68,6 +68,18 @@ TEST(CppConformanceManifest, conformsToReferenceManifest) {
             EXPECT_EQ(mgr->stats.blocksCrcFailed, 0u) << key;
         }
 
+        // Deliberate non-conformances (optional). A file that declares none
+        // must report none — a well-formed file reporting a zero-length skip
+        // is itself a finding. Asserted unconditionally, unlike the integrity
+        // block above: a file with no integrity profile has no frame CRCs to
+        // fail, but any file at all can carry a zero-length block.
+        std::uint64_t wantZeroLen = 0;
+        if (entry.contains("anomalies")) {
+            wantZeroLen = entry.at("anomalies").at("zeroLengthBlocks").get<std::uint64_t>();
+        }
+        EXPECT_EQ(mgr->stats.blocksSkippedZeroLength, wantZeroLen)
+            << key << ": anomalies.zeroLengthBlocks (left = reader, right = manifest)";
+
         auto const& channels = mgr->channels();
         auto const& chEntries = entry.at("channels");
         EXPECT_EQ(channels.size(), chEntries.size()) << key;
