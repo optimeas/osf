@@ -72,29 +72,53 @@ the channel data and the anomaly are deterministic.
 ## Writer audit — can anything in this repository produce one?
 
 **No.** Audited 2026-07-28 across all five reference implementations (seven
-writer classes). Every block-emitting path writes the control byte into the
-payload buffer *before* the length field is derived from that buffer's size, so
-the length field always counts at least that one byte and can never read 0. The
-only code in this repository that produces a zero-length frame is the corpus
-generator above, which hand-assembles it from two writer outputs.
+writer classes). The only code in this repository that produces a zero-length
+frame is the corpus generator above, which hand-assembles it from two writer
+outputs.
+
+**Read this before trusting the rows below: the guarantee rests on two
+*different* mechanisms, and conflating them will mislead you.**
+
+- **Buffer-derived length — Rust, Python, Java, Delphi.** Each has exactly one
+  framing function that takes the length from the assembled payload buffer's
+  size (`write_block` from `payload.len()`, `BlockEncoder.frame` from
+  `body.toBytes()`, `WriteDataBlock` from `Length(Payload)`), and every path
+  that reaches it has already written the control byte into that buffer. So the
+  length counts at least one byte, structurally.
+- **Arithmetic length — C++.** C++ does the *opposite*: all six encoders in
+  `blockencode.cpp` compute `payloadLen` as an arithmetic expression (e.g.
+  `1u + 8u + 8u + (multi ? 4u : 0u) + count * sizeof(T)`) and hand it to
+  `beginFrame` (`:18`), which writes the length field **before** the control
+  byte is pushed. No C++ length is ever read from a buffer size. The guarantee
+  there comes from two other properties: every one of those expressions begins
+  with the constant `1u` for the control byte, and every count-taking entry
+  point and encoder rejects `count == 0`.
 
 | Writer | Can emit length 0? | Evidence |
 | --- | --- | --- |
-| Rust `WriterBuilder` | No | `rust/osf-core/src/writer.rs:503` derives the length from `payload.len()`; every one of the four callers writes the control byte first (`:615`, `:643`, `:687`, `:783`). Timestamped and variable paths return early on zero samples (`:672`, `:721`); an unwritten channel matches `ChannelData::Empty` and emits nothing (`:439`). |
-| Python (PyO3) | No — inherits Rust | `python/src/writer.rs:167-282` forwards NumPy slices, `Vec<String>` and `Vec<Vec<u8>>` unchanged into the Rust builder; `py_save` (`:374`) calls the same `write_to_file`. There is no Python-side block assembly, so it can construct nothing Rust cannot. |
-| C++ `StreamingWriter` | No | Every entry point rejects `count == 0` outright (`cpp/src/streamingwriter.cpp:440`, `:546`, `:584`, `:641`), and the encoders reject it again (`cpp/src/blockencode.cpp:96`, `:139`, `:187`, `:291`). `close()` (`streamingwriter.cpp:269`) flushes no per-channel state. |
-| C++ `BlockWriter` | No | Same encoder guards; every accumulator rejects `count == 0` (`cpp/src/blockwriter.cpp:276`, `:334`, `:388`, `:431`, `:476`), and an unwritten channel stays `Kind::Empty`, whose emit arm is explicitly a no-op (`:648`). `fromManager` skips zero-sample segments (`:763`). |
-| Java `BlockWriter` | No | `internal/BlockEncoder.java` has no `count > 0` guard, but every encoder writes the control byte unconditionally as the first body byte (`:83`, `:138`, `:161`, `:195`) before `frame()` (`:210`) measures the payload. `emitTimestamped` guards `total == 0` (`BlockWriter.java:661`); the `UNSET` arm emits nothing (`:612`); `fromManager` skips zero-sample segments (`:529`). |
-| Java `StreamingWriter` | No | Shares `BlockEncoder`. `flushTimestamped` only emits when `n > 0` (`StreamingWriter.java:649`, `:654`); `flush()` does nothing for `UNSET` channels (`:588`); variable samples go one block per call. |
-| Delphi `TOSFFile` | No | The strongest guards of the five: `WriteEquidistantBlock` exits on `N = 0` (`delphi/src/OSF.Filer.pas:2006`) and `WriteTimestampedBlock` on `N = 0` (`:2049`), so no block is emitted at all. `WriteDataBlock` (`:1929`) is private with exactly two callers, both fed by encoders that write the control byte first (`:586`/`:595`, `:652`). |
+| Rust `WriterBuilder` | No — tested | Buffer-derived: `rust/osf-core/src/writer.rs:503` lengths from `payload.len()`; every one of the four callers writes the control byte first (`:615`, `:643`, `:687`, `:783`). Timestamped and variable paths return early on zero samples (`:672`, `:721`); an unwritten channel matches `ChannelData::Empty` and emits nothing (`:439`). |
+| Python (PyO3) | No — by construction, **nothing executable backs this** | Buffer-derived, inherited: `python/src/writer.rs:167-282` forwards NumPy slices, `Vec<String>` and `Vec<Vec<u8>>` unchanged into the Rust builder; `py_save` (`:374`) calls the same `write_to_file`. There is no Python-side block assembly, so it can construct nothing Rust cannot — but that is a reading of the binding layer only. This is the weakest row in the table; no Python test asserts it. |
+| C++ `StreamingWriter` | No — by construction | Arithmetic: every *count-taking* entry point rejects `count == 0` (`cpp/src/streamingwriter.cpp:440`, `:546`, `:584`, `:641`) and the encoders reject it again (`cpp/src/blockencode.cpp:96`, `:139`, `:187`, `:291`). `writeTimestampedString` (`:486`) and `writeTimestampedBinary` (`:513`) take no count and carry no such guard — they are safe by the arithmetic floor instead (`blockencode.cpp:246`, `:269`: `1u + 8u + size`, i.e. 9 bytes for an empty sample). `close()` (`streamingwriter.cpp:269`) flushes no per-channel state. |
+| C++ `BlockWriter` | No — by construction | Arithmetic; same encoder guards. Every count-taking accumulator rejects `count == 0` (`cpp/src/blockwriter.cpp:276`, `:334`, `:388`, `:431`, `:476`); the single-sample `addStringSample` (`:466`) / `addBinarySample` (`:511`) carry no guard of their own but forward with a hard-coded count of 1. An unwritten channel stays `Kind::Empty`, whose emit arm is explicitly a no-op (`:648`); `fromManager` skips zero-sample segments (`:763`). |
+| Java `BlockWriter` | No — tested | Buffer-derived: `internal/BlockEncoder.java` has no `count > 0` guard, but all **five** encoders write the control byte unconditionally as the first body byte (`:83` timestamped, `:108` GPS, `:138` start, `:161` continued, `:195` variable) before `frame()` (`:210`) measures the payload; `variableStringBlock` (`:180`) is a sixth entry point that delegates to `:192`. `emitTimestamped` guards `total == 0` (`BlockWriter.java:661`); the `UNSET` arm emits nothing (`:612`); `fromManager` skips zero-sample segments (`:529`). |
+| Java `StreamingWriter` | No — tested | Buffer-derived; shares `BlockEncoder`. `flushTimestamped` only emits when the buffer is non-empty (`StreamingWriter.java:649`, `:654`); `flush()` does nothing for `UNSET` channels (`:588`); variable samples go one block per call. |
+| Delphi `TOSFFile` | No — by construction | Buffer-derived, and the strongest guards of the five: `WriteEquidistantBlock` exits on `N = 0` (`delphi/src/OSF.Filer.pas:2006`) and `WriteTimestampedBlock` on `N = 0` (`:2049`), so no block is emitted at all. `WriteDataBlock` (`:1929`) lengths from `Length(Payload)` (`:1945`/`:1947`), is private, and has exactly two callers, both fed by encoders that write the control byte first (`:586`/`:595`, `:652`). |
 
-**Risk shape 1 — chunking loops.** All seven writers use the same
+**Risk shape 1 — chunking loops.** Six of the seven writers use the same
 `while written < total { chunk = min(total - written, maxPer); … }` form, where
 `maxPer >= 1` is enforced by the sizing helpers (Rust `writer.rs:563`/`:569`,
 C++ `writercommon.cpp:60`/`:69`/`:79`, Java `BlockChunking.maxSamples*` via
 `Math.max(1, …)`). `chunk` is therefore always `>= 1` and the loop cannot be
 entered with zero remaining, including when the payload divides exactly by the
 chunk size. Tested at that exact boundary in Rust and Java (see below).
+
+**Delphi is the exception, and the stronger answer: it has no chunking loop at
+all.** `WriteDataBlock` emits exactly one block per call — "The Delphi writer
+emits one block per call (no splitting at the length-field boundary), so no
+chunk reduction is needed" (`OSF.Filer.pas:1942-1943`) — and its two call sites
+(`:2019`, `:2072`) each invoke it once, unconditionally, per public write call.
+An oversized payload is raised as `SOSFBlockLengthOverflow` (`:1952-1953`)
+rather than split. This risk shape therefore does not exist in Delphi.
 
 **Risk shape 2 — empty `string` / `binary` samples.** OSF5 appends no trailing
 `0x00`, so this is the version where an empty payload could plausibly reach
@@ -106,8 +130,14 @@ length 0. It does not: the single-sample variable layout is
 simply skips the payload write).
 
 **Risk shape 3 — channels never written to.** No writer emits a block for a
-declared-but-empty channel; each has an explicit no-op arm (cited per row
-above).
+declared-but-empty channel. Rust matches `ChannelData::Empty` and does nothing
+(`writer.rs:439`); C++ `BlockWriter` has an explicit `Kind::Empty` no-op arm
+(`blockwriter.cpp:648`); Java `BlockWriter` has the same as its `UNSET` arm
+(`BlockWriter.java:612`) and `StreamingWriter.flush()` skips `UNSET` channels
+(`StreamingWriter.java:588`). C++ `StreamingWriter` and Delphi need no arm at
+all: they emit only from an explicit write call and flush no per-channel state
+at close (`streamingwriter.cpp:269`, `OSF.Filer.pas:807`). Tested in Rust and
+both Java writers.
 
 **One behavioural divergence found — not a defect, but worth knowing.** An
 *empty equidistant segment* is accepted by Rust (`writer.rs:1356`, no length
@@ -116,8 +146,10 @@ check), Python (same call), and both Java writers (`BlockWriter.java:352`,
 opener unconditionally (`writer.rs:571`, `BlockWriter.java:631`,
 `StreamingWriter.java:707`). The result is a well-formed 21-byte block carrying
 zero samples — the only place in the codebase where a block is emitted for no
-data. C++ rejects the call (`blockencode.cpp:96`) and Delphi exits early
-(`OSF.Filer.pas:2006`), so those two cannot even produce the degenerate block.
+data. C++ rejects the call at the writer entry point (`streamingwriter.cpp:584`,
+`blockwriter.cpp:276`, with `blockencode.cpp:96` as a second layer) and Delphi
+exits early (`OSF.Filer.pas:2006`), so those two cannot even produce the
+degenerate block.
 The Rust manager-copy path also does not skip zero-sample segments
 (`writer.rs:1048`) where C++ (`blockwriter.cpp:763`) and Java
 (`BlockWriter.java:529`) do, so a Rust round trip reproduces it. All readers
@@ -129,17 +161,36 @@ zero-length counter is 0:
 `implementations/rust/osf-core/tests/writer_zero_length_audit_test.rs`
 (7 tests) and
 `implementations/java/osf-java/src/test/java/com/optimeas/osf/WriterZeroLengthAuditTest.java`
-(10 tests, both Java writers). Each suite opens with an anti-vacuity guard that
-points the same two detectors at `osf5_zero_length_block.osf` and requires them
-to fire, so a walker that silently finds nothing cannot make the rest pass for
-the wrong reason. No tests were added for C++ or Delphi: both reject
-`count == 0` at every entry point by construction, so the degenerate state is
-unreachable and a test there could never fail.
+(10 tests, both Java writers). Both walkers assert the parsed metablock declares
+`sizeoflengthvalue = 2` before decoding a single frame, so a corpus file
+regenerated at width 4 fails with a direct message instead of a confusing EOF
+mismatch. Each suite opens with an anti-vacuity guard that points the same two
+detectors at `osf5_zero_length_block.osf` and requires them to fire, so a walker
+that silently finds nothing cannot make the rest pass for the wrong reason.
+Suite totals after the additions: Rust `cargo test` 178 passed / 2 ignored,
+Java `mvn -pl :osf-java test` 244 passed.
+
+No tests were added for C++ or Delphi. C++ rejects `count == 0` at every
+count-taking entry point and Delphi exits early on `N = 0`, so the degenerate
+state is unreachable by construction and a test there could never fail; the
+C++ variable-sample entry points, which take no count, are covered by the
+arithmetic floor instead of a guard (see the table).
 
 **What remains unknown.** The producing writer is still unidentified. This audit
 narrows the suspect list to code *outside* this repository: the om kernel,
-smartCORE and its `osfwriter` plugin, and device firmware. Two practical facts
-for whoever resumes the corpus hunt with `osftool`:
+smartCORE and its `osfwriter` plugin, and device firmware. Two coverage gaps
+inside the audit itself, stated so they are not invisible:
+
+- **The GPS encoder path is exercised by no test in either new suite** — neither
+  `encodeAbsTimestampDataGps` / `timestampedGpsBlock` nor the GPS chunking loop.
+  It is cleared by reading only (`blockencode.cpp:291` guards `count == 0`;
+  `BlockEncoder:108` writes the control byte first), at the same confidence as
+  the C++ and Delphi rows.
+- **Python has no executable evidence at all** — the pass-through claim rests on
+  reading `python/src/writer.rs`. A single `pytest` case mirroring the Rust ones
+  would close it cheaply.
+
+Two practical facts for whoever resumes the corpus hunt with `osftool`:
 
 - `osftool verify --json` emits a stream of **concatenated JSON values** (log
   events followed by a multi-line pretty-printed report) — not a single JSON

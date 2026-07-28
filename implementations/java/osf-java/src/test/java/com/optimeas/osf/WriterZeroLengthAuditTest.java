@@ -3,6 +3,7 @@
 package com.optimeas.osf;
 
 import com.optimeas.osf.internal.BlockChunking;
+import com.optimeas.osf.internal.JsonMetablockParser;
 import com.optimeas.osf.testutil.ExamplesDir;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -52,9 +53,14 @@ class WriterZeroLengthAuditTest {
     private record Frame(int channel, int len) {}
 
     /**
-     * Walk the block stream and return every frame header. Assumes every
-     * channel uses {@code sizeoflengthvalue = 2}, which every writer call in
-     * this class declares explicitly.
+     * Walk the block stream and return every frame header.
+     *
+     * <p>Assumes every channel uses {@code sizeoflengthvalue = 2} — asserted
+     * against the parsed metablock rather than assumed in a comment. That
+     * matters for {@link #detectorsFireOnTheKnownMalformedCorpusFile()}, which
+     * reads a corpus file this class did not write: were it regenerated with
+     * width 4, an unchecked walker would misparse it and fail with a confusing
+     * EOF mismatch instead of a direct message.
      */
     private static List<Frame> frames(byte[] bytes) {
         int nl = -1;
@@ -69,6 +75,15 @@ class WriterZeroLengthAuditTest {
         String[] parts = line.trim().split("\\s+");
         assertThat(parts[0]).isEqualTo("OSF5");
         int metaLen = Integer.parseInt(parts[1]);
+
+        Metablock meta = new JsonMetablockParser()
+                .parse(java.util.Arrays.copyOfRange(bytes, nl + 1, nl + 1 + metaLen));
+        for (ChannelDef def : meta.channels()) {
+            assertThat(def.sizeOfLengthValue())
+                    .as("channel %d declares sizeoflengthvalue - this frame "
+                        + "walker assumes 2", def.index())
+                    .isEqualTo(2);
+        }
 
         List<Frame> out = new ArrayList<>();
         int pos = nl + 1 + metaLen;
