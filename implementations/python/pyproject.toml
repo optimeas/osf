@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "osfdata"
-version = "1.0.0"
+version = "1.1.0"
 description = "Python bindings for the Open Streaming Format (OSF) — read, write, and inspect .osf and .osfz files."
 authors = [{ name = "Optimeas GmbH" }]
 license = { text = "MIT" }
