@@ -1,6 +1,11 @@
 # Claude Code Session State
 
-Last updated: 2026-07-29 (**OSF-UP4 — `bcMessageEvent` is read-mandatory**: a
+Last updated: 2026-07-29 (**`osfdata 1.1.0` is live on production PyPI** —
+`pip install osfdata`, four abi3 wheels + sdist, verified from the index rather
+than a local build. The repo-wide documentation was pulled in line in the same
+pass: every reference to the test index is gone and the README version badge is
+now self-updating. See *Production PyPI release* below. Before that in the same
+day: **OSF-UP4 — `bcMessageEvent` is read-mandatory**: a
 normative spec rule + DECISIONS §26, control byte 4 decoded in all five
 implementations instead of skipped, a dedicated `bcStatusEvent` counter
 everywhere, the **Delphi meta cache and `osftool verify` fixed**, and a corpus
@@ -51,6 +56,50 @@ outright, since the firmware that produces the encoding is *conforming*. Java is
 complete (§21); only a native **C** implementation remains unstarted.
 
 ## Recent sessions (since 2026-05-22)
+
+### Production PyPI release — `osfdata 1.1.0` (2026-07-29)
+
+`osfdata` is live at <https://pypi.org/project/osfdata/> — `pip install osfdata`.
+Tag `v1.1.0` on `9d2f5f7` drove `release.yml`, which built the four abi3 wheels
+(Linux x86_64 + aarch64, macOS arm64, Windows x64) plus the sdist and published
+all five via Trusted Publishing. Verification was done **from the index in a
+fresh venv**, not from a local build: `osf4_message_event_string.osf` yields 5
+samples on `Demo.Message` (0 before OSF-UP4) and `osf5_zero_length_block.osf`
+reports `blocks_skipped_zero_length == 1`, so the UP3/UP4 reader work is provably
+in the shipped wheel.
+
+**Two things worth knowing before the next release.** First, **version 1.0.0 was
+never published** — it was prepared on 2026-07-25 with a dated CHANGELOG entry
+claiming to be the first production release, but it was never tagged or
+uploaded, so PyPI went straight from nothing to 1.1.0. A dated CHANGELOG heading
+is therefore not evidence that a release happened; query the index
+(`curl -s https://pypi.org/pypi/<pkg>/json`, 404 = never published). The 1.0.0
+entry is now marked accordingly and its dead compare/tag links are fixed. The
+number itself was not burned — PyPI only blocks versions that had files
+uploaded — so it is simply skipped. Second, the first tag push **failed at the
+publish step** with `invalid-publisher`: the PyPI Trusted Publisher must exist
+*before* the first upload, because activating it is what claims the project
+name, and its **environment field must stay empty** to match a `publish-pypi`
+job that declares no `environment:` (the OIDC claim reads `environment:
+MISSING`, and PyPI matches claims exactly). Nothing is uploaded on such a
+failure, so recovery is `gh run rerun <id> --failed` — **no new tag**. Both facts
+are now in `implementations/python/RELEASE.md`.
+
+**Documentation pass** (`cd7ac8f`, committed directly to `main` by the
+maintainer's choice, no PR). Every reference to the test index is gone from the
+tracked tree; the install instruction is `pip install osfdata` everywhere; the
+README badge is now the dynamic `img.shields.io/pypi/v/osfdata` endpoint, so the
+version cannot go stale again. `STATUS.md` gained a *Production PyPI release*
+section and its header "Latest tag" now reads `v1.1.0` with a note that tags
+carry **package** versions and do not track the repo CHANGELOG line.
+`python/BUILD.md` also lost three stale claims unrelated to the index — a
+`publish-testpypi` job name (it is `publish-pypi`), an `if: false` gate on
+publishing that no longer exists (the dangerous one: believing it makes a tag
+push look harmless), and "all five platforms" for a four-platform matrix. Five
+historical mentions were deliberately left intact — the `0.1.0` entries in both
+CHANGELOGs and the dated 2026-07-10 audit correctly describe what was true when
+written. The merged `.claude/worktrees/osfdata-release` worktree was removed
+after confirming it held no unmerged commits.
 
 ### OSF-UP4 — `bcMessageEvent` (2026-07-28)
 
