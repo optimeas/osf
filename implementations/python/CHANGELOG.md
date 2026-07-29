@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.0] - 2026-07-29
 
+**First release on production PyPI — `pip install osfdata`.** The distribution
+graduates from the earlier pre-releases to a stable production line; the API
+surface is considered stable under semantic versioning. (Version 1.0.0 below was
+prepared but never uploaded — see its note — so 1.1.0 is what production PyPI
+starts from.)
+
 ### Added
 
 - **`bcMessageEvent` (control byte 4) channels are now read (OSF-UP4).**
@@ -33,11 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Inherited from the `osf-core` reader; type stubs updated. Reading behaviour is
   unchanged — no file that loaded before loads differently now.
 
-## [1.0.0] - 2026-07-25
+## [1.0.0] - 2026-07-25 — prepared, never published
 
-First release on production PyPI — `pip install osfdata`. The distribution
-graduates from the TestPyPI pre-releases to a stable production line; the API
-surface below is considered stable under semantic versioning.
+**This version was never uploaded to any index.** It was prepared on the date
+above (version bump, production-PyPI retarget of the release workflow), but the
+release tag was not pushed and the PyPI Trusted Publisher had not been
+registered yet, so the release never ran. There is no `v1.0.0` tag and no
+`1.0.0` file on any index; the changes below shipped as part of
+[1.1.0](#110---2026-07-29) instead. The entry is kept rather than folded in, so
+that the version history stays readable — the number itself is still unused and
+was simply skipped.
 
 ### Added
 
@@ -81,6 +92,8 @@ Initial release on TestPyPI.
   follows after sufficient field testing.
 
 [Unreleased]: https://github.com/optimeas/osf/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/optimeas/osf/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/optimeas/osf/releases/tag/v1.0.0
+[1.1.0]: https://github.com/optimeas/osf/compare/v0.1.0...v1.1.0
 [0.1.0]: https://github.com/optimeas/osf/releases/tag/v0.1.0
+
+<!-- 1.0.0 deliberately has no link target: it was prepared but never tagged
+     or released, so neither a tag page nor a compare range exists for it. -->

@@ -16,7 +16,7 @@
 # at end-of-life with deteriorating availability; Intel-macOS users
 # install from the sdist. See DECISIONS.md §19.
 #
-# Trusted Publishing to TestPyPI lives in release.yml (this file
+# Trusted Publishing to PyPI lives in release.yml (this file
 # never publishes anything).
 name: CI
 

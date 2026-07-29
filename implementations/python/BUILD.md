@@ -226,7 +226,7 @@ Same compilation as `develop`, but instead of installing into a venv, the output
 The wheel filename encodes important information:
 
 ```
-osfdata-0.1.0-cp39-abi3-win_amd64.whl
+osfdata-1.1.0-cp39-abi3-win_amd64.whl
         ^^^^^ ^^^^ ^^^^ ^^^^^^^^^
         version  py-tag abi-tag platform-tag
 ```
@@ -256,7 +256,7 @@ In addition to wheels, we also build a source distribution:
 maturin sdist --out dist
 ```
 
-This produces `osfdata-0.1.0.tar.gz`, a tarball containing all source files needed to build the project from scratch. Users on platforms we did not pre-build wheels for (FreeBSD, exotic ARM variants) can install with `pip install osfdata` and pip will fall back to the sdist, compile it on the fly, and produce a wheel locally.
+This produces `osfdata-1.1.0.tar.gz`, a tarball containing all source files needed to build the project from scratch. Users on platforms we did not pre-build wheels for (FreeBSD, exotic ARM variants) can install with `pip install osfdata` and pip will fall back to the sdist, compile it on the fly, and produce a wheel locally.
 
 Compiling from sdist requires the user to have a Rust toolchain installed. For mainstream platforms, the pre-built wheels mean users never see this complexity.
 
@@ -315,11 +315,11 @@ The matrix uses `fail-fast: false` so that a Linux-aarch64 failure does not canc
 
 ### 6.2 `.github/workflows/release.yml`
 
-Triggered only by Git tags matching `v*` (e.g. `v0.1.0`, `v0.2.0`). Same build matrix as `ci.yml`, plus an additional job:
+Triggered only by Git tags matching `v*` (e.g. `v1.1.0`, `v1.2.0`). Same build matrix as `ci.yml`, plus an additional job:
 
-- **`publish-testpypi`** — downloads all built wheels and the sdist, then publishes them to TestPyPI using Trusted Publishing.
+- **`publish-pypi`** — downloads all built wheels and the sdist, then publishes them to production PyPI using Trusted Publishing. It runs only for `refs/tags/v*` and declares `permissions: id-token: write`, which is what mints the OIDC token.
 
-This second workflow is currently gated behind an `if: false` condition. The gate exists because we want several green CI runs first, before allowing automatic publishing. Once `ci.yml` is reliably green, the gate is removed and the next tag push triggers a real upload.
+Publishing is live: a `v*` tag push performs a real upload. Since a published version can never be replaced, treat pushing a tag as the irreversible step of a release.
 
 ### 6.3 Caching
 
@@ -333,7 +333,7 @@ If GitHub releases native Linux ARM runners and they prove stable, we can switch
 
 ---
 
-## 7. The release pipeline: TestPyPI and PyPI
+## 7. The release pipeline: publishing to PyPI
 
 Building wheels in CI is one thing; getting them to users is another. Wheels are distributed through PyPI, the Python Package Index.
 
@@ -341,7 +341,7 @@ Building wheels in CI is one thing; getting them to users is another. Wheels are
 
 PyPI (https://pypi.org) is the central registry for Python packages. When a user runs `pip install osfdata`, pip queries PyPI for the package, finds the appropriate wheel for the user's platform, downloads it, and installs it. PyPI is the equivalent of crates.io for Rust, npm for JavaScript, or Maven Central for Java.
 
-TestPyPI (https://test.pypi.org) is a separate, parallel index intended for testing the release process without affecting production users. Uploads to TestPyPI do not appear on PyPI; the two have separate accounts, separate package namespaces, and (by convention) different audiences. TestPyPI is the right place to verify that a release works before pushing it to production.
+`osfdata` publishes to production PyPI: <https://pypi.org/project/osfdata/>. Earlier pre-releases went to a separate test index during stabilization; that phase ended with the 1.1.0 release and nothing in this repository targets a test index any more.
 
 ### 7.2 Trusted Publishing
 
@@ -349,13 +349,13 @@ Historically, publishing to PyPI required an API token: a long secret string tha
 
 Trusted Publishing replaces tokens with OIDC. The flow:
 
-1. On TestPyPI (or PyPI), we tell the index: "Workflow `release.yml` in repository `optimeas/osf` is allowed to publish package `osfdata`."
+1. On PyPI, we tell the index: "Workflow `release.yml` in repository `optimeas/osf` is allowed to publish package `osfdata`."
 2. When the workflow runs, GitHub gives it a short-lived, cryptographically signed token (an OIDC token) that proves the workflow is in fact running where it claims.
 3. The publish step presents this token to PyPI, which verifies the signature and grants the upload.
 
 There are no long-lived secrets in the repository. The trust relationship is between PyPI and the specific workflow file path, not a person and a password.
 
-The configuration on TestPyPI is a one-time manual step done in the web UI under Account Settings → Publishing → Add a new pending publisher. For our project:
+The configuration on PyPI is a one-time manual step done in the web UI under Account Settings → Publishing → Add a new pending publisher. For our project:
 
 - Project name: `osfdata`
 - Owner: `optimeas`
@@ -364,6 +364,8 @@ The configuration on TestPyPI is a one-time manual step done in the web UI under
 - Environment: empty (we do not use environment gates)
 
 A "pending publisher" is one that activates on first successful upload. After that, it appears in the active publishers list.
+
+The claims are matched **exactly**, and that includes the environment. Our publish job declares no `environment:`, so its token says `environment: MISSING`; entering any value in that field would make every upload fail with `invalid-publisher`. The publisher must also exist *before* the first upload, since activating it is what claims the project name. `RELEASE.md` documents the recovery path — nothing is uploaded on such a failure, so re-running the failed job after fixing the publisher is enough, without a new tag.
 
 ### 7.3 The release sequence
 
@@ -377,20 +379,18 @@ When ready to release, the steps are:
 4. Wait for `ci.yml` to go green.
 5. Create and push a tag:
    ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag v1.1.0
+   git push origin v1.1.0
    ```
-6. The tag push triggers `release.yml`, which builds wheels on all five platforms, builds the sdist, and uploads everything to TestPyPI.
+6. The tag push triggers `release.yml`, which builds wheels for the four `(os, target)` pairs, builds the sdist, and uploads everything to PyPI.
 7. After a few minutes, verify in a fresh virtual environment:
    ```bash
-   pip install --index-url https://test.pypi.org/simple/ \
-               --extra-index-url https://pypi.org/simple/ \
-               osfdata
+   pip install osfdata
    python -c "import osf; print(osf.__version__)"
    ```
-   The `--extra-index-url` is necessary because TestPyPI does not host our dependencies (NumPy, etc.); pip needs to fall back to PyPI for those.
+   No extra index is needed: NumPy and every other runtime dependency resolve from PyPI itself.
 
-The same procedure applies to PyPI once the package is mature, with a PyPI Trusted Publisher configured analogously.
+`RELEASE.md` is the operational checklist for this sequence; this section explains what the steps do.
 
 ---
 
@@ -427,25 +427,22 @@ This section answers the question "what do I do, step by step, to take a Rust ch
 7. **Repeat steps 1-6** for as many changes as belong in the next release.
 8. **When ready to release**, bump the version in `Cargo.toml` and `pyproject.toml`, update `CHANGELOG.md`, commit, push.
 9. **Wait for CI to confirm** the version-bump commit is green.
-10. **Tag and push the tag:**
+10. **Tag and push the tag** — this is the irreversible step:
     ```bash
-    git tag v0.1.1
-    git push origin v0.1.1
+    git tag v1.1.1
+    git push origin v1.1.1
     ```
-11. **Watch the release workflow** at https://github.com/optimeas/osf/actions. It builds wheels for all platforms and uploads to TestPyPI.
+11. **Watch the release workflow** at https://github.com/optimeas/osf/actions. It builds wheels for all platforms and uploads to PyPI.
 12. **Verify the upload** in a fresh virtual environment:
     ```bash
     uv venv /tmp/verify-release
     source /tmp/verify-release/bin/activate    # on Linux/macOS
     # or: /tmp/verify-release/Scripts/Activate.ps1 on Windows
-    pip install --index-url https://test.pypi.org/simple/ \
-                --extra-index-url https://pypi.org/simple/ \
-                osfdata==0.1.1
+    pip install osfdata==1.1.1
     python -c "import osf; print(osf.__version__)"
     ```
-    The version printed should match the tag.
-13. **If verification fails**, investigate. PyPI versions cannot be re-uploaded — bump to `0.1.2` and try again. (TestPyPI versions also cannot be re-uploaded.)
-14. **For a production release to PyPI**, the same procedure applies, with the PyPI Trusted Publisher (a separate one-time setup) and the `pypi.org` index URL. We are deliberately staying on TestPyPI until the package has accumulated enough field testing.
+    The version printed should match the tag. Verify against a *fresh* environment installing from the index — not a local `maturin develop` build, which would prove nothing about what users receive.
+13. **If verification fails**, investigate. A PyPI version can never be re-uploaded or overwritten, even after deleting it — bump to `1.1.2` and release again. `RELEASE.md` covers yanking a bad release, which hides it from new installs without breaking users who pinned it.
 
 ### 8.2 Documentation-only changes
 
@@ -464,7 +461,7 @@ A docs-only change does not need a release in any case; documentation lives in t
 | CI fails on one platform only | Platform-specific issue (path separators, line endings, missing dep) | The platform's job logs in GitHub Actions |
 | CI fails on all platforms identically | Code regression that local tests missed | Re-run local tests in a fresh checkout to reproduce |
 | Wheel uploads but `pip install` fails | Wheel platform tag mismatch | Compare the wheel filename with the target system's tag |
-| First TestPyPI upload silently does nothing | Trusted Publisher not configured | TestPyPI Account Settings → Publishing |
+| Publish job fails with `invalid-publisher` | Trusted Publisher missing, or its environment field does not match the workflow | PyPI Account Settings → Publishing; the claims are printed in the failed job's log |
 
 ---
 
@@ -475,7 +472,7 @@ For readers coming from other ecosystems, some terms may be unfamiliar.
 - **Wheel (`.whl`)** — A pre-built Python package format. Roughly analogous to a `.deb` or `.rpm`: a ZIP archive with metadata and binaries, ready to be installed without further compilation.
 - **Sdist (`.tar.gz`)** — A source distribution. The fallback when no wheel is available; users build from it locally.
 - **PyPI** — The Python Package Index. Where wheels and sdists are published for the world to install with `pip install`.
-- **TestPyPI** — A separate parallel index for testing releases without affecting production.
+- **Trusted Publishing** — Uploading via a short-lived OIDC token minted by the CI provider, instead of a long-lived API token stored as a repository secret.
 - **abi3** — A stable subset of the Python C API. Allows one binary to work across multiple Python minor versions.
 - **Crate** — A Rust package. Either a library (`.rlib`) or a binary or, in our case, a `cdylib` (dynamic library with C ABI).
 - **cdylib** — Crate type that produces `.dll`/`.so`/`.dylib` files loadable from non-Rust code, including Python.

@@ -8,7 +8,7 @@ when deeper context is needed.
 |---|---|
 | Repo | https://github.com/optimeas/osf |
 | Working dir | `V:\github\osf` (Windows) |
-| Latest tag | **v0.10.0** (2026-05-25) |
+| Latest tag | **v1.1.0** (2026-07-29) — the `osfdata` package release. Tags share one repo-wide `v*` namespace but carry *package* versions, so this does not track the repo `CHANGELOG.md` line (still `0.10.0`, tagged `v0.10.0` on 2026-05-25). |
 | Branch | `main` |
 | Spec revision in effect | **2026-07-28** (`bcMessageEvent` read-mandatory, OSF-UP4; zero-length data blocks, OSF-UP3 — both dated 2026-07-28, so the value does not move; OSF5 integrity profile 2026-07-07; base format 2026-05-24) |
 
@@ -1092,7 +1092,7 @@ GitHub Actions workflows live in `.github/workflows/`:
   `.github/workflows/**` (the Delphi tree is still uncovered — no hosted
   Delphi toolchain).
 - `release.yml` — triggered by `v*`-tag pushes. Same wheel + sdist
-  matrix; the `publish-testpypi` job uploads to TestPyPI via
+  matrix; the `publish-pypi` job uploads to **production PyPI** via
   Trusted Publishing (OIDC, no API tokens).
 
 **Wheel matrix (4 (os, target) pairs, abi3-py39 → one wheel per
@@ -1123,25 +1123,49 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
   arm64+x86_64 platforms and the workflow proven stable across
   multiple consecutive `main` pushes (~3:30 per run).
 
-### Session 8 — Phase B (TestPyPI release)
+### Session 8 — Phase B (first pre-release) — historical
 
-- 2026-05-07: `osfdata 0.1.0` released on TestPyPI via Trusted
-  Publishing — first successful end-to-end release pipeline run.
-  Tag `v0.1.0` triggered `release.yml`, which built four wheels
-  plus the sdist and published them via OIDC.
-- Live: <https://test.pypi.org/project/osfdata/>
-- Trusted Publisher on TestPyPI active (account: optiMEAS,
-  project: `osfdata`, owner: `optimeas`, repo: `osf`, workflow:
-  `release.yml`).
-- Verification install in fresh venv passed:
+- 2026-05-07: `osfdata 0.1.0` published to the separate test index via
+  Trusted Publishing — the first successful end-to-end release pipeline
+  run. Tag `v0.1.0` triggered `release.yml`, which built four wheels plus
+  the sdist and uploaded them via OIDC.
+- Verification install in a fresh venv passed:
   `cp39-abi3-win_amd64` wheel installed, `osf.__version__ == "0.1.0"`,
   numpy 2.4.4 pulled in as dependency.
+- **Superseded.** The pipeline has targeted production PyPI since 1.1.0
+  (see the section below); this entry is kept only as the record of the
+  first working release run. The pre-releases and the publisher that
+  produced them are no longer referenced anywhere in the repository.
+
+### Production PyPI release — `osfdata 1.1.0` (2026-07-29)
+
+- **Live at <https://pypi.org/project/osfdata/> — `pip install osfdata`.**
+  Tag `v1.1.0` on `9d2f5f7` triggered `release.yml`, which built the four
+  abi3 wheels plus the sdist and published all five artefacts.
+- Contents: the OSF-UP3 and OSF-UP4 reader work (zero-length block
+  counter; `bcMessageEvent` channels now decode instead of arriving empty)
+  plus the crc integrity surface prepared under 1.0.0.
+- **Version 1.0.0 was never published.** It was prepared on 2026-07-25 but
+  neither tagged nor uploaded, so production PyPI starts at 1.1.0. The
+  package CHANGELOG keeps the 1.0.0 entry marked as such. A dated CHANGELOG
+  heading is therefore not evidence of a release — query the index instead
+  (`curl -s https://pypi.org/pypi/<pkg>/json`; 404 = never published).
+- The first tag push failed at the publish step with `invalid-publisher`
+  because the PyPI Trusted Publisher had not been registered yet — it must
+  exist *before* the first upload, since activating it is what claims the
+  project name. Nothing was uploaded; re-running the failed job after
+  registration was enough, with no new tag. The publisher's **environment
+  field must stay empty** to match the `publish-pypi` job, which declares
+  no `environment:`. Both facts are in `implementations/python/RELEASE.md`.
+- Verified from the index, not from a local build: fresh venv,
+  `pip install osfdata`, then `osf4_message_event_string.osf` → 5 samples
+  on `Demo.Message` (was 0 before OSF-UP4) and
+  `osf5_zero_length_block.osf` → `blocks_skipped_zero_length == 1`.
+- The repository no longer references the test index anywhere; the earlier
+  `0.1.0` pre-releases there are historical only.
 
 ### Open / known follow-ups (Session 8)
 
-- Production PyPI release: requires a separate Trusted Publisher
-  configured on `pypi.org` (TestPyPI and production are independent
-  accounts).
 - Pandas convenience layer (Session 7b): build a DataFrame from a
   `DataManager`, one column per channel, optional time alignment.
 - Other language implementations (C, C++, …) will
@@ -1214,14 +1238,15 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
   bucket; and the round's remaining evidence gaps (no executable round-trip
   test for C++/Delphi, no `binary` corpus file for this block type, Rust
   missing a synthetic `N = 0` case).
-- **Production PyPI release for `osfdata`** — the Python bindings are
-  functional and CI already publishes to **TestPyPI** (`osfdata 0.1.0`); a
-  production `pypi.org` release needs its own Trusted Publisher. Pandas
-  convenience helpers remain a separate nice-to-have. See the *Python
-  implementation* section above.
-- **`optimeas/python-osf` deprecation header** — `osfdata` is on TestPyPI, so
-  the trigger condition is met: add a "deprecated in favor of osfdata" notice to
-  that repo's README. Mini follow-up.
+- **Pandas convenience layer for `osfdata`** — build a DataFrame from a
+  `DataManager`, one column per channel, with optional time alignment. The
+  production PyPI release itself is **done** (`osfdata 1.1.0`, 2026-07-29 —
+  see the *Python implementation* section above); this is the remaining
+  nice-to-have from that track.
+- **`optimeas/python-osf` deprecation header** — `osfdata` is now on production
+  PyPI (`pip install osfdata`), so the trigger condition is met with room to
+  spare: add a "deprecated in favor of osfdata" notice to that repo's README.
+  Mini follow-up.
 - **Other language implementations** — only **C (native)** remains a README
   placeholder. Rust, Python, C++ (§20 complete), Java, and Delphi are all
   implemented — see their sections above.

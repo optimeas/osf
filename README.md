@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/optimeas/osf/actions/workflows/ci.yml/badge.svg)](https://github.com/optimeas/osf/actions/workflows/ci.yml)
-[![osfdata on TestPyPI](https://img.shields.io/badge/osfdata-TestPyPI%20v0.1.0-blue)](https://test.pypi.org/project/osfdata/)
+[![osfdata on PyPI](https://img.shields.io/pypi/v/osfdata?label=osfdata)](https://pypi.org/project/osfdata/)
 
 OSF is an open, lightweight streaming format for time-series measurement and process data. It is designed to be written efficiently by embedded devices and read at high speed by desktop, server, and AI workloads — without lossy conversion through CSV or Parquet intermediates.
 
@@ -40,7 +40,7 @@ The Delphi reference implementation, the Rust foundation, the Python bindings, t
 |----------|----------|--------|
 | [Delphi](implementations/delphi/) | Windows desktop, industrial | ✅ Reference implementation; full OSF4/OSF5 reader + writer. Generates the test files in [`examples/generated/`](examples/generated/). |
 | [Rust](implementations/rust/) (`osf-core`) | Systems, embedded, foundation for bindings | ✅ Read + write + OSFZ decompression; full OSF4/OSF5 support. |
-| [Python](implementations/python/) (`osfdata`) | Analytics, NumPy integration | ✅ Pre-release v0.1.0 on [TestPyPI](https://test.pypi.org/project/osfdata/). Built on the Rust foundation via PyO3. |
+| [Python](implementations/python/) (`osfdata`) | Analytics, NumPy integration | ✅ Released on [PyPI](https://pypi.org/project/osfdata/) — `pip install osfdata`. Built on the Rust foundation via PyO3. |
 | [C++](implementations/cpp/) | Industrial measurement, embedded + desktop | ✅ Standalone C++17 implementation. Full OSF4/OSF5 reader (incl. OSFZ decompression), typed `DataManager`, both OSF5 writers (streaming + block), the `osf-c` C ABI, and the crc integrity profile. Cross-platform CI on Linux/macOS/Windows. |
 | [C](implementations/c/) | Embedded + desktop | 📋 Planned. |
 | [Java](implementations/java/) | Enterprise + Android | ✅ Complete — Java 21, JPMS, both OSF5 writers, transparent OSFZ, crc integrity profile; plus `osf-cli` + `osf-viewer` ([DECISIONS.md §21](DECISIONS.md)). |
@@ -63,12 +63,10 @@ See [`DECISIONS.md`](DECISIONS.md) for the architectural rationale and implement
 
 ## Quick Start (Python)
 
-The fastest way to read and analyze OSF data today is via the Python package `osfdata` on TestPyPI:
+The fastest way to read and analyze OSF data today is via the Python package [`osfdata`](https://pypi.org/project/osfdata/):
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ \
-            osfdata
+pip install osfdata
 ```
 
 Then in Python:
