@@ -439,11 +439,23 @@ OSF-UP3, but three surfaces do not expose them where callers actually work:
   dropped. C++ and Java read the count off their high-level manager in their own
   conformance tests; Delphi's has to go through the filer to do the same.
 - **Python (`osfdata`)** — the binding surfaces only a subset of `osf-core`'s
-  `ReaderStats`: `blocks_skipped_unsupported`, `blocks_skipped_deprecated_type`
-  and `blocks_skipped_reserved_type` are absent (`blocks_skipped_zero_length`
-  was added for OSF-UP3).
+  `ReaderStats`. `blocks_skipped_zero_length` was added for OSF-UP3, and
+  OSF-UP4 added `blocks_skipped_status_event`, `blocks_skipped_deprecated_type`
+  and `blocks_skipped_reserved_type`, so **`blocks_skipped_unsupported` is the
+  only one still absent**.
+- **Java** — `ReaderStats` has no `unsupported` bucket at all, so a channel or
+  block the reader could not interpret is invisible where Rust
+  (`blocks_skipped_unsupported`, `channels_unsupported`) and C++
+  (`blocksSkippedUnsupported`, `channelsUnsupported`) both report it. OSF-UP4
+  had to introduce `blocksSkippedReservedType` and
+  `blocksSkippedDeprecatedType` because Java's `ReaderStats` had *no* skip
+  buckets whatsoever — it counted decoded blocks and a truncation flag and
+  nothing else. That closed the gap OSF-UP4 needed; the `unsupported` bucket
+  and the per-channel statistics the other two carry are still missing, which
+  is why a cross-implementation statistics comparison cannot be written
+  symmetrically.
 
-Both are additive, mechanical changes.
+All of these are additive, mechanical changes.
 
 ### `osftool verify` — cap the mirrored per-block warnings
 
@@ -456,6 +468,160 @@ anomaly likely to occur hundreds of times in a single file, which is what made
 it visible. Suggested during review: cap the mirrored lines (the first N, e.g.
 10) and append a `… N further warnings suppressed` line. Presentation only —
 the counters and the exit code are already summary-based.
+
+### Invalid UTF-8 in a `string` payload splits the implementations three ways
+
+Established during OSF-UP4 by byte-patching a corpus `string` payload to `0xFF`
+(same length, framing untouched) and loading the result through each
+implementation. Nothing in the specification or in any test pins the behaviour,
+and the five readers do three different things:
+
+- **Rust and Python fail the whole load** — `String::from_utf8` returns an
+  error that propagates out of the reader.
+- **Delphi also fails the whole load, and harder.** `TEncoding.UTF8.GetString`
+  raises `EEncodingError`, which escapes `TOSFDataManager.LoadFromStream` and
+  discards every already-decoded channel — through an API documented as
+  best-effort and as *not* propagating exceptions from partial files. That is
+  arguably a defect in its own right, independent of which encoding policy the
+  project eventually picks: a documented best-effort loader should not throw.
+  It also **reopens the cache-versus-manager split in a second dimension.**
+  OSF-UP4 fixed that split for *counts* (the meta cache did not count
+  `bcMessageEvent` samples while the manager decoded them), but the two halves
+  still disagree on *load success*: the filer/cache path never decodes the
+  bytes to text, so `osftool channels` succeeds on a file with invalid UTF-8
+  while `osftool export` fails with `EEncodingError` out of
+  `TOSFDataManager`. Whatever encoding policy is chosen has to be applied to
+  both halves, or the same file will keep opening in one verb and failing in
+  another.
+- **C++ accepts the raw bytes** (`std::string` is a byte container; no
+  validation happens).
+- **Java substitutes `U+FFFD`** — `new String(bytes, UTF_8)` replaces invalid
+  sequences silently, so the load succeeds with corrupted text.
+
+This is **pre-existing** and shared with the `bcAbsTimeStampData` path in every
+implementation; OSF-UP4 deliberately did not change it, because doing so would
+have mixed an encoding-policy decision into a block-framing fix. But OSF-UP4
+exists precisely to rescue `string` channels written by legacy device firmware,
+and firmware emitting **CP1252 / Latin-1** rather than UTF-8 is the plausible
+next field case — at which point three implementations cannot open a file the
+other two read, and one of the three loses the unrelated channels too.
+
+Resolving it means a decision first, then five small changes: does a `string`
+channel carry declared-UTF-8 text (invalid input = error), or opaque bytes with
+a best-effort text view (invalid input = replacement characters, or a
+per-sample lossy flag)? The spec is silent, so any implementation choice today
+is unreviewed. Trigger to act: a field file with non-UTF-8 `string` payloads,
+or the Delphi exception being hit in `osftool`. The Delphi escape is worth
+fixing regardless of the encoding decision.
+
+### A truncated `bcMessageEvent` frame splits the implementations four ways, and nothing tests it
+
+A frame that declares more payload than it carries — `N` larger than the bytes
+remaining in the block — is handled differently by all four independently
+scanning readers, and there is **no test for the case in any language**:
+
+- **Rust** propagates a hard error (`MessageEvent payload truncated: …`) that
+  fails the whole load.
+- **Java** swallows it into `markTruncated()` and stops best-effort, so the
+  file loads with the blocks read so far and `truncationSeen()` set.
+- **C++** returns an error.
+- **Delphi** returns `boStop`, ending the scan.
+
+Each implementation is following its own pre-existing truncation policy, and
+that *is* the rule the round adopted — so this is not a defect in any of them.
+What is missing is that the policy is written down nowhere for this block type
+(it survives only in a Java javadoc), nothing pins it, and the resulting
+four-way split means the same malformed file yields a hard failure, a partial
+success and a silent stop depending on the reader. Distinct from the
+encoding question above: that one is about *what a valid frame's bytes mean*,
+this one about *what happens when the framing itself is wrong*.
+
+The cheap half is a test per implementation asserting each one's documented
+policy, which turns four undocumented behaviours into four pinned ones without
+changing any of them. The expensive half — agreeing a single cross-language
+policy and writing it into the spec — is a separate decision and probably
+belongs with the general truncation policy rather than with `bcMessageEvent`.
+
+### Shared string/binary builder: Rust rejects an unknown datatype, C++ and Java fall through to `Binary`
+
+All three implementations funnel `string` / `binary` sample construction
+through one shared helper. Rust's (`build_string_or_binary`,
+`osf-core/src/reader.rs`) has an explicit `other => Err(...)` arm, so calling it
+with any other datatype is a loud failure. The C++ and Java equivalents end in a
+fall-through that yields a **`Binary`** channel instead — a wrong-but-plausible
+result that no test would notice, because the bytes are the same and only the
+declared shape differs.
+
+This surfaced in OSF-UP4: because the helper cannot be trusted to reject a bad
+datatype in two of the three languages, both the C++ and the Java
+`bcMessageEvent` parser needed an explicit early-return backstop before calling
+it, to honour §26's "skip and count on any datatype other than `string` /
+`binary`" rule. The backstops are correct and in place, so nothing is broken
+today — but the hazard is now load-bearing in three call sites per language
+rather than one, and the next caller added will have to remember the same
+backstop. Aligning the two helpers on Rust's behaviour (return an error rather
+than guess `Binary`) removes the trap at its source. Small, mechanical, and
+best done together with any other touch of those readers.
+
+### Delphi block-skip counters: one misleading name, two block types with no counter at all
+
+Two related gaps in Delphi's reader statistics, both surfaced by OSF-UP4:
+
+- **The name over-claims.** The two unspecified `bcMessageEvent` shapes — bit 7
+  set, and a `datatype` other than `string` / `binary` — are counted under
+  `TOSFFile.BlocksUnknownTypeSkipped`, whose name asserts the *type* was
+  unknown when in fact the type is perfectly well known and only the *shape* is
+  unspecified. The sibling implementations call that reason `ReservedBlockType`
+  / `RESERVED_BLOCK_TYPE`, so a cross-language grep for "reserved" finds
+  nothing in Delphi — the same discoverability problem OSF-UP3 already noted for
+  `BlocksZeroLengthSkipped` versus `blocksSkippedZeroLength`.
+- **Two deprecated types are still uncounted.** `bcTrustedTimestamp` (control
+  byte 1) and `bcTimebaseRealign` (2) appear in `OSF.Types.pas` and in
+  `BlockTypeToLogString`, but nowhere else: they are delivered as blocks that
+  both the data-manager and the meta-cache dispatch drop through a default arm,
+  with no counter and no log line. An occurrence in the field is therefore
+  exactly as silent as `bcMessageEvent` was before OSF-UP4 — the failure mode
+  this round was created to eliminate. Rust, C++ and Java fold both into their
+  deprecated/reserved buckets.
+
+Neither is a correctness bug in what Delphi *reads*; both are blind spots in
+what it can *report*, and the second is the same shape of blind spot that made
+OSF-UP4 necessary. Cheap to close; best done in one pass together with the
+`TOSFDataManager` counter surface (see *Reader counters are not reachable from
+every high-level API* above).
+
+### OSF-UP4 — the evidence that is still reading rather than measurement
+
+From the writer audit's own "what remains unknown"
+(`examples/README.md`). None of these is a suspected defect; they are the
+places where the OSF-UP4 guarantee rests on someone having read the code
+correctly rather than on a test that would go red:
+
+- **C++ and Delphi have no executable round-trip evidence.** Both are cleared
+  by construction — the control byte is unreachable, so a test could never
+  fail — but that also means no test pins the *content* survival that the Rust,
+  Java and Python round-trip tests assert. For Delphi specifically, no test
+  pushes a `bcMessageEvent` file through `osftool convert`, so `TOSFMerger`'s
+  re-emit is a reading of `OSF.Merger.pas`.
+- **`datatype=binary` over `bcMessageEvent` has no corpus file.** DECISIONS §26
+  admits it explicitly and the readers implement it, but the committed pair
+  covers `string` only. Rust compensates with a built-not-loaded binary round
+  trip (with payload bytes that are literally `0x04` / `0x84`); C++, Java and
+  Delphi have no equivalent, and the shared manifest cannot assert what does not
+  exist as a file.
+- **Rust has no synthetic case pinning "`N = 0` decodes to an empty value".**
+  C++ (`message_event_n_zero_decodes_to_empty_value`), Delphi
+  (`ZeroLengthMessagePayloadDecodesToAnEmptyValue`) and Java all gained one;
+  Rust covers the case only transitively, through the corpus file. Since §26
+  distinguishes this case from the OSF-UP3 zero-length anomaly by hand, the one
+  implementation without a direct assertion is the one most likely to drift.
+- **Python's evidence rides on the wheel-building CI leg.** `pytest` runs in
+  `build-wheels` against a freshly built wheel, not as a standalone unit job,
+  so a Python-only regression is invisible until the wheel matrix runs.
+
+Cheapest first: the Rust `N = 0` case is a few lines. A `binary` corpus file
+would close the widest gap, since it turns four separate per-language decisions
+into one manifest assertion.
 
 ---
 

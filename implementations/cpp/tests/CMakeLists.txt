@@ -464,6 +464,28 @@ osf_set_warnings(test_manager_examples)
 gtest_discover_tests(test_manager_examples)
 
 # ---------------------------------------------------------------------------
+# test_message_event_examples — bcMessageEvent (control byte 4) decoding
+# integration tests against the generated conformance pair (OSF-UP4,
+# DECISIONS §26).
+# ---------------------------------------------------------------------------
+
+add_executable(test_message_event_examples
+    integration/test_message_event_examples.cpp
+)
+
+target_link_libraries(test_message_event_examples PRIVATE
+    osf::osf
+    GTest::gtest_main
+)
+
+target_compile_definitions(test_message_event_examples PRIVATE
+    OSF_EXAMPLES_DIR="${OSF_EXAMPLES_DIR_PATH}")
+
+osf_set_warnings(test_message_event_examples)
+
+gtest_discover_tests(test_message_event_examples)
+
+# ---------------------------------------------------------------------------
 # test_conformance_manifest — manifest-driven cross-implementation contract.
 # Reads examples/reference_manifest.json (the shared source of truth) and
 # validates every listed file. Uses the vendored nlohmann/json (via osf::osf).

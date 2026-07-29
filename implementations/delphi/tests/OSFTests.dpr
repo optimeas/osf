@@ -27,7 +27,8 @@ uses
   Test.OSF.CRC32C          in 'Test.OSF.CRC32C.pas',
   Test.OSF.Filer.Header    in 'Test.OSF.Filer.Header.pas',
   Test.OSF.Filer.Integrity in 'Test.OSF.Filer.Integrity.pas',
-  Test.OSF.Filer.ZeroLengthBlock in 'Test.OSF.Filer.ZeroLengthBlock.pas';
+  Test.OSF.Filer.ZeroLengthBlock in 'Test.OSF.Filer.ZeroLengthBlock.pas',
+  Test.OSF.Filer.MessageEvent    in 'Test.OSF.Filer.MessageEvent.pas';
 
 var
   Runner: ITestRunner;

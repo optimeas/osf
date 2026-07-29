@@ -64,12 +64,18 @@ fn every_example_file_loads_into_data_manager() {
         );
 
         let total_samples: usize = mgr.channels().iter().map(Channel::sample_count).sum();
+        // Deliberately NOT a hand-summed list of individual
+        // `blocks_skipped_*` counters here: that list has already gone
+        // stale twice (missing `blocks_skipped_zero_length`, then
+        // `blocks_skipped_status_event`) as new skip reasons were added.
+        // `blocks_skipped_*` always sums to `blocks_total - blocks_read`
+        // by construction (`BlockReader::stats()`), so "zero samples
+        // reached any channel because every block was a skip of some
+        // kind" is exactly `blocks_read == 0` — an invariant that stays
+        // correct no matter how many skip reasons exist.
         assert!(
             mgr.channels().iter().any(|c| c.sample_count() > 0)
-                || total_samples == 0
-                    && mgr.stats.blocks_total == mgr.stats.blocks_skipped_unsupported
-                        + mgr.stats.blocks_skipped_deprecated_type
-                        + mgr.stats.blocks_skipped_reserved_type,
+                || total_samples == 0 && mgr.stats.blocks_read == 0,
             "{} declared channels but no sample reached any of them",
             path.display()
         );

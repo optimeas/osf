@@ -10,7 +10,7 @@ when deeper context is needed.
 | Working dir | `V:\github\osf` (Windows) |
 | Latest tag | **v0.10.0** (2026-05-25) |
 | Branch | `main` |
-| Spec revision in effect | **2026-07-28** (zero-length data blocks, OSF-UP3; OSF5 integrity profile 2026-07-07; base format 2026-05-24) |
+| Spec revision in effect | **2026-07-28** (`bcMessageEvent` read-mandatory, OSF-UP4; zero-length data blocks, OSF-UP3 — both dated 2026-07-28, so the value does not move; OSF5 integrity profile 2026-07-07; base format 2026-05-24) |
 
 **Public-release prep — done (on `main`).** All four phases are complete:
 Phase 1 (repo cleanup), Phase 2 (Docusaurus integration), Phase 3
@@ -131,7 +131,7 @@ osf/
 │   ├── steam_loco.osf + .csv        — real field sample
 │   ├── weather_station.osfz         — real gzip-OSFZ field sample
 │   ├── Testdata Motorbike/          — real OSFZ motorbike field recordings (daily dirs)
-│   └── generated/                   — 17 reference files (from OSFGenerator)
+│   └── generated/                   — 19 reference files (17 from OSFGenerator, 2 from the Rust bcMessageEvent generator) + integrity/ and malformed/ subdirs
 ├── dataformats/
 │   └── hdf5/                        — language-agnostic HDF5 spec, knowledge base, DLL install scripts
 ├── CHANGELOG.md, DECISIONS.md, CONTRIBUTING.md, README.md, LICENSE
@@ -228,15 +228,22 @@ table-based CRC-32/ISCSI; check value `0xE3069283`, byte-identical to Rust/C++;
 bidirectionally with Rust** (Rust reads Delphi files and vice versa, 0 CRC
 failures, byte-identical CRCs).
 
-**Tests — DUnitX suite** (`implementations/delphi/tests/OSFTests.dpr`, **29
-tests**, green under **dcc32 and dcc64**): `Test.OSF.CRC32C` (vectors incl.
+**Tests — DUnitX suite** (`implementations/delphi/tests/OSFTests.dpr`, **37
+tests**, measured 2026-07-29, green under **dcc32 and dcc64**):
+`Test.OSF.CRC32C` (vectors incl.
 RFC 3720), `Test.OSF.Filer.Header` (tokenizer matrix + strict-space cases),
 `Test.OSF.Filer.Integrity` (metablock/frame CRC good+corrupt per block type,
 Fix C control-byte-9 skip, `VerificationStatus`, write/read round-trip,
 writer-overflow boundary, cross-validation reading the Rust + Delphi
-`integrity/*.osf` reference files, and the manifest anomaly counts), and
+`integrity/*.osf` reference files, and the manifest anomaly counts),
 `Test.OSF.Filer.ZeroLengthBlock` (3 tests — OSF-UP3: skip + count on the normal
-read path and on the channel-filter path). Build with the DUnitX source **and
+read path and on the channel-filter path), and
+`Test.OSF.Filer.MessageEvent` (8 tests — OSF-UP4: manager decode of the legacy
+channel, legacy-vs-equivalent equality, filer-level timestamp + payload,
+`N = 0` → empty value, the two unspecified shapes plus `bcStatusEvent` skipped
+and counted, meta cache agreeing with the manager, a `binary` payload ending in
+`0x00` surviving intact, and malformed frames stopping the scan without
+delivering a sample). Build with the DUnitX source **and
 `..\src`** on the unit path, the DUnitX source on the include path, and `.dcu`
 output routed to a writable dir that must exist:
 
@@ -305,10 +312,10 @@ control-byte-9-profile-less skip case. Frame-CRC byte-identity to Rust is
 transitive: the reader reads the two Rust reference files with 0 CRC failures,
 and the writer's output reads back clean.
 
-**Current module total: 244** (measured 2026-07-28, after the channeltype,
-manifest and OSF-UP3 rounds). The `226` above is the figure of its own round and
-was never refreshed as the suite grew — it had drifted to 232 before OSF-UP3
-added 12. Run it with
+**Current module total: 265** (measured 2026-07-29, after the channeltype,
+manifest, OSF-UP3 and OSF-UP4 rounds). The `226` above is the figure of its own
+round and was never refreshed as the suite grew — it had drifted to 232 before
+OSF-UP3 added 12, and OSF-UP4 added a further 21. Run it with
 
 ```powershell
 mvn -f implementations/java/pom.xml -pl :osf-java test
@@ -319,7 +326,13 @@ The module selector must be **group-qualified** (`:osf-java`): a bare
 selected project in the reactor*.
 
 Reader statistics gained `ReaderStats.blocksSkippedZeroLength()` for OSF-UP3 —
-see the *Zero-length data blocks* section below.
+see the *Zero-length data blocks* section below — and, for OSF-UP4,
+`blocksSkippedStatusEvent()` **plus the reserved- and deprecated-skip counters
+Java never had at all** (`blocksSkippedReservedType()` /
+`blocksSkippedDeprecatedType()`): before that round `ReaderStats` carried a
+decoded-block count and a truncation flag and no skip buckets, so a skipped
+block left no trace. Java's stats surface is still thinner than Rust's and
+C++'s — it has no `unsupported` bucket — see `BACKLOG.md`.
 
 The four `integrity/` reference files are now part of the shared
 `examples/reference_manifest.json` conformance contract (sub-path keys, optional
@@ -601,8 +614,11 @@ files: `examples/generated/integrity/osf5_crc_{equidistant,variable}.osf` (Rust
 `cargo run --example gen_crc_refs`). Signing (level `signed`) is not
 implemented. **139 → 147 lib tests + `tests/integrity_test.rs` (6)**.
 
-**Suite total (measured 2026-07-28): `cargo test` = 178 passed, 2 ignored** —
-the two `#[ignore]`-gated performance smokes above. Added by OSF-UP3:
+**Suite total (measured 2026-07-29): `cargo test` = 189 passed, 2 ignored** —
+the two `#[ignore]`-gated performance smokes above. Added by OSF-UP4:
+`bcMessageEvent` decoding into the existing timestamped representation
+(`parse_message_event`), `ReaderStats.blocks_skipped_status_event`, and
+`tests/writer_message_event_audit_test.rs` (4 tests). Added by OSF-UP3:
 `ReaderStats.blocks_skipped_zero_length` + `SkipReason::ZeroLengthBlock` (the
 `blocks_total` aggregation had to gain the new counter as a term; it omitted it
 for three commits mid-branch — see `17771ee`), the
@@ -691,9 +707,17 @@ develop` (18 passed, 1 skipped).
 
 **OSF-UP3 (2026-07-28).** `ReaderStats` gained `blocks_skipped_zero_length`
 (getter + type stub), inherited from the Rust core; `tests/test_basic.py` covers
-the malformed corpus file. Suite now **19 passed, 1 skipped**. The binding still
-surfaces only a subset of `osf-core`'s counters — see BACKLOG, *Reader counters
-are not reachable from every high-level API*.
+the malformed corpus file.
+
+**OSF-UP4 (2026-07-28).** `bcMessageEvent` decoding is inherited from the Rust
+core — no binding change was needed for the read itself. `ReaderStats` gained
+three more getters + type stubs (`blocks_skipped_status_event`,
+`blocks_skipped_deprecated_type`, `blocks_skipped_reserved_type`), and
+`tests/test_basic.py` plus `tests/test_writer_message_event_audit.py` cover the
+corpus pair and the writer audit. **Suite total (measured 2026-07-29): 23
+passed, 1 skipped.** The binding still surfaces only a subset of `osf-core`'s
+counters — `blocks_skipped_unsupported` is the one that remains absent — see
+BACKLOG, *Reader counters are not reachable from every high-level API*.
 
 **Pending:** pandas `DataFrame` convenience (Session 7b).
 
@@ -744,7 +768,7 @@ byte-identical to Rust/Delphi). Signing (level `signed`) is out of scope.
   and a gzip-wrapped crc file). Byte-level cross-validation with Rust is
   transitive: the CRC primitive matches and the C++ reader reads the Rust
   reference files with zero failures. **345/345 ctest green** at that round
-  (**346/346** today — OSF-UP3 added one).
+  (**354/354** today — OSF-UP3 added one, OSF-UP4 eight).
 
 **Library targets:**
 
@@ -789,7 +813,7 @@ byte-identical to Rust/Delphi). Signing (level `signed`) is out of scope.
 | `include/osf/blockwriter.h` + `src/blockwriter.cpp` | **Phase 7c** analyst-style writer: accumulates a per-channel `ChannelData` variant in memory, emits the whole file at `writeToFile(path)` / `writeTo(ostream&)` (const). Same template surface as `StreamingWriter`; **does** auto-bump variable `sizeOfLengthValue` 2 → 4. `fromManager(DataManager const&)` + free `osf::writeToFile` / `osf::writeTo(DataManager, …)` for round-trip / copy |
 | `include/osf/stalevalueguard.h` + `src/stalevalueguard.cpp` | **Phase 7d** optional freshness layer over `StreamingWriter`. Write-through wrapper: forwards each timestamped write and caches the channel's last `(timestamp, value)`. `poll(now_ns)` re-emits the cached value of any channel idle `>= repeat_interval_ns` (default 100 s) stamped at `now_ns`, at most once per poll (no backfill, no internal clock/thread). Numeric (11 types) + `GpsLocation` only; string/binary excluded. Auto-tracks on first write-through; `isTracked` / `forget` / `clear`. |
 | `tests/CMakeLists.txt` | GoogleTest via `FetchContent`; pinned to v1.15.2 by tarball URL + SHA256; `gtest_force_shared_crt=ON` for /MD parity; `DOWNLOAD_EXTRACT_TIMESTAMP=FALSE` for CMP0135 NEW behaviour; `OSF_EXAMPLES_DIR` define for integration tests |
-| `tests/integration/test_header_examples.cpp` | Four integration tests against `examples/`: `motorbike.osf` and `steam_loco.osf` parse as Osf4; raw `weather_station.osfz` gzip bytes are not parseable as a plain magic header (the low-level parser deliberately does not decompress — OSFZ transparency lives in the DataManager layer); the 17 generated files in `examples/generated/` all parse with version per filename prefix |
+| `tests/integration/test_header_examples.cpp` | Four integration tests against `examples/`: `motorbike.osf` and `steam_loco.osf` parse as Osf4; raw `weather_station.osfz` gzip bytes are not parseable as a plain magic header (the low-level parser deliberately does not decompress — OSFZ transparency lives in the DataManager layer); the generated files directly under `examples/generated/` (19 since OSF-UP4 — the test iterates the directory rather than hard-coding a count) all parse with version per filename prefix |
 | `tests/integration/test_metablock_examples.cpp` | Three integration tests against the OSF5 reference files in `examples/generated/`: snapshot check on `osf5_equidistant.osf`; every `osf5_*.osf` parses with non-empty channels and valid `sizeOfLengthValue`; `osf5_gpslocation.osf` actually declares a `GpsLocation` channel |
 | `tests/integration/test_metablock_xml_examples.cpp` | Six integration tests against `examples/generated/osf4_*.osf` plus the two field samples: snapshot check on `osf4_equidistant.osf`; every `osf4_*.osf` parses with valid `sizeOfLengthValue`; `osf4_gpslocation.osf` declares a `GpsLocation` channel; `motorbike.osf` and `steam_loco.osf` metablocks parse end-to-end (encoding-tolerance + deprecated-field-tolerance paths); cross-parser symmetry probe (`osf4_equidistant.osf` via XML parser matches `osf5_equidistant.osf` via JSON parser on every channel field) |
 | `tests/integration/test_reader_examples.cpp` | Six BlockReader integration tests: every `.osf` under `examples/generated/` streams end-to-end producing at least one block; first-block snapshots on `osf5_scalar_int64.osf` (single-sample AbsTs Int64) and `osf4_equidistant.osf` (StartData with sample_rate > 0); `motorbike.osf` and `steam_loco.osf` field samples stream clean; reader-stats sanity (non-zero counters, at least one channel produces a time range) |
@@ -836,7 +860,8 @@ ctest --test-dir build
   runs ctest. FetchContent fetches googletest + zlib over HTTPS on
   the runners (no local-extract workaround needed there).
 - Local (MSVC, Visual Studio 18, with `OSF_BUILD_C_API=ON`): `ctest`
-  reports **346/346 passed** (measured 2026-07-28 — 345 before the OSF-UP3
+  reports **354/354 passed** (measured 2026-07-29 — 346 before the OSF-UP4
+  `bcMessageEvent` tests added on 2026-07-28; 345 before the OSF-UP3
   zero-length-block test added on 2026-07-28; 321 before the integrity-profile
   `crc` work added on 2026-07-09; 319 before the two DECISIONS-§13
   metadata-defaults tests added 2026-06-12) with 0 warnings under
@@ -955,6 +980,103 @@ writer hunt runs through a C/C++ integration.
 
 ---
 
+## `bcMessageEvent` is read-mandatory — OSF-UP4 (2026-07-28)
+
+Deployed device firmware writes OSF4 `string` channels as **`bcMessageEvent`
+(control byte 4)**. Every reference reader skipped it as deprecated, so those
+channels arrived **empty and silent** — no error, no warning, and in three of
+the five implementations no statistic either. The spec only ever said the type
+is no longer *produced* from OSF5 onwards, so emitting it in OSF4 is
+**conforming**: this was a specification gap plus a reader gap, not a firmware
+bug.
+
+The rule is now normative in `docs/{en,de}/osf_general.md` (block-type table
+rows 3 and 4, a dedicated `#### bcMessageEvent (deprecated, read-mandatory)`
+subsection, a row in the block-type restriction table, and a corrected
+`datatype` table) and recorded as
+[DECISIONS §26](DECISIONS.md#26-bcmessageevent-is-read-mandatory). The two
+version reference pages were pulled in line with it in the same wave:
+`docs/{en,de}/references/osf5.md` no longer says the type is simply "dropped"
+and `…/osf4.md` no longer says merely "no longer recommended", both now
+pointing at the normative subsection — an implementer building a reader from a
+reference page alone would otherwise have reproduced the very defect. Both the
+OSF-UP3 and the OSF-UP4 spec text carry `2026-07-28`, so the header table's
+*spec revision in effect* stays at **2026-07-28** and simply gains a second
+entry.
+
+**The deeper cause was in the table, not the readers.** Row 4's payload column
+omitted the `uint32` length prefix the bytes on disk actually carry — it
+described the payload as a bare `string`. A reader built strictly from that row
+decodes the wrong layout whether or not it also skips the block. Related trap,
+also now stated: the OSF4 trailing-`0x00` rule belongs to `bcAbsTimeStampData`
+only; `bcMessageEvent` is length-prefixed and never null-terminated, so reusing
+`bcAbsTimeStampData`'s *framing* silently truncates every value by one byte.
+
+**Readers.** All five decode control byte 4 as one time-stamped sample of the
+channel's declared `datatype`, into their **existing** time-stamped
+representation rather than a new block kind. `bcStatusEvent` (byte 3) keeps
+being skipped — its payload is a fixed `uint32` status word regardless of
+`datatype`, so attaching it as a sample would fabricate a value of the wrong
+type — but everywhere gained a counter of its own:
+
+| Implementation | Status-event reason / counter | Note |
+|---|---|---|
+| Rust | `SkipReason::StatusEventBlock`, `ReaderStats.blocks_skipped_status_event` | |
+| C++ | `SkipReason::Kind::StatusEventBlock`, `ReaderStats::blocksSkippedStatusEvent` | |
+| Java | `Block.SkipReason.STATUS_EVENT_BLOCK`, `ReaderStats.blocksSkippedStatusEvent()` | **also gained `blocksSkippedReservedType()` + `blocksSkippedDeprecatedType()`, which its `ReaderStats` never had at all** — before this round a skipped block left no trace in Java |
+| Python | `stats.blocks_skipped_status_event` | inherited from the Rust core, together with the deprecated- and reserved-type getters |
+| **Delphi** | `TOSFFile.BlocksStatusEventSkipped` | local `Blocks…Skipped` naming as with OSF-UP3 |
+
+Two shapes are deliberately **not** guessed and are skipped-and-counted
+instead: bit 7 (multi-value) set, whose layout is unspecified for this block
+type, and any `datatype` other than `string` / `binary`. `N = 0` is legal and
+decodes to an empty value — it is *not* the OSF-UP3 zero-length anomaly, where
+the block's own length field is `0` and no control byte is ever read.
+
+**Delphi additionally.** The codec unwraps the frame
+(`TOSFFile.DecodeMessageEventPayload`) and hands the block on with
+`BlockType = bcMessageEvent` and `RawPayload` holding the bare value bytes —
+the type tag is load-bearing in two dispatches and must not be relabelled. The
+manager dispatch feeds the sample to the channel, and the **meta cache was
+fixed to count it too**: it previously disagreed with the manager, so
+`osftool info` reported zero samples on a channel `osftool export` decoded five
+from. `osftool verify` now surfaces the new counter (`Status-event skips:` /
+`status_event_skipped_count`), deliberately as a reported line and not a
+warning.
+
+**Corpus + contract.** `examples/generated/osf4_message_event_string.osf` and
+`…_equivalent.osf` hold the same `string` channel content twice — once as
+`bcMessageEvent`, once as `bcAbsTimeStampData` — are reproducible via
+`cargo run --example gen_message_event_refs`, and are registered in
+`examples/reference_manifest.json`. All four manifest-driven conformance suites
+assert them, and the assertion was proven non-vacuous by sabotage.
+
+**Writer audit.** No writer in this repository can emit control byte 4, and the
+round trip re-emits the decoded samples as `bcAbsTimeStampData` with the data
+intact. The per-writer evidence table, what is cleared by test versus by
+construction, and the audit's own four coverage gaps live in
+[`examples/README.md`](examples/README.md#bcmessageevent-writer-audit--can-anything-here-emit-control-byte-4)
+— not repeated here.
+
+**Suite totals after the round**, each measured on the work machine 2026-07-29
+by this bookkeeping pass (not copied from the implementation tasks): Rust
+`cargo test` **189 passed / 2 ignored**; Java **265**; C++ ctest **354/354**;
+Delphi DUnitX **37**, green under dcc32 *and* dcc64; Python pytest **23 passed
+/ 1 skipped**.
+
+Follow-ups the round surfaced — the three-way split on invalid UTF-8 in a
+`string` payload (including a Delphi exception that escapes a best-effort API,
+and the cache-vs-manager disagreement it reopens for *load success* after this
+round fixed it for *counts*), the untested four-way split on a **truncated**
+`bcMessageEvent` frame, the shared string/binary builder that silently falls
+through to `Binary` in C++ and Java, Delphi's `BlocksUnknownTypeSkipped` naming
+plus its two uncounted deprecated block types, and the remaining evidence gaps
+— are recorded in `BACKLOG.md`. The UTF-8 one is the one to act on first: OSF-UP4 exists to
+rescue legacy-firmware string channels, and firmware emitting CP1252/Latin-1 is
+the plausible next field case.
+
+---
+
 ## CI / release pipeline (Session 8)
 
 GitHub Actions workflows live in `.github/workflows/`:
@@ -1049,11 +1171,13 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 - **DUnitX test suite** for the Delphi implementation — **started
   (2026-07-08).** `implementations/delphi/tests/OSFTests.dpr` (DUnitX console
-  runner, **29 tests**, dcc32 + dcc64 green) covers `OSF.CRC32C`, the header
-  tokenizer, the integrity read/write path, and the OSF-UP3 zero-length-block
-  skip. Structured for extension (one `Test.OSF.*` unit per area); the older OSF
-  library units (merger, exporters, cache, …) are not yet covered — incremental
-  follow-up.
+  runner, **37 tests**, dcc32 + dcc64 green) covers `OSF.CRC32C`, the header
+  tokenizer, the integrity read/write path, the OSF-UP3 zero-length-block skip,
+  and the OSF-UP4 `bcMessageEvent` decode. Structured for extension (one
+  `Test.OSF.*` unit per area); the older OSF library units (merger, exporters,
+  cache, …) are not yet covered — incremental follow-up. Note that the suite is
+  still filer-centric: no Delphi test drives `osftool convert` / `TOSFMerger`,
+  which is why the OSF-UP4 writer audit could clear Delphi only by reading.
 - **OSF-UP3 writer origin** — the reader side is closed across all five
   implementations and held by the manifest contract, and the seven writers in
   this repository are audited and cleared, so the producer of the zero-length
@@ -1068,8 +1192,28 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
   reader counters missing from the surfaces callers use — **no zero-length
   getter in the `osf-c` C ABI** (the surface smartCORE and the om kernel
   integrate through, so the one that matters for the hunt), none at all on
-  `TOSFDataManager`, and only a subset in the Python binding — and the N+1
-  warning mirroring in `osftool verify`.
+  `TOSFDataManager`, and only a subset in the Python binding (OSF-UP4 closed
+  most of that subset gap — only `blocks_skipped_unsupported` is still absent)
+  — and the N+1 warning mirroring in `osftool verify`.
+- **Follow-ups surfaced by OSF-UP4**, all in `BACKLOG.md`: **invalid UTF-8 in a
+  `string` payload splits the implementations three ways** (Rust/Python/Delphi
+  fail the whole load, C++ keeps raw bytes, Java substitutes `U+FFFD`) and
+  Delphi's failure escapes as an exception through an API documented as
+  best-effort, discarding every already-decoded channel *and* reopening the
+  cache-vs-manager disagreement this round closed for counts, now for load
+  success (`osftool channels` succeeds where `osftool export` throws) — the
+  highest-value entry, because OSF-UP4 exists to rescue legacy-firmware string
+  channels and CP1252/Latin-1 firmware is the plausible next field case; a
+  **truncated `bcMessageEvent` frame splitting four ways** (Rust and C++ hard
+  error, Java best-effort `truncationSeen()`, Delphi `boStop`) with no test in
+  any language and the policy written down only in a Java javadoc; the shared
+  string/binary builder falling through to `Binary` on an unknown datatype in
+  C++ and Java where Rust errors; Delphi's `BlocksUnknownTypeSkipped` naming
+  plus its two still-uncounted deprecated block types (`bcTrustedTimestamp`,
+  `bcTimebaseRealign`); Java's `ReaderStats` still having no `unsupported`
+  bucket; and the round's remaining evidence gaps (no executable round-trip
+  test for C++/Delphi, no `binary` corpus file for this block type, Rust
+  missing a synthetic `N = 0` case).
 - **Production PyPI release for `osfdata`** — the Python bindings are
   functional and CI already publishes to **TestPyPI** (`osfdata 0.1.0`); a
   production `pypi.org` release needs its own Trusted Publisher. Pandas
@@ -1088,7 +1232,7 @@ the sdist if needed. See DECISIONS.md §19 for the reasoning.
 
 ---
 
-## Next session priorities (as of 2026-07-28)
+## Next session priorities (as of 2026-07-29)
 
 **Integrity profile — stage `crc` (level b) is complete across all five
 active implementations** and locked down by the shared conformance contract.
@@ -1116,6 +1260,21 @@ firmware). That is a corpus hunt with `osftool verify`, not a coding task, and
 it waits on a field file plus its device and firmware version —
 [BACKLOG.md](BACKLOG.md) → *Zero-length data blocks — find the producing writer
 (OSF-UP3)* has the entry conditions and the two `--json` gotchas.
+
+**OSF-UP4 — `bcMessageEvent` is read-mandatory — is closed (2026-07-28).**
+Unlike OSF-UP3 there is no writer hunt behind it: the firmware that produces the
+encoding is *conforming* in OSF4, so the fix was ours to make and it is made.
+The rule is normative in `docs/{en,de}/osf_general.md` and in
+[DECISIONS §26](DECISIONS.md#26-bcmessageevent-is-read-mandatory); all five
+implementations decode control byte 4 into their existing time-stamped
+representation and count `bcStatusEvent` separately; the corpus pair is a
+manifest key all four conformance suites assert; and the writer audit
+(`examples/README.md`) shows nothing here can emit the byte. See
+*`bcMessageEvent` is read-mandatory — OSF-UP4* above. **The open remainder is
+the encoding question the round deliberately did not touch:** invalid UTF-8 in
+a `string` payload splits the implementations three ways, and legacy firmware
+emitting CP1252/Latin-1 is the plausible next field case — `BACKLOG.md` →
+*Invalid UTF-8 in a `string` payload splits the implementations three ways*.
 
 **Next: stage `signed` (level c).** Level `signed` adds an Ed25519 signature
 block (control byte 9) on the reserved `0xFFFE` channel over a hash chain of the

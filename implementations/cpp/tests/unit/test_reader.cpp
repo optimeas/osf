@@ -66,6 +66,10 @@ void putI16(std::vector<std::uint8_t>& dst, std::int16_t v) {
     putU16(dst, static_cast<std::uint16_t>(v));
 }
 
+void putI32(std::vector<std::uint8_t>& dst, std::int32_t v) {
+    putU32(dst, static_cast<std::uint32_t>(v));
+}
+
 void putI64(std::vector<std::uint8_t>& dst, std::int64_t v) {
     auto const u = static_cast<std::uint64_t>(v);
     for (int i = 0; i < 8; ++i) {
@@ -215,19 +219,160 @@ TEST(BlockReader, capture_skipped_payload_keeps_body_bytes) {
 // Deprecated / reserved control bytes
 // ---------------------------------------------------------------------
 
-TEST(BlockReader, deprecated_control_bytes_route_to_deprecated_skip_reason) {
+TEST(BlockReader, trusted_timestamp_control_byte_routes_to_deprecated_skip_reason) {
+    // Only bcTrustedTimestamp (1) still routes to DeprecatedBlockType.
+    // bcStatusEvent (3) and bcMessageEvent (4) each have their own
+    // handling, covered by dedicated tests below (OSF-UP4, DECISIONS §26).
     auto meta = makeMeta({makeChannel(0, osf::DataType::Int16, 2)});
-    for (std::uint8_t raw : {std::uint8_t{1}, std::uint8_t{3}, std::uint8_t{4}}) {
-        std::vector<std::uint8_t> bytes = {0, 0, 1, 0, raw};
-        ByteStream s(std::move(bytes));
-        osf::BlockReader r(s.get(), meta);
-        auto blkR = r.next();
-        ASSERT_TRUE(blkR && blkR->has_value());
-        auto const& sk = std::get<osf::Skipped>((*blkR)->kind);
-        EXPECT_EQ(sk.reason.kind, osf::SkipReason::Kind::DeprecatedBlockType)
-            << "raw byte " << int{raw};
-        EXPECT_EQ(sk.reason.rawByte, raw) << "raw byte " << int{raw};
-    }
+    std::vector<std::uint8_t> bytes = {0, 0, 1, 0, 1u};
+    ByteStream s(std::move(bytes));
+    osf::BlockReader r(s.get(), meta);
+    auto blkR = r.next();
+    ASSERT_TRUE(blkR && blkR->has_value());
+    auto const& sk = std::get<osf::Skipped>((*blkR)->kind);
+    EXPECT_EQ(sk.reason.kind, osf::SkipReason::Kind::DeprecatedBlockType);
+    EXPECT_EQ(sk.reason.rawByte, 1u);
+}
+
+TEST(BlockReader, status_event_control_byte_routes_to_its_own_skip_reason) {
+    // bcStatusEvent (control byte 3): payload is a fixed status word,
+    // never a value of the channel's declared datatype, so it must be
+    // skipped but counted separately from the generic deprecated
+    // bucket (OSF-UP4, DECISIONS §26).
+    auto meta = makeMeta({makeChannel(0, osf::DataType::Int16, 2)});
+    std::vector<std::uint8_t> bytes = {0, 0, 1, 0, 3u};
+    ByteStream s(std::move(bytes));
+    osf::BlockReader r(s.get(), meta);
+    auto blkR = r.next();
+    ASSERT_TRUE(blkR && blkR->has_value());
+    auto const& sk = std::get<osf::Skipped>((*blkR)->kind);
+    EXPECT_EQ(sk.reason.kind, osf::SkipReason::Kind::StatusEventBlock);
+    EXPECT_EQ(sk.reason.rawByte, 3u);
+    EXPECT_EQ(r.stats().blocksSkippedStatusEvent, 1u);
+    EXPECT_EQ(r.stats().blocksSkippedDeprecatedType, 0u);
+    // blocksTotal is a recomputed sum in BlockReader::stats(); this pins
+    // that blocksSkippedStatusEvent is actually a term in it. Deleting
+    // the term from that sum must fail this assertion.
+    EXPECT_EQ(r.stats().blocksTotal, 1u);
+}
+
+// ---------------------------------------------------------------------
+// bcMessageEvent (control byte 4) — OSF-UP4, DECISIONS §26.
+// ---------------------------------------------------------------------
+
+TEST(BlockReader, message_event_bit7_set_is_skipped_as_reserved) {
+    // Bit 7 (multi-sample) on bcMessageEvent is unspecified — never
+    // observed in the field. A reader that finds it set must treat the
+    // block as unknown: skip via the length field, count, continue
+    // (OSF-UP4, DECISIONS §26).
+    auto meta = makeMetaV4({makeChannel(0, osf::DataType::String, 2)});
+    // control byte 0x84 = MessageEvent (4) | multi-sample bit (0x80).
+    // Body: whatever bytes follow are irrelevant since the block is
+    // skipped via the length field without being parsed.
+    std::vector<std::uint8_t> bytes = {0, 0, 6, 0, 0x84u};
+    bytes.insert(bytes.end(), {0xAA, 0xBB, 0xCC, 0xDD, 0xEE});
+    ByteStream s(std::move(bytes));
+    osf::BlockReader r(s.get(), meta);
+    auto blkR = r.next();
+    ASSERT_TRUE(blkR && blkR->has_value());
+    auto const& sk = std::get<osf::Skipped>((*blkR)->kind);
+    EXPECT_EQ(sk.reason.kind, osf::SkipReason::Kind::ReservedBlockType);
+    EXPECT_EQ(sk.reason.rawByte, 0x04u);
+    EXPECT_EQ(r.stats().blocksRead, 0u);
+    EXPECT_EQ(r.stats().blocksTotal, 1u);
+    // The scan must reach a clean EOF afterwards.
+    EXPECT_FALSE(r.next().has_value());
+}
+
+TEST(BlockReader, message_event_binary_datatype_decodes_without_terminator_strip) {
+    // datatype=binary is supported over bcMessageEvent; the frame
+    // layout (timestamp, length, payload) is type-agnostic. The
+    // payload here deliberately ends with 0x00 — if a reader wrongly
+    // reused bcAbsTimeStampData's OSF4 terminator strip, the last byte
+    // would be dropped. All four bytes must survive because the
+    // length prefix, not a terminator convention, governs (OSF-UP4,
+    // DECISIONS §26).
+    auto meta = makeMetaV4({makeChannel(0, osf::DataType::Binary, 2)});
+    std::vector<std::uint8_t> const payload = {0xFF, 0xD8, 0xFF, 0x00};
+    // control(1) + ts(8) + N(4) + payload(4) = 17
+    std::vector<std::uint8_t> bytes = {0, 0, 17, 0, 0x04u};
+    putI64(bytes, 123);
+    putU32(bytes, static_cast<std::uint32_t>(payload.size()));
+    bytes.insert(bytes.end(), payload.begin(), payload.end());
+    ByteStream s(std::move(bytes));
+    osf::BlockReader r(s.get(), meta);
+    auto blkR = r.next();
+    ASSERT_TRUE(blkR && blkR->has_value());
+    auto const& ad = std::get<osf::AbsTimestampData>((*blkR)->kind);
+    auto const& v = std::get<std::vector<std::pair<std::int64_t,
+                                                   std::vector<std::uint8_t>>>>(
+        ad.samples);
+    ASSERT_EQ(v.size(), 1u);
+    EXPECT_EQ(v[0].first, 123);
+    EXPECT_EQ(v[0].second, payload);
+    EXPECT_EQ(r.stats().blocksRead, 1u);
+}
+
+TEST(BlockReader, message_event_n_zero_decodes_to_empty_value) {
+    // N = 0 is legal for bcMessageEvent and decodes to an empty value —
+    // not an error, and NOT the zero-length-block anomaly (§25): the
+    // block's own length field reflects the true frame size
+    // (1 + 8 + 4 + 0), only the payload itself is empty (OSF-UP4,
+    // DECISIONS §26).
+    auto meta = makeMetaV4({makeChannel(0, osf::DataType::String, 2)});
+    // control(1) + ts(8) + N(4) + payload(0) = 13
+    std::vector<std::uint8_t> bytes = {0, 0, 13, 0, 0x04u};
+    putI64(bytes, 7);
+    putU32(bytes, 0);
+    ByteStream s(std::move(bytes));
+    osf::BlockReader r(s.get(), meta);
+    auto blkR = r.next();
+    ASSERT_TRUE(blkR && blkR->has_value());
+    auto const& ad = std::get<osf::AbsTimestampData>((*blkR)->kind);
+    auto const& v =
+        std::get<std::vector<std::pair<std::int64_t, std::string>>>(ad.samples);
+    ASSERT_EQ(v.size(), 1u);
+    EXPECT_EQ(v[0].first, 7);
+    EXPECT_EQ(v[0].second, "");
+    EXPECT_EQ(r.stats().blocksRead, 1u);
+    EXPECT_EQ(r.stats().blocksSkippedZeroLength, 0u);
+}
+
+TEST(BlockReader, message_event_unsupported_datatype_is_skipped_not_an_error) {
+    // Only string/binary are defined over bcMessageEvent. A channel of
+    // any other datatype must be skipped and counted, never raised as
+    // an error — raising would make an otherwise-readable file
+    // unopenable, reintroducing the class of defect the
+    // zero-length-block rule (§25) closed (OSF-UP4, DECISIONS §26).
+    auto meta = makeMetaV4({makeChannel(0, osf::DataType::Int32, 2),
+                             makeChannel(1, osf::DataType::Int32, 2)});
+    std::vector<std::uint8_t> bytes = {0, 0, 13, 0, 0x04u};
+    putI64(bytes, 1);
+    putU32(bytes, 0);
+    // A second, well-formed block on a different channel must still be
+    // reachable afterwards. length = 1 ctrl + 8 ts + 4 value = 13.
+    bytes.insert(bytes.end(), {1, 0, 13, 0, 0x08});
+    putI64(bytes, 2);
+    putI32(bytes, 42);
+
+    ByteStream s(std::move(bytes));
+    osf::BlockReader r(s.get(), meta);
+
+    auto firstR = r.next();
+    ASSERT_TRUE(firstR && firstR->has_value());
+    EXPECT_EQ((*firstR)->channelIndex, 0u);
+    auto const& sk = std::get<osf::Skipped>((*firstR)->kind);
+    EXPECT_EQ(sk.reason.kind, osf::SkipReason::Kind::ReservedBlockType);
+    EXPECT_EQ(sk.reason.rawByte, 0x04u);
+
+    auto secondR = r.next();
+    ASSERT_TRUE(secondR && secondR->has_value());
+    EXPECT_EQ((*secondR)->channelIndex, 1u);
+    EXPECT_TRUE(std::holds_alternative<osf::AbsTimestampData>((*secondR)->kind))
+        << "scan must continue to the next block";
+
+    EXPECT_EQ(r.stats().blocksRead, 1u);
+    EXPECT_EQ(r.stats().blocksSkippedReservedType, 1u);
 }
 
 TEST(BlockReader, unknown_high_control_byte_routes_to_reserved_skip_reason) {

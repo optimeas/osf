@@ -1,12 +1,18 @@
 # Claude Code Session State
 
-Last updated: 2026-07-28 (**OSF-UP3 — zero-length data blocks**: a normative
-spec rule + DECISIONS §25, a dedicated skip reason and counter in all five
-implementations, the **Delphi reader fixed** (it used to abort the whole file),
-a malformed corpus file behind a new optional `anomalies` manifest field, and
-`osftool verify` reporting the count. Spec revision in effect is now
-**2026-07-28**. Suite totals: Rust 178/2 ignored, Java 244, C++ ctest 346,
-Delphi DUnitX 29, Python 19/1 skipped. Earlier July work already on `main`: the
+Last updated: 2026-07-29 (**OSF-UP4 — `bcMessageEvent` is read-mandatory**: a
+normative spec rule + DECISIONS §26, control byte 4 decoded in all five
+implementations instead of skipped, a dedicated `bcStatusEvent` counter
+everywhere, the **Delphi meta cache and `osftool verify` fixed**, and a corpus
+pair under the shared manifest contract. Spec revision in effect stays
+**2026-07-28** — the OSF-UP4 spec text carries that date too. Suite totals
+measured 2026-07-29: Rust 189/2 ignored, Java 265, C++ ctest 354, Delphi DUnitX
+37, Python 23/1 skipped. The round before it, **OSF-UP3 — zero-length data
+blocks**: a normative spec rule + DECISIONS §25, a dedicated skip reason and
+counter in all five implementations, the **Delphi reader fixed** (it used to
+abort the whole file), a malformed corpus file behind a new optional `anomalies`
+manifest field, and `osftool verify` reporting the count. Earlier July work
+already on `main`: the
 documentation currency pass (2026-07-10), the OSF5 **integrity profile level
 `crc`** across all five implementations, the `channeltype`-as-data-shape fix,
 the shared `reference_manifest.json` conformance retrofit, and a Docusaurus docs
@@ -37,12 +43,81 @@ A brief may also be repo-wide. The current repo-wide line is the **OSF5
 integrity profile** (DECISIONS §24): level `crc` has shipped across all five
 implementations (Rust/Python/C++/Java/Delphi) with a shared
 `reference_manifest.json` conformance contract; level `signed` (Ed25519) is the
-next step. The most recent repo-wide brief, **OSF-UP3** (zero-length data
-blocks, DECISIONS §25), is closed on the reader side — only the hunt for the
-producing writer remains, and that lives outside this repository. Java is
+next step. Two repo-wide upstream briefs have since landed: **OSF-UP3**
+(zero-length data blocks, DECISIONS §25), closed on the reader side — only the
+hunt for the producing writer remains, and that lives outside this repository —
+and **OSF-UP4** (`bcMessageEvent` read-mandatory, DECISIONS §26), closed
+outright, since the firmware that produces the encoding is *conforming*. Java is
 complete (§21); only a native **C** implementation remains unstarted.
 
 ## Recent sessions (since 2026-05-22)
+
+### OSF-UP4 — `bcMessageEvent` (2026-07-28)
+
+**The defect.** Deployed device firmware writes OSF4 `string` channels as
+`bcMessageEvent` (control byte 4). All five reference readers skipped it as
+deprecated, so those channels arrived **empty and silent** — no error, no
+warning, and no statistic in three of the five (Rust and C++ counted a generic
+deprecated-skip; Java's `ReaderStats` had no skip counters at all; Delphi
+dropped the block through a dispatch default arm). In the field files this was
+found in, that is fourteen channels of device metadata per file — exactly what
+one opens such a file for. It was **our** gap, not the firmware's: the spec said
+only that the type is no longer *produced* from OSF5 onwards, so emitting it in
+OSF4 is conforming. The deeper cause sat in the spec table itself — row 4's
+payload column had omitted the `uint32` length prefix the bytes actually carry,
+so a reader built strictly from that row decodes the wrong layout even if it
+does not skip the block.
+
+**What changed.** Delivered on branch `worktree-osf-up4-bcmessageevent`
+(15 implementation commits + this bookkeeping pass). The rule is normative in
+`docs/{en,de}/osf_general.md` (block-type table rows 3 + 4, a dedicated
+`bcMessageEvent (deprecated, read-mandatory)` subsection, a row in the
+block-type restriction table, a corrected `datatype` table) and recorded as
+**DECISIONS §26**; both it and OSF-UP3 carry `2026-07-28`, so the *spec revision
+in effect* does not move. The version reference pages
+(`docs/{en,de}/references/osf{4,5}.md`) were pulled in line too — they still
+said "dropped" / "no longer recommended", so an implementer building a reader
+from one of them alone would have reproduced the defect; they now cross-link
+the normative subsection via the shared anchor `{#bcmessageevent}` (explicit
+id, because the DE heading text differs and Docusaurus matches anchors, not
+headings). All five implementations decode the block as one
+time-stamped sample of the channel's declared `datatype` into their **existing**
+time-stamped representation — no new block kind. Bit 7 and any `datatype`
+outside `string` / `binary` are skipped-and-counted, never guessed; `N = 0` is a
+legal empty value and is *not* the OSF-UP3 anomaly. `bcStatusEvent` (byte 3)
+stays skipped but gained a counter everywhere. Delphi additionally: the codec
+unwraps the frame (`DecodeMessageEventPayload`, keeping `BlockType =
+bcMessageEvent` — the tag is load-bearing in two dispatches, do not relabel it),
+the manager feeds the sample to the channel, the **meta cache was fixed** (it
+disagreed with the manager, so `osftool info` reported zero where `export`
+decoded five), and `osftool verify` surfaces the new counter. The corpus pair
+`examples/generated/osf4_message_event_string{,_equivalent}.osf` is a manifest
+key all four conformance suites assert, proven non-vacuous by sabotage. The
+writer audit (evidence in `examples/README.md`) shows nothing here can emit
+byte 4 and that the round trip re-emits `bcAbsTimeStampData` with data intact.
+
+**What is left.** No writer hunt — unlike OSF-UP3, the producing firmware is
+conforming. The open items are in `BACKLOG.md`, and the first one matters:
+**invalid UTF-8 in a `string` payload splits the implementations three ways**
+(Rust/Python/Delphi fail the whole load, C++ keeps raw bytes, Java substitutes
+`U+FFFD`), with Delphi's `EEncodingError` escaping `TOSFDataManager.LoadFromStream`
+— an API documented as best-effort — and discarding every already-decoded
+channel. That last one also reopens the cache-vs-manager split this round
+closed for counts, now for *load success*: `osftool channels` succeeds on such
+a file while `osftool export` throws. OSF-UP4 exists to rescue legacy-firmware
+string channels, so CP1252 / Latin-1 firmware is the plausible next field case.
+Also parked: a **truncated `bcMessageEvent` frame splits four ways** (Rust and
+C++ hard error, Java best-effort `truncationSeen()`, Delphi `boStop`) with no
+test anywhere and the policy recorded only in a Java javadoc; the shared
+string/binary builder falling through to `Binary` in C++/Java where Rust errors;
+Delphi's misleading `BlocksUnknownTypeSkipped` name and its two uncounted
+deprecated block types; Java's still-missing `unsupported` bucket; and the
+evidence gaps (no executable round-trip test for C++/Delphi, no `binary` corpus
+file for this block type, Rust missing a synthetic `N = 0` case). Suite totals
+measured this round: Rust 189 passed / 2 ignored, Java **265** (`mvn -f
+implementations/java/pom.xml -pl :osf-java test` — group-qualified selector),
+C++ ctest **354/354**, Delphi DUnitX **37** under dcc32 *and* dcc64, Python
+pytest 23 passed / 1 skipped.
 
 ### OSF-UP3 — zero-length data blocks (2026-07-28)
 

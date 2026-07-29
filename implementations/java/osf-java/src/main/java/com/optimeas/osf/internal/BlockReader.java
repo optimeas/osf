@@ -45,8 +45,8 @@ import java.util.zip.CRC32C;
  *   <tr><td>0</td><td>bcReserved</td><td>skip (reserved)</td></tr>
  *   <tr><td>1</td><td>bcTrustedTimestamp</td><td>skip (deprecated)</td></tr>
  *   <tr><td>2</td><td>bcTimebaseRealign</td><td>skip (reserved)</td></tr>
- *   <tr><td>3</td><td>bcStatusEvent</td><td>skip (deprecated)</td></tr>
- *   <tr><td>4</td><td>bcMessageEvent</td><td>skip (deprecated)</td></tr>
+ *   <tr><td>3</td><td>bcStatusEvent</td><td>skip (status event, counted on its own)</td></tr>
+ *   <tr><td>4</td><td>bcMessageEvent</td><td>decode (string/binary, bit 7 clear) — else skip (reserved)</td></tr>
  *   <tr><td>5</td><td>bcContinuedData</td><td>decode (numeric)</td></tr>
  *   <tr><td>6</td><td>bcStartData</td><td>decode (numeric + ts + rate)</td></tr>
  *   <tr><td>7</td><td>bcContinuedRelStampData</td><td>decode (OSF4-era)</td></tr>
@@ -59,6 +59,23 @@ import java.util.zip.CRC32C;
  * When bit 7 is set, the payload begins with a {@code uint32} sample count N.
  * For {@code string}/{@code binary} {@code bcAbsTimeStampData} both forms are
  * accepted on input (writers emit the bit-7-clear compact form).
+ *
+ * <h2>bcMessageEvent (control byte 4) — read-mandatory (OSF-UP4, DECISIONS §26)</h2>
+ * Deployed OSF4 firmware writes {@code string} channels as {@code
+ * bcMessageEvent}; treating it as merely deprecated silently loses that
+ * channel's content. Its body is {@code [i64 timestamp][u32 N][N bytes]} — a
+ * length-prefixed frame carrying no trailing {@code 0x00}, unlike {@code
+ * bcAbsTimeStampData}'s terminator-based framing. A block on a {@code
+ * STRING}/{@code BINARY} channel with bit 7 clear decodes into the existing
+ * {@link Block.AbsTimestampData} representation (the spec itself describes
+ * {@code bcMessageEvent} as fully replaceable by {@code bcAbsTimeStampData}
+ * with the same datatype, so no separate block kind is introduced). Two
+ * shapes are unspecified and are skipped-and-counted rather than treated as
+ * an error (failing would make an otherwise-readable file unopenable): bit 7
+ * set, and any {@code dataType} other than {@code STRING}/{@code BINARY}.
+ * {@code N = 0} is legal and decodes to an empty value — distinct from the
+ * zero-length-block anomaly (OSF-UP3), where the block's own length field is
+ * {@code 0} and no control byte is ever read.
  *
  * <h2>Best-effort truncation</h2>
  * A short/garbled trailing block stops the read: the reader returns everything
@@ -245,7 +262,22 @@ public final class BlockReader {
                 // Step 7: decode control byte and route.
                 Block block = decodeBlock(channelIndex, def, version, payload, length, integrityActive);
                 out.add(block);
-                if (!(block instanceof Block.Skipped)) {
+                if (block instanceof Block.Skipped sk) {
+                    // Every skip reason decodeBlock can produce (status
+                    // event, reserved, deprecated) must bump its own
+                    // ReaderStats counter — §26 requires an occurrence to
+                    // stay visible, and ReaderStats is the ONLY surface a
+                    // consumer can observe it on: ChannelAssembler discards
+                    // Block.Skipped, and com.optimeas.osf.internal is not
+                    // exported from the JPMS module (OSF-UP4, DECISIONS
+                    // §26).
+                    switch (sk.reason()) {
+                        case STATUS_EVENT_BLOCK -> stats.incBlocksSkippedStatusEvent();
+                        case RESERVED_BLOCK_TYPE -> stats.incBlocksSkippedReservedType();
+                        case DEPRECATED_BLOCK_TYPE -> stats.incBlocksSkippedDeprecatedType();
+                        default -> { /* other reasons are counted at their own skip site */ }
+                    }
+                } else {
                     stats.incBlocksRead();
                 }
             } catch (BufferUnderflowException | IndexOutOfBoundsException
@@ -344,10 +376,31 @@ public final class BlockReader {
                 return new Block.Skipped(channelIndex,
                         Block.SkipReason.RESERVED_BLOCK_TYPE, length);
             case 1:  // bcTrustedTimestamp
-            case 3:  // bcStatusEvent
-            case 4:  // bcMessageEvent
                 return new Block.Skipped(channelIndex,
                         Block.SkipReason.DEPRECATED_BLOCK_TYPE, length);
+            case 3:  // bcStatusEvent
+                // Its payload is a fixed status word, never a value of the
+                // channel's declared datatype, so it can never become a
+                // sample. Counted under its own reason so an occurrence
+                // stays visible rather than folding into the generic
+                // deprecated-skip bucket (OSF-UP4, DECISIONS §26).
+                return new Block.Skipped(channelIndex,
+                        Block.SkipReason.STATUS_EVENT_BLOCK, length);
+            case 4: {  // bcMessageEvent
+                // Read-mandatory (OSF-UP4, DECISIONS §26): deployed OSF4
+                // firmware writes `string` channels this way, and every
+                // reader that treated it as deprecated silently lost that
+                // channel's content. Two cases remain unspecified and are
+                // skipped (never a hard error — failing would make an
+                // otherwise readable file unopenable): bit 7 (multi-sample)
+                // set, and a channel dataType other than string/binary.
+                DataType mdt = def.dataType();
+                if (multi || !messageEventDatatypeSupported(mdt)) {
+                    return new Block.Skipped(channelIndex,
+                            Block.SkipReason.RESERVED_BLOCK_TYPE, length);
+                }
+                return parseMessageEvent(channelIndex, mdt, body);
+            }
             case 5:  // bcContinuedData
                 return checkNumericConsumed(
                         parseContinuedData(channelIndex, def.dataType(), multi, body),
@@ -544,6 +597,106 @@ public final class BlockReader {
         }
         return new Block.AbsTimestampData(channelIndex, ts,
                 new Block.BinaryValues(payloads));
+    }
+
+    // --- bcMessageEvent (control byte 4) — OSF-UP4, DECISIONS §26 ---
+
+    /**
+     * Whether {@code bcMessageEvent} is defined for this channel's declared
+     * {@code dataType}: {@code STRING} or {@code BINARY} only.
+     *
+     * <p>The Rust and C++ references carry an additional, explicitly
+     * defensive {@code ByteArray} branch in their equivalent check, because
+     * their {@code DataType} enums have a distinct {@code ByteArray}
+     * constant (for symmetry with their {@code parseAbsTimestampData}
+     * equivalent check). Both references say that branch is unreachable in
+     * their own builds: both metablock parsers already normalise the
+     * {@code "bytearray"} wire alias to {@code Binary} before a channel
+     * definition exists, so the branch exists only for symmetry, not
+     * because a {@code ByteArray}-typed channel can actually reach it.
+     *
+     * <p>Java has no equivalent branch to carry, and for a simpler reason
+     * than a normalisation-timing difference: there is no separate
+     * {@code DataType} constant for the pre-alias spelling in the first
+     * place. This port's {@link DataType#fromWireName} resolves the
+     * {@code "bytearray"} wire alias straight to {@link DataType#BINARY},
+     * so {@code BINARY} is the only value that can ever reach this method
+     * for either on-wire spelling — there is nothing left to defend
+     * against.
+     */
+    private static boolean messageEventDatatypeSupported(DataType dt) {
+        return dt == DataType.STRING || dt == DataType.BINARY;
+    }
+
+    /**
+     * Parse a {@code bcMessageEvent} body into a single time-stamped sample:
+     * {@code [i64 timestamp][u32 N][N bytes]}.
+     *
+     * <p>The payload is <b>length-prefixed and carries no trailing {@code
+     * 0x00}</b>. The OSF4 null-terminator rule ({@link
+     * #stripOsf4Terminator}) applies to {@code bcAbsTimeStampData} only;
+     * calling it here would silently drop the last byte of every value
+     * (OSF-UP4, DECISIONS §26).
+     *
+     * <p><b>Backstop, not just a dispatch-level guard.</b> This method
+     * itself rejects any {@code dt} outside {@code STRING}/{@code BINARY}
+     * rather than trusting the caller ({@link #decodeBlock}'s {@code case
+     * 4}, via {@link #messageEventDatatypeSupported}) to have already
+     * filtered it. That matters here because {@link #buildStringOrBinary}
+     * has <em>no error arm</em> for a non-{@code STRING} type — everything
+     * else silently falls through to the binary encoding. (This is the same
+     * shape as the C++ reference's {@code buildStringOrBinary}, which needed
+     * the identical backstop after review; it differs from the Rust
+     * reference's builder, which is an exhaustive match with its own error
+     * arm and so does not need one — see the class/method history for the
+     * comparison this port made before choosing which shape to copy.)
+     * Without this guard, a forgotten check at some future call site would
+     * silently fabricate a wrongly-typed sample instead of failing loudly —
+     * exactly what §26 forbids for {@code bcStatusEvent}.
+     *
+     * <p>String-payload validity handling follows this reader's existing
+     * {@code bcAbsTimeStampData} policy — {@link #buildStringOrBinary}
+     * decodes with {@link StandardCharsets#UTF_8}, which replaces invalid
+     * sequences rather than throwing; no third behaviour is invented here.
+     *
+     * <p>Tolerant of trailing surplus bytes: only a short read (fewer than
+     * {@code N} bytes available) is an error. A frame carrying <em>more</em>
+     * bytes than {@code N} declares has the excess silently left unread
+     * rather than rejected — deliberate, matching this reader's general
+     * best-effort stance (mirrors {@code checkNumericConsumed} being skipped
+     * for string/binary {@code bcAbsTimeStampData} at the {@code case 8} call
+     * site above).
+     *
+     * <p><b>Short-frame behaviour is untested and language-specific — do not
+     * copy it across ports.</b> When {@code N} exceeds the bytes actually
+     * available, this method throws {@link OsfException.MalformedFile}, which
+     * {@link #readAll} catches and turns into {@link ReaderStats#markTruncated()}
+     * plus a best-effort stop, per this reader's own existing truncation
+     * policy (the same policy every other short-read path in this class
+     * follows — see the class doc's "Best-effort truncation" section). This
+     * is a deliberate continuation of Java's own convention, not a decision
+     * specific to {@code bcMessageEvent}. It differs materially from the
+     * Rust reference, which propagates a hard {@code Err} for the same
+     * condition rather than stopping best-effort; neither behaviour is
+     * pinned by a test in any of the three implementations that have this
+     * path today. A Python or Delphi port should follow its own existing
+     * truncation policy here too, not either of these two by default.
+     */
+    private static Block parseMessageEvent(int channelIndex, DataType dt, ByteBuffer body) {
+        if (!messageEventDatatypeSupported(dt)) {
+            throw new OsfException.MalformedFile(
+                    "bcMessageEvent is defined for string and binary channels only");
+        }
+        long ts = body.getLong();
+        long n = Integer.toUnsignedLong(body.getInt());
+        if (n > body.remaining()) {
+            throw new OsfException.MalformedFile(
+                    "MessageEvent payload truncated: " + n + " bytes declared, "
+                    + body.remaining() + " available");
+        }
+        byte[] payload = new byte[(int) n];
+        body.get(payload);
+        return buildStringOrBinary(channelIndex, dt, new long[]{ts}, new byte[][]{payload});
     }
 
     /**

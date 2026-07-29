@@ -15,12 +15,21 @@
 ///
 /// - **Unsupported channels** (forward-compat skips) usually mean the
 ///   file uses a future-spec datatype this build does not yet handle.
-/// - **Deprecated block types** (`bcTrustedTimestamp`,
-///   `bcStatusEvent`, `bcMessageEvent`) appear in older field files
-///   and tell you the file predates spec rev 2026-05-04.
+/// - **Deprecated block types** (`bcTrustedTimestamp`) appear in older
+///   field files and tell you the file predates spec rev 2026-05-04.
+///   `bcStatusEvent` has its own counter (see below); `bcMessageEvent`
+///   is decoded rather than skipped in its specified cases (OSF-UP4,
+///   DECISIONS §26).
+/// - **Status-event blocks** (`bcStatusEvent`, control byte 3) are
+///   counted on their own, separate from the generic deprecated-skip
+///   bucket: its payload is a fixed status word, never a value of the
+///   channel's declared `dataType` (OSF-UP4, DECISIONS §26).
 /// - **Reserved block types** (`bcReserved`, `bcTimebaseRealign`,
-///   anything with bits 0–6 ≥ 9) are either spec-internal or
-///   genuinely unknown.
+///   anything with bits 0–6 ≥ 9, or one of `bcMessageEvent`'s two
+///   unspecified shapes — bit 7 set, or a `dataType` other than
+///   `String`/`Binary`/`ByteArray`) are either spec-internal, genuinely
+///   unknown, or an unspecified `bcMessageEvent` shape (OSF-UP4,
+///   DECISIONS §26).
 /// - **Zero-length blocks** (a length field that reads `0`) are always
 ///   a non-conforming writer artefact (OSF-UP3) — a conforming block
 ///   always carries at least its control byte. Kept separate from
@@ -123,10 +132,24 @@ struct ReaderStats {
     /// `Unsupported`.
     std::uint64_t blocksSkippedUnsupported = 0;
     /// Blocks skipped because the control byte identified a
-    /// deprecated block type.
+    /// deprecated block type (`bcTrustedTimestamp`). `bcStatusEvent`
+    /// has its own counter (`blocksSkippedStatusEvent`);
+    /// `bcMessageEvent` is decoded rather than skipped in its
+    /// specified cases (OSF-UP4, DECISIONS §26).
     std::uint64_t blocksSkippedDeprecatedType = 0;
+    /// Blocks skipped because the control byte was `bcStatusEvent`
+    /// (control byte 3). Counted separately from
+    /// `blocksSkippedDeprecatedType` so an occurrence stays visible
+    /// in the field (OSF-UP4, DECISIONS §26): its payload is a fixed
+    /// status word rather than a value of the channel's declared
+    /// `dataType`, so it can never become a sample.
+    std::uint64_t blocksSkippedStatusEvent = 0;
     /// Blocks skipped because the control byte identified a reserved
-    /// block type.
+    /// block type (`bcReserved`, `bcTimebaseRealign`, or any value
+    /// the spec does not currently define), or because a
+    /// `bcMessageEvent` block hit one of its two unspecified shapes:
+    /// the multi-sample bit set, or a channel `dataType` other than
+    /// `String`/`Binary`/`ByteArray` (OSF-UP4, DECISIONS §26).
     std::uint64_t blocksSkippedReservedType = 0;
     /// Blocks skipped because their length field read `0` — a non-conforming
     /// writer artefact (OSF-UP3). A conforming block always carries at least

@@ -52,13 +52,23 @@ type
   // bcContinuedData         - N contiguous encoded data values
   // bcAbsTimeStampData      - N × [int64 timestamp, encoded value] interleaved
   // bcContinuedRelStampData - N × [uint32 delta_ns, encoded value] interleaved (OSF4 only)
+  // bcMessageEvent          - the bare value bytes of one sample, already
+  //                           unwrapped from the on-disk
+  //                           [int64 timestamp][uint32 N][N bytes] frame;
+  //                           the timestamp is in StartTimestampNs and
+  //                           SampleCount is always 1 (OSF-UP4, see below)
   // info block ($FFFF)      - raw UTF-8 XML or JSON (IsInfoBlock = True)
   TOSFDataBlock = record
     ChannelIndex: Word;
     BlockType: TBlockContent;
     MultiValue: Boolean; // bit 7 of the control byte
     SampleCount: UInt32; // 1 when not MultiValue
-    StartTimestampNs: Int64; // bcStartData only; 0 for all other types
+    // bcStartData: absolute start time of the block's first sample.
+    // bcMessageEvent: absolute timestamp of the block's single sample,
+    // unwrapped from the length-prefixed frame by the codec so consumers
+    // never have to parse that framing themselves (OSF-UP4).
+    // 0 for every other block type.
+    StartTimestampNs: Int64;
     SampleRate: Double; // bcStartData only; 0.0 for all other types
     RawPayload: TBytes;
     IsInfoBlock: Boolean; // True when ChannelIndex = $FFFF
@@ -114,6 +124,7 @@ type
     FBlocksUnknownTypeSkipped: UInt32;
     FBlocksSignatureSkipped: UInt32;
     FBlocksZeroLengthSkipped: UInt32;
+    FBlocksStatusEventSkipped: UInt32;
 
     // Magic header line + meta block dispatcher.
     procedure ReadMagicAndMeta;
@@ -144,7 +155,16 @@ type
     function ReadInfoBlock(var Block: TOSFDataBlock): TOSFBlockOutcome;
     function ReadSignatureBlock: TOSFBlockOutcome;
     function ReadDataBlock(ChannelIndex: Word; var Block: TOSFDataBlock): TOSFBlockOutcome;
-    function DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): TOSFBlockOutcome;
+    // FrameOffset is the stream position of the block's own frame (captured
+    // in ReadDataBlock, right after the channel index), so a log line names
+    // where the block starts rather than where it ended — the same offset
+    // SOSFLogZeroLengthBlockSkip reports.
+    function DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; FrameOffset: Int64; var Block: TOSFDataBlock): TOSFBlockOutcome;
+    // OSF-UP4: unwraps a bcMessageEvent (control byte 4) frame
+    // [int64 timestamp][uint32 N][N bytes] into one time-stamped sample.
+    // Deliberately NOT routed through the bcAbsTimeStampData path — see the
+    // implementation for why sharing that framing would corrupt every value.
+    function DecodeMessageEventPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; FrameOffset: Int64; var Block: TOSFDataBlock): TOSFBlockOutcome;
     // Integrity level crc: verify the trailing 4-byte frame CRC over the
     // whole frame (channel index, length field, control byte, payload).
     function VerifyFrameCRC(ChannelIndex: Word; LFS: TOSFLengthFieldSize;
@@ -287,15 +307,27 @@ type
     property IntegrityProfile: TOSFIntegrityProfile read FIntegrity write FIntegrity;
     // ed25519 keyid from the header token (level signed); empty otherwise.
     property Ed25519KeyId: string read FEd25519KeyId;
-    // Read-side counters: blocks dropped by a failed frame CRC, unknown
-    // block types skipped (forward-compat), signature blocks skipped, and
-    // zero-length blocks skipped (a non-conforming writer artefact — the
-    // frame is only the channel index and the length field, so it is
-    // consumed and skipped rather than treated as a truncation).
+    // Read-side counters: blocks dropped by a failed frame CRC, unknown or
+    // otherwise uninterpretable block shapes skipped (forward-compat),
+    // signature blocks skipped, zero-length blocks skipped (a non-conforming
+    // writer artefact — the frame is only the channel index and the length
+    // field, so it is consumed and skipped rather than treated as a
+    // truncation), and deprecated bcStatusEvent blocks skipped.
     property BlocksCRCFailed: UInt32 read FBlocksCRCFailed;
+    // Counts control bytes above bcAbsTimeStampData (reserved for future
+    // revisions) and, since OSF-UP4, the two bcMessageEvent shapes the
+    // specification leaves unspecified: bit 7 set, and a channel datatype
+    // other than string/binary. Both are skipped via the length field and
+    // counted here so an occurrence in the field stays visible.
     property BlocksUnknownTypeSkipped: UInt32 read FBlocksUnknownTypeSkipped;
     property BlocksSignatureSkipped: UInt32 read FBlocksSignatureSkipped;
     property BlocksZeroLengthSkipped: UInt32 read FBlocksZeroLengthSkipped;
+    // OSF-UP4 / DECISIONS §26: bcStatusEvent (control byte 3) carries a fixed
+    // status word rather than a value of the channel's datatype, so it can
+    // never become a sample and is skipped. It gets a counter of its own —
+    // separate from the generic bucket above — so an occurrence in the field
+    // is visible rather than silent.
+    property BlocksStatusEventSkipped: UInt32 read FBlocksStatusEventSkipped;
     // Verification status vocabulary (osf5_integrity.md §1.6):
     // 'none' | 'crc_valid' | 'invalid' | 'signature_unverifiable'.
     function VerificationStatus: string;
@@ -367,6 +399,15 @@ resourcestring
   // Framing anomalies - independent of the integrity level and of the OSF
   // version, so deliberately not filed under the integrity sub-block below.
   SOSFLogZeroLengthBlockSkip = 'Zero-length data block on channel %d at offset %d - skipping';
+  // Deprecated event block types (OSF-UP4 / DECISIONS §26). bcStatusEvent is
+  // never a sample; the two bcMessageEvent messages below cover the shapes the
+  // specification leaves unspecified and which must therefore be skipped and
+  // counted rather than guessed at.
+  SOSFLogStatusEventSkip = 'Deprecated bcStatusEvent block on channel %d at offset %d - skipping (its payload is a status word, never a channel sample)';
+  SOSFLogMessageEventMultiValue = 'bcMessageEvent block on channel %d at offset %d has the multi-value bit set - that layout is unspecified, skipping';
+  SOSFLogMessageEventDataType = 'bcMessageEvent block on channel %d at offset %d declares datatype "%s" - only string and binary are defined for this block type, skipping';
+  SOSFLogMessageEventShortFrame = 'bcMessageEvent block on channel %d at offset %d is shorter than its 13-byte frame header - stopping';
+  SOSFLogMessageEventShortPayload = 'bcMessageEvent block on channel %d at offset %d declares a %d-byte payload but the frame holds only %d bytes - stopping';
   SOSFLogUnknownLengthFieldSize = 'Data block for channel %d declares an unrecognised length-field width - stopping';
   SOSFLogWritingHeader = 'Writing header: version=%s  channels=%d';
   SOSFLogWriteEquidistant = 'WriteEquidistant: channel=%d  samples=%d';
@@ -1063,6 +1104,7 @@ begin
   FBlocksUnknownTypeSkipped := 0;
   FBlocksSignatureSkipped := 0;
   FBlocksZeroLengthSkipped := 0;
+  FBlocksStatusEventSkipped := 0;
 
   Line := ReadAsciiLine(FStream);
   if Length(Line) = 0 then
@@ -1521,7 +1563,7 @@ begin
     LenField := LenField - 4;
   end;
 
-  Result := DecodeBlockPayload(Channel, Payload, LenField, Block);
+  Result := DecodeBlockPayload(Channel, Payload, LenField, Offset, Block);
 end;
 
 function TOSFFile.VerifyFrameCRC(ChannelIndex: Word; LFS: TOSFLengthFieldSize;
@@ -1555,7 +1597,7 @@ begin
   Result := Crc.Final = Stored;
 end;
 
-function TOSFFile.DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; var Block: TOSFDataBlock): TOSFBlockOutcome;
+function TOSFFile.DecodeBlockPayload(Channel: TOSFChannelDef; const Payload: TBytes; LenField: UInt32; FrameOffset: Int64; var Block: TOSFDataBlock): TOSFBlockOutcome;
 var
   CtrlByte: Byte;
   TypeBits: Byte;
@@ -1588,6 +1630,36 @@ begin
   end;
   Block.BlockType := TBlockContent(TypeBits);
   Block.MultiValue := OSFBlockHasMultipleValues(CtrlByte);
+
+  // OSF-UP4 / DECISIONS §26 — the two deprecated event block types.
+  //
+  // bcStatusEvent (3): its payload is a fixed uint32 status word regardless of
+  // the channel's datatype, so attaching it as a sample would fabricate a value
+  // of the wrong type. It stays skipped, but under a counter of its own so an
+  // occurrence in the field is visible instead of silent.
+  if Block.BlockType = bcStatusEvent then
+  begin
+    // llInfo, not llWarning: skipping this block is normal, conforming
+    // operation, so it must not colour the file's verdict. osftool's verify
+    // mirrors every filer warning into its warning list, which would report
+    // WARNING for a perfectly conforming OSF4 file that merely carries legacy
+    // status events. Same reasoning, and the same level, as
+    // SOSFLogSignatureBlockSkipped above. Visibility comes from the dedicated
+    // counter instead. The bcMessageEvent messages below stay at llWarning:
+    // those shapes really are anomalies.
+    Logger.Write(SOSFLogStatusEventSkip, [Block.ChannelIndex, FrameOffset], llInfo, 'TOSFFile');
+    Inc(FBlocksStatusEventSkipped);
+    Exit(boSkip);
+  end;
+
+  // bcMessageEvent (4): read-mandatory in every format version - deployed
+  // device firmware still writes OSF4 string channels this way. Its frame is
+  // length-prefixed, which is why it is decoded by its own helper and never
+  // falls through to the generic body below: that body hands the caller a
+  // payload the bcAbsTimeStampData path then reads with the OSF4
+  // trailing-0x00 rule, which does not apply here.
+  if Block.BlockType = bcMessageEvent then
+    Exit(DecodeMessageEventPayload(Channel, Payload, LenField, FrameOffset, Block));
 
   // Pre-validate the encoded prefix length so the body needs no further checks.
   // bcStartData carries 8 bytes (int64 timestamp) + 8 bytes (double SampleRate).
@@ -1628,6 +1700,99 @@ begin
   end;
 
   Channel.SampleCount := Channel.SampleCount + Block.SampleCount;
+  Result := boBlock;
+end;
+
+// OSF-UP4 / DECISIONS §26 — bcMessageEvent (control byte 4).
+//
+// Frame (the control byte is Payload[0] and has already been consumed by the
+// caller):  [int64 timestamp][uint32 N][N bytes of payload]
+//
+// THE FRAMING IS NOT SHARED WITH bcAbsTimeStampData. Only the string/binary
+// *value* interpretation is. OSF4's rule that a variable-length payload
+// carries a trailing 0x00 (which readers strip unconditionally) governs
+// bcAbsTimeStampData alone; a bcMessageEvent payload is length-prefixed and
+// ends exactly after N bytes. Routing this block through the
+// bcAbsTimeStampData path would therefore silently drop the last byte of
+// every value - and most values would still decode to *something*, so
+// nothing would fail loudly. That is why this decode lives in its own
+// function that never touches the abs-timestamp layout, and why the block is
+// delivered with BlockType = bcMessageEvent rather than re-labelled as
+// bcAbsTimeStampData: the type is what keeps the consumer (see
+// TOSFDataManager.DispatchBlock) off the stripping path.
+//
+// The decoded sample is surfaced ready to use - timestamp in
+// Block.StartTimestampNs, bare value bytes in Block.RawPayload - so no
+// consumer has to re-derive a wire layout whose uint32 length prefix the
+// specification itself only documented as of OSF-UP4.
+//
+// Two shapes are left unspecified by the specification and are skipped and
+// counted here, never guessed at and never raised: bit 7 (multi-value) set,
+// and a channel datatype other than string/binary. Failing the file instead
+// would reintroduce, in a new place, the defect class the zero-length-block
+// rule closed. Surplus bytes after the N payload bytes are tolerated; only
+// "too few" is an error.
+function TOSFFile.DecodeMessageEventPayload(Channel: TOSFChannelDef;
+  const Payload: TBytes; LenField: UInt32; FrameOffset: Int64;
+  var Block: TOSFDataBlock): TOSFBlockOutcome;
+const
+  // control byte (1) + int64 timestamp (8) + uint32 payload length (4)
+  MESSAGE_EVENT_HEADER_LEN = 13;
+var
+  DeclaredLen: UInt32;
+  Available: Int64;
+begin
+  // Unspecified shape 1: bit 7 set. No multi-sample layout is defined for this
+  // block type and none has ever been observed, so the block is treated like
+  // any other unrecognised shape - skipped via the length field (already
+  // consumed by the caller), counted, and the scan continues.
+  if Block.MultiValue then
+  begin
+    Logger.Write(SOSFLogMessageEventMultiValue, [Block.ChannelIndex, FrameOffset], llWarning, 'TOSFFile');
+    Inc(FBlocksUnknownTypeSkipped);
+    Exit(boSkip);
+  end;
+
+  // Unspecified shape 2: only string and binary are defined over this block
+  // type. Any other datatype is skipped and counted, never an error.
+  if not OSFDataTypeIsVariableLength(Channel.DataType) then
+  begin
+    Logger.Write(SOSFLogMessageEventDataType,
+      [Block.ChannelIndex, FrameOffset, OSFDataTypeToString(Channel.DataType)],
+      llWarning, 'TOSFFile');
+    Inc(FBlocksUnknownTypeSkipped);
+    Exit(boSkip);
+  end;
+
+  // A frame too short to hold its own header is malformed, not unspecified:
+  // the same best-effort stop the generic body applies to a short prefix.
+  if LenField < MESSAGE_EVENT_HEADER_LEN then
+  begin
+    Logger.Write(SOSFLogMessageEventShortFrame, [Block.ChannelIndex, FrameOffset], llWarning, 'TOSFFile');
+    Exit(boStop);
+  end;
+
+  Move(Payload[1], Block.StartTimestampNs, 8);
+  Move(Payload[9], DeclaredLen, 4);
+
+  Available := Int64(LenField) - MESSAGE_EVENT_HEADER_LEN;
+  if Int64(DeclaredLen) > Available then
+  begin
+    Logger.Write(SOSFLogMessageEventShortPayload,
+      [Block.ChannelIndex, FrameOffset, DeclaredLen, Available], llWarning, 'TOSFFile');
+    Exit(boStop);
+  end;
+
+  // N = 0 is legal and decodes to an empty value - explicitly not the
+  // zero-length-block anomaly, where the block's own length field is 0 and no
+  // control byte is ever read. The payload ends after exactly N bytes; there
+  // is no terminator to strip and none present.
+  SetLength(Block.RawPayload, DeclaredLen);
+  if DeclaredLen > 0 then
+    Move(Payload[MESSAGE_EVENT_HEADER_LEN], Block.RawPayload[0], DeclaredLen);
+
+  Block.SampleCount := 1;
+  Channel.SampleCount := Channel.SampleCount + 1;
   Result := boBlock;
 end;
 

@@ -25,8 +25,12 @@
 //!   keeps working.
 //! - **Skipped payload capture is opt-in.** Default behaviour drops
 //!   the bytes without allocation; specialists who need to look at
-//!   deprecated `bcMessageEvent` blocks or unknown future types call
+//!   still-skipped types such as `bcStatusEvent` or
+//!   `bcTrustedTimestamp`, or at unknown future types, call
 //!   [`BlockReader::with_capture_skipped_payload`] to keep them.
+//!   `bcMessageEvent` is decoded rather than skipped for
+//!   `string`/`binary` channels (OSF-UP4, DECISIONS §26), so it no
+//!   longer needs this opt-in.
 //!
 //! A future zero-copy `RawBlockReader` could exist as a second layer
 //! on top of the same on-disk parsing logic if profiling demands it;
@@ -199,6 +203,7 @@ impl<R: Read> BlockReader<R> {
         s.blocks_total = s.blocks_read
             + s.blocks_skipped_unsupported
             + s.blocks_skipped_deprecated_type
+            + s.blocks_skipped_status_event
             + s.blocks_skipped_reserved_type
             + s.blocks_skipped_zero_length
             + s.blocks_crc_failed
@@ -578,15 +583,64 @@ impl<R: Read> Iterator for BlockReader<R> {
                     payload: payload_field,
                 }
             }
-            ControlKind::TrustedTimestamp
-            | ControlKind::StatusEvent
-            | ControlKind::MessageEvent => {
+            ControlKind::TrustedTimestamp => {
                 let reason = SkipReason::DeprecatedBlockType(control_byte & 0x7F);
                 self.record_skip(channel_index, length, &reason);
                 BlockKind::Skipped {
                     reason,
                     bytes_skipped,
                     payload: payload_field,
+                }
+            }
+            ControlKind::StatusEvent => {
+                // bcStatusEvent (control byte 3): its payload is a fixed
+                // status word, never a value of the channel's declared
+                // datatype, so it can never become a sample. Counted under
+                // its own reason so an occurrence stays visible rather than
+                // folding into the generic deprecated-skip bucket
+                // (OSF-UP4, DECISIONS §26).
+                let reason = SkipReason::StatusEventBlock;
+                self.record_skip(channel_index, length, &reason);
+                BlockKind::Skipped {
+                    reason,
+                    bytes_skipped,
+                    payload: payload_field,
+                }
+            }
+            ControlKind::MessageEvent => {
+                // bcMessageEvent (control byte 4) is read-mandatory
+                // (OSF-UP4, DECISIONS §26): deployed OSF4 firmware writes
+                // `string` channels this way, and every reader that
+                // treated it as deprecated silently lost that channel's
+                // content. Two cases remain unspecified and are skipped
+                // (never a hard error — failing would make an otherwise
+                // readable file unopenable): bit 7 (multi-sample) set, and
+                // a channel datatype other than string/binary.
+                if control.multi_sample || !message_event_datatype_supported(&info.data_type) {
+                    let reason = SkipReason::ReservedBlockType(control_byte & 0x7F);
+                    self.record_skip(channel_index, length, &reason);
+                    BlockKind::Skipped {
+                        reason,
+                        bytes_skipped,
+                        payload: payload_field,
+                    }
+                } else {
+                    match parse_message_event(body, &info.data_type) {
+                        Ok(samples) => {
+                            let chan_stats =
+                                self.stats.per_channel.entry(channel_index).or_default();
+                            chan_stats.blocks_read += 1;
+                            chan_stats.bytes_payload += u64::from(length);
+                            chan_stats.samples_total += samples.len() as u64;
+                            if let Some((first, last)) = abs_timestamp_range(&samples) {
+                                chan_stats.observe_timestamp(first);
+                                chan_stats.observe_timestamp(last);
+                            }
+                            self.stats.blocks_read += 1;
+                            BlockKind::AbsTimestampData { samples }
+                        }
+                        Err(e) => return Some(Err(e)),
+                    }
                 }
             }
             ControlKind::Unknown(raw) => {
@@ -753,6 +807,9 @@ impl<R: Read> BlockReader<R> {
             }
             SkipReason::DeprecatedBlockType(_) => {
                 self.stats.blocks_skipped_deprecated_type += 1;
+            }
+            SkipReason::StatusEventBlock => {
+                self.stats.blocks_skipped_status_event += 1;
             }
             SkipReason::ReservedBlockType(_) => {
                 self.stats.blocks_skipped_reserved_type += 1;
@@ -959,7 +1016,7 @@ fn parse_abs_timestamp_string_or_binary(
             .read_u32::<LittleEndian>()
             .map_err(|e| invalid_block(format!("AbsTs string/binary N: {e}")))?;
         if raw == 0 {
-            return build_string_or_binary(dt, Vec::new());
+            return build_string_or_binary("bcAbsTimeStampData", dt, Vec::new());
         }
         (raw as usize, cur)
     } else {
@@ -976,7 +1033,7 @@ fn parse_abs_timestamp_string_or_binary(
             .read_i64::<LittleEndian>()
             .map_err(|e| invalid_block(format!("AbsTs string/binary ts: {e}")))?;
         let payload = strip_osf4_terminator(cur, osf_version);
-        return build_string_or_binary(dt, vec![(ts, payload.to_vec())]);
+        return build_string_or_binary("bcAbsTimeStampData", dt, vec![(ts, payload.to_vec())]);
     }
 
     // N > 1: equal-length segments.
@@ -991,7 +1048,7 @@ fn parse_abs_timestamp_string_or_binary(
             .read_i64::<LittleEndian>()
             .map_err(|e| invalid_block(format!("AbsTs string/binary ts: {e}")))?;
         let payload = strip_osf4_terminator(cur, osf_version);
-        return build_string_or_binary(dt, vec![(ts, payload.to_vec())]);
+        return build_string_or_binary("bcAbsTimeStampData", dt, vec![(ts, payload.to_vec())]);
     }
 
     let per_sample = total / n;
@@ -1022,10 +1079,84 @@ fn parse_abs_timestamp_string_or_binary(
         let payload = strip_osf4_terminator(chunk_cur, osf_version);
         samples.push((ts, payload.to_vec()));
     }
-    build_string_or_binary(dt, samples)
+    build_string_or_binary("bcAbsTimeStampData", dt, samples)
 }
 
+/// Parse a `bcMessageEvent` (control byte 4) body into a single time-stamped
+/// sample: `[i64 timestamp][u32 N][N bytes]`.
+///
+/// The payload is **length-prefixed and carries no trailing `0x00`**. The OSF4
+/// null-terminator rule applies to `bcAbsTimeStampData` only, so
+/// `strip_osf4_terminator` must NOT be called here — doing so silently drops the
+/// last byte of every value (OSF-UP4, DECISIONS §26).
+///
+/// `dt` is passed straight to [`build_string_or_binary`] rather than being
+/// pre-normalised to `String`/`Binary` here. The caller
+/// ([`message_event_datatype_supported`]) is expected to have already
+/// restricted `dt` to `String`/`Binary`/`ByteArray`, but if that guard is
+/// ever missed (e.g. a porter adding a new call site, or a future refactor),
+/// `build_string_or_binary`'s `other => Err(...)` arm turns the mistake into
+/// a loud error instead of silently fabricating a wrongly-typed `Binary`
+/// sample — exactly the failure mode §26 forbids for `bcStatusEvent`.
+///
+/// Payload-validity handling for `string` follows this crate's existing
+/// `bcAbsTimeStampData` policy: invalid UTF-8 is a hard error that aborts
+/// the whole file (see [`build_string_or_binary`]), not a per-sample
+/// skip or a lossy replacement. Byte-oriented implementations (C++, Delphi)
+/// do not enforce UTF-8 and will decode a CP1252/Latin-1 payload that this
+/// crate refuses — a genuine cross-implementation divergence, tracked as a
+/// follow-up rather than changed here since it affects `bcAbsTimeStampData`
+/// equally. A port must match its own language's existing
+/// `bcAbsTimeStampData` UTF-8 policy for this path too, never invent a
+/// third behaviour just for `bcMessageEvent`.
+///
+/// Tolerant of trailing surplus bytes: only `cur.len() < n` (too few bytes)
+/// is an error. A frame carrying *more* bytes than `N` declares has the
+/// excess silently discarded rather than rejected — deliberate, matching
+/// this reader's general best-effort stance, but worth stating explicitly
+/// since conforming files never do this and a port might otherwise guess
+/// either "reject" or "ignore".
+fn parse_message_event(body: &[u8], dt: &DataType) -> Result<TimestampedPayload, OsfError> {
+    let mut cur = body;
+    let ts = cur
+        .read_i64::<LittleEndian>()
+        .map_err(|e| invalid_block(format!("MessageEvent ts: {e}")))?;
+    let n = cur
+        .read_u32::<LittleEndian>()
+        .map_err(|e| invalid_block(format!("MessageEvent length prefix: {e}")))? as usize;
+    if cur.len() < n {
+        return Err(invalid_block(format!(
+            "MessageEvent payload truncated: {n} bytes declared, {} available",
+            cur.len()
+        )));
+    }
+    let payload = &cur[..n];
+    build_string_or_binary("bcMessageEvent", dt, vec![(ts, payload.to_vec())])
+}
+
+/// Whether `bcMessageEvent` is defined for this channel's declared datatype.
+///
+/// `ByteArray` is included for symmetry with
+/// [`parse_abs_timestamp_data`]'s equivalent check, but the reader normalises
+/// `bytearray` to `Binary` in the metablock parser, so this branch is
+/// theoretically unreachable in this crate — defensive only. A port whose
+/// metablock parser does not normalise `bytearray` the same way needs this
+/// branch to be load-bearing, not defensive.
+fn message_event_datatype_supported(dt: &DataType) -> bool {
+    matches!(dt, DataType::String | DataType::Binary | DataType::ByteArray)
+}
+
+/// Shared `string`/`binary` sample builder for the two block types that
+/// carry variable-length values.
+///
+/// `block_type` names the block the samples came from and is used only in
+/// diagnostics. It is a parameter rather than a hard-coded literal because
+/// this helper is shared: since OSF-UP4 it is reached from
+/// [`parse_message_event`] as well as from `bcAbsTimeStampData`, and a fixed
+/// `"AbsTs"` in the message would point a field user at the wrong block type
+/// when a legacy `bcMessageEvent` payload fails to decode.
 fn build_string_or_binary(
+    block_type: &str,
     dt: &DataType,
     samples: Vec<(i64, Vec<u8>)>,
 ) -> Result<TimestampedPayload, OsfError> {
@@ -1034,7 +1165,7 @@ fn build_string_or_binary(
             let mut decoded = Vec::with_capacity(samples.len());
             for (ts, bytes) in samples {
                 let s = String::from_utf8(bytes).map_err(|e| {
-                    invalid_block(format!("AbsTs string is not valid UTF-8: {e}"))
+                    invalid_block(format!("{block_type} string is not valid UTF-8: {e}"))
                 })?;
                 decoded.push((ts, s));
             }
@@ -1042,7 +1173,8 @@ fn build_string_or_binary(
         }
         DataType::Binary | DataType::ByteArray => Ok(TimestampedPayload::Binary(samples)),
         other => Err(invalid_block(format!(
-            "build_string_or_binary called with non-string/binary datatype {other:?}"
+            "build_string_or_binary called with non-string/binary datatype \
+             {other:?} for {block_type}"
         ))),
     }
 }
@@ -1480,23 +1612,141 @@ mod tests {
     }
 
     #[test]
-    fn deprecated_control_bytes_route_to_deprecated_skip_reason() {
+    fn trusted_timestamp_control_byte_routes_to_deprecated_skip_reason() {
+        // Only bcTrustedTimestamp (1) still routes to DeprecatedBlockType.
+        // bcStatusEvent (3) and bcMessageEvent (4) each have their own
+        // handling, covered by dedicated tests below (OSF-UP4, DECISIONS
+        // §26).
         let meta = make_meta(vec![channel(0, DataType::Int16, 2)]);
-        for raw in [1u8, 3, 4] {
-            let bytes = vec![0u8, 0, 1, 0, raw];
-            let mut r = BlockReader::new(Cursor::new(bytes), &meta);
-            let blk = r.next().unwrap().unwrap();
-            match blk.kind {
-                BlockKind::Skipped { reason, .. } => {
-                    assert_eq!(
-                        reason,
-                        SkipReason::DeprecatedBlockType(raw),
-                        "deprecated byte {raw}"
-                    );
-                }
-                other => panic!("expected Skipped, got {other:?}"),
+        let bytes = vec![0u8, 0, 1, 0, 1u8];
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::Skipped { reason, .. } => {
+                assert_eq!(reason, SkipReason::DeprecatedBlockType(1));
             }
+            other => panic!("expected Skipped, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn status_event_control_byte_routes_to_its_own_skip_reason() {
+        // bcStatusEvent (control byte 3): payload is a fixed status word,
+        // never a value of the channel's declared datatype, so it must be
+        // skipped but counted separately from the generic deprecated
+        // bucket (OSF-UP4, DECISIONS §26).
+        let meta = make_meta(vec![channel(0, DataType::Int16, 2)]);
+        let bytes = vec![0u8, 0, 1, 0, 3u8];
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::Skipped { reason, .. } => {
+                assert_eq!(reason, SkipReason::StatusEventBlock);
+            }
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+        assert_eq!(r.stats().blocks_skipped_status_event, 1);
+        assert_eq!(r.stats().blocks_skipped_deprecated_type, 0);
+        // blocks_total is a recomputed sum in BlockReader::stats(); this
+        // pins that blocks_skipped_status_event is actually a term in it.
+        // Deleting the term from that sum must fail this assertion.
+        assert_eq!(r.stats().blocks_total, 1);
+    }
+
+    #[test]
+    fn message_event_bit7_set_is_skipped_as_reserved() {
+        // Bit 7 (multi-sample) on bcMessageEvent is unspecified — never
+        // observed in the field. A reader that finds it set must treat
+        // the block as unknown: skip via the length field, count, continue
+        // (OSF-UP4, DECISIONS §26).
+        let meta = make_meta_v4(vec![channel(0, DataType::String, 2)]);
+        // control byte 0x84 = MessageEvent (4) | multi-sample bit (0x80).
+        // Body: whatever bytes follow are irrelevant since the block is
+        // skipped via the length field without being parsed.
+        let mut bytes = vec![0u8, 0, 6, 0, 0x84u8];
+        bytes.extend_from_slice(&[0xAA, 0xBB, 0xCC, 0xDD, 0xEE]);
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::Skipped { reason, .. } => {
+                assert_eq!(reason, SkipReason::ReservedBlockType(0x04));
+            }
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+        assert_eq!(r.stats().blocks_read, 0);
+        assert_eq!(r.stats().blocks_total, 1);
+        // The scan must reach a clean EOF afterwards.
+        assert!(r.next().is_none());
+    }
+
+    #[test]
+    fn message_event_binary_datatype_decodes_without_terminator_strip() {
+        // datatype=binary is supported over bcMessageEvent; the frame
+        // layout (timestamp, length, payload) is type-agnostic. The
+        // payload here deliberately ends with 0x00 — if a reader wrongly
+        // reused bcAbsTimeStampData's OSF4 terminator strip, the last byte
+        // would be dropped. All four bytes must survive because the
+        // length prefix, not a terminator convention, governs
+        // (OSF-UP4, DECISIONS §26).
+        let meta = make_meta_v4(vec![channel(0, DataType::Binary, 2)]);
+        let payload = [0xFFu8, 0xD8, 0xFF, 0x00];
+        // control(1) + ts(8) + N(4) + payload(4) = 17
+        let mut bytes = vec![0u8, 0, 17, 0, 0x04u8];
+        bytes.extend_from_slice(&123i64.to_le_bytes());
+        bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&payload);
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let blk = r.next().unwrap().unwrap();
+        match blk.kind {
+            BlockKind::AbsTimestampData {
+                samples: TimestampedPayload::Binary(v),
+            } => {
+                assert_eq!(v, vec![(123, payload.to_vec())]);
+            }
+            other => panic!("expected AbsTimestampData/Binary, got {other:?}"),
+        }
+        assert_eq!(r.stats().blocks_read, 1);
+    }
+
+    #[test]
+    fn message_event_unsupported_datatype_is_skipped_not_an_error() {
+        // Only string/binary are defined over bcMessageEvent. A channel of
+        // any other datatype must be skipped and counted, never raised as
+        // an error — raising would make an otherwise-readable file
+        // unopenable, reintroducing the class of defect the
+        // zero-length-block rule (§25) closed (OSF-UP4, DECISIONS §26).
+        let meta = make_meta_v4(vec![
+            channel(0, DataType::Int32, 2),
+            channel(1, DataType::Int32, 2),
+        ]);
+        let mut bytes = vec![0u8, 0, 13, 0, 0x04u8];
+        bytes.extend_from_slice(&1i64.to_le_bytes());
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        // A second, well-formed block on a different channel must still
+        // be reachable afterwards. length = 1 ctrl + 8 ts + 4 value = 13.
+        bytes.extend_from_slice(&[1, 0, 13, 0, 0x08]);
+        bytes.extend_from_slice(&2i64.to_le_bytes());
+        bytes.extend_from_slice(&42i32.to_le_bytes());
+
+        let mut r = BlockReader::new(Cursor::new(bytes), &meta);
+        let first = r.next().unwrap().unwrap();
+        assert_eq!(first.channel_index, 0);
+        match first.kind {
+            BlockKind::Skipped { reason, .. } => {
+                assert_eq!(reason, SkipReason::ReservedBlockType(0x04));
+            }
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+
+        let second = r.next().unwrap().unwrap();
+        assert_eq!(second.channel_index, 1);
+        assert!(
+            matches!(second.kind, BlockKind::AbsTimestampData { .. }),
+            "scan must continue to the next block"
+        );
+
+        assert_eq!(r.stats().blocks_read, 1);
+        assert_eq!(r.stats().blocks_skipped_reserved_type, 1);
     }
 
     #[test]

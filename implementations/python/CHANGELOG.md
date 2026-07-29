@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`bcMessageEvent` (control byte 4) channels are now read (OSF-UP4).**
+  Deployed device firmware writes OSF4 `string` channels with this block type,
+  which the format permits; the reader treated it as deprecated and dropped it,
+  so those channels loaded empty with no error and no warning. They now decode
+  into ordinary time-stamped `str` / `bytes` samples. Inherited from the
+  `osf-core` reader — no API change was needed for the read itself. **This can
+  change what a program sees:** a channel that used to come back empty now comes
+  back populated.
+- **Three more `ReaderStats` counters** — `blocks_skipped_status_event`
+  (`bcStatusEvent`, control byte 3: still skipped, since its payload is a fixed
+  status word rather than a channel sample, but now counted separately),
+  `blocks_skipped_deprecated_type` and `blocks_skipped_reserved_type`. Type
+  stubs updated. `blocks_skipped_unsupported` remains the only `osf-core`
+  counter the binding does not surface.
 - **`ReaderStats.blocks_skipped_zero_length`** — the number of data blocks
   skipped because their length field read `0`, a non-conforming writer artefact
   (OSF-UP3). A conforming block always carries at least its control byte; the

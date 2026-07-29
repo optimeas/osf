@@ -93,7 +93,7 @@ OSF5 übernimmt die Blockstruktur aus OSF4, reduziert aber die Anzahl der genutz
 ### Änderungen gegenüber OSF4:
 
 - `bcContinuedRelStampData` wird nicht mehr verwendet.  
-- `bcStatusEvent` und `bcMessageEvent` entfallen.  
+- `bcStatusEvent` und `bcMessageEvent` werden nicht mehr erzeugt. Nicht mehr erzeugt zu werden heißt nicht, nicht mehr gelesen zu werden: `bcContinuedRelStampData` und `bcMessageEvent` müssen Leser weiterhin **in jeder Version** unterstützen, weil Dateien mit diesen Blöcken im Feld existieren — siehe [`osf_general.md`](../osf_general.md#bcmessageevent).  
 - Bit 7 für Einzel-/Mehrwert bleibt unverändert.  
 
 ### Unterstützte Blocktypen in OSF5:
@@ -188,7 +188,7 @@ In OSF5 haben wir beide Elemente bewusst entfernt.
 - **JSON** als Hauptformat, XML nur für Abwärtskompatibilität.  
 - **Vereinfachtes Steuerbyte** mit weniger Blocktypen.  
 - Keine Trailer oder Info-Datenblöcke am Dateiende.  
-- `bcContinuedRelStampData`, `bcStatusEvent`, `bcMessageEvent` werden nicht mehr erzeugt.
+- `bcContinuedRelStampData`, `bcStatusEvent`, `bcMessageEvent` werden nicht mehr erzeugt — `bcContinuedRelStampData` und `bcMessageEvent` müssen aber weiterhin gelesen werden (siehe [`osf_general.md`](../osf_general.md#bcmessageevent)).
 
 
 

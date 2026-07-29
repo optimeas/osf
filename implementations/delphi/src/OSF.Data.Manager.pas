@@ -638,6 +638,24 @@ begin
 
     bcContinuedRelStampData:
       DecodeRelTimestampedBlock(Channel, Block);
+
+    bcMessageEvent:
+      // OSF-UP4 / DECISIONS §26. Deployed device firmware writes OSF4 string
+      // channels as bcMessageEvent, so these blocks carry real channel
+      // content and must land as samples; before OSF-UP4 they fell into the
+      // else-arm below and the channel arrived empty, silently.
+      //
+      // The filer has already unwrapped the length-prefixed frame, so the
+      // block is exactly one sample: its absolute timestamp in
+      // StartTimestampNs and the bare value bytes in RawPayload.
+      //
+      // Deliberately NOT routed through DecodeAbsTimestampedBlock. That
+      // function applies OSF4's trailing-0x00 strip, a rule that governs
+      // bcAbsTimeStampData framing only — a bcMessageEvent payload is
+      // length-prefixed and carries no terminator, so reusing that path would
+      // silently drop the last byte of every value. Feeding the channel
+      // directly here is what keeps the strip unreachable from this branch.
+      Channel.AddRawSample(Block.StartTimestampNs, Block.RawPayload);
   else
     // Reserved / deprecated block types are skipped - the filer already
     // consumed their bytes via the length field.
