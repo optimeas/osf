@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-29
+
 ### Added
 
 - **`bcMessageEvent` (control byte 4) channels are now read (OSF-UP4).**
@@ -78,6 +80,7 @@ Initial release on TestPyPI.
 - This is a pre-release on TestPyPI for stabilization. Production PyPI release
   follows after sufficient field testing.
 
-[Unreleased]: https://github.com/optimeas/osf/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/optimeas/osf/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/optimeas/osf/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/optimeas/osf/releases/tag/v1.0.0
 [0.1.0]: https://github.com/optimeas/osf/releases/tag/v0.1.0
