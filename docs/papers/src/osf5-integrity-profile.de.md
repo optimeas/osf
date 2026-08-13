@@ -4,11 +4,17 @@ title: "Integrität und Signierung in Streaming-Messdatenformaten"
 subtitle: "Der OSF5-Ansatz: Korruptionserkennung, kryptografische Herkunftsnachweise und PKI-gestützte Drittprüfbarkeit für zeitbezogene Messdaten"
 authors: "optiMEAS GmbH, Friedrichsdorf · optiMEAS Switzerland GmbH, Oberstammheim"
 corresponding: "Burkhard Schranz"
-version: "1.0"
-date: "Juni 2026"
+version: "1.1"
+date: "August 2026"
 license: "CC BY 4.0 (Creative Commons Attribution 4.0 International)"
 doi: "10.5281/zenodo.21227941"
 ---
+
+> **Änderungen gegenüber Version 1.0 (Juni 2026):** Die Abschnitte 2 und 8 wurden auf
+> den Umsetzungsstand von August 2026 gebracht — die CRC-Stufe ist inzwischen
+> normativer Bestandteil der Spezifikation und in allen fünf Referenzimplementierungen
+> umgesetzt. Der fachliche Inhalt der Abschnitte 3 bis 7 ist unverändert. Erstmals liegt
+> zusätzlich eine englische Fassung vor.
 
 ## Zusammenfassung
 
@@ -69,12 +75,12 @@ zum letzten vollständigen Block lesbar. Diese Eigenschaften — insbesondere di
 Selbstabgeschlossenheit der Blöcke — sind die Grundlage, auf der sich Integrität
 streaming-tauglich ergänzen lässt.
 
-Normative Quelle für das Basisformat ist die veröffentlichte OSF-Spezifikation in der
-Revision vom 2026-05-24 (github.com/optimeas/osf, Verzeichnis `docs/`; identisch unter
-docs.optimeas.com). Das in diesem Papier beschriebene Integritätsprofil ist dort noch
-nicht enthalten: Es wird hier erstmals vollständig beschrieben und fließt in eine
-kommende Revision derselben Spezifikation ein. Die Abschnitte 4 bis 6 sind daher
-bewusst selbsttragend formuliert.
+Normative Quelle für das Basisformat ist die veröffentlichte OSF-Spezifikation
+(github.com/optimeas/osf, Verzeichnis `docs/`; identisch unter docs.optimeas.com). Die
+in Abschnitt 4 beschriebene CRC-Stufe ist dort seit der Revision vom 2026-07-07
+normativer Bestandteil. Die Signatur- und die PKI-Stufe (Abschnitte 5 und 6) werden hier
+erstmals vollständig beschrieben und fließen in eine kommende Revision derselben
+Spezifikation ein; diese Abschnitte sind daher bewusst selbsttragend formuliert.
 
 ## 3. Das dreistufige Integritätsprofil
 
@@ -241,10 +247,11 @@ beträgt vier Bytes je Block, rund 100–120 Bytes je Signaturanker und einmalig
 bis zwei Kilobyte Zertifikatskette je Datei.
 
 Offene Implementierungen des Formats existieren in Rust (Kern, mit Python-Anbindung),
-C++ und Delphi unter MIT-Lizenz; eine Java-Implementierung ist fertiggestellt (alle
-Unit-Tests bestanden) und durchläuft derzeit die interne Freigabe. Die
-Formatspezifikation steht unter CC BY 4.0. Die Integritätsstufen werden gestuft
-implementiert: CRC zuerst über alle Implementierungen, Signierung und PKI anschließend.
+C++, Delphi und Java unter MIT-Lizenz; die Formatspezifikation steht unter CC BY 4.0.
+Die Integritätsstufen werden gestuft umgesetzt: Die CRC-Stufe ist in allen fünf
+Implementierungen fertiggestellt und durch einen gemeinsamen Satz Referenzdateien
+abgesichert, den die Konformitätstests der Implementierungen gemeinsam prüfen.
+Signierung und PKI folgen.
 Referenz- und Negativtestdaten (gekippte Bytes, gebrochene Ketten, abgelaufene und
 gesperrte Zertifikate) sind Teil der Testsuite; eine strikt getrennte Test-PKI stellt
 sicher, dass Testzertifikate nie produktive Prüfergebnisse erzeugen.
