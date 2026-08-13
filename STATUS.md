@@ -1127,8 +1127,13 @@ One thing to know when checking this record: Zenodo's legacy API exposes a
 languages are set — the record page shows "German, English". Do not "fix" a
 language that is not missing.
 
-**Open:** the Docusaurus PR only — branch `osf-docs-sync-2026-08-13-paper-v11`
-is pushed and awaiting opening.
+**Docusaurus is live** (2026-08-13, merged and deployed). Verified on
+docs.optimeas.com in both language trees: the DOI reads `…941` on the index and
+the integrity reference pages, the concept-paper admonition renders with its
+title and no raw `:::` markup, and the sentence marking the specification as the
+normative reference sits outside the box as intended.
+
+**This round is closed** — nothing outstanding.
 
 ---
 

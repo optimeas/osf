@@ -116,11 +116,11 @@ never had. Note that Zenodo's legacy API returns a *singular* `language` field
 and therefore reports only `deu` — both are set; check the record page, not the
 API, before "fixing" it.
 
-**Open, and only this:** the Docusaurus PR, whose branch
-`osf-docs-sync-2026-08-13-paper-v11` is pushed and waiting to be opened; the
-paste-ready title and description are in the planning repo under
-`zenodo/2026-08-13-docusaurus-pr-text.md`. Also installed this round, at the
-maintainer's request:
+**The Docusaurus sync is merged and deployed**, verified live on
+docs.optimeas.com in both language trees — DOI `…941`, the admonition rendering
+with its title and no raw `:::`, and the normative-reference sentence outside
+the box. **Nothing from this round is outstanding.** Also installed this round,
+at the maintainer's request:
 the DejaVu fonts (required — they carry the visual identity), Typst 0.15.1 and
 wkhtmltopdf 0.12.6.
 
