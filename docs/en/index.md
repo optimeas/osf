@@ -44,7 +44,7 @@ But OSF does not stop at writing — it is **equally optimized for downstream pr
 -   **Flexible** for all time-related data: single values, vectors, matrices, images, and audio.
 -   **Open and easy to implement** with a clear structure.
 -   **Uniform** — one format for the edge, the lab, and the cloud.
--   **Optional integrity profile** (from OSF5 onwards) with three levels — *none*, *crc*, *signed*: per-block CRC32C corruption detection, an Ed25519 signature chain, and X.509/PKI-based third-party verifiability. See the [OSF5 Integrity Profile](references/osf5_integrity.md); concept paper: [doi.org/10.5281/zenodo.21227942](https://doi.org/10.5281/zenodo.21227942).
+-   **Optional integrity profile** (from OSF5 onwards) with three levels — *none*, *crc*, *signed*: per-block CRC32C corruption detection, an Ed25519 signature chain, and X.509/PKI-based third-party verifiability. See the [OSF5 Integrity Profile](references/osf5_integrity.md); concept paper: [doi.org/10.5281/zenodo.21227941](https://doi.org/10.5281/zenodo.21227941).
 
 OSF is therefore not only a storage format but a tool that **escorts data streams without loss and efficiently throughout their entire lifecycle** — from the very first measurement to analysis.
 

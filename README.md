@@ -140,7 +140,7 @@ it, please use:
 
 > Schranz, B. / optiMEAS GmbH & optiMEAS Switzerland GmbH (2026):
 > Integrität und Signierung in Streaming-Messdatenformaten: Der OSF5-Ansatz.
-> Zenodo. https://doi.org/10.5281/zenodo.21227942
+> Zenodo. https://doi.org/10.5281/zenodo.21227941
 
 A repository copy of the paper is kept under [`docs/papers/`](docs/papers/); the
 Zenodo record is the citable reference.

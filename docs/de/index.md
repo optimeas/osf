@@ -44,7 +44,7 @@ Doch OSF endet nicht beim Schreiben: Es ist ebenso für die **weiterführende Ve
 -   **Flexibel** für alle zeitbezogenen Daten: Einzelwerte, Vektoren, Matrizen, Bilder und Audiodaten.
 -   **Offen und einfach zu implementieren** mit klarer Struktur.
 -   **Einheitlich** – ein Format für Edge, Labor und Cloud.
--   **Optionales Integritätsprofil** (ab OSF5) mit drei Stufen – *none*, *crc*, *signed*: Blockweise CRC32C-Erkennung von Datenkorruption, eine Ed25519-Signaturkette sowie X.509/PKI-gestützte Verifizierbarkeit durch Dritte. Siehe [OSF5-Integritätsprofil](references/osf5_integrity.md); Konzeptpapier: [doi.org/10.5281/zenodo.21227942](https://doi.org/10.5281/zenodo.21227942).
+-   **Optionales Integritätsprofil** (ab OSF5) mit drei Stufen – *none*, *crc*, *signed*: Blockweise CRC32C-Erkennung von Datenkorruption, eine Ed25519-Signaturkette sowie X.509/PKI-gestützte Verifizierbarkeit durch Dritte. Siehe [OSF5-Integritätsprofil](references/osf5_integrity.md); Konzeptpapier: [doi.org/10.5281/zenodo.21227941](https://doi.org/10.5281/zenodo.21227941).
 
 OSF ist damit nicht nur ein Speicherformat, sondern ein Werkzeug, um **Datenströme verlustfrei und effizient über ihren gesamten Lebenszyklus** zu begleiten – vom ersten Messwert bis zur Analyse.
 

@@ -31,10 +31,19 @@ Das Profil ist eine **reine OSF5-Eigenschaft**. OSF4-Dateien sind nicht betroffe
 und tragen niemals einen Teil davon. Das Design ist vollständig abwärtskompatibel:
 OSF5-Dateien *ohne* Integritätsdeklaration bleiben unverändert gültig.
 
-Konzept und Begründung des Profils sind als Konzeptpapier veröffentlicht (Zenodo,
-DOI [10.5281/zenodo.21227942](https://doi.org/10.5281/zenodo.21227942), auch in
-diesem Repository unter [`docs/papers/`](https://github.com/optimeas/osf/tree/main/docs/papers/)). Das Papier liefert den
-Hintergrund; **dieses Dokument ist die normative Referenz** für Implementierer.
+:::info Konzeptpapier
+Die Entwurfsbegründung hinter diesem Profil — die dreistufige Leiter, die
+Fail-closed-Semantik der Tokens, die Hash-Kette mit Signaturankern und das
+PKI-Vertrauensmodell — steht im Konzeptpapier *Integrität und Signierung in
+Streaming-Messdatenformaten: Der OSF5-Ansatz*, veröffentlicht auf Zenodo auf
+**Deutsch und Englisch** (DOI
+[10.5281/zenodo.21227941](https://doi.org/10.5281/zenodo.21227941), CC BY 4.0)
+und in diesem Repository unter
+[`docs/papers/`](https://github.com/optimeas/osf/tree/main/docs/papers/).
+:::
+
+Das Papier liefert den Hintergrund; **dieses Dokument ist die normative
+Referenz** für Implementierer.
 
 Das Basisformat (Magic Header, JSON-Metablock, in sich abgeschlossene
 Datenblöcke) ist in [`osf_general.md`](../osf_general.md) und

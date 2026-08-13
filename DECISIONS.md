@@ -1114,7 +1114,7 @@ third-party-verifiable provenance. This is a **spec revision**, not a new
 format: files without the profile stay valid, and OSF4 is unaffected. The
 normative text is [`docs/{de,en}/references/osf5_integrity.md`](docs/en/references/osf5_integrity.md);
 the rationale is the published concept paper (Zenodo, DOI
-[10.5281/zenodo.21227942](https://doi.org/10.5281/zenodo.21227942)); the
+[10.5281/zenodo.21227941](https://doi.org/10.5281/zenodo.21227941)); the
 current-parser starting point is [`AUDIT_INTEGRITY_O1.md`](AUDIT_INTEGRITY_O1.md).
 This decision records the design choices; the four implementations follow via
 separate task briefs (CRC first across all, then signing/PKI).

@@ -31,10 +31,18 @@ The profile is a **pure OSF5 property**. OSF4 files are not affected and never
 carry any part of it. The design is fully backward compatible: OSF5 files
 *without* an integrity declaration remain valid exactly as before.
 
-The concept and rationale behind this profile are published as a concept paper
-(Zenodo, DOI [10.5281/zenodo.21227942](https://doi.org/10.5281/zenodo.21227942),
-also in this repository under [`docs/papers/`](https://github.com/optimeas/osf/tree/main/docs/papers/)). That paper is the
-background; **this document is the normative reference** for implementers.
+:::info Concept paper
+The design rationale behind this profile — the three-level ladder, the
+fail-closed token semantics, the hash chain with signature anchors, and the PKI
+trust model — is set out in *Integrity and Signing in Streaming Measurement Data
+Formats: The OSF5 Approach*, published on Zenodo in **English and German**
+(DOI [10.5281/zenodo.21227941](https://doi.org/10.5281/zenodo.21227941),
+CC BY 4.0) and kept in this repository under
+[`docs/papers/`](https://github.com/optimeas/osf/tree/main/docs/papers/).
+:::
+
+That paper is the background; **this document is the normative reference** for
+implementers.
 
 The base format (magic header, JSON metablock, self-contained data blocks) is
 described in [`osf_general.md`](../osf_general.md) and
