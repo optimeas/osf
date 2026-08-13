@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: "If you use OSF in your work, please cite the concept paper below."
+title: "OSF — Open Streaming Format"
+abstract: >-
+  Open Streaming Format (OSF) is a binary, block-oriented file format for
+  time-series measurement and process data, designed for embedded streaming
+  write and fast block-wise read. The specification is published under CC BY
+  4.0; reference implementations in Rust, Python, C++, Java and Delphi are
+  MIT-licensed.
+type: software
+license: MIT
+repository-code: "https://github.com/optimeas/osf"
+url: "https://docs.optimeas.com"
+keywords:
+  - measurement data
+  - time series
+  - streaming
+  - file format
+  - data integrity
+authors:
+  - name: "optiMEAS GmbH"
+    city: Friedrichsdorf
+    country: DE
+  - name: "optiMEAS Switzerland GmbH"
+    city: Oberstammheim
+    country: CH
+preferred-citation:
+  type: report
+  title: "Integrity and Signing in Streaming Measurement Data Formats: The OSF5 Approach"
+  year: 2026
+  month: 8
+  doi: "10.5281/zenodo.21227941"
+  license: CC-BY-4.0
+  authors:
+    - family-names: Schranz
+      given-names: Burkhard
+      orcid: "https://orcid.org/0009-0005-0717-4964"
+    - name: "optiMEAS GmbH"
+    - name: "optiMEAS Switzerland GmbH"
