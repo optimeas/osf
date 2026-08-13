@@ -107,11 +107,20 @@ the wrong one everywhere: `…942` is pinned to v1.0 forever, `…941` is the co
 DOI. Seven citations moved; four deliberately did not — three dated historical
 records plus the intentional v1.0 pointer in the papers README.
 
-**Open, and only these:** the Zenodo v1.1 upload (needs an authenticated
-session; paste-ready field values including the ORCID are in the private
-planning repo under `zenodo/2026-08-13-v1.1-record-fields.md`), and the
-Docusaurus PR, whose branch `osf-docs-sync-2026-08-13-paper-v11` is pushed and
-waiting to be opened. Also installed this round, at the maintainer's request:
+**Zenodo v1.1 is published** (2026-08-13, version DOI
+`10.5281/zenodo.21916543`), uploaded by the maintainer through a browser agent
+driven by the instructions in the private planning repo
+(`zenodo/2026-08-13-chrome-agent-prompt.txt`) and then verified from the index:
+both PDFs, both languages, ORCID, and the two related identifiers the record
+never had. Note that Zenodo's legacy API returns a *singular* `language` field
+and therefore reports only `deu` — both are set; check the record page, not the
+API, before "fixing" it.
+
+**Open, and only this:** the Docusaurus PR, whose branch
+`osf-docs-sync-2026-08-13-paper-v11` is pushed and waiting to be opened; the
+paste-ready title and description are in the planning repo under
+`zenodo/2026-08-13-docusaurus-pr-text.md`. Also installed this round, at the
+maintainer's request:
 the DejaVu fonts (required — they carry the visual identity), Typst 0.15.1 and
 wkhtmltopdf 0.12.6.
 

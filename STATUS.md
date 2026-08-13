@@ -1112,9 +1112,23 @@ correct; measured, it scales absolute `pt` by ~0.91 and names the DejaVu faces
 differently. Do not switch without re-running that comparison. The DejaVu fonts
 must be installed or the output silently falls back to Georgia.
 
-**Open:** the Zenodo v1.1 upload (maintainer's — needs an authenticated
-session) and the Docusaurus PR, branch `osf-docs-sync-2026-08-13-paper-v11`
-pushed and awaiting opening.
+**Published 2026-08-13.** Version 1.1 is live and was verified from the index,
+not from the upload form: version DOI
+[10.5281/zenodo.21916543](https://doi.org/10.5281/zenodo.21916543), both PDFs
+present at the byte sizes committed here, languages German **and** English,
+ORCID on the personal creator, and the two related identifiers set
+(`isSupplementedBy` → the repository and the documentation site) where the
+record previously had none. The concept DOI `…941` resolves to it; the old
+version DOI `…942` still resolves to v1.0, which is what
+`docs/papers/README.md` points at deliberately.
+
+One thing to know when checking this record: Zenodo's legacy API exposes a
+**singular** `metadata.language`, so it reports only `deu` even though both
+languages are set — the record page shows "German, English". Do not "fix" a
+language that is not missing.
+
+**Open:** the Docusaurus PR only — branch `osf-docs-sync-2026-08-13-paper-v11`
+is pushed and awaiting opening.
 
 ---
 
