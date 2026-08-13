@@ -1077,6 +1077,47 @@ the plausible next field case.
 
 ---
 
+## Concept paper — bilingual, v1.1 (2026-08-13)
+
+The OSF5 integrity concept paper is published in **German and English** at
+version 1.1, and is now built from source rather than existing only as a PDF.
+
+| | |
+|---|---|
+| Sources | `docs/papers/src/osf5-integrity-profile.{de,en}.md` + `paper.css` |
+| Build | `python docs/scripts/paper-to-pdf.py [--langs de en]` |
+| Output | `docs/papers/2026-08_osf5-integritaetsprofil_v1.1.pdf` (DE, authoritative) and `…_osf5-integrity-profile_v1.1_en.pdf` (EN) — **committed**, unlike the disposable output of `docs-to-pdf.py` |
+| Cite | concept DOI [10.5281/zenodo.21227941](https://doi.org/10.5281/zenodo.21227941) — always the newest version |
+
+**Why it changed.** The paper existed only in German, only as a PDF, with no
+editable source anywhere (the published file is `wkhtmltopdf` output whose HTML
+original is gone). Sections 2 and 8 also still described the CRC level as future
+work, although it has been normative since the 2026-07-07 spec revision and
+complete in all five implementations since 2026-07-09. Only those two sections
+and the header changed in v1.1; sections 3–7 are carried over verbatim.
+
+**Citations use the concept DOI now.** Zenodo mints two: `…942` is pinned to
+v1.0 permanently, `…941` follows the newest version. All seven forward-looking
+citations moved. Four occurrences deliberately keep `…942` — `AUDIT_INTEGRITY_O1.md`,
+`CHANGELOG.md`, `DOC_CURRENCY_AUDIT.md` (dated records that correctly describe
+what was true when written) and the intentional v1.0 pointer in
+`docs/papers/README.md`. A new root `CITATION.cff` carries the same concept DOI
+plus the maintainer's ORCID.
+
+**Renderer, and a trap in it.** Headless Edge/Chrome reproduces the v1.0
+typography exactly — same four pages, same font set, same size profile, 95 % of
+line starts on the same words. wkhtmltopdf 0.12.6 *produced* v1.0 and is
+installed on the work machine, which makes switching to it look obviously
+correct; measured, it scales absolute `pt` by ~0.91 and names the DejaVu faces
+differently. Do not switch without re-running that comparison. The DejaVu fonts
+must be installed or the output silently falls back to Georgia.
+
+**Open:** the Zenodo v1.1 upload (maintainer's — needs an authenticated
+session) and the Docusaurus PR, branch `osf-docs-sync-2026-08-13-paper-v11`
+pushed and awaiting opening.
+
+---
+
 ## CI / release pipeline (Session 8)
 
 GitHub Actions workflows live in `.github/workflows/`:

@@ -1,6 +1,13 @@
 # Claude Code Session State
 
-Last updated: 2026-07-29 (**`osfdata 1.1.0` is live on production PyPI** —
+Last updated: 2026-08-13 (**The OSF5 integrity concept paper now exists in
+German and English at version 1.1**, built from a Markdown master under version
+control instead of an unreproducible PDF, and every forward-looking citation in
+the repository moved from the version DOI to the **concept DOI**
+`10.5281/zenodo.21227941`. New `CITATION.cff`. The Zenodo upload itself is the
+maintainer's to do — field values are prepared in the private planning repo. See
+*Concept paper — bilingual v1.1* below. Before that, on 2026-07-29:
+**`osfdata 1.1.0` is live on production PyPI** —
 `pip install osfdata`, four abi3 wheels + sdist, verified from the index rather
 than a local build. The repo-wide documentation was pulled in line in the same
 pass: every reference to the test index is gone and the README version badge is
@@ -56,6 +63,57 @@ outright, since the firmware that produces the encoding is *conforming*. Java is
 complete (§21); only a native **C** implementation remains unstarted.
 
 ## Recent sessions (since 2026-05-22)
+
+### Concept paper — bilingual v1.1 (2026-08-13)
+
+**The problem was threefold.** The OSF5 integrity concept paper existed only in
+German, only as a PDF, and with two statements that had gone stale. It is the
+designated lead magnet for InnoTrans 2026 (22–25 September), where it is handed
+to an international audience and printed for the booth — so a German-only PDF
+excluded most of its readership. Worse, the source was **gone**: the published
+file is `wkhtmltopdf 0.12.6` output from 2026-07-06 whose HTML original exists
+nowhere on disk, so the "master" could not be edited, diffed or translated.
+And sections 2 and 8 still described the CRC level as future work, when it has
+been normative in the specification since the 2026-07-07 revision and complete
+in all five implementations since 2026-07-09.
+
+**What now exists.** Markdown masters under `docs/papers/src/` (DE + EN) plus
+`docs/scripts/paper-to-pdf.py`, modeled on the existing `docs-to-pdf.py` — same
+headless-browser mechanism, same bootstrap, no new dependency. Both PDFs are
+committed as published artifacts. The German reconstruction was verified against
+the published text by shingle comparison (1773 six-word sequences each side,
+none missing, none added) and the comparison was **mutation-tested** afterwards,
+because its normalization had to be loosened three times for PDF extraction
+artifacts and a check that passes everything is worse than none. The v1.1 edits
+are confined to sections 2, 8 and the header, which `git diff` against the
+verified reconstruction confirms as exactly four hunks.
+
+**Layout fidelity was measured, not judged** — the rendered PDF cannot be viewed
+in this environment, so "looks right" was not available as evidence. Font sizes,
+margins and leading were all read out of the v1.0 PDF: A4, DejaVu Serif
+9.2/10.9/13.8/18.4pt, DejaVu Sans Mono 7.5pt, 19.6mm side margins, 10.9pt
+baseline-to-baseline (line-height 1.19, where a plausible 1.42 had pushed the
+paper onto a fifth page). Result: same four pages, identical font set and size
+profile, **227 of 240 line starts on the same words (95%)**.
+
+**Two findings worth keeping.** First, wkhtmltopdf 0.12.6 turned out to be
+installed, which made "use the original engine for an exact match" the obvious
+move — measurement said otherwise. Edge reproduces the v1.0 metrics exactly;
+this wkhtmltopdf build scales even absolute `pt` by ~0.91 and names the DejaVu
+faces with a `Book` suffix v1.0 does not carry. **Do not switch the renderer
+back** without re-running that comparison; the warning is in the plan and in
+`docs/papers/README.md`. Second, Zenodo mints two DOIs and the repository cited
+the wrong one everywhere: `…942` is pinned to v1.0 forever, `…941` is the concept
+DOI. Seven citations moved; four deliberately did not — three dated historical
+records plus the intentional v1.0 pointer in the papers README.
+
+**Open, and only these:** the Zenodo v1.1 upload (needs an authenticated
+session; paste-ready field values including the ORCID are in the private
+planning repo under `zenodo/2026-08-13-v1.1-record-fields.md`), and the
+Docusaurus PR, whose branch `osf-docs-sync-2026-08-13-paper-v11` is pushed and
+waiting to be opened. Also installed this round, at the maintainer's request:
+the DejaVu fonts (required — they carry the visual identity), Typst 0.15.1 and
+wkhtmltopdf 0.12.6.
 
 ### Production PyPI release — `osfdata 1.1.0` (2026-07-29)
 
