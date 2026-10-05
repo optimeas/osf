@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Documentation in Italian and French.** New trees `docs/it/` and `docs/fr/`,
+  translated from `docs/de/` (37 pages each). `docs/scripts/translation-status.py`
+  reports translated pages whose German source has changed since, using the
+  hashes in `docs/translation-state.json`; the workflow and the translation
+  rules are in [`docs/TRANSLATING.md`](docs/TRANSLATING.md).
+  `docs/scripts/sync-to-docusaurus.py` now publishes all four languages and
+  overwrites the site's pages from this repository. The translations are
+  machine-made and not proofread by a native speaker.
+
 - **`bcMessageEvent` (control byte 4) is read-mandatory — normative spec rule +
   read support in all five implementations (OSF-UP4).** Deployed device firmware
   writes OSF4 `string` channels as `bcMessageEvent`, which the specification
@@ -152,6 +161,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **German developer handbook for the C++ implementation** — new subtree `docs/de/implementations/cpp/` with eight in-depth pages ([Architektur](docs/de/implementations/cpp/architektur.md), [Lesen](docs/de/implementations/cpp/lesen.md), [Schreiben](docs/de/implementations/cpp/schreiben.md), [Fehlerbehandlung](docs/de/implementations/cpp/fehlerbehandlung.md) incl. the complete error-code catalogue, [C-ABI](docs/de/implementations/cpp/c-abi.md) incl. function catalogue + C/P-Invoke examples, [Bauen & Einbinden](docs/de/implementations/cpp/bauen.md) incl. `add_subdirectory`/FetchContent consumption snippets, [Kochbuch](docs/de/implementations/cpp/kochbuch.md) with copy-ready recipes, and [Interna](docs/de/implementations/cpp/interna.md) for contributors). `docs/de/implementations/cpp.md` reworked into the overview/entry page linking the handbook. The English mirror of the new subtree is an open follow-up.
 
 ### Fixed
+
+- Documentation (German): removed a leftover drafting sentence before the
+  metablock section of `docs/de/osf_general.md`, and a grammar slip in
+  `docs/de/index.md`.
 
 - **Silent loss of every `bcMessageEvent` channel on read (OSF-UP4).** All five
   implementations skipped control byte 4 as deprecated, so OSF4 files written by

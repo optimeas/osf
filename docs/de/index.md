@@ -60,7 +60,7 @@ Die Antwort von OSF auf diese Anforderungen ist eine klare, offene Struktur, die
 
 ### Grundsätzliche OSF Dateistruktur
 
-Die Kernarchitektur ermöglicht es, alle zeitbezogenen Daten in einer einzigen, konsistenten Format abzulegen. OSF ist **offen dokumentiert**, leicht zu implementieren und von Edge-Geräten bis zur Cloud skalierbar.
+Die Kernarchitektur ermöglicht es, alle zeitbezogenen Daten in einem einzigen, konsistenten Format abzulegen. OSF ist **offen dokumentiert**, leicht zu implementieren und von Edge-Geräten bis zur Cloud skalierbar.
 
 ![OSF Dateistruktur.](media/dfa207f25f79c84ec79e2e2f6c2c42cc.jpg)
 

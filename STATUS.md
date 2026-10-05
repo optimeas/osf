@@ -12,6 +12,12 @@ when deeper context is needed.
 | Branch | `main` |
 | Spec revision in effect | **2026-07-28** (`bcMessageEvent` read-mandatory, OSF-UP4; zero-length data blocks, OSF-UP3 — both dated 2026-07-28, so the value does not move; OSF5 integrity profile 2026-07-07; base format 2026-05-24) |
 
+**Docs in four languages (2026-10-05).** `docs/it/` and `docs/fr/` are
+translations of `docs/de/`; this repo is the source for all four and
+`sync-to-docusaurus.py` overwrites them in the site. A German doc change is
+complete only with `en`, `it` and `fr` updated — check with
+`python docs/scripts/translation-status.py`, rules in `docs/TRANSLATING.md`.
+
 **Public-release prep — done (on `main`).** All four phases are complete:
 Phase 1 (repo cleanup), Phase 2 (Docusaurus integration), Phase 3
 (per-implementation + examples developer docs, **DE + EN**) and Phase 4

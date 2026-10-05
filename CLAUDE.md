@@ -64,6 +64,29 @@ complete (§21); only a native **C** implementation remains unstarted.
 
 ## Recent sessions (since 2026-05-22)
 
+### Documentation in four languages (2026-10-05)
+
+**The docs now have an Italian and a French tree, and this repo is the source
+for all four languages.** `docs/it/` and `docs/fr/` are translations of
+`docs/de/`. They were first made in the Docusaurus repository, where the
+sync could not reach them, so they would have gone stale at the next German
+change. They were moved here instead, and
+`docs/scripts/sync-to-docusaurus.py` now overwrites all four locales in the
+site.
+
+**The rule that follows: a change to a page under `docs/de/` is not done until
+`en`, `it` and `fr` carry it.** `docs/scripts/translation-status.py` reports
+what is open, by comparing each German page with the hash recorded in
+`docs/translation-state.json` when its translation was made; `--record`
+updates that file after translating. Workflow and translation rules:
+`docs/TRANSLATING.md`. Read it before touching a doc page.
+
+Two things to know. The status tool checks structure (headings, code blocks,
+front matter), not meaning, and nobody has proofread the Italian and French
+pages as a native speaker. And the sync skips `it`/`fr` when the target
+checkout has no `i18n/it` or `i18n/fr` at all, which is the case on the
+site's `main` until its locale PR (#107 there) is merged.
+
 ### Concept paper — bilingual v1.1 (2026-08-13)
 
 **The problem was threefold.** The OSF5 integrity concept paper existed only in

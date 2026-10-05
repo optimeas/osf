@@ -39,6 +39,12 @@ class StripFlagLinkTests(unittest.TestCase):
         text = "🇩🇪 [German version](../../de/index.md)\n# H\n"
         self.assertEqual(sync.strip_flag_link(text), "# H\n")
 
+    def test_strips_flag_into_italian_and_french_trees(self):
+        text = "🇮🇹 [Versione italiana](../it/index.md)\n\n# T\n"
+        self.assertEqual(sync.strip_flag_link(text), "# T\n")
+        text = "🇫🇷 [Version française](../../fr/tools/index.md)\n# T\n"
+        self.assertEqual(sync.strip_flag_link(text), "# T\n")
+
     def test_strips_root_level_flag_single_dotdot(self):
         # root-level pages (docs/de/index.md) use a single ../ ; deeper pages
         # use ../../ . Both must be stripped.
@@ -96,112 +102,55 @@ class SyncLocaleTests(unittest.TestCase):
         self.assertTrue((self.dst / "old.md").exists())
 
 
-    def test_reports_changed_and_new_pages(self):
-        self._write(self.src / "same.md", "# Same\n")
-        self._write(self.src / "edited.md", "# New text\n")
-        self._write(self.src / "sub" / "added.md", "# Added\n")
-        self._write(self.dst / "same.md", "# Same\n")
-        self._write(self.dst / "edited.md", "# Old text\n")
-
-        tally = sync.sync_locale(self.src, self.dst, dry_run=False)
-
-        self.assertEqual(tally["changed"], ["edited.md", "sub/added.md"])
-
-    def test_changed_ignores_line_endings_and_is_known_in_dry_run(self):
-        self._write(self.src / "page.md", "# T\n\nbody\n")
-        (self.dst / "page.md").write_bytes(b"# T\r\n\r\nbody\r\n")
-        self._write(self.src / "edited.md", "# New\n")
-        self._write(self.dst / "edited.md", "# Old\n")
-
-        tally = sync.sync_locale(self.src, self.dst, dry_run=True)
-
-        self.assertEqual(tally["changed"], ["edited.md"])
-
-
-class DerivedLocaleTests(unittest.TestCase):
-    """it/fr: translated in the Docusaurus repo, no source tree in this one."""
-
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        self.src = self.tmp / "src"
-        self.dst = self.tmp / "it"
-        self.src.mkdir()
-        self.dst.mkdir()
-
-    def _write(self, path: Path, content: str):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-
-    def test_keeps_translations_and_reports_what_needs_work(self):
-        self._write(self.src / "same.md", "# Same\n")
-        self._write(self.src / "edited.md", "# New\n")
-        self._write(self.src / "added.md", "# Added\n")
-        self._write(self.src / "media" / "pic.png", "NEW")
-        self._write(self.dst / "same.md", "# Uguale\n")
-        self._write(self.dst / "edited.md", "# Vecchio\n")
-        self._write(self.dst / "gone.md", "# Rimosso\n")
-        self._write(self.dst / "media" / "target_only.png", "KEEP")
-
-        tally = sync.reconcile_derived_locale(
-            self.src, self.dst, ["edited.md", "added.md"], dry_run=False
-        )
-
-        # translations are never overwritten with German text
-        self.assertEqual((self.dst / "same.md").read_text(encoding="utf-8"), "# Uguale\n")
-        self.assertEqual((self.dst / "edited.md").read_text(encoding="utf-8"), "# Vecchio\n")
-        self.assertFalse((self.dst / "added.md").exists())
-        # a translation whose German page is gone would never be rendered
-        self.assertFalse((self.dst / "gone.md").exists())
-        self.assertEqual((self.dst / "media" / "pic.png").read_text(), "NEW")
-        self.assertEqual((self.dst / "media" / "target_only.png").read_text(), "KEEP")
-        self.assertEqual(tally["stale"], ["edited.md"])
-        self.assertEqual(tally["untranslated"], ["added.md"])
-        self.assertEqual(tally["removed_md"], 1)
-        self.assertEqual(tally["media"], 1)
-
-    def test_locale_not_set_up_in_target_is_skipped(self):
-        self._write(self.src / "index.md", "# T\n")
-        self.assertIsNone(
-            sync.reconcile_derived_locale(
-                self.src, self.tmp / "fr", ["index.md"], dry_run=False
-            )
-        )
-
-    def test_dry_run_writes_nothing(self):
-        self._write(self.src / "media" / "pic.png", "NEW")
-        self._write(self.dst / "gone.md", "# Rimosso\n")
-
-        tally = sync.reconcile_derived_locale(self.src, self.dst, [], dry_run=True)
-
-        self.assertTrue((self.dst / "gone.md").exists())
-        self.assertFalse((self.dst / "media" / "pic.png").exists())
-        self.assertEqual(tally["removed_md"], 1)
-
-
 class MainTests(unittest.TestCase):
     def test_main_errors_on_non_directory_target(self):
         with self.assertRaises(SystemExit):
             sync.main(["this/path/does/not/exist"])
 
-    def test_main_syncs_de_en_and_reconciles_derived_locales(self):
+    def _site(self, locales):
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         repo, target = tmp / "repo", tmp / "target"
-        for loc in ("de", "en"):
+        for loc in ("de", "en", "it", "fr"):
             (repo / "docs" / loc).mkdir(parents=True)
             (repo / "docs" / loc / "index.md").write_text("# " + loc + "\n", encoding="utf-8")
-        (target / sync.DST_DE).mkdir(parents=True)
-        (target / sync.DST_EN).mkdir(parents=True)
-        it = target / sync.derived_dst("it")
-        it.mkdir(parents=True)
-        (it / "index.md").write_text("# it\n", encoding="utf-8")
-        (it / "gone.md").write_text("# via\n", encoding="utf-8")
-        # no fr tree: that locale is simply not set up in this target
+        for loc in locales:
+            (target / sync.dst_dir(loc)).mkdir(parents=True)
+        return repo, target
+
+    def test_main_overwrites_every_locale_from_this_repo(self):
+        repo, target = self._site(("de", "en", "it", "fr"))
+        stale = target / sync.dst_dir("it") / "index.md"
+        stale.write_text("# edited in the site\n", encoding="utf-8")
+        orphan = target / sync.dst_dir("fr") / "gone.md"
+        orphan.write_text("# plus de source\n", encoding="utf-8")
 
         self.assertEqual(sync.main([str(target), "--repo-root", str(repo)]), 0)
 
-        self.assertEqual((target / sync.DST_DE / "index.md").read_text(encoding="utf-8"), "# de\n")
-        self.assertEqual((it / "index.md").read_text(encoding="utf-8"), "# it\n")
-        self.assertFalse((it / "gone.md").exists())
-        self.assertFalse((target / sync.derived_dst("fr")).exists())
+        for loc in ("de", "en", "it", "fr"):
+            page = target / sync.dst_dir(loc) / "index.md"
+            self.assertEqual(page.read_text(encoding="utf-8"), "# " + loc + "\n")
+        self.assertFalse(orphan.exists())
+
+    def test_main_skips_optional_locale_the_site_does_not_have(self):
+        repo, target = self._site(("de", "en", "it"))
+
+        self.assertEqual(sync.main([str(target), "--repo-root", str(repo)]), 0)
+
+        self.assertTrue((target / sync.dst_dir("it") / "index.md").is_file())
+        self.assertFalse((target / "i18n" / "fr").exists())
+
+    def test_main_refuses_locale_without_osf_subtree(self):
+        # i18n/fr exists, but nobody created the OSF category there
+        repo, target = self._site(("de", "en", "it"))
+        (target / "i18n" / "fr").mkdir(parents=True)
+
+        with self.assertRaises(SystemExit):
+            sync.main([str(target), "--repo-root", str(repo)])
+
+    def test_dst_dir_layout(self):
+        self.assertEqual(sync.dst_dir("de").as_posix(), "docs/software/data_formats/osf")
+        self.assertEqual(
+            sync.dst_dir("it").as_posix(),
+            "i18n/it/docusaurus-plugin-content-docs/current/software/data_formats/osf",
+        )

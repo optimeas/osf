@@ -155,8 +155,6 @@ Ob der folgende Metablock **XML** oder **JSON** ist, wird anhand des ersten Zeic
 * **Einfache Implementierung:** Eine Zeile reicht, um Version und Parser zu bestimmen.
 
 
-Hier ist der allgemeine Text zum **Metablock** für OSF4 und OSF5, ohne Spezifika zu XML/JSON und ohne Vektor-/Matrix-Parameter:
-
 
 ## Metablock – Kanäle und Metadaten
 

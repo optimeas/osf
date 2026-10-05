@@ -103,7 +103,7 @@ The [`examples/`](examples/) directory contains real and synthetic OSF files for
 
 ## Documentation
 
-The specification is maintained in English under [`docs/en/`](docs/en/) and mirrored in German under [`docs/de/`](docs/de/).
+The specification is maintained in English under [`docs/en/`](docs/en/) and mirrored in German under [`docs/de/`](docs/de/). Italian ([`docs/it/`](docs/it/)) and French ([`docs/fr/`](docs/fr/)) are translations of the German pages; see [`docs/TRANSLATING.md`](docs/TRANSLATING.md).
 
 - [Format introduction](docs/en/index.md) ([🇩🇪 Deutsch](docs/de/index.md))
 - [General OSF concepts](docs/en/osf_general.md) ([🇩🇪 Deutsch](docs/de/osf_general.md))
