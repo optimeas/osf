@@ -52,7 +52,7 @@ class StatusTests(unittest.TestCase):
         self._write("docs/de/index.md", DE)
         self._write("docs/de/sub/page.md", DE)
         self._write("docs/de/media/pic.png", "PNG")
-        for locale in ("it", "fr"):
+        for locale in ts.LOCALES:
             self._write(f"docs/{locale}/index.md", IT)
             self._write(f"docs/{locale}/sub/page.md", IT)
             self._write(f"docs/{locale}/media/pic.png", "PNG")
@@ -69,7 +69,7 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(self._open(), {"stale": ["index.md", "sub/page.md"]})
 
     def test_recorded_translation_is_up_to_date_until_german_changes(self):
-        self.assertEqual(ts.record(self.repo), 4)
+        self.assertEqual(ts.record(self.repo), 2 * len(ts.LOCALES))
         self.assertEqual(self._open(), {})
         self.assertEqual(ts.main(["--repo-root", str(self.repo)]), 0)
 

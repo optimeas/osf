@@ -5,13 +5,17 @@ copyright: © 2026 optiMEAS GmbH und optiMEAS Switzerland GmbH
 
 # OSF Specification Documents
 
-The formal specification for the Open Streaming Format is maintained in two
-languages. English is the default; the German version is kept in sync.
+The formal specification for the Open Streaming Format is maintained in English
+and German. Italian, French and Spanish are translated from German; see
+[TRANSLATING.md](TRANSLATING.md).
 
 | Language | Path |
 |----------|------|
 | English (default) | [`en/`](en/) |
 | German            | [`de/`](de/) |
+| Italian           | [`it/`](it/) |
+| French            | [`fr/`](fr/) |
+| Spanish           | [`es/`](es/) |
 
 Each language directory follows the same layout:
 

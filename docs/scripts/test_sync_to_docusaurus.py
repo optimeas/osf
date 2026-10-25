@@ -39,10 +39,12 @@ class StripFlagLinkTests(unittest.TestCase):
         text = "🇩🇪 [German version](../../de/index.md)\n# H\n"
         self.assertEqual(sync.strip_flag_link(text), "# H\n")
 
-    def test_strips_flag_into_italian_and_french_trees(self):
+    def test_strips_flag_into_italian_french_and_spanish_trees(self):
         text = "🇮🇹 [Versione italiana](../it/index.md)\n\n# T\n"
         self.assertEqual(sync.strip_flag_link(text), "# T\n")
         text = "🇫🇷 [Version française](../../fr/tools/index.md)\n# T\n"
+        self.assertEqual(sync.strip_flag_link(text), "# T\n")
+        text = "🇪🇸 [Versión en español](../es/index.md)\n# T\n"
         self.assertEqual(sync.strip_flag_link(text), "# T\n")
 
     def test_strips_root_level_flag_single_dotdot(self):
@@ -111,7 +113,7 @@ class MainTests(unittest.TestCase):
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         repo, target = tmp / "repo", tmp / "target"
-        for loc in ("de", "en", "it", "fr"):
+        for loc in ("de", "en", "it", "fr", "es"):
             (repo / "docs" / loc).mkdir(parents=True)
             (repo / "docs" / loc / "index.md").write_text("# " + loc + "\n", encoding="utf-8")
         for loc in locales:
@@ -119,7 +121,7 @@ class MainTests(unittest.TestCase):
         return repo, target
 
     def test_main_overwrites_every_locale_from_this_repo(self):
-        repo, target = self._site(("de", "en", "it", "fr"))
+        repo, target = self._site(("de", "en", "it", "fr", "es"))
         stale = target / sync.dst_dir("it") / "index.md"
         stale.write_text("# edited in the site\n", encoding="utf-8")
         orphan = target / sync.dst_dir("fr") / "gone.md"
@@ -127,7 +129,7 @@ class MainTests(unittest.TestCase):
 
         self.assertEqual(sync.main([str(target), "--repo-root", str(repo)]), 0)
 
-        for loc in ("de", "en", "it", "fr"):
+        for loc in ("de", "en", "it", "fr", "es"):
             page = target / sync.dst_dir(loc) / "index.md"
             self.assertEqual(page.read_text(encoding="utf-8"), "# " + loc + "\n")
         self.assertFalse(orphan.exists())

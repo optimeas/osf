@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Optimeas GmbH
-"""Sync the OSF docs from this repo's docs/{de,en,it,fr} trees into the
+"""Sync the OSF docs from this repo's docs/{de,en,it,fr,es} trees into the
 Bitbucket Docusaurus site's native-i18n layout.
 
   DE  docs/de/X  ->  <target>/docs/software/data_formats/osf/X
   EN  docs/en/X  ->  <target>/i18n/en/docusaurus-plugin-content-docs/current/software/data_formats/osf/X
   IT  docs/it/X  ->  <target>/i18n/it/docusaurus-plugin-content-docs/current/software/data_formats/osf/X
   FR  docs/fr/X  ->  <target>/i18n/fr/docusaurus-plugin-content-docs/current/software/data_formats/osf/X
+  ES  docs/es/X  ->  <target>/i18n/es/docusaurus-plugin-content-docs/current/software/data_formats/osf/X
 
 German is the site's default locale; every other locale lives under i18n/.
 This repo is the source for all of them: the target's pages are overwritten.
@@ -27,8 +28,8 @@ from pathlib import Path
 DEFAULT_LOCALE = "de"
 # Locales besides German. A target site that does not have one of the
 # OPTIONAL_LOCALES at all (no i18n/<locale> directory) is synced without it.
-I18N_LOCALES = ("en", "it", "fr")
-OPTIONAL_LOCALES = ("it", "fr")
+I18N_LOCALES = ("en", "it", "fr", "es")
+OPTIONAL_LOCALES = ("it", "fr", "es")
 
 SUBTREE = Path("software/data_formats/osf")
 DST_DE = Path("docs") / SUBTREE
@@ -51,7 +52,7 @@ def dst_dir(locale: str) -> Path:
 # page's directory depth (root pages use ../, deeper pages ../../), so match
 # one or more ../ segments.
 FLAG_LINK_RE = re.compile(
-    r"^\s*[\U0001F1E6-\U0001F1FF]{2}\s*\[[^\]]*\]\((?:\.\./)+(?:en|de|it|fr)/[^)]*\)\s*$"
+    r"^\s*[\U0001F1E6-\U0001F1FF]{2}\s*\[[^\]]*\]\((?:\.\./)+(?:en|de|it|fr|es)/[^)]*\)\s*$"
 )
 
 

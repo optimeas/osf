@@ -3,7 +3,7 @@
 # Copyright (c) 2026 Optimeas GmbH
 """Tell which translated doc pages need work.
 
-docs/it and docs/fr are translations of docs/de. A translation cannot be
+docs/it, docs/fr and docs/es are translations of docs/de. A translation cannot be
 diffed against its source, so docs/translation-state.json records, per
 translated page, the hash of the German page it was made from. This tool
 compares that record with the trees on disk:
@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 
 SOURCE = "de"
-LOCALES = ("it", "fr")
+LOCALES = ("it", "fr", "es")
 STATE_FILE = Path("docs/translation-state.json")
 
 _FENCE_RE = re.compile(r"^\s*(```+|~~~+)(.*)$")

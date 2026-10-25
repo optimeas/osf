@@ -1,15 +1,16 @@
 # Translating the documentation
 
-The documentation exists in four languages:
+The documentation exists in five languages:
 
 | Tree | Language | Role |
 |---|---|---|
-| `docs/de/` | German | source of the Italian and French translations |
+| `docs/de/` | German | source of the Italian, French and Spanish translations |
 | `docs/en/` | English | maintained by hand alongside German |
 | `docs/it/` | Italian | translated from German |
 | `docs/fr/` | French | translated from German |
+| `docs/es/` | Spanish | translated from German |
 
-All four are published from this repository:
+All five are published from this repository:
 `docs/scripts/sync-to-docusaurus.py` copies them into the Docusaurus site and
 overwrites what is there. A page edited only in the Docusaurus repository is
 lost at the next sync, so every change to an OSF page starts here.
@@ -17,7 +18,7 @@ lost at the next sync, so every change to an OSF page starts here.
 ## Workflow
 
 A change to a page under `docs/de/` is complete when the same change is in
-`docs/en/`, `docs/it/` and `docs/fr/`.
+`docs/en/`, `docs/it/`, `docs/fr/` and `docs/es/`.
 
 1. Edit the German page and mirror the change in `docs/en/`.
 2. Ask what is open:
@@ -33,7 +34,7 @@ A change to a page under `docs/de/` is complete when the same change is in
    media files that are absent (`media`). It exits with 1 while anything is
    open.
 3. Bring the listed pages up to date following the rules below. For a small
-   change, apply the same edit to the Italian and French page; for a new or
+   change, apply the same edit to the Italian, French and Spanish page; for a new or
    reworked page, translate it again from German.
 4. Record that the translations now match the German text:
 
@@ -45,7 +46,7 @@ A change to a page under `docs/de/` is complete when the same change is in
    German page each translation was made from. Commit it together with the
    pages. `--record implementations/java.md` or `--locale it` limits what is
    recorded; use that when only part of the list has been done.
-5. Run the status again; it must report `up to date` for both languages.
+5. Run the status again; it must report `up to date` for every language.
 
 Recording a page states that its translation is current. Do not record to
 make the list go away.
@@ -78,12 +79,12 @@ translated heading text would produce a different one, append the German
 anchor as an explicit id: `## Configurazione {#konfiguration}`.
 
 Write natural technical prose for engineers, formal address (Italian:
-impersonal or "voi"; French: "vous"). Add nothing that is not in the German
+impersonal or "voi"; French: "vous"; Spanish: "usted"). Add nothing that is not in the German
 page and drop nothing. Keep English terms that engineers use in the target
 language (CAN bus, timestamp, firmware).
 
 ## What the status tool cannot see
 
 It compares structure, not meaning. A page can pass every check and still be
-a poor translation; nobody has proofread the Italian and French pages as a
-native speaker.
+a poor translation; nobody has proofread the Italian, French and Spanish pages
+as a native speaker.
